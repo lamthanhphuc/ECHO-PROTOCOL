@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace EchoProtocol.Settings
 {
@@ -7,6 +9,7 @@ namespace EchoProtocol.Settings
     public static class GameGraphicsSettings
     {
         private const string QualityKey = "Echo.Graphics.Quality";
+        private const string PerformanceKey = "Echo.Graphics.PerformanceMode";
         private const string WidthKey = "Echo.Graphics.Width";
         private const string HeightKey = "Echo.Graphics.Height";
         private const string FullscreenKey = "Echo.Graphics.Fullscreen";
@@ -18,6 +21,9 @@ namespace EchoProtocol.Settings
         private static Vector2Int _previousResolution;
         private static bool _previousFullscreen;
         private static float _previewDeadline;
+        private static bool _performanceMode;
+        private static RenderPipelineAsset _normalPipeline;
+        private static UniversalRenderPipelineAsset _performancePipeline;
         public static bool HasResolutionPreview { get; private set; }
         public static float ResolutionPreviewSecondsRemaining => Mathf.Max(0, _previewDeadline - Time.realtimeSinceStartup);
 
@@ -25,6 +31,7 @@ namespace EchoProtocol.Settings
         {
             get
             {
+                if (_performanceMode) return GameLanguage.Choose("Tiết kiệm GPU", "GPU Saver");
                 var names = QualitySettings.names;
                 return names.Length > 0 ? names[Mathf.Clamp(QualitySettings.GetQualityLevel(), 0, names.Length - 1)] : "Default";
             }
@@ -51,6 +58,12 @@ namespace EchoProtocol.Settings
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatic()
         {
+            if (_performancePipeline != null && QualitySettings.renderPipeline == _performancePipeline)
+                QualitySettings.renderPipeline = _normalPipeline;
+            if (_performancePipeline != null) Object.Destroy(_performancePipeline);
+            _performancePipeline = null;
+            _normalPipeline = null;
+            _performanceMode = false;
             _resolutionRequestFrame = -10;
             _fullscreenRequestFrame = -10;
             HasResolutionPreview = false;
@@ -73,6 +86,11 @@ namespace EchoProtocol.Settings
             if (PlayerPrefs.HasKey(VSyncKey))
                 QualitySettings.vSyncCount = PlayerPrefs.GetInt(VSyncKey) != 0 ? 1 : 0;
 
+            bool usePerformanceMode = PlayerPrefs.HasKey(PerformanceKey)
+                ? PlayerPrefs.GetInt(PerformanceKey) != 0
+                : !Application.isEditor && IsIntegratedGraphics();
+            SetPerformanceMode(usePerformanceMode);
+
             bool fullscreen = PlayerPrefs.HasKey(FullscreenKey)
                 ? PlayerPrefs.GetInt(FullscreenKey) != 0 : Screen.fullScreen;
             if (CanChangeResolution && PlayerPrefs.HasKey(WidthKey) && PlayerPrefs.HasKey(HeightKey))
@@ -89,6 +107,12 @@ namespace EchoProtocol.Settings
 
         public static void CycleQuality()
         {
+            if (_performanceMode || GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+            {
+                SetPerformanceMode(!_performanceMode);
+                PlayerPrefs.SetInt(PerformanceKey, _performanceMode ? 1 : 0);
+                return;
+            }
             var names = QualitySettings.names;
             if (names.Length == 0) return;
             int next = (QualitySettings.GetQualityLevel() + 1) % names.Length;
@@ -96,6 +120,41 @@ namespace EchoProtocol.Settings
             PlayerPrefs.SetString(QualityKey, names[next]);
             if (PlayerPrefs.HasKey(VSyncKey))
                 QualitySettings.vSyncCount = PlayerPrefs.GetInt(VSyncKey) != 0 ? 1 : 0;
+        }
+
+        private static bool IsIntegratedGraphics()
+        {
+            string gpu = SystemInfo.graphicsDeviceName;
+            return gpu.Contains("Radeon(TM) Graphics") || gpu.Contains("Radeon Graphics") ||
+                   gpu.Contains("Intel(R) UHD") || gpu.Contains("Intel(R) Iris");
+        }
+
+        private static void SetPerformanceMode(bool enabled)
+        {
+            if (enabled == _performanceMode) return;
+            if (!enabled)
+            {
+                QualitySettings.renderPipeline = _normalPipeline;
+                if (_performancePipeline != null) Object.Destroy(_performancePipeline);
+                _performancePipeline = null;
+                _normalPipeline = null;
+                _performanceMode = false;
+                return;
+            }
+
+            var source = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (source == null) return;
+            _normalPipeline = QualitySettings.renderPipeline;
+            _performancePipeline = Object.Instantiate(source);
+            _performancePipeline.name = source.name + " GPU Saver";
+            _performancePipeline.hideFlags = HideFlags.DontSave;
+            _performancePipeline.renderScale = 0.7f;
+            _performancePipeline.mainLightShadowmapResolution = 1024;
+            _performancePipeline.shadowDistance = Mathf.Min(source.shadowDistance, 30f);
+            _performancePipeline.shadowCascadeCount = 2;
+            _performancePipeline.maxAdditionalLightsCount = Mathf.Min(source.maxAdditionalLightsCount, 2);
+            QualitySettings.renderPipeline = _performancePipeline;
+            _performanceMode = true;
         }
 
         public static void CycleResolution()

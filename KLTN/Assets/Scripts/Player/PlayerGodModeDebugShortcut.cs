@@ -61,6 +61,7 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 
         if (!localLife.DebugGodMode)
         {
+            EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugAlienDirection = false;
             return;
         }
 
@@ -96,6 +97,25 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
         {
             localLife.RequestDebugTeamTool(
                 LobbyPlayerState.CoreStabilizerToolId);
+            return;
+        }
+
+        var hunt = AlienHuntMission.Instance;
+        var match = NetworkMatchState.Instance;
+        if (hunt == null || !hunt.Ready || match == null) return;
+        if (keyboard.digit8Key.wasPressedThisFrame)
+        {
+            EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugAlienDirection =
+                !EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugAlienDirection;
+            return;
+        }
+        if (keyboard.digit6Key.wasPressedThisFrame)
+        {
+            match.RequestDebugHuntItem(HuntKind.Meat);
+        }
+        else if (keyboard.digit7Key.wasPressedThisFrame)
+        {
+            match.RequestDebugHuntItem(HuntKind.Jerrycan);
         }
     }
 

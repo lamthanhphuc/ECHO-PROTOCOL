@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using System.Collections.Generic;
@@ -19,10 +19,36 @@ namespace EchoProtocol.MatchFlow
                 foreach (var renderer in _renderers) HeldVisualShadowOverride.SetActive(renderer, false);
         }
         [SerializeField] private Vector3 carryLocalOffset = new Vector3(0.25f, 1.15f, 0.55f);
+        [SerializeField] private Vector3 leftGripLocalPosition = new Vector3(-0.2f, 0f, 0f);
+        [SerializeField] private Vector3 rightGripLocalPosition = new Vector3(0.2f, 0f, 0f);
+        private int _carryPoseFrame = -1;
+        private Vector3 _carryPosePosition;
+        private Quaternion _carryPoseRotation;
+        public void SetSingleHandGripPose(Vector3 rightHandle, Quaternion rotation)
+        {
+            _carryPoseFrame = Time.frameCount;
+            _carryPoseRotation = rotation;
+            transform.localScale = _originalVisualScale;
+            _carryPosePosition = rightHandle - rotation * Vector3.Scale(rightGripLocalPosition, _originalVisualScale);
+            transform.SetPositionAndRotation(_carryPosePosition, rotation);
+        }
+        private Transform _gripHand;
+        private Vector3 _gripHandLocalPoint;
+        private Quaternion _gripHandLocalRotation;
+        public void AttachToRightHandGrip(Transform hand, Vector3 handle, Quaternion rotation)
+        {
+            _gripHand = hand;
+            _gripHandLocalPoint = hand.InverseTransformPoint(handle);
+            _gripHandLocalRotation = Quaternion.Inverse(hand.rotation) * rotation;
+            SetSingleHandGripPose(handle, rotation);
+        }
+        private QuickOutline.Outline[] _outlines;
+        private EchoProtocol.Visuals.ObjectiveGlowHighlight[] _highlights;
         [Networked] public NetworkBool Selected { get; private set; }
         [Networked] public NetworkBool Consumed { get; private set; }
         [Networked] public PlayerRef Holder { get; private set; }
         [Networked] public Vector3 WorldPosition { get; private set; }
+        [Networked] public Quaternion WorldRotation { get; private set; }
         private GameObject _offlineCarrier;
         private bool _offlineSelected;
         private bool _offlineConsumed;
@@ -41,20 +67,24 @@ namespace EchoProtocol.MatchFlow
         public bool IsCarried => Online ? Holder.IsRealPlayer : _offlineCarrier != null;
         public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("Nhặt pin nhiên liệu", "Pick up fuel cell");
 
-        private Vector3 _originalVisualScale;
+        private Vector3 _originalVisualScale = Vector3.one;
         private void Awake()
         {
             _originalVisualScale = transform.localScale;
             _collider = GetComponent<Collider>();
             _renderers = GetComponentsInChildren<Renderer>(true);
+            _outlines = GetComponentsInChildren<QuickOutline.Outline>(true);
+            _highlights = GetComponentsInChildren<EchoProtocol.Visuals.ObjectiveGlowHighlight>(true);
             if (TryGetComponent<Rigidbody>(out var body)) { body.isKinematic = true; body.useGravity = false; }
         }
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 Holder = PlayerRef.None;
-                WorldPosition = transform.position;
+                PlaceOnFloor(transform, 0f, out var position, out var rotation);
+                WorldPosition = position;
+                WorldRotation = rotation;
             }
             ApplyVisuals();
         }
@@ -65,7 +95,13 @@ namespace EchoProtocol.MatchFlow
                 if (!Object.HasStateAuthority) return;
                 Selected = selected;
             }
-            else _offlineSelected = selected;
+            else {
+                if (selected && !_offlineSelected) {
+                    PlaceOnFloor(transform, 0f, out var position, out var rotation);
+                    transform.SetPositionAndRotation(position, rotation);
+                }
+                _offlineSelected = selected;
+            }
             ApplyVisuals();
         }
         public static Zone3FuelCell FindCarried(GameObject player)
@@ -139,24 +175,42 @@ namespace EchoProtocol.MatchFlow
             if (Holder != info.Source || !Holder.IsRealPlayer) return;
             DropAuthoritative();
         }
-        private Vector3 DropPosition(GameObject player)
+        private float FloorClearance
         {
-            if (player == null) return transform.position;
-            ItemDropPlacementUtility.GetFloorSnappedPose(player.transform, 1.1f, 0.3f,
-                out var position, out _);
-            return position;
+            get
+            {
+                // The imported visual is centred, not bottom-pivoted. Always use its
+                // uncarried dimensions; a Jammo carry scale must not affect ground placement.
+                var box = GetComponent<BoxCollider>();
+                return box != null
+                    ? Mathf.Max(.01f, (box.size.y * .5f - box.center.y) * _originalVisualScale.y + .01f)
+                    : .32f;
+            }
+        }
+        private void PlaceOnFloor(Transform source, float distance, out Vector3 position, out Quaternion rotation)
+        {
+            ItemDropPlacementUtility.GetFloorSnappedPose(source, distance, FloorClearance, out position, out rotation);
+            rotation = Quaternion.Euler(0f, source.eulerAngles.y, 0f);
         }
         private void DropAuthoritative()
         {
-            WorldPosition = DropPosition(Carrier);
+            var player = Carrier;
+            PlaceOnFloor(player != null ? player.transform : transform, player != null ? 1.1f : 0f,
+                out var position, out var rotation);
+            WorldPosition = position;
+            WorldRotation = rotation;
             Holder = PlayerRef.None;
-            transform.position = WorldPosition;
+            _carryPoseFrame = -1;
+            transform.SetPositionAndRotation(position, rotation);
             ApplyVisuals();
         }
         private void DropOffline()
         {
-            transform.position = DropPosition(_offlineCarrier);
+            PlaceOnFloor(_offlineCarrier != null ? _offlineCarrier.transform : transform,
+                _offlineCarrier != null ? 1.1f : 0f, out var position, out var rotation);
             _offlineCarrier = null;
+            _carryPoseFrame = -1;
+            transform.SetPositionAndRotation(position, rotation);
             ApplyVisuals();
         }
         public override void FixedUpdateNetwork()
@@ -191,15 +245,33 @@ namespace EchoProtocol.MatchFlow
             }
             if (_collider != null) _collider.enabled = IsAvailable && !IsCarried;
             var player = Carrier;
-            transform.localScale = _originalVisualScale * (IsCarried && player != null ? player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f : 1f);
+            transform.localScale = _originalVisualScale;
+            if (IsCarried || !IsAvailable)
+            {
+                if (_highlights != null)
+                    foreach (var highlight in _highlights) if (highlight != null) highlight.SetHighlightActive(false);
+                if (_outlines != null)
+                    foreach (var outline in _outlines) if (outline != null) outline.enabled = false;
+            }
             if (IsCarried && player != null)
             {
+                if (_carryPoseFrame == Time.frameCount)
+                {
+                    if (_gripHand != null)
+                    {
+                        Quaternion rotation = _gripHand.rotation * _gripHandLocalRotation;
+                        Vector3 handle = _gripHand.TransformPoint(_gripHandLocalPoint);
+                        transform.SetPositionAndRotation(handle - rotation * Vector3.Scale(rightGripLocalPosition, _originalVisualScale), rotation);
+                    }
+                    else transform.SetPositionAndRotation(_carryPosePosition, _carryPoseRotation);
+                    return;
+                }
                 var anchor = PlayerHeldItemAnchor.ResolveCoreCarryAnchor(player);
                 transform.SetPositionAndRotation((anchor != null ? anchor.position : player.transform.TransformPoint(carryLocalOffset))
                     + (player.GetComponent<PlayerCharacterPresenter>()?.HeldItemWorldOffset ?? Vector3.zero),
                     anchor != null ? anchor.rotation : player.transform.rotation);
             }
-            else if (Online) transform.position = WorldPosition;
+            else if (Online) transform.SetPositionAndRotation(WorldPosition, WorldRotation);
         }
     }
 }

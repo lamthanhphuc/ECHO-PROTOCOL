@@ -13,7 +13,7 @@ using EchoProtocol.Networking.Authority;
 namespace EchoProtocol.Networking
 {
     /// <summary>Owned-player command gateway. All interaction RPCs pass through this behaviour.</summary>
-    public sealed class NetworkPlayerInteractor : NetworkBehaviour
+    public sealed class NetworkPlayerInteractor : NetworkBehaviour, IInputAuthorityGained
     {
         private const float DoorJammerInteractionDistance = 4f;
 
@@ -117,7 +117,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 FirstAidRevivesUsedThisMatch = 0;
             }
@@ -128,6 +128,19 @@ namespace EchoProtocol.Networking
             _teamToolAction?.Enable();
             _placementPreviewAction?.Enable();
             _helpPingAction?.Enable();
+        }
+
+        // Fusion does not invoke Spawned again when a restored player gains InputAuthority.
+        public void InputAuthorityGained()
+        {
+            if (Object == null || !Object.HasInputAuthority) return;
+            _interactAction?.Enable();
+            _dropCoreAction?.Enable();
+            _teamToolAction?.Enable();
+            _placementPreviewAction?.Enable();
+            _helpPingAction?.Enable();
+            RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                $"NPI_INPUT_REBIND|cause=authority-gained|object={Object.Id}|gEnabled={_dropCoreAction?.enabled}");
         }
 
         public void ResetForMatchAuthoritative()
@@ -155,6 +168,13 @@ namespace EchoProtocol.Networking
             _placementPreviewAction?.Disable();
             _helpPingAction?.Disable();
             ClearStabilizerBuffedPlayers();
+        }
+
+        private void OnDisable() => _toolInputArmed = false;
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) _toolInputArmed = false;
         }
 
         private void OnDestroy()
@@ -225,10 +245,44 @@ namespace EchoProtocol.Networking
             return null;
         }
 
+        private bool _toolInputArmed;
+        private string _toolInputScene;
+
         private void Update()
         {
+            // Diagnostic only: one line per local G press, including early-return conditions.
+            if (Runner != null && Runner.IsRunning
+                && Object != null && Object.HasInputAuthority
+                && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame)
+            {
+                var debugState = GetComponent<LobbyPlayerState>();
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"TT_DROP_KEY|player={Runner.LocalPlayer}|object={Object.Id}|tool={debugState?.ToolId}|core={debugState?.CarriedCoreId}|gameplay={debugState?.IsGameplayPlayer}|gActionEnabled={_dropCoreAction?.enabled}|suppressed={_suppressInteractionPrompt}|locked={PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)}|voicePanel={EchoProtocol.Voice.VoiceSettingsPanel.IsOpen}|localSequence={_nextSequence}|serverSequence={LastProcessedSequence}");
+            }
+
+            // A migration/rejoin can keep this PlayerObject but restore its InputAuthority
+            // without rerunning Spawned. Repair locally disabled actions without touching
+            // authoritative gameplay state or creating any NetworkObjects.
+            if (Runner != null && Runner.IsRunning && Object != null
+                && Object.HasInputAuthority
+                && _dropCoreAction != null && !_dropCoreAction.enabled)
+            {
+                _interactAction?.Enable();
+                _dropCoreAction.Enable();
+                _teamToolAction?.Enable();
+                _placementPreviewAction?.Enable();
+                _helpPingAction?.Enable();
+                RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                    $"NPI_INPUT_REBIND|cause=local-update|object={Object.Id}|gEnabled={_dropCoreAction.enabled}");
+            }
+
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            if (_toolInputScene != scene) { _toolInputScene = scene; _toolInputArmed = false; }
+            if (scene == "Lobby") { _toolInputArmed = false; return; }
             if (_suppressInteractionPrompt || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
             {
+                _toolInputArmed = false;
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -240,6 +294,7 @@ namespace EchoProtocol.Networking
 
             if (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen)
             {
+                _toolInputArmed = false;
                 if (_currentReviveTarget != null) RequestCancelRevive(_currentReviveTarget);
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -251,12 +306,18 @@ namespace EchoProtocol.Networking
             var playerState = GetComponent<LobbyPlayerState>();
             if (isOnline && (!Object.HasInputAuthority || (playerState != null && playerState.Object != null && playerState.Object.IsValid && !playerState.IsGameplayPlayer)))
             {
+                _toolInputArmed = false;
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
                 IsDoorJammerPreviewActive = false;
                 IsNoiseMakerPreviewActive = false;
                 return;
             }
+
+            var mouse = Mouse.current;
+            if (!_toolInputArmed && mouse != null && !mouse.leftButton.isPressed
+                && !mouse.rightButton.isPressed && !mouse.leftButton.wasPressedThisFrame
+                && !mouse.rightButton.wasPressedThisFrame) _toolInputArmed = true;
 
             if (_helpPingAction?.WasPerformedThisFrame() == true) RequestHelpPing();
             if ((_interactAction?.WasReleasedThisFrame() == true
@@ -267,7 +328,7 @@ namespace EchoProtocol.Networking
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
-            if (lifeState != null && !lifeState.CanInitiateAction)
+            if (NetworkPlayerFlashlight.IsResonating(gameObject) || lifeState != null && !lifeState.CanInitiateAction)
             {
                 CurrentCandidate = null;
                 IsTeamToolPickupBlocked = false;
@@ -282,7 +343,7 @@ namespace EchoProtocol.Networking
                 CurrentCandidate != null
                 && IsTeamToolPickup(CurrentCandidate)
                 && playerState != null
-                && playerState.ToolId > 0;
+                && (playerState.ToolId > 0 || AlienHuntMission.IsCarrying(gameObject));
 
             var inventory = GetComponent<PlayerInventory>();
             int equippedToolId =
@@ -311,7 +372,7 @@ namespace EchoProtocol.Networking
                 IsNoiseMakerPreviewActive = false;
             }
 
-            if (_placementPreviewAction
+            if (_toolInputArmed && _placementPreviewAction
                     ?.WasPerformedThisFrame() == true)
             {
                 if (hasDoorJammer)
@@ -336,13 +397,22 @@ namespace EchoProtocol.Networking
                     : null;
             }
 
-            if (_dropCoreAction?.WasPerformedThisFrame() == true)
+            // One dispatch per G press, even when Fusion restores a disabled InputAction.
+            // The keyboard path is also used by PlayerInventoryDropInput, but its local
+            // inventory drop is explicitly rejected in active Fusion sessions; only this
+            // NetworkPlayerInteractor sends the authoritative drop RPC.
+            bool dropActionPressed = _dropCoreAction?.WasPerformedThisFrame() == true;
+            bool dropKeyboardPressed = isOnline && Object.HasInputAuthority
+                && Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
+            if (dropActionPressed || dropKeyboardPressed)
             {
-                RequestDropCarriedItem();
+                bool submitted = RequestDropCarriedItem();
+                RuntimeLog.Log(RuntimeLogCategory.Interaction,
+                    $"TT_DROP_DISPATCH|object={Object.Id}|source={(dropActionPressed ? "action" : "keyboard")}|submitted={submitted}|localSequence={_nextSequence}|serverSequence={LastProcessedSequence}");
             }
 
             bool useTeamToolPressed =
-                _teamToolAction?.WasPerformedThisFrame() == true;
+                _toolInputArmed && _teamToolAction?.WasPerformedThisFrame() == true;
             bool interactPressed =
                 _interactAction?.WasPressedThisFrame() == true;
 
@@ -440,6 +510,8 @@ namespace EchoProtocol.Networking
         public bool RequestDropCarriedItem()
         {
             if (!Object.HasInputAuthority) return false;
+            var hunt = AlienHuntMission.Instance;
+            if (hunt != null && hunt.TryDropLocal(gameObject)) return true;
 
             var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
             if (fuelCell != null)
@@ -583,6 +655,7 @@ namespace EchoProtocol.Networking
 
         public bool CanStartFirstAidReviveAuthoritative(LobbyPlayerState state)
         {
+            if (AlienHuntMission.IsCarrying(gameObject) || NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (Object == null
                 || !Object.IsValid
                 || !Object.HasStateAuthority
@@ -611,11 +684,14 @@ namespace EchoProtocol.Networking
 
         public bool RequestUseTeamTool()
         {
+            if (!_toolInputArmed || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby"
+                || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             bool isOnline = Runner != null && Runner.IsRunning && Object != null && Object.IsValid;
             if (isOnline && !Object.HasInputAuthority) return false;
 
             var playerState = GetComponent<LobbyPlayerState>();
-            if (isOnline && playerState != null && playerState.CarriedCoreId.IsValid) return false;
+            if (isOnline && (playerState == null || !playerState.IsGameplayPlayer || (playerState.CarriedCoreId.IsValid || AlienHuntMission.IsCarrying(gameObject)))) return false;
             var scanner = GetComponent<EchoProtocol.Tools.Scanner.NetworkFieldScanner>();
             if (scanner != null && scanner.IsScannerEquipped())
             {
@@ -794,6 +870,7 @@ namespace EchoProtocol.Networking
 
         public bool RequestInteraction(NetworkInteractable target)
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (!Object.HasInputAuthority)
             {
                 CompleteLocally(default, 0, InteractionValidationResult.NotInputAuthority);
@@ -1124,9 +1201,13 @@ namespace EchoProtocol.Networking
         {
             if (!TryResolveRequester(info.Source, out var requester))
             {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"TT_DROP_RPC_REJECT|source={info.Source}|owner={Object.InputAuthority}|sequence={sequence}|reason=UnresolvedRequester");
                 return;
             }
 
+            uint previousProcessed = LastProcessedSequence;
             var result = ValidateRequester(requester, sequence);
             var state = GetComponent<LobbyPlayerState>();
             var targetId = default(NetworkId);
@@ -1139,7 +1220,7 @@ namespace EchoProtocol.Networking
                 {
                     result = InteractionValidationResult.InvalidRequester;
                 }
-                else if (state == null || state.CarriedCoreId.IsValid)
+                else if (state == null || state.CarriedCoreId.IsValid || AlienHuntMission.IsCarrying(gameObject))
                 {
                     result = InteractionValidationResult.InvalidTargetState;
                 }
@@ -1166,6 +1247,9 @@ namespace EchoProtocol.Networking
             }
 
             if (sequence > LastProcessedSequence) LastProcessedSequence = sequence;
+            RuntimeLog.Log(
+                RuntimeLogCategory.Interaction,
+                $"TT_DROP_RPC_RESULT|requester={requester}|object={Object.Id}|sequence={sequence}|previousProcessed={previousProcessed}|lastProcessed={LastProcessedSequence}|tool={state?.ToolId}|result={result}");
             RpcInteractionResult(requester, targetId, sequence, (int)result);
         }
 
@@ -1307,7 +1391,7 @@ namespace EchoProtocol.Networking
             }
 
             var state = GetComponent<LobbyPlayerState>();
-            if (state != null && state.CarriedCoreId.IsValid)
+            if (AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
             {
                 return;
             }
@@ -1534,7 +1618,7 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            if (state != null && state.CarriedCoreId.IsValid)
+            if (AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
             {
                 return false;
             }
@@ -2085,7 +2169,7 @@ namespace EchoProtocol.Networking
         private void RpcRequestHelpPing(uint sequence, RpcInfo info = default)
         {
             if (!TryResolveRequester(info.Source, out var requester)
-                || ValidateRequester(requester, sequence) != InteractionValidationResult.Accepted)
+                || ValidateRequester(requester, sequence, requireActivePlayer: false) != InteractionValidationResult.Accepted)
             {
                 return;
             }
@@ -2405,8 +2489,9 @@ namespace EchoProtocol.Networking
                 out requester);
         }
 
-        private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence)
+        private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence, bool requireActivePlayer = true)
         {
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return InteractionValidationResult.InvalidRequester;
             if (!Object.HasStateAuthority || !source.IsValid || source != Object.InputAuthority)
             {
                 return InteractionValidationResult.InvalidRequester;
@@ -2421,6 +2506,13 @@ namespace EchoProtocol.Networking
             {
                 return InteractionValidationResult.InvalidRequester;
             }
+            var lifeState = GetComponent<NetworkPlayerLifeState>();
+            if ((requireActivePlayer && (lifeState == null || !lifeState.CanInitiateAction))
+                || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded)
+            {
+                return InteractionValidationResult.InvalidRequester;
+            }
+
             return sequence == 0 || sequence <= LastProcessedSequence
                 ? InteractionValidationResult.DuplicateRequest
                 : InteractionValidationResult.Accepted;
@@ -2438,6 +2530,15 @@ namespace EchoProtocol.Networking
 
         private uint NextSequence()
         {
+            // The networked watermark survives migration; the local counter does not.
+            // Rebase before every RPC so a newly restored interactor never replays IDs.
+            if (_nextSequence < LastProcessedSequence)
+            {
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Interaction,
+                    $"NPI_SEQUENCE_RESYNC|object={Object.Id}|localBefore={_nextSequence}|networkedWatermark={LastProcessedSequence}");
+                _nextSequence = LastProcessedSequence;
+            }
             _nextSequence++;
             if (_nextSequence == 0) _nextSequence = 1;
             return _nextSequence;

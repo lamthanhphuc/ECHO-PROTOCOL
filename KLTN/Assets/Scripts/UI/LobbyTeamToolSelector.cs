@@ -310,7 +310,7 @@ namespace EchoProtocol.UI
                 if (valueText != null)
                 {
                     valueText.text =
-                        "TEAM TOOL: NONE";
+                        EchoProtocol.Settings.GameLanguage.Choose("Không có", "None");
                 }
 
                 if (thumbnail != null)
@@ -336,9 +336,7 @@ namespace EchoProtocol.UI
                     if (valueText != null)
                     {
                         valueText.text =
-                            "TEAM TOOL: "
-                            + definition.DisplayName
-                                .ToUpperInvariant();
+                            EchoProtocol.Settings.GameLanguage.TeamToolName(toolId);
                     }
 
                     RefreshThumbnail(
@@ -351,7 +349,7 @@ namespace EchoProtocol.UI
             if (valueText != null)
             {
                 valueText.text =
-                    $"TEAM TOOL: TOOL {toolId}";
+                    EchoProtocol.Settings.GameLanguage.Choose($"Công cụ {toolId}", $"Tool {toolId}");
             }
 
             RefreshThumbnail(
@@ -418,6 +416,11 @@ namespace EchoProtocol.UI
 
                 LobbySelectionError.InvalidSelection =>
                     "INVALID TOOL",
+
+                LobbySelectionError.OwnershipNotVerified =>
+                    EchoProtocol.Settings.GameLanguage.Choose(
+                        "KHÔNG XÁC MINH ĐƯỢC QUYỀN SỞ HỮU",
+                        "OWNERSHIP COULD NOT BE VERIFIED"),
 
                 LobbySelectionError.NotInputAuthority =>
                     "NO PLAYER AUTHORITY",

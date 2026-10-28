@@ -89,7 +89,15 @@ public sealed class PaymentWebhookService(
 
             if (paymentEvent.Status != PaymentProviderEventStatus.PAID)
             {
-                storedEvent.ProcessingOutcome = PaymentProviderEventOutcome.STATUS_IGNORED;
+                var terminal = PaymentProviderStatusRules.TerminalOrderStatus(paymentEvent.Status);
+                if (terminal is { } target && PaymentOrderStateMachine.CanTransition(order.Status, target))
+                {
+                    order.Status = target;
+                    order.UpdatedAtUtc = now;
+                    storedEvent.ProcessingOutcome = PaymentProviderEventOutcome.TERMINAL_APPLIED;
+                }
+                else
+                    storedEvent.ProcessingOutcome = PaymentProviderEventOutcome.STATUS_IGNORED;
                 storedEvent.ProcessedAtUtc = now;
                 await db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -230,6 +238,8 @@ public sealed class PaymentWebhookService(
             : PaymentProviderEventOutcome.FULFILLMENT_PENDING;
         trackedEvent.ProcessedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(cancellationToken);
+        if (!fulfillment.IsSuccess)
+            return Fail("Payment verified; fulfillment is pending recovery", ErrorCodes.PaymentFulfillmentPending);
         return Success(trackedEvent, replay);
     }
 

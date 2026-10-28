@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using EchoProtocol.Voice;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -22,7 +22,7 @@ namespace EchoProtocol.UI
 
         private static void OnSceneChanged(Scene previous, Scene current)
         {
-            if (current.name != LobbyManager.GameSceneName) return;
+            if (!LobbyMapCatalog.IsGameplayScene(current.name)) return;
             if (FindAnyObjectByType<GameplayMenuController>() != null) return;
             var owner = new GameObject("GameplayMenus");
             owner.AddComponent<GameplayMenuController>();
@@ -35,7 +35,7 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
-            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+            if (!LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
             {
                 if (_lock.IsLocked) Close();
                 return;

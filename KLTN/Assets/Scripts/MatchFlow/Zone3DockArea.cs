@@ -90,7 +90,7 @@ namespace EchoProtocol.Networking
                 && Mathf.Abs(point.z) <= half.z - containmentInset;
         }
 
-        private void RefreshLine()
+        public void RefreshLine()
         {
             _area = GetComponent<BoxCollider>();
             _line = GetComponent<LineRenderer>();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.Settings;
+using EchoProtocol.UI.Result;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -34,6 +35,7 @@ namespace EchoProtocol.UI
             foreach (var entry in _labels.Values)
             {
                 if (entry.Label == null || !entry.Label.gameObject.activeInHierarchy) continue;
+                if (IsResultPlayerName(entry.Label)) continue;
                 string current = entry.Label is TMP_Text tmp ? tmp.text : ((Text)entry.Label).text;
                 if (current == entry.Output && entry.Locale == GameLanguage.Current) continue;
                 if (current != entry.Output) entry.Source = current;
@@ -47,6 +49,7 @@ namespace EchoProtocol.UI
         private void Register(Graphic label)
         {
             if (_labels.ContainsKey(label)) return;
+            if (IsResultPlayerName(label)) return;
             // Input values and identity labels are player data, not interface copy.
             if ((label.GetComponentInParent<TMP_InputField>() != null || label.GetComponentInParent<InputField>() != null)
                 && !label.name.ToLowerInvariant().Contains("placeholder")) return;
@@ -57,6 +60,14 @@ namespace EchoProtocol.UI
                 || label.GetComponentInParent<LobbyPlayerNameplate>() != null
                 || label.GetComponentInParent<EchoProtocol.UI.MainMenu.TeamToolShopPanel>() != null) return;
             _labels.Add(label, new Entry { Label = label });
+        }
+
+        private static bool IsResultPlayerName(Graphic label)
+        {
+            if (label.GetComponentInParent<CinematicResultSceneController>() == null) return false;
+            string name = label.gameObject.name;
+            return name.Length == 9 && name.StartsWith("TeamName", System.StringComparison.Ordinal)
+                && name[8] >= '0' && name[8] <= '3';
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

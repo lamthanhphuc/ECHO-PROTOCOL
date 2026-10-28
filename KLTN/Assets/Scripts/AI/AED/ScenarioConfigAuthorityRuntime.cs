@@ -330,7 +330,8 @@ namespace EchoProtocol.AI.AED
                 mode,
                 decisionPoint,
                 phaseContext ?? string.Empty,
-                experimentCondition ?? string.Empty);
+                experimentCondition ?? string.Empty,
+                EchoProtocol.Networking.LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name));
             var extendedRequested = runtimeSettings != null
                 && (runtimeSettings.ExtendedPolicyShadowEnabled
                     || runtimeSettings.ExtendedPolicyGameplayEnabled);
@@ -372,7 +373,8 @@ namespace EchoProtocol.AI.AED
                     extendedRequested && mode == ScenarioResolutionMode.Adaptive
                         ? new ScenarioResolutionRequest(request.ResolutionId, matchId,
                             ScenarioResolutionMode.Fixed, decisionPoint,
-                            phaseContext ?? string.Empty, experimentCondition ?? string.Empty)
+                            phaseContext ?? string.Empty, experimentCondition ?? string.Empty,
+                            request.MapId)
                         : request,
                     CurrentAppliedScenarioConfig,
                     snapshot,

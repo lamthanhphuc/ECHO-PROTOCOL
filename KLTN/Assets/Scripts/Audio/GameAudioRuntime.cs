@@ -91,16 +91,16 @@ namespace EchoProtocol.Audio
         public static void UI(string key) { if (_instance != null) Play(_instance._ui, key); }
         public static AudioClip FindClip(string key) => _instance != null ? _instance._catalog.Find(key) : null;
 
-        public static void AtPoint(string key, Vector3 position)
+        public static void AtPoint(string key, Vector3 position) => AtPoint(FindClip(key), position);
+
+        public static void AtPoint(AudioClip clip, Vector3 position, float volume = 1f)
         {
-            if (_instance == null) return;
-            var clip = _instance._catalog.Find(key);
-            if (clip == null) return;
+            if (_instance == null || clip == null || !Application.isPlaying) return;
             var owner = new GameObject("OneShotAudio");
             owner.transform.position = position;
             var source = CreateSource(owner, true);
             source.clip = clip;
-            source.volume = _instance._catalog.effectsVolume;
+            source.volume = volume * _instance._catalog.effectsVolume;
             source.Play();
             Destroy(owner, clip.length + 0.1f);
         }

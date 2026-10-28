@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Api;
 using EchoProtocol.Profile;
+using EchoProtocol.UI.MainMenu;
 using UnityEngine;
 
 namespace EchoProtocol.Auth
@@ -66,6 +67,9 @@ namespace EchoProtocol.Auth
               });
               return;
             }
+            AuthSession.Clear();
+            PlayerProfileSession.Clear();
+            TeamToolOwnershipSession.Clear();
           }
 
           callback?.Invoke(result);
@@ -172,6 +176,7 @@ namespace EchoProtocol.Auth
       TokenStorage.Clear();
       AuthSession.Clear();
       PlayerProfileSession.Clear();
+      TeamToolOwnershipSession.Clear();
     }
   }
 }

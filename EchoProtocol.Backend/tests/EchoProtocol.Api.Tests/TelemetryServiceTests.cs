@@ -230,6 +230,29 @@ public sealed partial class TelemetryServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("M2-MAP-1", "EXPEDITION", "NORMAL")]
+    [InlineData("EXPEDITION-SCENE-A", "EXPEDITION", "EASY")]
+    [InlineData("PURGE-SCENE-B", "PURGE", "HARD")]
+    public async Task MatchStartPreservesGameplayProvenance(string mapId, string mode, string difficulty)
+    {
+        var repository = new FakeTelemetryEventRepository();
+        var request = CreateMatchStarted();
+        var value = System.Text.Json.Nodes.JsonNode.Parse(request.Events[0].ValueJson.GetRawText())!;
+        value["context"]!["gameMode"] = mode;
+        value["context"]!["difficulty"] = difficulty;
+        value["data"]!["mapId"] = mapId;
+        request.Events[0].ValueJson = JsonSerializer.SerializeToElement(value);
+        var result = await CreateService(repository).IngestBatchAsync(request, Guid.NewGuid(), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(TelemetryAckStatuses.Accepted, Assert.Single(result.Data!.Items).Status);
+        var stored = Assert.Single(repository.InsertedEvents);
+        Assert.Equal(mapId, stored.ValueJson["data"]!["mapId"]!.AsString);
+        Assert.Equal(mode, stored.ValueJson["context"]!["gameMode"]!.AsString);
+        Assert.Equal(difficulty, stored.ValueJson["context"]!["difficulty"]!.AsString);
+
+    }
+
     [Fact]
     public async Task IngestBatchAsync_CanonicalV11MatchStart_StoresValueJsonAndReturnsAcceptedAck()
     {
@@ -1363,9 +1386,21 @@ public sealed partial class TelemetryServiceTests
         public Task<ServiceResult<MatchAuthorityResponse>> CreateAsync(Guid hostUserId, CreateMatchAuthorityRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<JoinProofResponse>> IssueJoinProofAsync(Guid userId, Guid matchId, IssueJoinProofRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(Guid hostUserId, Guid matchId, BindMatchPlayerRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchPlayerEntitlementsResponse>> GetPlayerEntitlementsAsync(Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+            Guid newHostUserId,
+            Guid matchId,
+            TakeoverMatchAuthorityRequest request,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+            Guid hostUserId,
+            Guid matchId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(Guid hostUserId, Guid matchId, int fusionActorNumber, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(Guid hostUserId, Guid matchId, int fusionActorNumber, Guid expectedUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchAuthorityResponse>> EndAsync(Guid hostUserId, Guid matchId, EndMatchAuthorityRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

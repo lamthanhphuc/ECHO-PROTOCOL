@@ -6,6 +6,7 @@ namespace EchoProtocol.UI.HUD
 {
     public class HUD3DWorldMarker : MonoBehaviour
     {
+        public static bool ShowDebugAlienDirection { get; set; }
         [System.Serializable]
         public class MarkerItemUI
         {
@@ -133,6 +134,25 @@ namespace EchoProtocol.UI.HUD
 
             // 4. Escape Door during FinalHunt or ExitCountdown
             CollectEscapeDoorTarget();
+
+            // shortcut: the four-slot marker pool can hide this debug target, expand the pool if all slots are occupied.
+            var hunt = Networking.AlienHuntMission.Instance;
+            if (!ShowDebugAlienDirection || hunt == null || !hunt.Ready || hunt.Completed || hunt.Actors == null) return;
+            Networking.AlienHuntActor closest = null;
+            float nearest = float.MaxValue;
+            foreach (var actor in hunt.Actors)
+            {
+                if (actor == null || actor.Kind != Networking.HuntKind.Alien ||
+                    hunt.Read(actor.Index).Stage >= (int)Networking.AlienStage.Carried) continue;
+                float distance = (actor.transform.position - _mainCamera.transform.position).sqrMagnitude;
+                if (distance >= nearest) continue;
+                closest = actor;
+                nearest = distance;
+            }
+            if (closest == null) return;
+            _targetTransforms.Add(closest.transform);
+            _targetTitles.Add("Alien gần nhất");
+            _targetColors.Add(downedTeammateColor);
         }
 
         private void CollectSectorBoxTarget()

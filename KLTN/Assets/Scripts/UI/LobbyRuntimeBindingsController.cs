@@ -501,6 +501,7 @@ namespace EchoProtocol.UI
                 .EnsureExists(bootstrap)
                 .RequestDifficulty(
                     difficulty);
+            LobbySelectionMemory.Write("difficulty", (int)difficulty);
         }
 
 
@@ -561,7 +562,7 @@ namespace EchoProtocol.UI
                         .ShutdownRunnerAsync();
                 }
 
-                SceneManager.LoadScene(
+                GameUIFeedback.LoadScene(
                     GameConstants.SceneMainMenu);
             }
             catch (Exception exception)

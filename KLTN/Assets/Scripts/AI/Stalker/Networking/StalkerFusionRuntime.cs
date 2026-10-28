@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using EchoProtocol.AI.AED;
@@ -134,10 +134,16 @@ namespace EchoProtocol.AI.Stalker.Networking
                 || controller == null || controller.CurrentState != StalkerState.ATTACK
                 || !CatchCooldown.ExpiredOrNotRunning(Runner) || player == null)
                 return false;
+            if (AlienHuntMission.Instance && NetworkMatchState.Instance != null)
+            {
+                var purge = NetworkMatchState.Instance;
+                if (purge.IsEnded || purge.PurgeMood == PurgeBossMood.Warning || purge.PurgeMood == PurgeBossMood.Staggered || purge.PurgeUvContact) return false;
+            }
             if (!player.TryCatchAuthoritative(Object, maximumDamageDistance, jumpscareSeconds, catchEndsInDeath))
                 return false;
             CatchCooldown = TickTimer.CreateFromSeconds(Runner, Mathf.Max(jumpscareSeconds, catchCooldownSeconds));
             AttackSequence++;
+            if(AlienHuntMission.Instance) NetworkMatchState.Instance?.PacifyPurgeBoss();
             return true;
         }
 
@@ -193,6 +199,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
         private StalkerProductionTelemetryProducer _productionTelemetryProducer;
         private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+        private bool _hostMigrationFirstSimulationPending;
         private float _nextHearingDiagnosticTime;
 
         [Networked] public int ReplicatedSemanticState { get; private set; }
@@ -284,7 +291,10 @@ namespace EchoProtocol.AI.Stalker.Networking
             ResolveLocalDependencies();
             if (Object != null && Object.HasStateAuthority)
                 ApplyMatchDifficulty();
-            specialEncounterRuntime?.ResetForMatch();
+            if (!EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                specialEncounterRuntime?.ResetForMatch();
+            }
             ResolveLifecycle();
             BindProductionConsequenceSink();
             BindProductionTelemetryProducer();
@@ -304,7 +314,10 @@ namespace EchoProtocol.AI.Stalker.Networking
 // #endif
             }
 
-            if (Object != null && Object.HasStateAuthority)
+            // Host Migration keeps the replicated Stalker state.
+            if (Object != null
+                && Object.HasStateAuthority
+                && !EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 ReplicatedState = controller != null ? controller.CurrentState : StalkerState.PATROL;
                 TargetPlayer = PlayerRef.None;
@@ -313,6 +326,14 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             if (Object != null) ApplyReplicatedPresentation();
+
+            if (Object != null && Object.HasStateAuthority
+                && NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                _hostMigrationFirstSimulationPending = true;
+                Debug.Log(
+                    $"[HM_AI_STALKER_RESTORE]|id={Object.Id}|snapshotState={ReplicatedState}|snapshotTarget={TargetPlayer}|attackSequence={AttackSequence}|attackEpisode={ReplicatedAttackEpisodeId}|controllerState={(controller != null ? controller.CurrentState.ToString() : "missing")}");
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -378,6 +399,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
+            var auditFirstSimulation = _hostMigrationFirstSimulationPending;
+            var stateBeforeFirstSimulation = ReplicatedState;
+            var targetBeforeFirstSimulation = TargetPlayer;
+            var attackBeforeFirstSimulation = AttackSequence;
+
             RefreshAEDv2ProfileAuthoritative();
             BindPatrolVariationFromMatchAuthority();
             BindScenarioConfigFromRegistry();
@@ -393,6 +419,19 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             PublishAuthoritativeState();
+            if (auditFirstSimulation)
+            {
+                _hostMigrationFirstSimulationPending = false;
+                Debug.Log(
+                    $"[HM_AI_STALKER_FIRST_TICK]|id={Object.Id}|snapshotState={stateBeforeFirstSimulation}|currentState={ReplicatedState}|snapshotTarget={targetBeforeFirstSimulation}|currentTarget={TargetPlayer}|snapshotAttackSeq={attackBeforeFirstSimulation}|currentAttackSeq={AttackSequence}|controllerState={controller.CurrentState}");
+
+                if (stateBeforeFirstSimulation != ReplicatedState
+                    || targetBeforeFirstSimulation != TargetPlayer)
+                {
+                    Debug.LogWarning(
+                        $"[HM_AI_STALKER_STATE_CHANGED]|id={Object.Id}|from={stateBeforeFirstSimulation}|to={ReplicatedState}|targetFrom={targetBeforeFirstSimulation}|targetTo={TargetPlayer}|note=inspect whether transition used restored or fresh AI memory");
+                }
+            }
             if (Runner.IsServer && Object.HasStateAuthority)
             {
                 MatchAuthorityRuntime.Instance?.RecordStalkerPursuitSnapshot(
@@ -660,6 +699,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             return -1;
         }
 
+        private int _lastPurgeRitualVersion;
+
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
             if (!step.IsValid || controller == null || visionSensor == null)
@@ -734,8 +775,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             // Perception frames have already been built above, so Vision,
             // Hearing and target-status information remain fresh.
             //
-            TickCabinetCandidate(step);
-            specialEncounterRuntime?.TickAuthoritative(
+            if (!AlienHuntMission.Instance) TickCabinetCandidate(step);
+            if (AlienHuntMission.Instance) specialEncounterRuntime?.SuppressForPurge();
+            else specialEncounterRuntime?.TickAuthoritative(
                 Runner,
                 lifecycle,
                 step);
@@ -754,6 +796,22 @@ namespace EchoProtocol.AI.Stalker.Networking
                 sustainedCoreCarrier = null;
             }
 
+            if (AlienHuntMission.Instance && NetworkMatchState.Instance)
+            {
+                var purge = NetworkMatchState.Instance;
+                bool hunt = purge.PurgeMood == PurgeBossMood.Hunting;
+                if (purge.PurgeRageTier >= 1 && !hunt && purge.PurgeMood == PurgeBossMood.Calm)
+                    foreach (var candidate in _visibleCandidates)
+                        if ((candidate.Observation.ObservedPosition - transform.position).sqrMagnitude <= 2.5f * 2.5f) { purge.ProvokePurgeBoss(); break; }
+                bool frozen = purge.PurgeMood == PurgeBossMood.Warning || purge.PurgeMood == PurgeBossMood.Staggered || purge.IsEnded;
+                controller.ApplyPurgePolicy(purge.PurgeRageTier == 0 || hunt, frozen, purge.PurgeChaseSpeed);
+                if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion
+                    && controller.InvestigatePurgeRitual(purge.PurgeRitualPosition))
+                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
+                if(purge.PurgeMood==PurgeBossMood.Calm)
+                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
+                sustainedCoreCarrier=null;
+            }
             var input =
                 new StalkerSimulationInput(
                     step,
@@ -1276,6 +1334,8 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private bool TryApplyAuthoritativeAttackDamage()
         {
+            if (AlienHuntMission.Instance != null && NetworkMatchState.Instance != null
+                && NetworkMatchState.Instance.PurgeUvContact) return false;
             if (!Object.HasStateAuthority
                 || !TargetPlayer.IsRealPlayer
                 || !Runner.TryGetPlayerObject(TargetPlayer, out var playerObject)
@@ -1610,6 +1670,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private void OnPlayerDownedByStalkerAuthoritative(
             StalkerDownedPlayerFact fact)
         {
+            if (AlienHuntMission.Instance) return;
             if (Object == null
                 || !Object.HasStateAuthority
                 || !fact.IsValid)

@@ -50,6 +50,8 @@ public class PlayerCamera : MonoBehaviour
     private float? _lockedPitch;
     private bool _driveTargetRotation = true;
     private bool _spectateThirdPerson;
+    private bool _wasGameplayScene;
+    private PlayerCameraFeedback _feedback;
 
     public float Yaw => _yaw;
     public float Pitch => _pitch;
@@ -100,12 +102,36 @@ public class PlayerCamera : MonoBehaviour
         {
             if (nm != null && nm.gameObject.activeInHierarchy)
             {
-                if (nm.Object == null || !nm.Object.IsValid || nm.Object.HasInputAuthority)
+                var networkObject = nm.Object;
+                if (networkObject == null) continue;
+
+                bool hasLocalInputAuthority;
+                try
+                {
+                    hasLocalInputAuthority = networkObject.IsValid && networkObject.HasInputAuthority;
+                }
+                catch (System.ArgumentOutOfRangeException)
+                {
+                    // Fusion may invalidate an old Runner during Host Migration.
+                    continue;
+                }
+
+                if (hasLocalInputAuthority)
                 {
                     SetTarget(nm.transform);
                     return true;
                 }
             }
+        }
+
+        // Never attach to an arbitrary remote player while Fusion owns the session.
+        var bootstrap = EchoProtocol.Networking.NetworkBootstrap.Instance;
+        if (bootstrap != null
+            && (bootstrap.HasRunningRunner
+                || bootstrap.State != EchoProtocol.Networking.NetworkSessionState.Disconnected
+                || EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationReconciliationPending))
+        {
+            return false;
         }
 
         // 2. Tim GameObject co Tag Player
@@ -175,20 +201,39 @@ public class PlayerCamera : MonoBehaviour
 
         _lookAction?.Enable();
 
-        if (lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor)
+        _wasGameplayScene = IsGameplayActive();
+        if (_wasGameplayScene && lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor)
         {
             LockCursor();
+        }
+        else if (!_wasGameplayScene)
+        {
+            UnlockCursor();
         }
     }
 
     private void OnDisable()
     {
         _lookAction?.Disable();
+        if (_feedback != null) _feedback.Apply(null, false, false);
         UnlockCursor();
     }
 
     private void Update()
     {
+        bool gameplayScene = IsGameplayActive();
+        if (!gameplayScene)
+        {
+            if (_wasGameplayScene || Cursor.lockState != CursorLockMode.None) UnlockCursor();
+            _wasGameplayScene = false;
+            return;
+        }
+        if (!_wasGameplayScene)
+        {
+            _wasGameplayScene = true;
+            if (lockCursorOnEnable && !PlayerInteractionControlLock.ShouldUnlockCursor) LockCursor();
+        }
+
         if (PlayerInteractionControlLock.ShouldUnlockCursor)
         {
             UnlockCursor();
@@ -213,6 +258,7 @@ public class PlayerCamera : MonoBehaviour
             AutoFindTarget();
             if (target == null)
             {
+                if (_feedback != null) _feedback.Apply(null, false, false);
                 return;
             }
         }
@@ -354,6 +400,9 @@ public class PlayerCamera : MonoBehaviour
                 Quaternion.Euler(_pitch, _yaw, 0f);
         }
 
+        if (_feedback == null) _feedback = gameObject.AddComponent<PlayerCameraFeedback>();
+        _feedback.Apply(target, _driveTargetRotation && !_spectateThirdPerson, isReviving);
+
         if (target != null && _driveTargetRotation)
         {
             target.rotation = Quaternion.Euler(0f, _yaw, 0f);
@@ -364,6 +413,15 @@ public class PlayerCamera : MonoBehaviour
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    private static bool IsGameplayActive()
+    {
+        var bootstrap = EchoProtocol.Networking.NetworkBootstrap.Instance;
+        return bootstrap != null
+            && bootstrap.State == EchoProtocol.Networking.NetworkSessionState.InMatch
+            && EchoProtocol.Networking.LobbyMapCatalog.IsGameplayScene(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
     private static void UnlockCursor()

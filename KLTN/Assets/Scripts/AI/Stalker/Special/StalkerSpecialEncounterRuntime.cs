@@ -84,6 +84,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public void Arm(StalkerDownedPlayerFact fact)
         {
+            if (AlienHuntMission.Instance) { SuppressForPurge(); return; }
             if (!fact.IsValid || IsActive)
             {
                 return;
@@ -121,6 +122,7 @@ namespace EchoProtocol.AI.Stalker.Special
             FusionPlayerLifecycle lifecycle,
             AiSimulationStep step)
         {
+            if (AlienHuntMission.Instance) { SuppressForPurge(); return; }
             ResolveDependencies();
             if (step.IsValid) _cabinetNow = step.Time.Seconds;
             if (_cabinet.IsActive || _cabinet.Phase == EchoProtocol.AI.Common.AED.AEDV02CabinetPhase.Backoff)
@@ -1028,6 +1030,14 @@ namespace EchoProtocol.AI.Stalker.Special
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerCombat,
                 $"[STK_SPECIAL][ABORT] reason={reason}");
+        }
+
+        public void SuppressForPurge()
+        {
+            if (!AlienHuntMission.Instance) return;
+            // Cleanup releases only an override acquired by this encounter.
+            // The PURGE policy reapplies its Warning/Staggered freeze afterward.
+            if (IsActive || _pendingFact.IsValid || _ownsControllerOverride) Cleanup();
         }
 
         private void Cleanup()

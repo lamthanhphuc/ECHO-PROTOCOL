@@ -58,6 +58,16 @@ namespace EchoProtocol.Voice
             SettingsMenuWidgets.Label("LanguageTitle", general, 34, 174, 350, 30, "Ngôn ngữ", 19);
             SettingsMenuWidgets.Button("Language", general, 405, 172, 347, 32, "Tiếng Việt / English", false, 17);
             general.GetComponent<RectTransform>().sizeDelta = new Vector2(780, 216);
+            var cameraMotion = SettingsMenuWidgets.Frame("CameraMotion", _canvas.transform.Find("Overlay/Window/Body"), 800, 520, 780, 150);
+            SettingsMenuWidgets.Label("Title", cameraMotion, 34, 12, 700, 30, GameLanguage.Choose("CHUYỂN ĐỘNG CAMERA", "CAMERA MOTION"), 21);
+            SettingsMenuWidgets.Label("MotionTitle", cameraMotion, 34, 52, 320, 30, GameLanguage.Choose("Cường độ chuyển động", "Motion intensity"), 19);
+            var motionSlider = SettingsMenuWidgets.Slider("Intensity", cameraMotion, 405, 52, 280);
+            motionSlider.SetValueWithoutNotify(PlayerCameraSettings.Intensity);
+            motionSlider.onValueChanged.AddListener(value => PlayerCameraSettings.Intensity = value);
+            SettingsMenuWidgets.Label("ReduceTitle", cameraMotion, 34, 96, 340, 30, GameLanguage.Choose("Giảm chuyển động", "Reduce motion"), 19);
+            var reduceToggle = SettingsMenuWidgets.Toggle("Reduce", cameraMotion, 605, 94);
+            reduceToggle.SetIsOnWithoutNotify(PlayerCameraSettings.ReduceMotion);
+            reduceToggle.onValueChanged.AddListener(value => PlayerCameraSettings.ReduceMotion = value);
             var audioRect = _canvas.transform.Find(Body + "Audio").GetComponent<RectTransform>();
             audioRect.anchoredPosition = new Vector2(audioRect.anchoredPosition.x, -570);
             audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 168);
@@ -337,6 +347,7 @@ namespace EchoProtocol.Voice
             Place("Graphics", index == 1, 0, 0);
             Place("Display", index == 1, 800, 0);
             Place("ControlsNote", index == 3, 0, 228);
+            Place("CameraMotion", index == 3, 0, 520);
             string[] tabs = { "General", "Graphics", "Audio", "Controls" };
             for (int i = 0; i < tabs.Length; i++)
             {
@@ -378,6 +389,8 @@ namespace EchoProtocol.Voice
             TextAt(Body + "Mouse/SensitivityText").text = GameplayInputSettings.MouseSensitivity.ToString("0.00");
             SetToggle("Mouse/Invert", GameplayInputSettings.InvertY);
             SetToggle("Mouse/Acceleration", GameplayInputSettings.MouseAcceleration);
+            Find<Slider>(Body + "CameraMotion/Intensity").SetValueWithoutNotify(PlayerCameraSettings.Intensity);
+            SetToggle("CameraMotion/Reduce", PlayerCameraSettings.ReduceMotion);
             foreach (GameplayAction action in Enum.GetValues(typeof(GameplayAction)))
             {
                 if (action == GameplayAction.Inventory) continue;
@@ -403,7 +416,8 @@ namespace EchoProtocol.Voice
                     : "Chọn giá trị để chuyển sang tùy chọn tiếp theo.";
             }
             if (_tab != 2) return;
-            TextAt(Body + "Devices/DeviceText").text = !string.IsNullOrEmpty(_voice.Devices.Error) ? "Không thể thu mic. Kiểm tra thiết bị và chọn lại."
+            TextAt(Body + "Devices/DeviceText").text = !string.IsNullOrEmpty(_voice.Devices.Error)
+                ? _voice.Devices.Selected + " · " + GameLanguage.Choose("Không khả dụng. Kiểm tra thiết bị hoặc chọn lại.", "Unavailable. Check the device or select another.")
                 : string.IsNullOrEmpty(_voice.Devices.Selected) ? "Chọn microphone để bắt đầu nói" : _voice.Devices.Selected;
             TextAt(Body + "Devices/Test/Label").text = _voice.Devices.Testing ? "DỪNG THỬ MIC" : "THỬ MICROPHONE";
             Find<Button>(Body + "Devices/Test").interactable = _voice.Devices.Ready;

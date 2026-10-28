@@ -23,6 +23,36 @@ public sealed class MatchJoinProofServiceTests
         Assert.Equal(expected, actual);
     }
 
+    [Theory]
+    [InlineData(5)]
+    [InlineData(17)]
+    [InlineData(int.MaxValue)]
+    public void TryValidate_ActorNumberBeyondRoomCapacity_IsAccepted(int actorNumber)
+    {
+        var service = CreateService("proof-key-that-is-at-least-32-bytes-long", Now);
+        var expected = new MatchJoinProofPayload(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), actorNumber,
+            "room-with-rejoins", Now.AddMinutes(1).UtcDateTime);
+
+        var proof = service.Issue(expected);
+
+        Assert.True(service.TryValidate(proof, out var actual));
+        Assert.Equal(actorNumber, actual!.FusionActorNumber);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void TryValidate_NonPositiveActorNumber_IsRejected(int actorNumber)
+    {
+        var service = CreateService("proof-key-that-is-at-least-32-bytes-long", Now);
+        var proof = service.Issue(new MatchJoinProofPayload(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), actorNumber,
+            "room-a", Now.AddMinutes(1).UtcDateTime));
+
+        Assert.False(service.TryValidate(proof, out _));
+    }
+
     [Fact]
     public void TryValidate_TamperedPayload_IsRejected()
     {

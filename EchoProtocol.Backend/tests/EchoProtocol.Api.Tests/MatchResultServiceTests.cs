@@ -28,6 +28,21 @@ public sealed class MatchResultServiceTests
         Assert.Equal(MatchRewardStatus.Pending, result.Data.RewardStatus);
     }
 
+    [Fact]
+    public async Task LostSuccessResponseCanReplayAfterLeaseExpires()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
+        Assert.True((await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request)).IsSuccess);
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.LeaseExpiresAtUtc = Now.AddMinutes(-1).UtcDateTime;
+        await harness.Db.SaveChangesAsync();
+        var replay = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Single(await harness.Db.MatchResults.ToListAsync());
+    }
+
     [Fact, Trait("Category", "M4Unit")]
     public async Task NonHostIsRejected()
     {
@@ -236,13 +251,31 @@ public sealed class MatchResultServiceTests
     public async Task MatchBeyondSubmissionGraceIsRejected()
     {
         await using var harness = await UnitHarness.CreateAsync(
-            matchAge: TimeSpan.FromMinutes(46).Add(TimeSpan.FromSeconds(1)));
+            matchAge: TimeSpan.FromMinutes(121).Add(TimeSpan.FromSeconds(1)));
 
         var result = await harness.Service.SubmitAsync(
             harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.MatchResultInvalidDuration, result.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(2761)]
+    [InlineData(5400)]
+    [InlineData(7200)]
+    [InlineData(7260)]
+    public async Task TwoHourGameplayAndSubmissionGraceAreAccepted(int durationSeconds)
+    {
+        await using var harness = await UnitHarness.CreateAsync(
+            matchAge: TimeSpan.FromSeconds(durationSeconds));
+
+        var result = await harness.Service.SubmitAsync(
+            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(durationSeconds, result.Data!.DurationSeconds);
+        Assert.Single(harness.Db.MatchResults);
     }
 
     [Fact, Trait("Category", "M4Unit")]

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
@@ -15,7 +15,7 @@ namespace EchoProtocol.Tools.Scanner
     /// and implements IInteractable for local prompt display and interaction.
     /// </summary>
     [RequireComponent(typeof(Collider))]
-    public class NetworkToolPickup : NetworkInteractable, IInteractable
+    public class NetworkToolPickup : NetworkInteractable, IInteractable, IAfterHostMigration
     {
         private const float MaxOutlineVisibleDistance = 20f;
 
@@ -101,7 +101,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 _isPickedUp = false;
                 _localPickedUp = false;
@@ -141,6 +141,14 @@ namespace EchoProtocol.Tools.Scanner
                         1,
                         LobbyPlayerState.MultiUseTeamToolUses)
                     : 0;
+        }
+
+        public void AfterHostMigration()
+        {
+            // CopyStateFrom restores replicated values. Reapply only
+            // local pose/cache/visibility after the migration completes.
+            ApplyReplicatedPose();
+            OnReplicatedStateChanged();
         }
 
         private void EnsureOutline()
@@ -267,7 +275,7 @@ namespace EchoProtocol.Tools.Scanner
             // Cannot pick up tool if carrying an Energy Core
             if (context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
-                if (context.PlayerState.CarriedCoreId.IsValid)
+                if (context.PlayerState.CarriedCoreId.IsValid || EchoProtocol.Networking.AlienHuntMission.IsCarrying(context.PlayerState.gameObject))
                 {
                     return InteractionValidationResult.InvalidTargetState;
                 }
@@ -370,7 +378,7 @@ namespace EchoProtocol.Tools.Scanner
         public bool CanInteract(GameObject interactor)
         {
             if (IsPickedUp) return false;
-            if (interactor == null) return false;
+            if (interactor == null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(interactor)) return false;
 
             var carrier = interactor.GetComponentInParent<PlayerEnergyCoreCarrier>();
             if (carrier != null && carrier.IsCarrying) return false;

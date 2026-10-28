@@ -1,4 +1,4 @@
-using Fusion;
+﻿using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -76,7 +76,7 @@ namespace EchoProtocol.Networking
         {
             _spawnVisualGraceUntil = Time.unscaledTime + SpawnVisualGraceSeconds;
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 State = NetworkDoorJammerState.NotDeployed;
                 DoorId = default;
@@ -178,6 +178,17 @@ namespace EchoProtocol.Networking
 
         public bool TryDestroyAuthoritative()
         {
+            if (Object == null || !Object.IsValid)
+            {
+                if (_offlineState == NetworkDoorJammerState.Destroyed) return true;
+                _offlineState = NetworkDoorJammerState.Destroyed;
+                _forceActivePresentation = false;
+                _spawnVisualGraceUntil = 0f;
+                if (_blockingCollider != null) _blockingCollider.enabled = false;
+                if (_visualRoot != null) _visualRoot.gameObject.SetActive(false);
+                if (_breakClip != null) AudioSource.PlayClipAtPoint(_breakClip, transform.position);
+                return true;
+            }
             if (!Object.HasStateAuthority)
             {
                 return false;

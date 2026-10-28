@@ -27,6 +27,17 @@ namespace EchoProtocol.RelayA
         private float _nextAdjustSoundAt;
         private float _nextOverloadSoundAt;
         private int _lastBreakerPulseSequence = -1;
+        private bool _hasReplicatedAudioBaseline;
+        private int _replicatedAudioScenario;
+        private RelayACircuitPhase _replicatedAudioPhase;
+        private int _replicatedAudioTestSequence;
+        private bool _replicatedAudioTrip;
+        private bool _replicatedAudioFault;
+        private RelayAFaultType _replicatedWarning;
+        private RelayAFaultType _replicatedActiveFault;
+        private bool _replicatedDangerous;
+
+        private enum ReplicatedAudioCue { None, Warning, Overload, MatrixBalanced, Complete }
 
         public event Action RelayAOnline;
 
@@ -141,6 +152,7 @@ namespace EchoProtocol.RelayA
         {
             if (attemptSeed == 0 || _attemptSeed == attemptSeed || IsOnline) return;
             _attemptSeed = attemptSeed;
+            _hasReplicatedAudioBaseline = false;
             _circuit.Initialize(config, scenarioIndex, attemptSeed);
         }
 
@@ -183,7 +195,69 @@ namespace EchoProtocol.RelayA
         {
             ui?.Close();
             _attemptSeed = 0;
+            _hasReplicatedAudioBaseline = false;
             _circuit.Initialize(config, _circuit.Snapshot.ScenarioIndex, attemptSeed);
+        }
+
+        public void PresentReplicatedAudio()
+        {
+            PresentReplicatedAudio(_circuit.Snapshot, _circuit.Stabilization.Snapshot);
+        }
+
+        private void PresentReplicatedAudio(RelayACircuitSnapshot circuit, RelayAStabilizationSnapshot stabilization)
+        {
+            switch (ObserveReplicatedAudio(circuit, stabilization))
+            {
+                case ReplicatedAudioCue.Warning:
+                    PlayOneShot(warningClip, 0.8f, "map_ambience/electrical_flicker");
+                    break;
+                case ReplicatedAudioCue.Overload:
+                    PlayOverloadSound();
+                    break;
+                case ReplicatedAudioCue.MatrixBalanced:
+                    PlayOneShot(completeClip, 0.6f, "sector_box_power_hub/fully_powered");
+                    break;
+                case ReplicatedAudioCue.Complete:
+                    PlayOneShot(completeClip, 0.9f, "sector_box_power_hub/fully_powered");
+                    break;
+            }
+        }
+
+        private ReplicatedAudioCue ObserveReplicatedAudio(RelayACircuitSnapshot circuit, RelayAStabilizationSnapshot stabilization)
+        {
+            bool baseline = _hasReplicatedAudioBaseline && _replicatedAudioScenario == circuit.ScenarioIndex;
+            ReplicatedAudioCue cue = ReplicatedAudioCue.None;
+            if (baseline)
+            {
+                if (circuit.Phase == RelayACircuitPhase.Online && _replicatedAudioPhase != RelayACircuitPhase.Online)
+                    cue = ReplicatedAudioCue.Complete;
+                else if (circuit.Phase == RelayACircuitPhase.StabilizeOutput
+                         && _replicatedAudioPhase == RelayACircuitPhase.BreakerMatrix)
+                    cue = ReplicatedAudioCue.MatrixBalanced;
+                else if ((circuit.Phase == RelayACircuitPhase.Failed
+                          && (_replicatedAudioPhase != RelayACircuitPhase.Failed
+                              || circuit.TestSequence != _replicatedAudioTestSequence))
+                         || (circuit.FaultPowered && !_replicatedAudioTrip)
+                         || (stabilization.ActiveFault != RelayAFaultType.None
+                             && _replicatedActiveFault == RelayAFaultType.None)
+                         || (stabilization.IsDangerous && !_replicatedDangerous))
+                    cue = ReplicatedAudioCue.Overload;
+                else if ((circuit.FaultActive && !_replicatedAudioFault)
+                         || (stabilization.WarningFault != RelayAFaultType.None
+                             && _replicatedWarning == RelayAFaultType.None))
+                    cue = ReplicatedAudioCue.Warning;
+            }
+
+            _hasReplicatedAudioBaseline = true;
+            _replicatedAudioScenario = circuit.ScenarioIndex;
+            _replicatedAudioPhase = circuit.Phase;
+            _replicatedAudioTestSequence = circuit.TestSequence;
+            _replicatedAudioTrip = circuit.FaultPowered;
+            _replicatedAudioFault = circuit.FaultActive;
+            _replicatedWarning = stabilization.WarningFault;
+            _replicatedActiveFault = stabilization.ActiveFault;
+            _replicatedDangerous = stabilization.IsDangerous;
+            return cue;
         }
 
         private void HandleCircuitChanged(RelayACircuitSnapshot snapshot)

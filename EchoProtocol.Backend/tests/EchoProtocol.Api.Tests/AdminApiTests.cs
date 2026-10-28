@@ -231,6 +231,33 @@ public sealed class AdminApiTests
             transaction.Description);
     }
 
+    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task AdminGrantUsesFreshBalanceWhenContextTrackedAnOlderWallet()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var tracked = await harness.Db.Wallets.SingleAsync(item => item.UserId == harness.AdminUserId);
+        Assert.Equal(550, tracked.Balance);
+
+        await using (var concurrentWriter = harness.CreateSiblingDb())
+        {
+            var wallet = await concurrentWriter.Wallets.SingleAsync(item => item.UserId == harness.AdminUserId);
+            wallet.Balance += 75;
+            await concurrentWriter.SaveChangesAsync();
+        }
+
+        var result = await harness.Service.GrantCreditsAsync(harness.AdminUserId,
+            new AdminGrantCreditsRequest { Amount = 25 });
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(625, result.Data!.BalanceBefore);
+        Assert.Equal(650, result.Data.BalanceAfter);
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(650, (await harness.Db.Wallets.SingleAsync(item => item.UserId == harness.AdminUserId)).Balance);
+        var grant = await harness.Db.WalletTransactions.SingleAsync(item => item.Id == result.Data.TransactionId);
+        Assert.Equal(625, grant.BalanceBefore);
+        Assert.Equal(650, grant.BalanceAfter);
+    }
+
     [Theory, Trait("Category", "AdminApiUnit")]
     [InlineData(0)]
     [InlineData(-1)]
@@ -334,6 +361,9 @@ public sealed class AdminApiTests
         public Guid AdminUserId { get; }
         public Guid PaymentOrderId { get; }
         public Guid ShopItemId { get; }
+
+        public AppDbContext CreateSiblingDb() => new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_connection).Options);
 
         public static async Task<AdminHarness> CreateAsync()
         {

@@ -11,10 +11,10 @@ public sealed class PetCompanionController : MonoBehaviour {
  private LobbyPlayerState _owner;
  private NetworkPlayerMovement _movement;
  private NetworkPlayerLifeState _life;
+ private CharacterController _ownerController;
  private PetCatalog _catalog;
  private GameObject _visual;
  private Animator _animator;
- private Transform[] _feet = System.Array.Empty<Transform>();
  private int _id = -1, _authorityId = -1;
  private int _skinId = -1;
  private PetMotion _motion = PetMotion.Hidden;
@@ -29,8 +29,8 @@ public sealed class PetCompanionController : MonoBehaviour {
  private float _phaseStart, _phaseStartHeight;
  private float _groundingOffset, _groundingVelocity;
  private float _takeOffGroundingOffset;
- private float _restFootHeight, _lastRenderTime;
- private bool _hasRestFootHeight;
+ private float _restContactOffset, _lastRenderTime;
+ private bool _hasRestContactOffset;
  private int _flightLoops, _flightCycle;
  private bool _renderInitialized, _isFollowing;
  private Vector3 _renderPositionVelocity;
@@ -38,7 +38,8 @@ public sealed class PetCompanionController : MonoBehaviour {
  private void Awake() {
   _path=new NavMeshPath();
   _owner=GetComponent<LobbyPlayerState>(); _movement=GetComponent<NetworkPlayerMovement>();
-  _life=GetComponent<NetworkPlayerLifeState>(); _catalog=Resources.Load<PetCatalog>("Pets/PetCatalog");
+  _life=GetComponent<NetworkPlayerLifeState>(); _ownerController=GetComponent<CharacterController>();
+  _catalog=Resources.Load<PetCatalog>("Pets/PetCatalog");
  }
  private bool Visible => _owner.PetId>0 && !_owner.Disconnected &&
   (_movement==null || !_movement.IsHidden) && (_life==null || _life.Status==NetworkPlayerLifeStatus.Alive || _life.Status==NetworkPlayerLifeStatus.Downed);
@@ -50,28 +51,30 @@ public sealed class PetCompanionController : MonoBehaviour {
   var time=(float)_owner.Runner.SimulationTime;
   bool ownerRunning=_movement!=null && _movement.IsAnimationSprinting;
   bool inLobby=SceneManager.GetActiveScene().name=="Lobby";
-  // Lobby characters face the camera, so their local left is screen-right.
+  // Use the exact midpoint between neighboring lobby lineup positions.
+  // In gameplay, keep the pet beside the right leg.
   var target=inLobby
-   ? transform.position-transform.right*(LobbyLineupLayout.Spacing*0.5f)
-   : transform.position-transform.forward*1.25f+transform.right*0.85f;
+   ? transform.position+(LobbyLineupLayout.Position(1)-LobbyLineupLayout.Position(0))*0.5f
+   : transform.position+transform.right*1.6f+transform.forward*.35f;
   bool ownerTeleported=_initialized && Vector3.Distance(_previousOwnerPosition,transform.position)>5f;
   _previousOwnerPosition=transform.position;
   if (!_initialized || ownerTeleported || _stuckTime>=8f) {
-   if(!NavMesh.SamplePosition(target,out var reset,2f,NavMesh.AllAreas)) {
-    if(!GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var hit,4f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) {
-     _owner.SetPetPose(target,transform.rotation,PetMotion.Hidden);return;
-    } _ground=hit.point;
-   } else _ground=reset.position;
+   if(!TryResolveGroundPosition(target,inLobby,out _ground))
+    _ground=target;
    _initialized=true; _followSpeed=0; _stuckTime=0; _nextPath=0;_height=0;_motion=PetMotion.Idle; _nextFlight=time+FlightDelay();
   }
   if(time>=_nextPath || ownerRunning && Vector3.Distance(_ground,_goal)<0.15f) {
    _nextPath=time+(ownerRunning ? 0.1f : 0.3f); _goal=_ground;
-   if(NavMesh.SamplePosition(target,out var navGoal,2f,NavMesh.AllAreas) && NavMesh.SamplePosition(_ground,out var navStart,1f,NavMesh.AllAreas)
+   if(inLobby) {
+    if(TryResolveGroundPosition(target,true,out var lobbyFloor)) _goal=lobbyFloor;
+   }
+   else if(NavMesh.SamplePosition(target,out var navGoal,2f,NavMesh.AllAreas) && NavMesh.SamplePosition(_ground,out var navStart,1f,NavMesh.AllAreas)
     && NavMesh.CalculatePath(navStart.position,navGoal.position,NavMesh.AllAreas,_path) && _path.status==NavMeshPathStatus.PathComplete) {
     foreach(var corner in _path.corners) if(Vector3.Distance(corner,_ground)>0.2f){_goal=corner;break;}
    } else if(!GameplayEnvironmentPhysics.Linecast(_ground+Vector3.up*0.2f,target+Vector3.up*0.2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)
     && GameplayEnvironmentPhysics.Raycast(target+Vector3.up,Vector3.down,out var floor,2f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) _goal=floor.point;
   }
+  if(inLobby) _ground=_goal;
   float distance=Vector3.Distance(_ground,target);
   bool moving=Vector3.Distance(_ground,_goal)>(_isFollowing ? 0.1f : 0.18f) && distance>(_isFollowing ? 0.4f : 0.8f);
   _isFollowing=moving;
@@ -158,19 +161,24 @@ public sealed class PetCompanionController : MonoBehaviour {
    if(entry!=null && entry.prefab!=null) {
     _renderInitialized=false;_renderMotion=PetMotion.Hidden;_groundingOffset=0;_groundingVelocity=0;
     _visual=Instantiate(entry.prefab);_visual.name="CosmeticPet_"+entry.displayName;
+    SetLayerRecursively(_visual,gameObject.layer);
     _visual.transform.localScale=Vector3.one*(entry.scale*GetVisualScaleMultiplier(_id));
     _animator=_visual.GetComponentInChildren<Animator>();
-    var feet=new System.Collections.Generic.List<Transform>();
-    foreach(var bone in _visual.GetComponentsInChildren<Transform>())
-     if(bone.name.IndexOf("Toe",System.StringComparison.OrdinalIgnoreCase)>=0 || bone.name.EndsWith("Foot",System.StringComparison.OrdinalIgnoreCase))feet.Add(bone);
-    _feet=feet.ToArray();
     _animator.runtimeAnimatorController=entry.controller;_animator.applyRootMotion=false;
     // Evaluate once at rest, then advance explicitly on the network render clock.
     _animator.enabled=false;_animator.cullingMode=AnimatorCullingMode.AlwaysAnimate;
     _animator.Play("Idle",0,0);_animator.Update(0);
-    _restFootHeight=float.PositiveInfinity;
-    foreach(var foot in _feet)if(foot!=null)_restFootHeight=Mathf.Min(_restFootHeight,foot.position.y-_visual.transform.position.y);
-    _hasRestFootHeight=!float.IsInfinity(_restFootHeight);
+    // Mesh bounds include a tail/body underside below the toes. Ground the
+    // character by its actual feet so its walking pose does not float.
+    _restContactOffset=float.PositiveInfinity;
+    foreach(var bone in _visual.GetComponentsInChildren<Transform>(true))
+     if(bone.name.IndexOf("Toe",System.StringComparison.OrdinalIgnoreCase)>=0 ||
+      bone.name.EndsWith("Foot",System.StringComparison.OrdinalIgnoreCase))
+      _restContactOffset=Mathf.Min(_restContactOffset,bone.position.y-_visual.transform.position.y);
+    if(float.IsInfinity(_restContactOffset))
+     foreach(var renderer in _visual.GetComponentsInChildren<Renderer>(true))
+      _restContactOffset=Mathf.Min(_restContactOffset,renderer.bounds.min.y-_visual.transform.position.y);
+    _hasRestContactOffset=!float.IsInfinity(_restContactOffset);
     foreach(var c in _visual.GetComponentsInChildren<Collider>())c.enabled=false;
     foreach(var a in _visual.GetComponentsInChildren<AudioSource>())a.enabled=false;
     _visual.transform.SetPositionAndRotation(_owner.PetPosition,_owner.PetRotation);
@@ -211,18 +219,40 @@ public sealed class PetCompanionController : MonoBehaviour {
   float transitionProgress=Mathf.SmoothStep(0,1,(renderTime-startTime)/Mathf.Max(0.1f,transitionSeconds));
   float desiredGrounding=0;
   if(motion==PetMotion.TakeOff)desiredGrounding=_takeOffGroundingOffset*(1f-transitionProgress);
-  if((grounded || motion==PetMotion.Land) && _hasRestFootHeight) {
+  if((grounded || motion==PetMotion.Land) && _hasRestContactOffset) {
    float floorY=posePosition.y;
    if(GameplayEnvironmentPhysics.Raycast(posePosition+Vector3.up*0.6f,Vector3.down,out var hit,1.6f,Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore))floorY=hit.point.y;
    {
     // Restore floor contact gradually during landing, instead of at its final frame.
     float flightHeight=motion==PetMotion.Land ? 0.7f*(1f-transitionProgress) : 0f;
-    desiredGrounding=(floorY+flightHeight+0.015f-position.y-_restFootHeight)*(motion==PetMotion.Land ? transitionProgress : 1f);
+    desiredGrounding=(floorY+flightHeight-position.y-_restContactOffset)*(motion==PetMotion.Land ? transitionProgress : 1f);
    }
   }
   if(!_renderInitialized){_groundingOffset=desiredGrounding;_groundingVelocity=0;_renderInitialized=true;}
   else _groundingOffset=Mathf.SmoothDamp(_groundingOffset,desiredGrounding,ref _groundingVelocity,0.2f);
   _visual.transform.SetPositionAndRotation(position+Vector3.up*_groundingOffset,poseRotation);
+ }
+ private bool TryResolveGroundPosition(Vector3 target,bool inLobby,out Vector3 position) {
+  if(inLobby && GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var lobbyFloor,4f,
+   Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) { position=lobbyFloor.point;return true; }
+  // The flooded lobby backdrop is visual-only and has no collider. Use the
+  // lineup player's feet instead of its root height when the SciFi floor is hidden.
+  if(inLobby && _ownerController!=null) {
+   position=target;
+   position.y=transform.TransformPoint(_ownerController.center).y-
+    _ownerController.height*Mathf.Abs(transform.lossyScale.y)*0.5f;
+   return true;
+  }
+  if(!inLobby && NavMesh.SamplePosition(target,out var hit,2f,NavMesh.AllAreas)) { position=hit.position;return true; }
+  // Some Map2 spawn markers sit beside a narrow NavMesh edge. Fall back to the
+  // owner's reachable polygon before using the physical floor so the pet stays visible.
+  if(!inLobby && NavMesh.SamplePosition(transform.position,out var ownerNav,4f,NavMesh.AllAreas)) { position=ownerNav.position;return true; }
+  if(GameplayEnvironmentPhysics.Raycast(target+Vector3.up*1.5f,Vector3.down,out var floor,4f,
+   Physics.DefaultRaycastLayers,QueryTriggerInteraction.Ignore)) { position=floor.point;return true; }
+  position=default;return false;
+ }
+ private static void SetLayerRecursively(GameObject root,int layer) {
+  foreach(var child in root.GetComponentsInChildren<Transform>(true))child.gameObject.layer=layer;
  }
  private void ApplySelectedSkin() {
   if(_visual==null || _owner==null || _id<=0)return;
@@ -239,7 +269,13 @@ public sealed class PetCompanionController : MonoBehaviour {
   _skinId=skinId;
  }
  private void OnEnable(){SceneManager.activeSceneChanged+=OnSceneChanged;}
- private void OnSceneChanged(Scene previous,Scene current){_initialized=false;_nextPath=0;}
+ private void OnSceneChanged(Scene previous,Scene current){
+  _initialized=false;_nextPath=0;_renderInitialized=false;
+  // Recreate the detached visual in the new active scene. This also reapplies
+  // the gameplay camera layer used by Scene_A and Scene_B.
+  if(_visual!=null)Destroy(_visual);
+  _visual=null;_id=-1;
+ }
  private void OnDisable(){SceneManager.activeSceneChanged-=OnSceneChanged;if(_visual!=null)_visual.SetActive(false);}
  private void OnDestroy(){if(_visual!=null)Destroy(_visual);}
 }

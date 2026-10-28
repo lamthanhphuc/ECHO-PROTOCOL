@@ -118,7 +118,10 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
             _runtimeFallbackAnchor.localRotation = GetComponent<PlayerCharacterPresenter>()?.RightHandGripCorrection ?? Quaternion.identity;
         }
         if (_runtimeCoreCarryAnchor != null)
+        {
             ReparentForCharacter(_runtimeCoreCarryAnchor, ResolveCoreCarryParent());
+            ApplyCoreCarryPose(_runtimeCoreCarryAnchor);
+        }
     }
 
     private static void ReparentForCharacter(Transform anchor, Transform parent)
@@ -224,8 +227,7 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
 
         GameObject anchor = new GameObject("Runtime_CoreCarryAnchor");
         anchor.transform.SetParent(ResolveCoreCarryParent(), false);
-        anchor.transform.localPosition = coreCarryLocalPosition;
-        anchor.transform.localRotation = Quaternion.Euler(coreCarryLocalEulerAngles);
+        ApplyCoreCarryPose(anchor.transform);
         Transform parent = anchor.transform.parent;
         if (parent != null)
         {
@@ -238,6 +240,18 @@ public sealed class PlayerHeldItemAnchor : MonoBehaviour
         }
         _runtimeCoreCarryAnchor = anchor.transform;
         return _runtimeCoreCarryAnchor;
+    }
+
+    private void ApplyCoreCarryPose(Transform anchor)
+    {
+        // These offsets are in metres, not the imported skeleton's units.
+        // Jammo's bones have a large scale, so compensate position as well as size.
+        Vector3 scale = anchor.parent != null ? anchor.parent.lossyScale : Vector3.one;
+        anchor.localPosition = new Vector3(
+            Mathf.Approximately(scale.x, 0f) ? coreCarryLocalPosition.x : coreCarryLocalPosition.x / scale.x,
+            Mathf.Approximately(scale.y, 0f) ? coreCarryLocalPosition.y : coreCarryLocalPosition.y / scale.y,
+            Mathf.Approximately(scale.z, 0f) ? coreCarryLocalPosition.z : coreCarryLocalPosition.z / scale.z);
+        anchor.localRotation = Quaternion.Euler(coreCarryLocalEulerAngles);
     }
 
     private Transform ResolveCoreCarryParent()

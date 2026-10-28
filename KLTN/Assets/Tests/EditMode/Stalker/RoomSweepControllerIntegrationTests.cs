@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using EchoProtocol.AI.Common.Spatial;
 using NUnit.Framework;
@@ -12,6 +13,87 @@ namespace EchoProtocol.AI.Stalker.Tests
     public sealed class RoomSweepControllerIntegrationTests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
+
+        [Test]
+        public void STK_RoomSweep_ProbeFailuresContinueNextTickWithoutClearingRoom()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var nodes = new object[9];
+            var mapping = new RegionId[nodes.Length];
+            for (var i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = Node(i, Vector3.right * i,
+                    i == 0 ? new[] { 1 } : i == nodes.Length - 1 ? new[] { i - 1 } : new[] { i - 1, i + 1 });
+                mapping[i] = room;
+            }
+            var graph = CreateSpatialGraph(nodes);
+            var regions = CreateRegionGraph(graph, mapping, RoomRegion(room, 1, "Room"));
+            var memory = CreateMemory();
+            AttachRoomSweepState(controller, graph, regions, memory);
+            AttachNavigationAndLocalSelector(controller, graph, regions);
+            RegisterRegion(memory, room, Enumerable.Range(0, nodes.Length).ToArray());
+            MarkObserved(memory, room, 0);
+
+            Assert.That((bool)InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes), Is.True);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(4));
+            InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(4));
+
+            SetPrivateField(controller, "_currentSimulationSeconds", 1d);
+            Assert.That((bool)InvokePrivate(controller, "SetRoomSweepPatrolDestination", Type.EmptyTypes), Is.False);
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(8));
+            Assert.That(IsRegionCleared(memory, room), Is.False);
+        }
+
+        [Test]
+        public void STK_RoomSweep_VisualCoverageContinuesPastFirstBatch()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var nodes = new object[65];
+            var mapping = new RegionId[nodes.Length];
+            for (var i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = Node(i, Vector3.zero);
+                mapping[i] = room;
+            }
+            var graph = CreateSpatialGraph(nodes);
+            var regions = CreateRegionGraph(graph, mapping, RoomRegion(room, 1, "Room"));
+            var memory = CreateMemory();
+            RegisterRegion(memory, room, System.Linq.Enumerable.Range(0, nodes.Length).ToArray());
+            AttachRoomSweepState(controller, graph, regions, memory);
+            AttachVision(controller, Vector3.zero, Vector3.forward, 10f, 90f);
+
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            Assert.That(IsObserved(memory, room, 31), Is.True);
+            Assert.That(IsObserved(memory, room, 32), Is.False);
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            InvokePrivate(controller, "UpdateRoomSweepVisualCoverage", new[] { typeof(RegionId) }, room);
+            Assert.That(IsObserved(memory, room, 64), Is.True);
+        }
+
+        [Test]
+        public void STK_RoomSweep_FallbackCooldownSurvivesDestinationReset()
+        {
+            var controller = CreateController();
+
+            SetPrivateField(
+                controller,
+                "_nextRoomSweepFallbackAttemptSeconds",
+                42f);
+
+            InvokePrivate(
+                controller,
+                "ResetRoomSweepFallbackState",
+                Type.EmptyTypes);
+
+            Assert.That(
+                (float)GetPrivateField(
+                    controller,
+                    "_nextRoomSweepFallbackAttemptSeconds"),
+                Is.EqualTo(42f));
+        }
 
         [TearDown]
         public void TearDown()
@@ -343,6 +425,68 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(IsObserved(memory, room, 0), Is.True);
             Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
             Assert.That((bool)GetPrivateField(controller, "_roomSweepSelfProbeScanActive"), Is.False);
+        }
+
+        [Test]
+        public void STK_RoomSweepIntegration_VisibleActiveProbeOutsideBatchFinishesWithoutRotation()
+        {
+            var controller = CreateController();
+            var room = new RegionId(1);
+            var nodes = new object[40];
+            var mapping = new RegionId[nodes.Length];
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = Node(i, i == 39 ? Vector3.forward * 5f : Vector3.right * 100f);
+                mapping[i] = room;
+            }
+            var graph = CreateSpatialGraph(nodes);
+            var regions = CreateRegionGraph(graph, mapping, RoomRegion(room, 1, "Room"));
+            var memory = CreateMemory();
+            AttachRoomSweepState(controller, graph, regions, memory);
+            Invoke(GetPrivateField(controller, "_roomSweepPlanner"), "TryBeginRegion", new[] { typeof(RegionId) }, room);
+            AttachChildVisionWithLocalOrigin(controller, Vector3.zero, Vector3.up * 1.6f, Vector3.forward, 20f, 60f);
+            SetPrivateField(controller, "_currentSimulationDeltaSeconds", 1f);
+            ((Component)controller).GetComponent<NavMeshAgent>().angularSpeed = 180f;
+            var before = ((Component)controller).transform.rotation;
+            InvokePrivate(controller, "BeginRoomSweepSelfProbeScan", new[] { typeof(int), typeof(RegionId) }, 39, room);
+            InvokePrivate(controller, "TickRoomSweepSelfProbeScan", Type.EmptyTypes);
+            Assert.That(IsObserved(memory, room, 39), Is.True);
+            Assert.That((bool)GetPrivateField(controller, "_roomSweepSelfProbeScanActive"), Is.False);
+            Assert.That(((Component)controller).transform.rotation, Is.EqualTo(before));
+        }
+
+        [TestCase("Isolated", "Zone01", "Zone01", true)]
+        [TestCase("Zone01", "Isolated", "Zone01", false)]
+        [TestCase("Zone02", "Zone01", "Zone01", false)]
+        [TestCase("Isolated", "Isolated", "Isolated", false)]
+        public void STK_RoomSweepIntegration_FallbackCanOnlyReturnFromIsolatedPrefix(string first, string middle, string last, bool expected)
+        {
+            var controller = CreateController();
+            var nodes = new[] { Node(0, new Vector3(0f, 1000f, 0f)), Node(1, new Vector3(1f, 1000f, 0f)), Node(2, new Vector3(2f, 1000f, 0f)) };
+            var graph = CreateSpatialGraph(nodes);
+            var ids = new[] { new RegionId(1), new RegionId(2), new RegionId(3) };
+            var zones = new[] { first, middle, last };
+            var regions = CreateRegionGraph(graph, ids, Enumerable.Range(0, 3).Select(i =>
+                SemanticRegion(ids[i], i, "Path/" + i, zones[i], zones[i] == "Isolated" ? "IsolatedIsland" : "Room")).ToArray());
+            AttachRoomSweepState(controller, graph, regions, CreateMemory());
+            SetPrivateField(controller, "_patrolZone", Enum.Parse(RegionSemanticZoneType, "Zone01"));
+            var settings = NavMesh.GetSettingsByID(0);
+            settings.minRegionArea = 0f;
+            var sources = new List<NavMeshBuildSource> { new NavMeshBuildSource {
+                shape = NavMeshBuildSourceShape.Box,
+                transform = Matrix4x4.TRS(new Vector3(0f, 999.9f, 0f), Quaternion.identity, Vector3.one),
+                size = new Vector3(10f, .2f, 6f), area = 0 } };
+            var data = NavMeshBuilder.BuildNavMeshData(settings, sources,
+                new Bounds(Vector3.up * 1000f, new Vector3(12f, 4f, 8f)), Vector3.zero, Quaternion.identity);
+            var instance = NavMesh.AddNavMeshData(data);
+            try
+            {
+                var path = new NavMeshPath();
+                Assert.That(NavMesh.CalculatePath(new Vector3(0f, 1000f, 0f), new Vector3(2f, 1000f, 0f), NavMesh.AllAreas, path), Is.True);
+                Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete));
+                Assert.That((bool)InvokePrivate(controller, "IsRoomSweepFallbackPathInZone", new[] { typeof(NavMeshPath) }, path), Is.EqualTo(expected));
+            }
+            finally { instance.Remove(); UnityEngine.Object.DestroyImmediate(data); }
         }
 
         [Test]
@@ -877,7 +1021,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         }
 
         [Test]
-        public void STK_RoomSweepIntegration_FsmResumeClearsProbeRejectsAndPreservesVisualProgressAndClearedRooms()
+        public void STK_RoomSweepIntegration_FsmResumePreservesProbeRejectsAndVisualProgressAndClearedRooms()
         {
             var controller = CreateController();
             var room = new RegionId(1);
@@ -898,7 +1042,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokePrivate(controller, "SetCurrentPatrolDestination", Type.EmptyTypes);
 
-            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(0));
+            Assert.That(GetPlannerInt(controller, "RejectedProbeCount"), Is.EqualTo(1));
             Assert.That(IsObserved(memory, room, 0), Is.True);
             MarkRegionCleared(memory, room);
             InvokePrivate(controller, "SetCurrentPatrolDestination", Type.EmptyTypes);

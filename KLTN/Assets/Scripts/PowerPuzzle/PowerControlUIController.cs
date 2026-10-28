@@ -351,7 +351,7 @@ public class PowerControlUIController : MonoBehaviour
                 var director = Zone2MissionDirector.Instance;
                 bool unlocksDoor = director != null && director.TryGetDistributionPanelIndex(this, out _);
                 feedbackText.text = unlocksDoor
-                    ? EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>")
+                    ? (FloodedMapMission.IsLoaded ? "<color=#86AD91>Đã mở quyền nạp đĩa bay</color>" : EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>"))
                     : EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã khôi phục nguồn điện</color>", "<color=#86AD91>Power restored</color>");
             }
             TriggerLedFlash(new Color(0f, 1f, 0.6f, 1f), 3.0f);
@@ -414,7 +414,7 @@ public class PowerControlUIController : MonoBehaviour
         {
             case Zone2NetworkCommandResult.Accepted:
                 _inputBuffer.Clear();
-                if (feedbackText != null) feedbackText.text = EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>");
+                if (feedbackText != null) feedbackText.text = FloodedMapMission.IsLoaded ? "<color=#86AD91>Đã mở quyền nạp đĩa bay</color>" : EchoProtocol.Settings.GameLanguage.Choose("<color=#86AD91>Đã mở cửa</color>", "<color=#86AD91>Door unlocked</color>");
                 TriggerLedFlash(new Color(0f, 1f, 0.6f, 1f), 3.0f);
                 EchoProtocol.Audio.GameAudioRuntime.UI("power_puzzle/puzzle_complete");
                 break;
@@ -476,7 +476,7 @@ public class PowerControlUIController : MonoBehaviour
 
         if (headerTitleText != null)
         {
-            headerTitleText.text = "Mở cửa khu vực";
+            headerTitleText.text = FloodedMapMission.IsLoaded ? "Xác thực điều khiển đĩa bay" : "Mở cửa khu vực";
         }
 
         if (online)
@@ -487,7 +487,7 @@ public class PowerControlUIController : MonoBehaviour
 
             if (statusBannerText != null)
             {
-                statusBannerText.text = "<color=#86AD91>Đã mở cửa khu vực</color>";
+                statusBannerText.text = FloodedMapMission.IsLoaded ? "<color=#86AD91>Đã xác thực · Đến trạm nạp năng lượng</color>" : "<color=#86AD91>Đã mở cửa khu vực</color>";
             }
             if (_ledFlashTimer <= 0f && statusLed != null)
             {
@@ -534,7 +534,7 @@ public class PowerControlUIController : MonoBehaviour
             {
                 if (statusBannerText != null)
                 {
-                    statusBannerText.text = "<color=#7EA6A4>Nhập mã xác thực để mở cửa</color>";
+                    statusBannerText.text = FloodedMapMission.IsLoaded ? "<color=#7EA6A4>Nhập mã từ terminal để mở quyền nạp đĩa bay</color>" : "<color=#7EA6A4>Nhập mã xác thực để mở cửa</color>";
                 }
                 if (_ledFlashTimer <= 0f && statusLed != null)
                 {

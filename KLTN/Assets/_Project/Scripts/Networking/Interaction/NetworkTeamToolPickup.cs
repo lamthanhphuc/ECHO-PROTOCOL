@@ -27,7 +27,8 @@ namespace EchoProtocol.Networking
         [Networked] public int RemainingUses { get; private set; }
 
         public int ToolId => _toolId;
-        public bool IsAvailableWorldSource => !IsConsumed;
+        public bool IsAvailable => Object != null && Object.IsValid && !IsConsumed;
+        public bool IsAvailableWorldSource => IsAvailable;
 
         public override string InteractionPrompt =>
             string.IsNullOrWhiteSpace(_toolDisplayName)
@@ -39,7 +40,7 @@ namespace EchoProtocol.Networking
             EnsureOutline();
             ConfigureWorldPickupShadows();
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 IsConsumed = false;
                 WorldPosition = transform.position;
@@ -177,6 +178,7 @@ namespace EchoProtocol.Networking
             }
 
             var playerState = context.PlayerState;
+            if(playerState != null && AlienHuntMission.IsCarrying(playerState.gameObject)) return InteractionValidationResult.InvalidTargetState;
             if (playerState == null || !playerState.IsGameplayPlayer)
             {
                 return InteractionValidationResult.InvalidRequester;

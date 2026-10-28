@@ -1,6 +1,7 @@
 using System;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
+using EchoProtocol.Networking;
 using EchoProtocol.Profile;
 using UnityEngine;
 using UnityEngine.UI;
@@ -184,6 +185,26 @@ namespace EchoProtocol.UI.MainMenu
         private bool _loading;
         private bool _purchasing;
         private bool _previewMode;
+
+        private void OnEnable() => LobbyPlayerState.LocalSelectionRequestCompleted += HandleSelectionResult;
+
+        private void OnDisable() => LobbyPlayerState.LocalSelectionRequestCompleted -= HandleSelectionResult;
+
+        private void HandleSelectionResult(LobbySelectionResult result)
+        {
+            if (result.Accepted || result.RequestedId != (_purchaseTarget == PurchaseTarget.Outfit
+                    ? _selectedOutfitId : _selectedCharacterId)
+                || result.Kind != (_purchaseTarget == PurchaseTarget.Outfit
+                    ? LobbySelectionKind.CharacterOutfit : LobbySelectionKind.Character)) return;
+
+            SetStatus(result.Error == LobbySelectionError.OwnershipNotVerified
+                ? EchoProtocol.Settings.GameLanguage.Choose(
+                    "Chưa xác minh được sở hữu. Chờ phòng đồng bộ với máy chủ rồi thử lại.",
+                    "Ownership could not be verified. Wait for the lobby to sync, then retry.")
+                : EchoProtocol.Settings.GameLanguage.Choose(
+                    "Không thể trang bị lúc này: " + result.Error,
+                    "Cannot equip right now: " + result.Error));
+        }
 
         public void EnsureBuilt()
         {
@@ -725,6 +746,8 @@ namespace EchoProtocol.UI.MainMenu
             if (_buyButton == null)
                 return;
 
+            if(StoreLobbyEquipment.ShowAction(_buyButton,_selectedPrice,false,_selectedCharacterId,(_purchaseTarget == PurchaseTarget.Outfit ? _selectedOutfitId : 0),(_purchaseTarget == PurchaseTarget.Outfit ? CharacterOutfitShopAssets.IsOwned(_selectedCharacterId,_selectedOutfitId) && CharacterShopAssets.IsOwned(_selectedCharacterId) : CharacterShopAssets.IsOwned(_selectedCharacterId))))return;
+
             var caption =
                 _buyButton
                     .GetComponentInChildren<Text>();
@@ -819,7 +842,7 @@ namespace EchoProtocol.UI.MainMenu
                     _buyButton.interactable = true;
 
                     if (caption != null)
-                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                     return;
                 }
@@ -842,7 +865,7 @@ namespace EchoProtocol.UI.MainMenu
                     caption.text =
                         _purchasing
                             ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                            : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                            : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
                 }
 
                 return;
@@ -890,7 +913,7 @@ namespace EchoProtocol.UI.MainMenu
                 _buyButton.interactable = true;
 
                 if (caption != null)
-                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                    caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
 
                 return;
             }
@@ -913,12 +936,14 @@ namespace EchoProtocol.UI.MainMenu
                 caption.text =
                     _purchasing
                         ? EchoProtocol.Settings.GameLanguage.Choose("Đang mua…", "Purchasing…")
-                        : EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
+                        : EchoProtocol.Settings.GameLanguage.Choose("Mua", "Buy");
             }
         }
 
         private void PurchaseSelected()
         {
+            if(StoreLobbyEquipment.Equip(transform,false,_selectedCharacterId,(_purchaseTarget == PurchaseTarget.Outfit ? _selectedOutfitId : 0),(_purchaseTarget == PurchaseTarget.Outfit ? CharacterOutfitShopAssets.IsOwned(_selectedCharacterId,_selectedOutfitId) && CharacterShopAssets.IsOwned(_selectedCharacterId) : CharacterShopAssets.IsOwned(_selectedCharacterId))))return;
+
             if (_previewMode)
             {
                 SetStatus(
@@ -1059,6 +1084,7 @@ namespace EchoProtocol.UI.MainMenu
 
                     TeamToolOwnershipSession.MarkOwned(
                         purchasingItem.itemId);
+                    StoreLobbyEquipment.Equip(transform,false,purchasingCharacterId,purchasingOutfit ? purchasingOutfitId : 0,true);
 
                     SetStatus(
                         purchasingName

@@ -108,6 +108,13 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (IsAlienHuntMode)
+                {
+                    return CurrentMode == FieldScannerMode.Core
+                        ? "JERRYCAN"
+                        : "MEAT";
+                }
+
                 var match = NetworkMatchState.Instance;
 
                 if (match != null
@@ -181,6 +188,9 @@ namespace EchoProtocol.Tools.Scanner
         }
 
         public bool IsScanActive => ActiveRemainingTime > 0.02f;
+
+        public bool IsAlienHuntMode =>
+            AlienHuntMission.Instance != null;
 
         public float LocalCooldownRemaining
         {
@@ -278,7 +288,8 @@ namespace EchoProtocol.Tools.Scanner
         public override void Spawned()
         {
             V02LastScan = null;
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
+
             {
                 CurrentMode = FieldScannerMode.Core;
                 ScanPulseOrdinal = 0;
@@ -406,9 +417,9 @@ namespace EchoProtocol.Tools.Scanner
                 forward = mainCam.transform.forward;
             }
 
-            if (CurrentMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || CurrentMode == FieldScannerMode.Core)
             {
-                var coreCandidates = CollectCoreCandidates();
+                var coreCandidates = CollectCoreCandidates(CurrentMode);
                 var result = FieldScannerCoreDetector.Evaluate(
                     origin,
                     forward,
@@ -457,6 +468,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public bool IsCarryingCore()
         {
+            if (EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)) return true;
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid)
             {
@@ -482,13 +494,21 @@ namespace EchoProtocol.Tools.Scanner
         public void ResetForMatchAuthoritative()
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
-            ScanCooldownTimer = TickTimer.None; NetworkScanPulseOrdinal = 0;
-            _localActiveScanTimer = 0; _localCooldownTimer = 0; V02LastScan = null;
+            ScanCooldownTimer = TickTimer.None;
+            NetworkScanPulseOrdinal = 0;
+            _localActiveScanTimer = 0f;
+            _localCooldownTimer = 0f;
+            V02LastScan = null;
+
             ClearLocalResult();
         }
 
         private bool CanUseScannerAuthoritative()
         {
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return false;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state != null && state.Object != null && state.Object.IsValid && !state.IsGameplayPlayer) return false;
+            if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
             if (!IsScannerEquipped() || IsCarryingCore()) return false;
             var life = GetComponent<NetworkPlayerLifeState>();
             if (life != null && life.Object != null && life.Object.IsValid && !life.CanInitiateAction) return false;
@@ -588,7 +608,7 @@ namespace EchoProtocol.Tools.Scanner
 
             PerformRealtimeScan();
 
-            if (requestedMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || requestedMode == FieldScannerMode.Core)
             {
                 LocalCoreResultReceived?.Invoke(_lastLocalCoreResult);
             }
@@ -663,10 +683,11 @@ namespace EchoProtocol.Tools.Scanner
             if (sequence > _lastProcessedSequence) _lastProcessedSequence = sequence;
 
             // Compute authoritative result
-            if (requestedMode == FieldScannerMode.Core)
+            if (IsAlienHuntMode || requestedMode == FieldScannerMode.Core)
             {
-                var coreCandidates = CollectCoreCandidates();
+                var coreCandidates = CollectCoreCandidates(requestedMode);
                 var occlusion = new Dictionary<int, bool>();
+
                 var result = FieldScannerCoreDetector.Evaluate(
                     transform.position,
                     transform.forward,
@@ -813,7 +834,7 @@ namespace EchoProtocol.Tools.Scanner
         public AEDV02ScanCandidate[] ReadV02WorldTargets()
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return Array.Empty<AEDV02ScanCandidate>();
-            return CollectCoreCandidates().Select(c => ScanCandidate(c.TargetId, SourceComponent(c), c.WorldPosition, c.IsAvailableInWorld, false, 0, false))
+            return CollectCoreCandidates(CurrentMode).Select(c => ScanCandidate(c.TargetId, SourceComponent(c), c.WorldPosition, c.IsAvailableInWorld, false, 0, false))
                 .Concat(CollectMotionTargets().Select(c => ScanCandidate(c.TargetId, c is Component component ? component : (c as StalkerMotionScannableAdapter)?.Source,
                     c.WorldPosition, c.IsActiveTarget, c.IsMoving, c.CurrentSpeed, false))).ToArray();
         }
@@ -871,9 +892,46 @@ namespace EchoProtocol.Tools.Scanner
                 out effectiveRequester);
         }
 
-        private List<ICoreScanCandidate> CollectCoreCandidates()
+        private List<ICoreScanCandidate> CollectCoreCandidates(
+            FieldScannerMode mode)
         {
-            List<ICoreScanCandidate> candidates = new List<ICoreScanCandidate>();
+            List<ICoreScanCandidate> candidates =
+                new List<ICoreScanCandidate>();
+
+            if (IsAlienHuntMode)
+            {
+                var mission = AlienHuntMission.Instance;
+
+                if (!mission.Ready || mission.Completed ||
+                    mission.Actors == null)
+                    return candidates;
+
+                HuntKind targetKind = mode == FieldScannerMode.Core
+                    ? HuntKind.Jerrycan
+                    : HuntKind.Meat;
+
+                foreach (var actor in mission.Actors)
+                {
+                    if (actor == null ||
+                        !actor.gameObject.activeInHierarchy ||
+                        actor.Kind != targetKind)
+                        continue;
+
+                    var state = mission.Read(actor.Index);
+
+                    bool claimed = state.Stage == 2 &&
+                        mission.IsBaitClaimed(actor.Index);
+
+                    if (!IsHuntTargetAvailable(
+                            targetKind, state, claimed))
+                        continue;
+
+                    candidates.Add(
+                        new ObjectiveScanCandidateAdapter(actor));
+                }
+
+                return candidates;
+            }
 
             var match = NetworkMatchState.Instance;
 
@@ -961,6 +1019,18 @@ namespace EchoProtocol.Tools.Scanner
             return candidates;
         }
 
+        private static bool IsHuntTargetAvailable(
+            HuntKind kind,
+            HuntEntityState state,
+            bool baitClaimed)
+        {
+            return state.Carrier.IsNone &&
+                (state.Stage == 0 ||
+                 (kind == HuntKind.Meat &&
+                  state.Stage == 2 &&
+                  !baitClaimed));
+        }
+
         private static void CollectZone2Targets(
             List<ICoreScanCandidate> candidates)
         {
@@ -1014,6 +1084,13 @@ namespace EchoProtocol.Tools.Scanner
         private static void CollectZone3FrigateTarget(
             List<ICoreScanCandidate> candidates)
         {
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                AddObjectiveCandidate(candidates, flooded.ChargeTarget);
+                return;
+            }
+
             var zone3 = Zone3MissionDirector.Instance;
             if (zone3 == null || zone3.Frigate == null)
             {
@@ -1023,9 +1100,23 @@ namespace EchoProtocol.Tools.Scanner
             AddObjectiveCandidate(candidates, zone3.Frigate);
         }
 
+        private static Component ResolveFloodedPushTarget(FloodedMapMission flooded, bool arrived)
+        {
+            return arrived && flooded.ExitTarget != null ? flooded.ExitTarget : flooded.Escort;
+        }
+
         private static void CollectZone3FuelTargets(
             List<ICoreScanCandidate> candidates)
         {
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                var match = NetworkMatchState.Instance;
+                AddObjectiveCandidate(candidates, ResolveFloodedPushTarget(flooded,
+                    match != null && match.FloodedEscortArrived));
+                return;
+            }
+
             Zone3FuelCell[] cells = FindObjectsByType<Zone3FuelCell>(FindObjectsInactive.Exclude);
 
             for (int i = 0; i < cells.Length; i++)

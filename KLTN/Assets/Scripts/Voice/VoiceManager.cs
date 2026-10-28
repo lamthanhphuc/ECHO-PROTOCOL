@@ -27,8 +27,8 @@ namespace EchoProtocol.Voice
         public Key ToggleMicrophoneKey { get; private set; } = Key.V;
         public float OutputVolume { get; private set; } = 1;
         public bool Speaking => _recorder != null && _recorder.IsCurrentlyTransmitting;
-        public float InputLevel => Devices.Testing ? Devices.TestLevel : (_recorder.LevelMeter?.CurrentPeakAmp ?? 0);
-        public bool Joined => _client != null && _client.Client.InRoom && _client.Client.CurrentRoom.Name == _room && _runner != null && _runner.IsRunning;
+        public float InputLevel => Devices != null && Devices.Testing ? Devices.TestLevel : (_recorder != null ? _recorder.LevelMeter?.CurrentPeakAmp ?? 0 : 0);
+        public bool Joined => _client != null && _client.Client != null && _client.Client.InRoom && _client.Client.CurrentRoom.Name == _room && _runner != null && _runner.IsRunning;
         private EchoVoiceClient _client;
         private Recorder _recorder;
         private NetworkRunner _runner;
@@ -54,7 +54,6 @@ namespace EchoProtocol.Voice
             _focused = Application.isFocused;
             DontDestroyOnLoad(gameObject);
             Devices = gameObject.AddComponent<VoiceDeviceController>();
-            Devices.DeviceChanged += StopCapture;
             _recorder = gameObject.AddComponent<Recorder>();
             _recorder.RecordingEnabled = false;
             _recorder.TransmitEnabled = false;
@@ -80,6 +79,27 @@ namespace EchoProtocol.Voice
             gameObject.AddComponent<VoiceSettingsPanel>();
         }
 
+        private void OnEnable()
+        {
+            if (Instance != null && Instance != this) return;
+            Instance = this;
+            _focused = Application.isFocused;
+            // Unity reloads scripts without rerunning Awake on surviving scene objects.
+            Devices = GetComponent<VoiceDeviceController>();
+            _recorder = GetComponent<Recorder>();
+            _client = GetComponent<EchoVoiceClient>();
+            if (Devices != null)
+            {
+                Devices.DeviceChanged -= StopCapture;
+                Devices.DeviceChanged += StopCapture;
+            }
+            if (_client != null)
+            {
+                _client.Owner = this;
+                _client.PrimaryRecorder = _recorder;
+            }
+        }
+
         private void RestoreMicrophoneKey()
         {
             if (Enum.TryParse(PlayerPrefs.GetString("Echo.Voice.ToggleKey", "V"), out Key saved)
@@ -96,6 +116,9 @@ namespace EchoProtocol.Voice
 
         private void Update()
         {
+            if (_client == null || _client.Client == null || Devices == null || _recorder == null)
+                return;
+
             bool canReadShortcut = _focused && !_paused && !VoiceSettingsPanel.IsOpen
                 && !PlayerInteractionControlLock.HasModal && Keyboard.current != null;
             _pushToTalkHeld = canReadShortcut && PushToTalk && Keyboard.current[ToggleMicrophoneKey].isPressed;
@@ -188,10 +211,7 @@ namespace EchoProtocol.Voice
 
         private void FailAttempt()
         {
-            StopCapture();
-            _connecting = false; _joinRequested = false;
-            _client.Client.Disconnect();
-            ClearSpeakers();
+            ResetConnection();
             ScheduleRetry();
             Status = "Voice disconnected; retrying...";
         }
@@ -211,7 +231,7 @@ namespace EchoProtocol.Voice
         private void UpdateCapture(bool connected)
         {
             bool canCapture = VoiceTransmissionRules.CanCapture(connected, MicrophoneEnabled, SelfMuted,
-                Devices.Ready, Devices.Testing, _focused, _paused, false);
+                Devices.Ready, Devices.Testing, _focused, _paused, VoiceSettingsPanel.IsOpen);
             if (!canCapture) { StopCapture(); return; }
             if (!_recorder.RecordingEnabled)
             {
@@ -239,9 +259,9 @@ namespace EchoProtocol.Voice
         private void ResetConnection()
         {
             StopCapture();
-            Devices.StopTest();
+            if (Devices != null) Devices.StopTest();
             _connecting = false; _joinRequested = false;
-            _client.Client.Disconnect();
+            if (_client != null) _client.Client?.Disconnect();
             ClearSpeakers();
         }
 

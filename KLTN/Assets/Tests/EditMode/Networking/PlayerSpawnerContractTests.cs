@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -24,6 +25,60 @@ namespace EchoProtocol.Networking.Tests
         private const string LobbyPlayerStateScriptPath = "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs";
         private const string PlayerSpawnerScriptPath = "Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs";
         private const string PlayerSpawnerTypeName = "EchoProtocol.Networking.PlayerSpawner";
+
+        [Test]
+        public void MAP2_BootstrapAssignsDistinctGraphsForExplorationAndHunt()
+        {
+            var scene = SceneManager.GetSceneByPath(BootstrapScenePath);
+            bool alreadyLoaded = scene.IsValid() && scene.isLoaded;
+            if (!alreadyLoaded) scene = EditorSceneManager.OpenScene(BootstrapScenePath, OpenSceneMode.Additive);
+            try
+            {
+                var spawner = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<MonoBehaviour>(true))
+                    .Single(component => component != null && component.GetType().FullName == PlayerSpawnerTypeName);
+                var serialized = new SerializedObject(spawner);
+                var exploration = serialized.FindProperty("_map2RegionGraph").objectReferenceValue;
+                var hunt = serialized.FindProperty("_map2HuntRegionGraph").objectReferenceValue;
+                Assert.That(exploration, Is.Not.Null);
+                Assert.That(hunt, Is.Not.Null);
+                Assert.That(hunt, Is.Not.SameAs(exploration));
+                StringAssert.EndsWith("AI_Stalker_Map2_Hunt_RegionGraph.asset", AssetDatabase.GetAssetPath(hunt));
+            }
+            finally { if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        [Test]
+        public void MAP2_StalkerSpawn_IsOnNavMeshAndReachableFromPlayerStarts()
+        {
+            const string scenePath = "Assets/Scenes/Scene_A.unity";
+            var scene = SceneManager.GetSceneByPath(scenePath);
+            var alreadyLoaded = scene.IsValid() && scene.isLoaded;
+            if (!alreadyLoaded) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            try
+            {
+                var transforms = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true)).ToArray();
+                var marker = transforms.Single(item => item.name == "MonsterSpawn_Stalker_EMPTY");
+                Assert.That(marker.gameObject.activeInHierarchy, Is.True);
+                Assert.That(NavMesh.SamplePosition(marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
+                var starts = transforms.Where(item => item.name.StartsWith("PlayerStart", System.StringComparison.Ordinal)).ToArray();
+                Assert.That(starts.Length, Is.EqualTo(4));
+                foreach (var start in starts)
+                {
+                    // PlayerSpawner grounds elevated player markers before placing players.
+                    Assert.That(Physics.Raycast(start.position + Vector3.up * 2f, Vector3.down,
+                        out var ground, 8f, ~0, QueryTriggerInteraction.Ignore), Is.True, start.name);
+                    Assert.That(NavMesh.SamplePosition(ground.point, out var player, 1f, NavMesh.AllAreas), Is.True, start.name);
+                    var path = new NavMeshPath();
+                    Assert.That(NavMesh.CalculatePath(spawn.position, player.position, NavMesh.AllAreas, path), Is.True, start.name);
+                    Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete), start.name);
+                    Assert.That(Vector3.Distance(spawn.position, player.position), Is.GreaterThan(18f), start.name);
+                }
+            }
+            finally
+            {
+                if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true);
+            }
+        }
 
         [Test]
         public void FND_NET_PLAYER_SPAWNER_DoesNotOwnPlayerNetworkObjectLifecycle()
@@ -162,6 +217,10 @@ namespace EchoProtocol.Networking.Tests
                 Assert.That(serializedSpawner.FindProperty("_playerPrefab"), Is.Null);
                 Assert.That(serializedSpawner.FindProperty("_doorPrefab"), Is.Not.Null);
                 Assert.That(serializedSpawner.FindProperty("_pickupItemPrefab"), Is.Not.Null);
+                var map2Lizard = serializedSpawner.FindProperty("_map2LizardPrefab");
+                Assert.That(map2Lizard, Is.Not.Null);
+                Assert.That(map2Lizard.objectReferenceValue, Is.Not.Null);
+                Assert.That(map2Lizard.objectReferenceValue.name, Is.EqualTo("StalkerNetwork_Lizard"));
             }
             finally
             {

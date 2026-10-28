@@ -30,19 +30,28 @@ namespace EchoProtocol.Voice
         {
             string[] actual;
             try { actual = Microphone.devices; }
-            catch (Exception) { Devices = Array.Empty<string>(); ReportCaptureFailure(); return; }
+            catch (Exception) { ApplyDevices(Array.Empty<string>()); ReportCaptureFailure(); return; }
+            ApplyDevices(actual);
+        }
+
+        private void ApplyDevices(string[] actual)
+        {
             string signature = string.Join("|", Devices);
             Devices = actual.Length == 0 ? Array.Empty<string>() : new string[actual.Length + 1];
             if (actual.Length > 0) { Devices[0] = SystemDefault; Array.Copy(actual, 0, Devices, 1, actual.Length); }
             string preferred = PlayerPrefs.GetString("Echo.Voice.Device", SystemDefault);
-            string next = Array.IndexOf(Devices, preferred) >= 0 ? preferred : actual.Length > 0 ? SystemDefault : "";
+            string next = string.IsNullOrEmpty(preferred) ? SystemDefault : preferred;
             if (Selected != next || signature != string.Join("|", Devices))
             {
                 StopTest(); Selected = next; Error = ""; _retryAfter = 0; DeviceChanged?.Invoke();
             }
-            if (actual.Length == 0) Error = "No microphone available. Connect a device and check microphone permissions.";
+            if (Selected != SystemDefault && Array.IndexOf(Devices, Selected) < 0)
+                Error = "Selected microphone unavailable: " + Selected + ". Connect it or select another device.";
+            else if (actual.Length == 0)
+                Error = "No microphone available. Connect a device and check microphone permissions.";
             else if (Time.unscaledTime >= _retryAfter) Error = "";
         }
+
 
         public void Select(string device)
         {

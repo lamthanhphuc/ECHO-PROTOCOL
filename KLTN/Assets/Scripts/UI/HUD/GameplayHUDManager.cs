@@ -40,7 +40,12 @@ namespace EchoProtocol.UI.HUD
         {
             EnsureSubModuleReferences();
             HUDPresentationStyle.Apply(transform);
-            if (GetComponent<HUDZoneMissions>() == null)
+            if (HUDPurgePresentation.IsPurgeScene)
+            {
+                if (GetComponent<HUDPurgePresentation>() == null)
+                    gameObject.AddComponent<HUDPurgePresentation>();
+            }
+            else if (GetComponent<HUDZoneMissions>() == null)
                 gameObject.AddComponent<HUDZoneMissions>();
         }
 
@@ -111,6 +116,7 @@ namespace EchoProtocol.UI.HUD
 
         private void ClearPlayerBinding()
         {
+            GetComponent<HUDPurgePresentation>()?.BindPlayer(null);
             if (playerVitals != null)
             {
                 playerVitals.BindPlayer(null, null, null);
@@ -175,6 +181,7 @@ namespace EchoProtocol.UI.HUD
         public void BindLocalPlayer(GameObject playerRoot)
         {
             if (playerRoot == null) return;
+            GetComponent<HUDPurgePresentation>()?.BindPlayer(playerRoot);
 
             var movement = playerRoot.GetComponentInChildren<PlayerMovement>(true);
             var networkMovement = playerRoot.GetComponentInChildren<NetworkPlayerMovement>(true);

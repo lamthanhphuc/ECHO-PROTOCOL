@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -86,7 +86,10 @@ public class PlayerAnimatorDriver : MonoBehaviour
         bool isCarryingCore = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null
             || (coreCarrier != null && coreCarrier.IsCarrying)
             || (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid);
-        bool useCarryPose = isCarryingCore || IsHoldingCoreStabilizer();
+        bool useCarryPose = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "Lobby"
+            && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
+            && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)
+            && (isCarryingCore || IsHoldingCoreStabilizer());
         bool isCrouching = !useCarryPose && (movement != null
             ? movement.IsCrouching
             : networkMovement != null && networkMovement.IsAnimationCrouching);

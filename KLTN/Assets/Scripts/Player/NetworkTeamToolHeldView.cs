@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -87,7 +87,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     private bool _wasCarryingFuel;
     private void LateUpdate()
     {
-        bool carryingFuel = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        bool carryingFuel = (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
         if (carryingFuel != _wasCarryingFuel)
         {
             _wasCarryingFuel = carryingFuel;
@@ -102,6 +102,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
     private void Update()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (_visual != null) Clear();
+            return;
+        }
         if (_visual != null) _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(_shownToolId) ?? 1f);
         bool pushing = IsPushing();
         if (pushing == _wasPushing)
@@ -115,6 +120,11 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
 
     private void Refresh()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            Clear();
+            return;
+        }
         if (lobbyState == null) lobbyState = GetComponentInParent<LobbyPlayerState>();
         if (lobbyState == null)
         {
@@ -129,7 +139,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         }
 
         int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing()
-            || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null ? 0 : lobbyState.ToolId;
+            || (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)) ? 0 : lobbyState.ToolId;
         if (ShouldSuppressLocalNetworkToolView(toolId))
         {
             toolId = 0;
@@ -324,6 +334,8 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         {
             return true;
         }
+
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return false;
 
         return _networkObject != null
             && _networkObject.IsValid

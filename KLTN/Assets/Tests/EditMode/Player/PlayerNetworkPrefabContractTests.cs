@@ -154,6 +154,7 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains(
                 "if (!preserveCooldown)",
                 source);
+
             StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
             StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
             StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);
@@ -251,6 +252,19 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("? crouchCameraForwardOffset", camera);
             StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
             StringAssert.Contains("if (animator.GetBool(IsCrouchingHash) && !jammo)", upperBodyAim);
+        }
+
+        [Test]
+        public void CURSOR_IsLockedOnlyInsideCatalogGameplayScenes()
+        {
+            var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
+            var demoMouse = File.ReadAllText("Assets/SciFi Warehouse Kit/Demo/Scripts/MouseComponent.cs");
+
+            StringAssert.Contains("NetworkSessionState.InMatch", camera);
+            StringAssert.Contains("LobbyMapCatalog.IsGameplayScene", camera);
+            StringAssert.Contains("if (!gameplayScene)", camera);
+            StringAssert.Contains("if (!_wasGameplayScene)", camera);
+            StringAssert.DoesNotContain("Cursor.lockState", demoMouse);
         }
 
         [Test]

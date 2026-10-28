@@ -227,7 +227,7 @@ namespace EchoProtocol.AI.Common.AED
         {
             if (input.Request.DecisionPoint == ScenarioDecisionPoint.PreMatch)
             {
-                var fixedConfig = FixedDirector.CreateFixedBaseline();
+                var fixedConfig = FixedDirector.CreateFixedBaseline(input.Request.MapId);
                 var validation = ScenarioValidator.ValidateFixedBaseline(fixedConfig);
                 if (!validation.IsValid)
                 {
@@ -277,7 +277,7 @@ namespace EchoProtocol.AI.Common.AED
             var fallbackConfig =
                 fallbackAction
                     == ScenarioFallbackAction.FullFixedConfig
-                    ? FixedDirector.CreateFixedBaseline()
+                    ? FixedDirector.CreateFixedBaseline(input.Request.MapId)
                     : null;
 
             if (input.AdaptiveInputUnavailableReason == "AED_RUNTIME_SETTINGS_MISSING")
@@ -464,7 +464,7 @@ namespace EchoProtocol.AI.Common.AED
 
             var baseConfig =
                 input.CurrentAppliedConfig
-                ?? FixedDirector.CreateFixedBaseline();
+                ?? FixedDirector.CreateFixedBaseline(input.Request.MapId);
 
             if (!input.ParameterRegistry
                     .IsCurrentPolicyBaseCompatible(
@@ -667,7 +667,7 @@ namespace EchoProtocol.AI.Common.AED
         {
             var baseConfig =
                 input.CurrentAppliedConfig
-                ?? FixedDirector.CreateFixedBaseline();
+                ?? FixedDirector.CreateFixedBaseline(input.Request.MapId);
 
             var capturedBaseRef =
                 input.Request.DecisionPoint == ScenarioDecisionPoint.PreMatch

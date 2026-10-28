@@ -10,6 +10,9 @@ public sealed class PaymentOrder
     public string? ProviderOrderId { get; set; }
     public string Purpose { get; set; } = string.Empty;
     public string ProductReference { get; set; } = string.Empty;
+    public PaymentFulfillmentKind? FulfillmentKind { get; set; }
+    public int? WalletCreditAmount { get; set; }
+    public Guid? FulfillmentShopItemId { get; set; }
     public decimal Amount { get; set; }
     public string Currency { get; set; } = string.Empty;
     public PaymentOrderStatus Status { get; set; }

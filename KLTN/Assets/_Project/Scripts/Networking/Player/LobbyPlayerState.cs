@@ -4,6 +4,7 @@ using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using Fusion;
 using EchoProtocol.Networking.Authority;
+using EchoProtocol.UI.MainMenu;
 using UnityEngine;
 
 namespace EchoProtocol.Networking
@@ -50,6 +51,44 @@ namespace EchoProtocol.Networking
         ToolAlreadyClaimed,
         SelectionLockedWhileReady,
         NotInputAuthority,
+        OwnershipNotVerified,
+    }
+
+    public static class LobbySelectionEntitlements
+    {
+        public static bool TryGetRequiredItems(LobbySelectionKind kind, int characterId,
+            int requestedId, out string[] requiredItemIds)
+        {
+            requiredItemIds = Array.Empty<string>();
+            switch (kind)
+            {
+                case LobbySelectionKind.Character:
+                    if (!CharacterShopAssets.TryGetByCharacterId(requestedId, out var character))
+                        return false;
+                    if (!character.DefaultOwned)
+                        requiredItemIds = new[] { character.ItemId };
+                    return true;
+                case LobbySelectionKind.CharacterOutfit:
+                    if (!CharacterShopAssets.TryGetByCharacterId(characterId, out var parent)
+                        || !CharacterOutfitShopAssets.TryGet(characterId, requestedId, out var outfit))
+                        return false;
+                    if (!parent.DefaultOwned && !outfit.DefaultOwned)
+                        requiredItemIds = new[] { parent.ItemId, outfit.ItemId };
+                    else if (!parent.DefaultOwned)
+                        requiredItemIds = new[] { parent.ItemId };
+                    else if (!outfit.DefaultOwned)
+                        requiredItemIds = new[] { outfit.ItemId };
+                    return true;
+                case LobbySelectionKind.Tool:
+                    if (requestedId == 0) return true;
+                    if (!TeamToolShopAssets.TryGetByToolId(requestedId, out var tool))
+                        return false;
+                    requiredItemIds = new[] { tool.ItemId };
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
     public readonly struct LobbySelectionResult
@@ -90,6 +129,9 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1)] private int _teamCount = 4;
         [SerializeField] private LobbyToolDefinition[] _toolDefinitions = Array.Empty<LobbyToolDefinition>();
+        private int _characterSelectionSerial;
+        private int _outfitSelectionSerial;
+        private int _toolSelectionSerial;
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkBool IsReady { get; private set; }
@@ -112,6 +154,9 @@ namespace EchoProtocol.Networking
         public NetworkBool IsGameplayPlayer { get; private set; }
 
         [Networked]
+        public NetworkBool GameplaySpawnReady { get; private set; }
+
+        [Networked]
         public NetworkBool Disconnected { get; private set; }
 
         public void SetDisconnectedAuthoritative(bool disconnected)
@@ -131,6 +176,7 @@ namespace EchoProtocol.Networking
 
             IsReady = false;
             IsGameplayPlayer = false;
+            GameplaySpawnReady = false;
             IsCoreStabilized = false;
             CarriedCoreId = default;
             Disconnected = false;
@@ -149,6 +195,33 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
+        // Snapshot-safe reconnect identity. The raw Fusion connection
+        // token remains local and is never replicated.
+        [Networked]
+        public NetworkString<_64> ReconnectTokenHash { get; private set; }
+
+        public void SetReconnectTokenHashAuthoritative(
+            string tokenHash)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || string.IsNullOrWhiteSpace(tokenHash)
+                || tokenHash.Length != 64)
+            {
+                return;
+            }
+
+            ReconnectTokenHash =
+                tokenHash;
+        }
+
+        [Networked, OnChangedRender(nameof(HandleFusionActorNumberChanged))]
+        public int FusionActorNumber { get; private set; }
+
+        [Networked]
+        public int RuntimePlayerIdValue { get; private set; }
+
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkId CarriedCoreId { get; private set; }
 
@@ -163,8 +236,49 @@ namespace EchoProtocol.Networking
 
         public bool HasVerifiedBackendIdentity => BackendUserId.Length > 0;
 
+        private void HandleFusionActorNumberChanged()
+        {
+            AnyStateChanged?.Invoke();
+
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority
+                || FusionActorNumber < 1)
+            {
+                return;
+            }
+
+            MatchAuthorityRuntime
+                .EnsureExists(NetworkBootstrap.Instance)
+                .TrySubmitLocalIdentity(
+                    this,
+                    NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
+        }
+
+
         public int TeamCount => _teamCount;
         public IReadOnlyList<LobbyToolDefinition> ToolDefinitions => _toolDefinitions;
+
+        public bool TrySetRuntimePlayerIdAuthoritative(
+            int playerIdValue)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority
+                || playerIdValue <= 0)
+            {
+                return false;
+            }
+
+            if (RuntimePlayerIdValue > 0
+                && RuntimePlayerIdValue != playerIdValue)
+            {
+                return false;
+            }
+
+            RuntimePlayerIdValue = playerIdValue;
+            return true;
+        }
 
         public void InitializeAuthoritativeSelection(int teamId, int toolId, bool isGameplayPlayer)
         {
@@ -173,8 +287,15 @@ namespace EchoProtocol.Networking
             TeamToolUsesRemaining = UsesForTool(toolId);
             IsReady = false;
             IsGameplayPlayer = isGameplayPlayer;
+            GameplaySpawnReady = false;
             IsCoreStabilized = false;
             if (!isGameplayPlayer) CarriedCoreId = default;
+        }
+
+        public void MarkGameplaySpawnReadyAuthoritative()
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority && IsGameplayPlayer)
+                GameplaySpawnReady = true;
         }
 
         public void SetStabilizerBuffedAuthoritative(
@@ -303,6 +424,12 @@ namespace EchoProtocol.Networking
             ApplyLobbyLook(angles);
         }
 
+        private const float IdentityRetryIntervalSeconds = 1f;
+        private float _nextIdentityRetryAt;
+
+        private bool _pendingReadyRequest;
+        private NetworkBool _pendingReadyValue;
+
         public override void Spawned()
         {
             _pet = GetComponent<PetCompanionController>();
@@ -310,6 +437,8 @@ namespace EchoProtocol.Networking
             AnyStateChanged?.Invoke();
             if (Object.HasInputAuthority)
             {
+                if (!IsGameplayPlayer && GetComponent<EchoProtocol.UI.LobbySelectionMemory>() == null)
+                    gameObject.AddComponent<EchoProtocol.UI.LobbySelectionMemory>();
                 MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
                     .TrySubmitLocalIdentity(this, NetworkBootstrap.Instance?.ReconnectIdentityPending == true);
             }
@@ -326,31 +455,99 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            MatchAuthorityRuntime
-                .EnsureExists(NetworkBootstrap.Instance)
-                .RefreshJoinedSessionBindingIfChanged(
-                    Runner,
-                    this);
+            var authority =
+                MatchAuthorityRuntime
+                    .EnsureExists(NetworkBootstrap.Instance);
+
+            authority.RefreshJoinedSessionBindingIfChanged(
+                Runner,
+                this);
+
+            if (_pendingReadyRequest
+                && HasVerifiedBackendIdentity)
+            {
+                var pendingReadyValue =
+                    _pendingReadyValue;
+
+                _pendingReadyRequest =
+                    false;
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Lobby,
+                    $"LPS|READY_FLUSH|player={Object.InputAuthority}|value={pendingReadyValue}");
+
+                RpcRequestReady(
+                    pendingReadyValue);
+            }
+
+            // Spawn, actor discovery and backend session attachment can
+            // complete in different frames. Keep retrying the local identity
+            // at a bounded rate until BackendUserId has been verified.
+            if (!HasVerifiedBackendIdentity
+                && (Runner.IsServer || FusionActorNumber > 0)
+                && Time.unscaledTime >= _nextIdentityRetryAt)
+            {
+                _nextIdentityRetryAt =
+                    Time.unscaledTime
+                    + IdentityRetryIntervalSeconds;
+
+                authority.TrySubmitLocalIdentity(
+                    this,
+                    NetworkBootstrap.Instance
+                        ?.ReconnectIdentityPending == true);
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _pendingReadyRequest = false;
+
             if (_pet != null) Destroy(_pet);
             AnyStateChanged?.Invoke();
         }
 
         public bool RequestReady(bool isReady)
         {
-            if (!Object.HasInputAuthority)
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority)
             {
-                Debug.LogWarning("[LobbyPlayerState] Rejected local ready request: object has no input authority.");
+                Debug.LogWarning(
+                    "[LobbyPlayerState] Rejected local ready request: object has no input authority.");
+
                 return false;
             }
 
-            RpcRequestReady(isReady);
+            if (!HasVerifiedBackendIdentity)
+            {
+                _pendingReadyRequest =
+                    true;
+
+                _pendingReadyValue =
+                    isReady;
+
+                MatchAuthorityRuntime
+                    .EnsureExists(
+                        NetworkBootstrap.Instance)
+                    .TrySubmitLocalIdentity(
+                        this,
+                        force: true);
+
+                RuntimeLog.Log(
+                    RuntimeLogCategory.Lobby,
+                    $"LPS|READY_QUEUED|player={Object.InputAuthority}|value={isReady}");
+
+                return true;
+            }
+
+            _pendingReadyRequest =
+                false;
+
+            RpcRequestReady(
+                isReady);
+
             return true;
         }
-
         public bool RequestOperatorName(string name)
         {
             if (Object == null || !Object.IsValid || !Object.HasInputAuthority) return false;
@@ -416,6 +613,16 @@ namespace EchoProtocol.Networking
             BackendUserId =
                 userId;
 
+            NetworkBootstrap.Instance
+                ?.RequestHostMigrationSnapshotCheckpoint(
+                    "backend-identity-verified");
+
+            if (Object.InputAuthority.IsRealPlayer)
+            {
+                RpcConfirmBackendIdentity(
+                    Object.InputAuthority);
+            }
+
             AnyStateChanged?.Invoke();
         }
 
@@ -423,6 +630,15 @@ namespace EchoProtocol.Networking
         {
             if (Object != null && Object.IsValid && Object.HasStateAuthority)
                 BackendUserId = default;
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcConfirmBackendIdentity(
+            [RpcTarget] PlayerRef target)
+        {
+            NetworkBootstrap.Instance
+                ?.MarkReconnectProofSubmitted();
+
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
@@ -657,6 +873,60 @@ namespace EchoProtocol.Networking
         }
         public override void FixedUpdateNetwork()
         {
+            // PlayerRef may remain stable after reconnect while the
+            // Photon transport ActorNumber changes. State Authority
+            // resolves the real current actor and replicates it.
+            if (Object != null
+                && Object.IsValid
+                && Object.HasStateAuthority
+                && Runner != null
+                && Runner.IsRunning
+                && Object.InputAuthority.IsRealPlayer)
+            {
+                var authoritativeActor =
+                    Runner.GetPlayerActorId(
+                        Object.InputAuthority);
+
+                var resolvedActor = 0;
+
+                if (authoritativeActor.HasValue
+                    && authoritativeActor.Value > 0)
+                {
+                    resolvedActor =
+                        authoritativeActor.Value;
+                }
+                else if (Runner.IsServer
+                    && Object.InputAuthority
+                        == Runner.LocalPlayer
+                    && Object.InputAuthority.IsRealPlayer
+                    && Object.InputAuthority.PlayerId > 0)
+                {
+                    // Host-local fallback only.
+                    resolvedActor =
+                        Object.InputAuthority.PlayerId;
+                }
+
+                if (resolvedActor > 0
+                    && FusionActorNumber
+                        != resolvedActor)
+                {
+                    FusionActorNumber =
+                        resolvedActor;
+
+                    if (Object.HasInputAuthority)
+                    {
+                        MatchAuthorityRuntime
+                            .EnsureExists(
+                                NetworkBootstrap.Instance)
+                            .TrySubmitLocalIdentity(
+                                this,
+                                NetworkBootstrap.Instance
+                                    ?.ReconnectIdentityPending
+                                    == true);
+                    }
+                }
+            }
+
             if (Object.HasStateAuthority && _pet != null) _pet.TickAuthority(Runner.DeltaTime);
         }
 
@@ -673,6 +943,7 @@ namespace EchoProtocol.Networking
             if (!TryResolveRequester(info.Source, out var requester))
                 return;
 
+            int serial = ++_characterSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -688,6 +959,18 @@ namespace EchoProtocol.Networking
             {
                 error =
                     LobbySelectionError.InvalidSelection;
+            }
+
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.Character, 0, characterId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.Character,
+                    characterId, 0, requiredItems, serial);
+                return;
             }
 
             if (error == LobbySelectionError.None)
@@ -737,6 +1020,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_outfitSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -761,6 +1045,18 @@ namespace EchoProtocol.Networking
                     LobbySelectionError.InvalidSelection;
             }
 
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.CharacterOutfit, CharacterId, outfitId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.CharacterOutfit,
+                    outfitId, CharacterId, requiredItems, serial);
+                return;
+            }
+
             if (error == LobbySelectionError.None)
             {
                 CharacterOutfitId =
@@ -777,6 +1073,19 @@ namespace EchoProtocol.Networking
         }
         private bool CanSendSelectionRequest(LobbySelectionKind kind, int requestedId)
         {
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Cannot request {kind}={requestedId}: match start is pending.");
+                LocalSelectionRequestCompleted?.Invoke(
+                    new LobbySelectionResult(
+                        kind,
+                        requestedId,
+                        false,
+                        LobbySelectionError.SelectionLockedWhileReady));
+                return false;
+            }
+
             if (Object.HasInputAuthority) return true;
             Debug.LogWarning($"[LobbyPlayerState] Cannot request {kind}={requestedId}: no input authority.");
             LocalSelectionRequestCompleted?.Invoke(
@@ -791,6 +1100,13 @@ namespace EchoProtocol.Networking
             {
                 Debug.LogWarning(
                     $"[LobbyPlayerState] Rejected ready request from {info.Source}; owner is {Object.InputAuthority}.");
+                return;
+            }
+
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                Debug.LogWarning(
+                    $"[LobbyPlayerState] Ready change rejected while match start is pending for {requester}.");
                 return;
             }
 
@@ -853,6 +1169,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_toolSelectionSerial;
             var error = ValidateOwnedRequest(requester);
             if (error == LobbySelectionError.None && toolId < 0)
             {
@@ -878,6 +1195,18 @@ namespace EchoProtocol.Networking
                 error = LobbySelectionError.ToolAlreadyClaimed;
             }
 
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.Tool, 0, toolId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.Tool,
+                    toolId, 0, requiredItems, serial);
+                return;
+            }
+
             if (error == LobbySelectionError.None)
             {
                 ToolId = toolId;
@@ -885,6 +1214,53 @@ namespace EchoProtocol.Networking
             }
 
             SendSelectionResult(requester, LobbySelectionKind.Tool, toolId, error);
+        }
+
+        private async void ConfirmOwnedSelection(PlayerRef requester, LobbySelectionKind kind,
+            int requestedId, int characterId, string[] requiredItems, int serial)
+        {
+            bool verified = await MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
+                .VerifyPlayerEntitlementsAsync(this, requiredItems);
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || (kind == LobbySelectionKind.Character && serial != _characterSelectionSerial)
+                || (kind == LobbySelectionKind.CharacterOutfit && serial != _outfitSelectionSerial)
+                || (kind == LobbySelectionKind.Tool && serial != _toolSelectionSerial))
+                return;
+
+            var error = ValidateOwnedRequest(requester);
+            if (error == LobbySelectionError.None && !verified)
+                error = LobbySelectionError.OwnershipNotVerified;
+            if (error == LobbySelectionError.None && IsReady)
+                error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None
+                && kind != LobbySelectionKind.Tool && IsGameplayPlayer)
+                error = LobbySelectionError.SelectionLockedWhileReady;
+            if (error == LobbySelectionError.None && kind == LobbySelectionKind.CharacterOutfit
+                && CharacterId != characterId)
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && kind == LobbySelectionKind.Tool
+                && (!TryGetTool(requestedId, out var definition)
+                    || definition.IsUnique && IsToolClaimedByAnother(requestedId)))
+                error = LobbySelectionError.ToolAlreadyClaimed;
+
+            if (error == LobbySelectionError.None)
+            {
+                switch (kind)
+                {
+                    case LobbySelectionKind.Character:
+                        if (CharacterId != requestedId) CharacterOutfitId = 0;
+                        CharacterId = requestedId;
+                        break;
+                    case LobbySelectionKind.CharacterOutfit:
+                        CharacterOutfitId = requestedId;
+                        break;
+                    case LobbySelectionKind.Tool:
+                        ToolId = requestedId;
+                        break;
+                }
+                AnyStateChanged?.Invoke();
+            }
+            SendSelectionResult(requester, kind, requestedId, error);
         }
 
         private bool TryResolveRequester(PlayerRef source, out PlayerRef requester)
@@ -914,6 +1290,11 @@ namespace EchoProtocol.Networking
 
         private LobbySelectionError ValidateOwnedRequest(PlayerRef source)
         {
+            if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
+            {
+                return LobbySelectionError.SelectionLockedWhileReady;
+            }
+
             if (!Object.HasStateAuthority || source != Object.InputAuthority)
             {
                 return LobbySelectionError.InvalidPlayer;

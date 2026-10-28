@@ -33,6 +33,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             Vector3 authoritativeHitPosition,
             AiSimulationTime resolvedAt)
         {
+            // UV cancels a PURGE attack at the authoritative consequence boundary.
+            if (AlienHuntMission.Instance != null && NetworkMatchState.Instance != null
+                && NetworkMatchState.Instance.PurgeUvContact) return false;
             if (_runner == null || !_runner.IsRunning || !_runner.IsServer
                 || _identityRegistry == null
                 || !_identityRegistry.TryGetPlayerRef(playerId, out var player)

@@ -38,6 +38,9 @@ namespace EchoProtocol.UI.HUD
         private float _displayStamina = 1f;
         private Image _healthBarFill;
         private float _noiseIntensity;
+        private NetworkPlayerFlashlight _resonance;
+        private bool _resonanceDepletedNotified;
+        private float _resonanceNoticeUntil;
 
         public void BindPlayer(
             PlayerMovement move,
@@ -53,6 +56,10 @@ namespace EchoProtocol.UI.HUD
                     : null;
             downState = down;
             carrier = coreCarrier;
+            _resonance = networkMovement != null ? networkMovement.GetComponent<NetworkPlayerFlashlight>()
+                : movement != null ? movement.GetComponent<NetworkPlayerFlashlight>() : null;
+            _resonanceDepletedNotified = false;
+            _resonanceNoticeUntil = 0f;
             if (_healthBarFill != null) _healthBarFill.transform.parent.gameObject.SetActive(down != null);
 
             if (carrier != null)
@@ -243,14 +250,21 @@ namespace EchoProtocol.UI.HUD
 
         private void UpdateHealthBar()
         {
-            float maxHealth = Mathf.Max(1f, downState.MaxHealth);
-            float health = Mathf.Clamp(downState.Health, 0f, maxHealth);
-            float amount = health / maxHealth;
-            Color barColor = amount < 0.3f
+            if (_resonance == null)
+                _resonance = networkMovement != null ? networkMovement.GetComponent<NetworkPlayerFlashlight>()
+                    : movement != null ? movement.GetComponent<NetworkPlayerFlashlight>() : null;
+            bool available = _resonance != null && _resonance.Object != null && _resonance.Object.IsValid;
+            float amount = available ? Mathf.Clamp01(_resonance.ResonanceEnergy / 100f) : 0f;
+            if (available && amount <= 0f && !_resonanceDepletedNotified)
+            {
+                _resonanceDepletedNotified = true;
+                _resonanceNoticeUntil = Time.unscaledTime + 2f;
+            }
+            Color barColor = amount <= 0.15f
                 ? HUDPresentationStyle.Danger
-                : amount < 0.6f
+                : amount <= 0.3f
                     ? HUDPresentationStyle.Warning
-                    : HUDPresentationStyle.Ink;
+                    : HUDPresentationStyle.Accent;
 
             if (_healthBarFill != null)
             {
@@ -261,7 +275,10 @@ namespace EchoProtocol.UI.HUD
             if (statusLabelText != null) statusLabelText.rectTransform.sizeDelta = new Vector2(288f, 23f);
             if (statusLabelTmp != null) statusLabelTmp.rectTransform.sizeDelta = new Vector2(288f, 23f);
             SetText(statusLabelTmp, statusLabelText,
-                $"HP    {Mathf.CeilToInt(health)} / {Mathf.CeilToInt(maxHealth)}");
+                Time.unscaledTime < _resonanceNoticeUntil
+                    ? EchoProtocol.Settings.GameLanguage.Choose("ĐÈN UV · CẠN NĂNG LƯỢNG", "UV LIGHT · DEPLETED")
+                    : EchoProtocol.Settings.GameLanguage.Choose("ĐÈN UV", "UV LIGHT")
+                        + " [Q]    " + (available ? $"{Mathf.CeilToInt(amount * 100f)}%" : "—"));
         }
 
         private void SetStatusBadge(string label, string hexColor, Color bgColor)

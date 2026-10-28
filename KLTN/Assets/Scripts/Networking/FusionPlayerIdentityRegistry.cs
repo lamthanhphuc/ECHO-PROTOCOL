@@ -54,6 +54,50 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryRestore(
+            PlayerRef playerRef,
+            PlayerId playerId)
+        {
+            if (!IsValidPlayerRef(playerRef)
+                || !playerId.IsValid)
+            {
+                return false;
+            }
+
+            if (_idsByPlayerRef.TryGetValue(
+                    playerRef,
+                    out var existingId))
+            {
+                return existingId == playerId;
+            }
+
+            if (_playerRefsById.TryGetValue(
+                    playerId,
+                    out var existingPlayerRef))
+            {
+                return existingPlayerRef == playerRef;
+            }
+
+            _idsByPlayerRef.Add(
+                playerRef,
+                playerId);
+
+            _playerRefsById.Add(
+                playerId,
+                playerRef);
+
+            if (_nextPlayerIdValue > 0
+                && playerId.Value >= _nextPlayerIdValue)
+            {
+                _nextPlayerIdValue =
+                    playerId.Value == int.MaxValue
+                        ? 0
+                        : playerId.Value + 1;
+            }
+
+            return true;
+        }
+
         public bool TryGetPlayerId(PlayerRef playerRef, out PlayerId playerId)
         {
             playerId = PlayerId.Invalid;

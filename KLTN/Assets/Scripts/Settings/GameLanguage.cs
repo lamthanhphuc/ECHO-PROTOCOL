@@ -24,6 +24,17 @@ namespace EchoProtocol.Settings
         public static event Action Changed;
         public static string Choose(string vietnamese, string english) => Current == GameLocale.English ? english : vietnamese;
 
+        public static string TeamToolName(int toolId) => toolId switch
+        {
+            0 => Choose("Không có", "None"),
+            1 => Choose("Máy quét hiện trường", "Field Scanner"),
+            2 => Choose("Máy phát tiếng động", "Noise Maker"),
+            3 => Choose("Túi cứu thương", "First Aid Kit"),
+            4 => Choose("Ván chặn cửa", "Door Jammer"),
+            6 => Choose("Máy ngụy trang", "Camouflage Device"),
+            _ => Choose($"Công cụ {toolId}", $"Tool {toolId}")
+        };
+
         public static void Set(GameLocale language)
         {
             if (language != GameLocale.Vietnamese && language != GameLocale.English) throw new ArgumentOutOfRangeException(nameof(language));
@@ -62,6 +73,12 @@ namespace EchoProtocol.Settings
 
         private static string TranslateLine(string source)
         {
+            source = source.Trim() switch
+            {
+                "EMF Reader" or "EMF READER" => "Noise Maker",
+                "Wooden Planks" or "WOODEN PLANKS" => "Door Jammer",
+                _ => source
+            };
             // Accept copy serialized before the terminology update without changing scene object names.
             string canonical = source.Replace("Doorexit", "cửa thoát").Replace("Spacefrigate", "tàu")
                 .Replace("Security Hold", "xác thực bảo mật").Replace("Access Panel", "bảng mở cửa")
@@ -124,6 +141,14 @@ namespace EchoProtocol.Settings
         }
 
         private const string Catalog = @"
+Trang phục|OUTFIT
+Va chạm người chơi:|Player Collisions:
+Thoại gần:|Proximity Voice:
+Túi cứu thương:|Medkits:
+Nhân vật:|Character:
+Độ khó:|Difficulty:
+Công cụ đội:|Team tool:
+Công cụ đội: Không có|TEAM TOOL: NONE
 Mạng an ninh chưa hoạt động|EMERGENCY NETWORK OFFLINE
 Khôi phục Relay A và Relay B|RESTORE POWER RELAY A AND DATA RELAY B
 trước khi xác thực bảo mật|BEFORE INITIATING SECURITY AUTHENTICATION
@@ -184,6 +209,7 @@ Tên đăng nhập|Username
 Mật khẩu|Password
 Xác nhận mật khẩu|Confirm password
 Đăng xuất|LOGOUT
+ĐĂNG XUẤT|LOGOUT
 CHƠI|PLAY
 TẠO PHÒNG|HOST GAME
 VÀO PHÒNG|JOIN GAME
@@ -366,10 +392,10 @@ LÕI NĂNG LƯỢNG|ENERGY CORE
 Không có tín hiệu|No signal
 Nhấn phím bất kỳ để tiếp tục|Press any key to continue
 Máy quét hiện trường|Field Scanner
-Máy tạo tiếng động|Noise Maker
+Máy phát tiếng động|Noise Maker
 Bộ sơ cứu|First Aid Kit
-Bộ ổn định lõi|Core Stabilizer
-Ván chèn cửa|Door Jammer
+Máy ngụy trang|Core Stabilizer
+Ván chặn cửa|Door Jammer
 Vác nặng · Dễ bị phát hiện|Heavy load · Easier to detect
 Chạy gây tiếng động|Sprinting makes noise
 Chỉ dùng để cứu người bị gục.|Only used to revive downed teammates.

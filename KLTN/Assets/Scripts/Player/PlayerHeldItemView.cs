@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using UnityEngine;
 
 [DisallowMultipleComponent, DefaultExecutionOrder(100)]
@@ -85,7 +85,12 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     private bool _wasCarryingFuel;
     private void LateUpdate()
     {
-        bool carryingFuel = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (_currentVisual != null) ClearVisual();
+            return;
+        }
+        bool carryingFuel = (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
         if (carryingFuel != _wasCarryingFuel)
         {
             _wasCarryingFuel = carryingFuel;
@@ -234,7 +239,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
-        if (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null) return null;
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return null;
+        if ((EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))) return null;
         if (IsPushing())
         {
             return null;

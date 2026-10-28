@@ -1,3 +1,4 @@
+using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -237,12 +238,20 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MatchAuthorityBinding>(entity =>
         {
-            entity.ToTable("MatchAuthorityBindings");
+            entity.ToTable("MatchAuthorityBindings", table => table.HasCheckConstraint(
+                "CK_MatchAuthorityBindings_LeaderboardContext",
+                "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR " +
+                "(\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND " +
+                "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND " +
+                "\"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))"));
             entity.HasKey(e => e.MatchId);
             entity.Property(e => e.FusionSessionName).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.MapId).HasMaxLength(64);
+            entity.Property(e => e.Difficulty).HasMaxLength(16);
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => new { e.FusionSessionName, e.Status });
             entity.HasIndex(e => e.HostUserId);
+            entity.HasIndex(e => new { e.MapId, e.Difficulty });
             entity.HasOne(e => e.HostUser)
                 .WithMany()
                 .HasForeignKey(e => e.HostUserId)
@@ -259,7 +268,9 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasAlternateKey(e => new { e.MatchId, e.UserId })
                 .HasName("AK_MatchPlayerBindings_MatchId_UserId");
-            entity.HasIndex(e => new { e.MatchId, e.FusionActorNumber }).IsUnique();
+            entity.HasIndex(e => new { e.MatchId, e.FusionActorNumber })
+                .IsUnique()
+                .HasFilter("\"DisconnectedAtUtc\" IS NULL");
             entity.HasIndex(e => e.JoinProofId).IsUnique();
             entity.HasOne(e => e.Match)
                 .WithMany(e => e.Players)
@@ -277,7 +288,7 @@ public class AppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_MatchResults_DurationSeconds_Range",
-                    "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 2760");
+                    $"\"DurationSeconds\" >= {GameConstants.MinimumMatchDurationSeconds} AND \"DurationSeconds\" <= {GameConstants.MaximumAcceptedMatchDurationSeconds}");
                 t.HasCheckConstraint(
                     "CK_MatchResults_Outcome_Allowed",
                     "\"Outcome\" IN ('WIN', 'LOSE')");
@@ -299,9 +310,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Outcome).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ObjectiveCompletion).HasPrecision(5, 4);
             entity.Property(e => e.PayloadHash).IsRequired().HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.RosterKey).HasMaxLength(131);
             entity.Property(e => e.RewardStatus).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => e.SubmittedByUserId);
             entity.HasIndex(e => e.SubmittedAtUtc);
+            entity.HasIndex(e => new { e.Outcome, e.PlayerCount, e.DurationSeconds, e.EndedAtUtc });
+            entity.HasIndex(e => e.RosterKey);
             entity.HasOne(e => e.SubmittedByUser)
                 .WithMany()
                 .HasForeignKey(e => e.SubmittedByUserId)
@@ -548,6 +562,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.ProviderOrderId).HasMaxLength(200);
             entity.Property(item => item.Purpose).IsRequired().HasMaxLength(100);
             entity.Property(item => item.ProductReference).IsRequired().HasMaxLength(128);
+            entity.Property(item => item.FulfillmentKind).HasConversion<string>().HasMaxLength(30);
             entity.Property(item => item.Amount).HasPrecision(18, 2);
             entity.Property(item => item.Currency).IsRequired().HasMaxLength(3).IsFixedLength();
             entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(30);

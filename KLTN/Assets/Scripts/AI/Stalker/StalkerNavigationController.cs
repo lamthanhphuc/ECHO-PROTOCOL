@@ -17,6 +17,7 @@ namespace EchoProtocol.AI.Stalker
         private NavigationRecoveryReason _currentRecoveryReason;
         private bool _authoritativeLocomotion;
         private Func<Vector3[], bool> _pathSafetyValidator;
+        private Vector3? _lastOnNavMeshPosition;
 
         public StalkerNavigationController(NavMeshAgent agent)
             : this(agent, NavigationProgressSettings.Default)
@@ -48,7 +49,97 @@ namespace EchoProtocol.AI.Stalker
         }
 
         public bool HasAuthoritativeLocomotion => _authoritativeLocomotion;
+        public bool TryRecoverLocalPosition(Vector3 destination)
+        {
+            if (!TryFindLocalRecoveryPosition(destination, out var position)) return false;
+            bool wasEnabled = _agent.enabled;
+            if (!wasEnabled) _agent.enabled = true;
+            if (!_agent.Warp(position))
+            { if (!wasEnabled) _agent.enabled = false; return false; }
+            _agent.transform.position = position;
+            _progressMonitor.Reset();
+            RememberOnNavMeshPosition();
+            return true;
+        }
+
+        private bool TryFindLocalRecoveryPosition(Vector3 destination, out Vector3 position)
+        {
+            position = default;
+            if (_agent == null) return false;
+            var origin = _agent.transform.position;
+            var filter = new NavMeshQueryFilter { agentTypeID = _agent.agentTypeID, areaMask = _agent.areaMask };
+            var body = _agent.GetComponent<CapsuleCollider>();
+            var scale = _agent.transform.lossyScale;
+            float radius = body != null ? body.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z)) : _agent.radius;
+            float height = body != null ? body.height * Mathf.Abs(scale.y) : _agent.height;
+            var center = body != null ? _agent.transform.TransformPoint(body.center) : origin + Vector3.up * height * .5f;
+            float segment = Mathf.Max(0f, height * .5f - radius);
+            bool backfaces = Physics.queriesHitBackfaces;
+            try
+            {
+                Physics.queriesHitBackfaces = true;
+                for (int i = 0; i < 16; i++)
+                {
+                    float angle = i * Mathf.PI / 4f;
+                    var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (i < 8 ? .6f : 1.2f);
+                    if (!NavMesh.SamplePosition(origin + offset, out var hit, .25f, filter)
+                        || Mathf.Abs(hit.position.y - origin.y) > .75f
+                        || Vector3.Distance(origin, hit.position) > 1.25f
+                        || Vector3.Distance(origin, hit.position) < .15f
+                        || !NavMesh.CalculatePath(hit.position, destination, filter, _evaluationPath)
+                        || _evaluationPath.status != NavMeshPathStatus.PathComplete) continue;
+                    var delta = hit.position - origin;
+                    bool blocked = false;
+                    foreach (var collision in Physics.CapsuleCastAll(center - Vector3.up * segment,
+                                 center + Vector3.up * segment, radius, delta.normalized, delta.magnitude + .05f,
+                                 Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+                    {
+                        if (!collision.transform.IsChildOf(_agent.transform)
+                            && IsMovementHitBlocking(collision, body, origin, delta))
+                        { blocked = true; break; }
+                    }
+                    // Only bridge missing navigation over continuous floor, never water or a drop.
+                    for (float t = 0f; !blocked && t <= 1.001f; t += .125f)
+                        blocked = !Physics.Raycast(Vector3.Lerp(origin, hit.position, t) + Vector3.up * .8f,
+                            Vector3.down, 1.1f, Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore);
+                    if (blocked) continue;
+                    position = hit.position;
+                    return true;
+                }
+                return false;
+            }
+            finally { Physics.queriesHitBackfaces = backfaces; }
+        }
+
         public float AuthoritativeMoveSpeed { get; private set; }
+
+        internal static bool IsMovementHitBlocking(RaycastHit hit, CapsuleCollider body, Vector3 bodyPosition, Vector3 motion)
+        {
+            // Initial-overlap cast normals point against the cast, even when the overlap is just the floor.
+            if (hit.distance <= .00001f && body != null
+                && Physics.ComputePenetration(body, bodyPosition, body.transform.rotation,
+                    hit.collider, hit.transform.position, hit.transform.rotation, out var separation, out float depth))
+            {
+                if (separation.y >= .65f)
+                {
+                    var scale = body.transform.lossyScale;
+                    float radius = body.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+                    float segment = Mathf.Max(0f, body.height * Mathf.Abs(scale.y) * .5f - radius);
+                    var center = bodyPosition + body.transform.TransformVector(body.center) + separation * (depth + .01f);
+                    // A floor and a wall can share one mesh: query again above the initial floor overlap.
+                    foreach (var raisedHit in Physics.CapsuleCastAll(center - Vector3.up * segment, center + Vector3.up * segment,
+                                 radius, motion.normalized, motion.magnitude + .05f,
+                                 Physics.DefaultRaycastLayers & ~(1 << 4), QueryTriggerInteraction.Ignore))
+                        if (raisedHit.collider == hit.collider && raisedHit.normal.y < .65f) return true;
+                    return false;
+                }
+                if (Vector3.Dot(motion, separation) < -.00001f) return true;
+                return Physics.ComputePenetration(body, bodyPosition + motion, body.transform.rotation,
+                    hit.collider, hit.transform.position, hit.transform.rotation, out _, out float nextDepth)
+                    && nextDepth > depth + .0001f;
+            }
+            return hit.normal.y < .65f;
+        }
 
         public void SetAuthoritativeLocomotion(bool enabled)
         {
@@ -74,6 +165,7 @@ namespace EchoProtocol.AI.Stalker
         public void TickAuthoritativeLocomotion(float deltaSeconds)
         {
             AuthoritativeMoveSpeed = 0f;
+            RememberOnNavMeshPosition();
             if (!_authoritativeLocomotion || !IsUsable || deltaSeconds <= 0f
                 || !_agent.hasPath || _agent.pathPending
                 || _agent.pathStatus != NavMeshPathStatus.PathComplete)
@@ -108,6 +200,7 @@ namespace EchoProtocol.AI.Stalker
             _agent.nextPosition = position;
             _agent.Move(direction * distance);
             _agent.transform.position = _agent.nextPosition;
+            RememberOnNavMeshPosition();
             AuthoritativeMoveSpeed = Vector3.Distance(position, _agent.transform.position) / deltaSeconds;
             if (_agent.updateRotation)
             {
@@ -164,6 +257,7 @@ namespace EchoProtocol.AI.Stalker
 
             if (_agent.isOnNavMesh)
             {
+                RememberOnNavMeshPosition();
                 _currentFailureReason = NavigationFailureReason.None;
                 return true;
             }
@@ -173,7 +267,10 @@ namespace EchoProtocol.AI.Stalker
                     _agent.transform.position,
                     out var hit,
                     sampleDistance,
-                    _agent.areaMask))
+                    _agent.areaMask)
+                && (!_lastOnNavMeshPosition.HasValue
+                    || Vector3.Distance(_agent.transform.position, _lastOnNavMeshPosition.Value) > sampleDistance
+                    || !NavMesh.SamplePosition(_lastOnNavMeshPosition.Value, out hit, 0.1f, _agent.areaMask)))
             {
                 _currentFailureReason = NavigationFailureReason.AgentNotOnNavMesh;
                 return false;
@@ -195,6 +292,7 @@ namespace EchoProtocol.AI.Stalker
             _pathPendingTimedOut = false;
             _currentFailureReason = NavigationFailureReason.None;
             _progressMonitor.Reset();
+            RememberOnNavMeshPosition();
 
             return true;
         }
@@ -214,11 +312,17 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            return _agent.remainingDistance <= _agent.stoppingDistance;
+            return _agent.remainingDistance <= _agent.stoppingDistance + .01f;
         }
 
         public NavigationEvaluationResult EvaluateDestination(Vector3 destination)
         {
+            return EvaluateDestination(destination, out _);
+        }
+
+        public NavigationEvaluationResult EvaluateDestination(Vector3 destination, out NavMeshPath path)
+        {
+            path = _evaluationPath;
             if (_agent == null || !_agent.enabled)
             {
                 _currentFailureReason = NavigationFailureReason.AgentUnavailable;
@@ -376,6 +480,7 @@ namespace EchoProtocol.AI.Stalker
 
         public void TickProgress(float deltaTime)
         {
+            RememberOnNavMeshPosition();
             if (_pathSafetyValidator != null && IsUsable && _agent.hasPath && !_agent.pathPending &&
                 _agent.pathStatus == NavMeshPathStatus.PathComplete && !IsPathSafe(_agent.path))
             {
@@ -504,6 +609,12 @@ namespace EchoProtocol.AI.Stalker
                 default:
                     return NavigationPathStatus.Invalid;
             }
+        }
+
+        private void RememberOnNavMeshPosition()
+        {
+            if (_agent != null && _agent.enabled && _agent.isOnNavMesh)
+                _lastOnNavMeshPosition = _agent.nextPosition;
         }
 
         private bool DoesPathReachRequestedDestination(

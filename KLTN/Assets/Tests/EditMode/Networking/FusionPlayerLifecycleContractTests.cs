@@ -16,6 +16,8 @@ namespace EchoProtocol.Networking.Tests
         private const string RunnerPrefabPath = "Assets/Prefabs/NetworkRunner.prefab";
         private const string PlayerPrefabPath = "Assets/Prefabs/PlayerNetwork.prefab";
         private const string LifecycleScriptPath = "Assets/Scripts/Networking/FusionPlayerLifecycle.cs";
+        private const string BootstrapScriptPath = "Assets/_Project/Scripts/Networking/Session/NetworkBootstrap.cs";
+        private const string LobbyManagerScriptPath = "Assets/_Project/Scripts/Networking/Session/LobbyManager.cs";
         private const string NetworkRunnerTypeName = "Fusion.NetworkRunner";
         private const string LifecycleTypeName = "EchoProtocol.Networking.FusionPlayerLifecycle";
         private const string NetworkObjectTypeName = "Fusion.NetworkObject";
@@ -180,6 +182,207 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("BackendUserId = default", player);
             StringAssert.Contains("state.HasVerifiedBackendIdentity && !state.Disconnected", session);
             StringAssert.DoesNotContain("MarkReconnectProofSubmitted()", authority);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_InputLifecycleUsesFusionAuthorityCallbacks()
+        {
+            var movementType = ResolveType(
+                "EchoProtocol.Networking.NetworkPlayerMovement");
+
+            Assert.That(
+                ResolveType("Fusion.IInputAuthorityGained")
+                    .IsAssignableFrom(movementType),
+                Is.True);
+
+            Assert.That(
+                ResolveType("Fusion.IInputAuthorityLost")
+                    .IsAssignableFrom(movementType),
+                Is.True);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_ResumeSnapshotAccessIsServerGuarded()
+        {
+            var source = File.ReadAllText(BootstrapScriptPath)
+                .Replace("\r\n", "\n");
+
+            var resumeStart = source.IndexOf(
+                "private void ResumeHostMigration(",
+                StringComparison.Ordinal);
+
+            var snapshotAccess = source.IndexOf(
+                "GetResumeSnapshotNetworkObjectPlayerObjects()",
+                resumeStart,
+                StringComparison.Ordinal);
+
+            var serverGuard = source.IndexOf(
+                "|| !migrationRunner.IsServer",
+                resumeStart,
+                StringComparison.Ordinal);
+
+            Assert.That(resumeStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(serverGuard, Is.GreaterThan(resumeStart));
+            Assert.That(snapshotAccess, Is.GreaterThan(serverGuard));
+        }
+
+        [Test]
+        public void HOST_MIGRATION_RestoresOnlyCanonicalMatchStateNetworkId()
+        {
+            var source = File.ReadAllText(BootstrapScriptPath);
+
+            StringAssert.Contains(
+                "_hostMigrationAuthoritativeMatchStateId",
+                source);
+
+            StringAssert.Contains(
+                "resumeObject.Id != canonicalMatchStateId",
+                source);
+
+            StringAssert.Contains(
+                "Stale migrated NetworkMatchState snapshot ignored",
+                source);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_MatchStartRequiresCurrentCommittedRoster()
+        {
+            var source = File.ReadAllText(LobbyManagerScriptPath);
+
+            StringAssert.Contains(
+                "TryValidateCommittedRoster(",
+                source);
+
+            StringAssert.Contains(
+                "playerObject.InputAuthority != player",
+                source);
+
+            StringAssert.Contains(
+                "lobbyState.FusionActorNumber != actorNumber",
+                source);
+
+            StringAssert.Contains(
+                "authority.IsPlayerBound(",
+                source);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_GracefulHostLeavePushesSnapshot()
+        {
+            var source = File.ReadAllText(BootstrapScriptPath);
+
+            StringAssert.Contains(
+                "PushGracefulHostMigrationSnapshotAsync(",
+                source);
+
+            StringAssert.Contains(
+                "ShutdownReason.HostMigration",
+                source);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_ReclaimsPlayerObjectsByStableConnectionToken()
+        {
+            var source = File.ReadAllText(BootstrapScriptPath);
+
+            StringAssert.Contains(
+                "FusionPlayerLifecycle.ReconnectTokenMatches(",
+                source);
+
+            StringAssert.Contains(
+                "Migrated PlayerObject reconciled by connection token",
+                source);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_RepositionsLobbyPlayersIntoUniqueSlots()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/PlayerSpawner.cs");
+
+            StringAssert.Contains(
+                "RebuildMigratedLobbyPlacementAuthoritative(",
+                source);
+
+            StringAssert.Contains(
+                "PSP|MIGRATION_LOBBY_PLACEMENT",
+                source);
+        }
+
+        [Test]
+        public void HOST_MIGRATION_BackendCleanupNeverDisconnectsReusedActiveActor()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
+
+            var reconcileStart = source.IndexOf(
+                "ReconcileMigratedDisconnectedActorsAsync(",
+                StringComparison.Ordinal);
+
+            var activeGuard = source.IndexOf(
+                "_boundPlayers.ContainsKey(",
+                reconcileStart,
+                StringComparison.Ordinal);
+
+            var disconnectCall = source.IndexOf(
+                "await _api.DisconnectPlayerAsync(",
+                reconcileStart,
+                StringComparison.Ordinal);
+
+            Assert.That(reconcileStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(activeGuard, Is.GreaterThan(reconcileStart));
+            Assert.That(disconnectCall, Is.GreaterThan(activeGuard));
+        }
+
+        [Test]
+        public void HOST_MIGRATION_NewHostBindingDoesNotDependOnReplicatedIdentityTiming()
+        {
+            var authoritySource = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
+            var bootstrapSource = File.ReadAllText(BootstrapScriptPath);
+
+            StringAssert.Contains(
+                "player == runner.LocalPlayer",
+                authoritySource);
+            StringAssert.Contains(
+                "AuthSession.CurrentUserId",
+                authoritySource);
+            StringAssert.Contains(
+                "pendingIdentityCount++",
+                authoritySource);
+            StringAssert.Contains(
+                "bindingRebuildDeadline",
+                bootstrapSource);
+        }
+
+        [Test]
+        public void JOIN_PROOF_RetryStopsOnlyAfterStateAuthorityConfirmsBinding()
+        {
+            var authoritySource = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
+            var playerStateSource = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs");
+
+            StringAssert.DoesNotContain(
+                "_bootstrap\n                ?.MarkReconnectProofSubmitted();",
+                authoritySource);
+            StringAssert.Contains(
+                "RpcConfirmBackendIdentity(",
+                playerStateSource);
+            StringAssert.Contains(
+                "MarkReconnectProofSubmitted();",
+                playerStateSource);
+        }
+
+        [Test]
+        public void MATCH_LOOP_QueuedResultForcesFreshBackendMatch()
+        {
+            var source = File.ReadAllText(
+                "Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
+
+            StringAssert.Contains(
+                "|| HasQueuedResult(MatchId);",
+                source);
         }
 
         private static GameObject LoadPrefab(string path)

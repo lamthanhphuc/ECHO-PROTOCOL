@@ -865,57 +865,108 @@ namespace EchoProtocol.MatchFlow
             relayB2?.ResetForRetry();
         }
 
-        private void ApplyRelayPresentation(NetworkMatchState matchState, int relayMask)
+        // The promoted Host has a fresh scene-local Relay simulation. Rebuild it from
+        // the copied NetworkMatchState BEFORE its first FixedUpdateNetwork capture.
+        // Return false while async Relay B surge boards are still being prepared.
+        public bool TryRehydrateAuthoritativeRelayRuntimeFromSnapshot(NetworkMatchState matchState)
         {
-            if (!matchState.Object.HasStateAuthority)
+            if (matchState == null
+                || matchState.Object == null
+                || !matchState.Object.IsValid
+                || !matchState.Object.HasStateAuthority
+                || matchState.CurrentPhase != NetworkMatchPhase.Zone2Objective
+                || !matchState.HasInitializedZone2RelayRuntime
+                || relayA1 == null || relayA2 == null
+                || relayB1 == null || relayB2 == null)
+            {
+                return false;
+            }
+
+            relayA1.ApplyAuthoritativeCircuitScenario(
+                matchState.RelayA1CircuitScenario, matchState.RelayA1AttemptSeed);
+            relayA2.ApplyAuthoritativeCircuitScenario(
+                matchState.RelayA2CircuitScenario, matchState.RelayA2AttemptSeed);
+            relayB1.ApplyAuthoritativeAttempt(
+                matchState.RelayB1PresetIndex, matchState.RelayB1AttemptSeed);
+            relayB2.ApplyAuthoritativeAttempt(
+                matchState.RelayB2PresetIndex, matchState.RelayB2AttemptSeed);
+
+            // Relay B may need Task.Run to rebuild the exact seeded board.
+            // Never tick/capture default boards into Networked fields while pending.
+            var b1 = matchState.RelayB1Surge;
+            var b2 = matchState.RelayB2Surge;
+            relayB1.ApplyAuthoritativeSurge(b1);
+            relayB2.ApplyAuthoritativeSurge(b2);
+            if ((b1.Seed != 0
+                    && (relayB1.Surge.Board == null
+                        || relayB1.Surge.Board.Seed != b1.Seed
+                        || relayB1.Surge.Attempt != b1.Attempt))
+                || (b2.Seed != 0
+                    && (relayB2.Surge.Board == null
+                        || relayB2.Surge.Board.Seed != b2.Seed
+                        || relayB2.Surge.Attempt != b2.Attempt)))
+            {
+                return false;
+            }
+
+            // On normal Hosts only proxies consume authoritative telemetry.
+            // A newly promoted Host is the one exception: seed its runtime once.
+            ApplyRelayPresentation(matchState, matchState.RelayCompletionMask, true);
+            return true;
+        }
+        private void ApplyRelayPresentation(NetworkMatchState matchState, int relayMask, bool restoreAuthoritativeRuntime = false)
+        {
+            if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))
                 relayA1?.ApplyAuthoritativeCircuitState(matchState.RelayA1CircuitScenario,
                     matchState.RelayA1CircuitRotations, (RelayACircuitPhase)matchState.RelayA1CircuitPhase,
                     matchState.RelayA1CircuitPowered, matchState.RelayA1CircuitMissing,
                     matchState.RelayA1CircuitTrip, matchState.RelayA1CircuitTestSequence,
                     matchState.RelayA1CircuitFaultActive, matchState.RelayA1FailedCell);
-            if (!matchState.Object.HasStateAuthority)
+            if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))
                 relayA2?.ApplyAuthoritativeCircuitState(matchState.RelayA2CircuitScenario,
                     matchState.RelayA2CircuitRotations, (RelayACircuitPhase)matchState.RelayA2CircuitPhase,
                     matchState.RelayA2CircuitPowered, matchState.RelayA2CircuitMissing,
                     matchState.RelayA2CircuitTrip, matchState.RelayA2CircuitTestSequence,
                     matchState.RelayA2CircuitFaultActive, matchState.RelayA2FailedCell);
 
-            if (!matchState.Object.HasStateAuthority)
+            if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))
             {
                 ApplyBreakerTelemetry(relayA1, matchState.RelayA1Breakers);
                 ApplyBreakerTelemetry(relayA2, matchState.RelayA2Breakers);
                 ApplyStabilizationTelemetry(relayA1, matchState.RelayA1Stabilization);
                 ApplyStabilizationTelemetry(relayA2, matchState.RelayA2Stabilization);
+                relayA1?.PresentReplicatedAudio();
+                relayA2?.PresentReplicatedAudio();
             }
 
             if (relayB1 != null)
             {
                 relayB1.ApplyAuthoritativeAttempt(matchState.RelayB1PresetIndex, matchState.RelayB1AttemptSeed);
-                if(!matchState.Object.HasStateAuthority)relayB1.ApplyAuthoritativeSurge(matchState.RelayB1Surge);
+                if((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))relayB1.ApplyAuthoritativeSurge(matchState.RelayB1Surge);
                 relayB1.ApplyAuthoritativeProcessing(matchState.RelayB1Scanned, matchState.RelayB1Slot1,
-                    matchState.RelayB1Slot2, matchState.RelayB1Tested, false);
+                    matchState.RelayB1Slot2, matchState.RelayB1Tested, restoreAuthoritativeRuntime);
                 relayB1.ApplyAuthoritativeControls(matchState.RelayB1Channel, matchState.RelayB1Frequency, matchState.RelayB1Phase);
                 relayB1.ApplyAuthoritativeCleanScenario(matchState.RelayB1CleanSeed);
-                if (!matchState.Object.HasStateAuthority && matchState.RelayB1Decoder.Round > 0)
+                if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority) && matchState.RelayB1Decoder.Round > 0)
                     relayB1.ApplyAuthoritativeDecoder(matchState.RelayB1Decoder.Snapshot);
                 relayB1.ApplyAuthoritativeSyncState(matchState.RelayB1Synchronizing);
                 // The host owns the running timer; only proxies consume replicated telemetry.
-                if (!matchState.Object.HasStateAuthority)
+                if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))
                     relayB1.ApplyAuthoritativeSyncTelemetry(matchState.RelayB1SyncProgress,
                         matchState.RelayB1DriftActive, matchState.RelayB1DriftWarning);
             }
             if (relayB2 != null)
             {
                 relayB2.ApplyAuthoritativeAttempt(matchState.RelayB2PresetIndex, matchState.RelayB2AttemptSeed);
-                if(!matchState.Object.HasStateAuthority)relayB2.ApplyAuthoritativeSurge(matchState.RelayB2Surge);
+                if((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))relayB2.ApplyAuthoritativeSurge(matchState.RelayB2Surge);
                 relayB2.ApplyAuthoritativeProcessing(matchState.RelayB2Scanned, matchState.RelayB2Slot1,
-                    matchState.RelayB2Slot2, matchState.RelayB2Tested, false);
+                    matchState.RelayB2Slot2, matchState.RelayB2Tested, restoreAuthoritativeRuntime);
                 relayB2.ApplyAuthoritativeControls(matchState.RelayB2Channel, matchState.RelayB2Frequency, matchState.RelayB2Phase);
                 relayB2.ApplyAuthoritativeCleanScenario(matchState.RelayB2CleanSeed);
-                if (!matchState.Object.HasStateAuthority && matchState.RelayB2Decoder.Round > 0)
+                if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority) && matchState.RelayB2Decoder.Round > 0)
                     relayB2.ApplyAuthoritativeDecoder(matchState.RelayB2Decoder.Snapshot);
                 relayB2.ApplyAuthoritativeSyncState(matchState.RelayB2Synchronizing);
-                if (!matchState.Object.HasStateAuthority)
+                if ((restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority))
                     relayB2.ApplyAuthoritativeSyncTelemetry(matchState.RelayB2SyncProgress,
                         matchState.RelayB2DriftActive, matchState.RelayB2DriftWarning);
             }

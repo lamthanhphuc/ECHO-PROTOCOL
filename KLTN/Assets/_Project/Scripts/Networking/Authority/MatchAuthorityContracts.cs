@@ -50,9 +50,29 @@ namespace EchoProtocol.Networking.Authority
     }
 
     [Serializable]
+    public sealed class TakeoverMatchAuthorityRequest
+    {
+        public string fusionSessionName;
+        public int fusionActorNumber;
+    }
+
+    public sealed class MatchPlayerEntitlementsDto
+    {
+        public string userId;
+        public string[] shopItemIds = Array.Empty<string>();
+    }
+
+    [Serializable]
     public sealed class EndMatchAuthorityRequest
     {
         public string reason;
+    }
+
+    [Serializable]
+    public sealed class StartMatchAuthorityRequest
+    {
+        public string mapId;
+        public string difficulty;
     }
 
     [Serializable]
@@ -101,6 +121,12 @@ namespace EchoProtocol.Networking.Authority
         public string policyVersion;
         public string progressionPolicyVersion;
         public string processedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class DisconnectMatchPlayerRequest
+    {
+        public string expectedUserId;
     }
 
     [Serializable]

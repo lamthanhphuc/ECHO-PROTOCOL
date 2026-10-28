@@ -21,7 +21,7 @@ namespace EchoProtocol.Networking
 
         public override void Spawned()
         {
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 CurrentHealth = Mathf.Max(1, maxHealth);
                 IsDowned = false;

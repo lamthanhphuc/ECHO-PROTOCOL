@@ -42,19 +42,50 @@ namespace EchoProtocol.Networking.Authority
                     joinProof = proof
                 });
 
-        public Task<ApiResult<ApiResponse<MatchPlayerBindingDto>>> DisconnectPlayerAsync(
+        public Task<ApiResult<ApiResponse<MatchPlayerEntitlementsDto>>> GetPlayerEntitlementsAsync(
             Guid matchId, int actorNumber) =>
-            PostAsync<EmptyMatchAuthorityRequest, MatchPlayerBindingDto>(
+            GetAsync<MatchPlayerEntitlementsDto>(
+                $"/api/matches/{matchId:D}/players/{actorNumber}/entitlements");
+
+        public Task<ApiResult<ApiResponse<MatchPlayerBindingDto>>> DisconnectPlayerAsync(
+            Guid matchId, int actorNumber, Guid expectedUserId) =>
+            PostAsync<DisconnectMatchPlayerRequest, MatchPlayerBindingDto>(
                 $"/api/matches/{matchId:D}/players/{actorNumber}/disconnect",
+                new DisconnectMatchPlayerRequest
+                {
+                    expectedUserId = expectedUserId.ToString("D")
+                });
+
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> TakeoverAsync(
+            Guid matchId,
+            string sessionName,
+            int actorNumber) =>
+            PostAsync<TakeoverMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/authority/takeover",
+                new TakeoverMatchAuthorityRequest
+                {
+                    fusionSessionName = sessionName,
+                    fusionActorNumber = actorNumber
+                });
+
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> RelinquishAsync(Guid matchId) =>
+            PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/authority/relinquish",
                 new EmptyMatchAuthorityRequest());
 
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> RenewLeaseAsync(Guid matchId) =>
             PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
                 $"/api/matches/{matchId:D}/lease", new EmptyMatchAuthorityRequest());
 
-        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartAsync(Guid matchId) =>
-            PostAsync<EmptyMatchAuthorityRequest, MatchAuthorityDto>(
-                $"/api/matches/{matchId:D}/start", new EmptyMatchAuthorityRequest());
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartAsync(
+            Guid matchId, string mapId, string difficulty) =>
+            PostAsync<StartMatchAuthorityRequest, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/start",
+                new StartMatchAuthorityRequest
+                {
+                    mapId = mapId,
+                    difficulty = difficulty
+                });
 
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> EndAsync(Guid matchId, string reason) =>
             PostAsync<EndMatchAuthorityRequest, MatchAuthorityDto>(

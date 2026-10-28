@@ -1,4 +1,4 @@
-using EchoProtocol.Networking;
+﻿using EchoProtocol.Networking;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -45,7 +45,12 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     private void Update()
     {
-        bool pushing = IsPushing() || EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null;
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            if (equippedObject != null) ClearEquippedTool();
+            return;
+        }
+        bool pushing = IsPushing() || (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
         if (pushing != _wasPushing)
         {
             _wasPushing = pushing;
@@ -53,7 +58,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
         }
 
         if (PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
-        if (!pushing && Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
+        if (fallbackUseKey != Key.Q && !pushing && Keyboard.current != null && Keyboard.current[fallbackUseKey].wasPressedThisFrame)
         {
             UseEquippedTool();
         }
@@ -61,16 +66,22 @@ public sealed class PlayerTeamToolController : MonoBehaviour
 
     public bool UseEquippedTool()
     {
+        if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
         return inventory != null
             && !inventory.IsTeamToolLocked
             && !IsPushing()
-            && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null
+            && (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))
             && equippedTool != null
             && equippedTool.TryUse();
     }
 
     public void RefreshEquippedTool()
     {
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby")
+        {
+            ClearEquippedTool();
+            return;
+        }
         InventoryItemDefinition definition = inventory != null ? inventory.TeamToolSlot : null;
         if (definition == equippedDefinition && equippedObject != null) return;
         ClearEquippedTool();
@@ -104,7 +115,7 @@ public sealed class PlayerTeamToolController : MonoBehaviour
     {
         if (equippedObject != null)
         {
-            equippedObject.SetActive(!IsPushing() && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null);
+            equippedObject.SetActive(!IsPushing() && (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) == null && !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)));
         }
     }
 

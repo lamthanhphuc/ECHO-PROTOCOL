@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Gameplay;
 using Fusion;
@@ -29,6 +29,9 @@ namespace EchoProtocol.Networking
             new Dictionary<Zone3ConvoyRoutePoint, Zone3RouteChoicePoint>();
         private PushableObject _pushable;
         private Rigidbody _rigidbody;
+        private Collider[] _hullColliders;
+        private readonly HashSet<NetworkSlidingDoor> _doorsToBreak = new HashSet<NetworkSlidingDoor>();
+        private readonly HashSet<NetworkDoorJammer> _jammersToBreak = new HashSet<NetworkDoorJammer>();
         private Zone3ConvoyRoutePoint _currentPoint = Zone3ConvoyRoutePoint.Point00;
         private Zone3ConvoyRoutePoint _targetPoint = Zone3ConvoyRoutePoint.Point01;
         private float _currentSpeed;
@@ -78,6 +81,7 @@ namespace EchoProtocol.Networking
         {
             _pushable = GetComponent<PushableObject>();
             _rigidbody = GetComponent<Rigidbody>();
+            _hullColliders = GetComponentsInChildren<Collider>(true);
             ResolveRoutePoints();
         }
 
@@ -289,6 +293,7 @@ namespace EchoProtocol.Networking
             Vector3 direction = _hasSegmentDirection ? _segmentDirection : toTarget / Mathf.Max(0.0001f, distance);
             float step = Mathf.Min(distance, _currentSpeed * deltaTime);
             Vector3 nextPosition = Vector3.MoveTowards(position, targetPosition, step);
+            if (step > 0f) BreakObstaclesInPath(nextPosition - position);
             if (_rigidbody != null) _rigidbody.MovePosition(nextPosition);
             else transform.position = nextPosition;
             if (direction.sqrMagnitude > 0.0001f)
@@ -299,6 +304,50 @@ namespace EchoProtocol.Networking
                 else transform.rotation = nextRotation;
             }
 
+        }
+
+        private void BreakObstaclesInPath(Vector3 displacement)
+        {
+            var networkObject = GetComponentInParent<NetworkObject>();
+            if (networkObject != null && networkObject.IsValid && !networkObject.HasStateAuthority) return;
+            bool hasBounds = false;
+            Bounds hull = default;
+            if (_hullColliders == null) _hullColliders = GetComponentsInChildren<Collider>(true);
+            foreach (var collider in _hullColliders)
+            {
+                if (collider == null || !collider.enabled || collider.isTrigger || !collider.gameObject.activeInHierarchy) continue;
+                if (!hasBounds) { hull = collider.bounds; hasBounds = true; }
+                else hull.Encapsulate(collider.bounds);
+            }
+            if (!hasBounds) return;
+            _doorsToBreak.Clear();
+            _jammersToBreak.Clear();
+            Vector3 extents = hull.extents + Vector3.one * .03f;
+            // Include existing contacts as casts alone omit colliders overlapping the hull.
+            foreach (var collider in Physics.OverlapBox(hull.center, extents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                CollectBreakable(collider);
+            float distance = displacement.magnitude;
+            if (distance > .0001f)
+                foreach (var hit in Physics.BoxCastAll(hull.center, extents, displacement / distance,
+                    Quaternion.identity, distance, ~0, QueryTriggerInteraction.Ignore))
+                    CollectBreakable(hit.collider);
+            foreach (var door in _doorsToBreak)
+            {
+                if (door.TryGetActiveJammer(out var jammer)) _jammersToBreak.Add(jammer);
+            }
+            foreach (var jammer in _jammersToBreak)
+                if (jammer != null && jammer.IsActive) jammer.CompleteBreakAuthoritative();
+            foreach (var door in _doorsToBreak)
+                if (door != null && !door.IsBroken) door.TryBreakAuthoritative();
+        }
+
+        private void CollectBreakable(Collider collider)
+        {
+            if (collider == null || collider.transform.IsChildOf(transform)) return;
+            var jammer = collider.GetComponentInParent<NetworkDoorJammer>();
+            if (jammer != null) _jammersToBreak.Add(jammer);
+            var door = collider.GetComponentInParent<NetworkSlidingDoor>();
+            if (door != null) _doorsToBreak.Add(door);
         }
 
         private void ArriveAtTarget(Transform target)

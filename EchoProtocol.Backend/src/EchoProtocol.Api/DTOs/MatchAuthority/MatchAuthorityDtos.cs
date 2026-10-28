@@ -20,11 +20,22 @@ public sealed class MatchAuthorityResponse
     public int MaxPlayers { get; set; }
     public MatchAuthorityStatus Status { get; set; }
     public DateTime LeaseExpiresAtUtc { get; set; }
+    public string? MapId { get; set; }
+    public string? Difficulty { get; set; }
+}
+
+public sealed class StartMatchAuthorityRequest
+{
+    [StringLength(64)]
+    public string? MapId { get; set; }
+
+    [StringLength(16)]
+    public string? Difficulty { get; set; }
 }
 
 public sealed class IssueJoinProofRequest
 {
-    [Range(1, 4)]
+    [Range(1, int.MaxValue)]
     public int FusionActorNumber { get; set; }
 
     [Required, StringLength(128, MinimumLength = 1)]
@@ -39,7 +50,7 @@ public sealed class JoinProofResponse
 
 public sealed class BindMatchPlayerRequest
 {
-    [Range(1, 4)]
+    [Range(1, int.MaxValue)]
     public int FusionActorNumber { get; set; }
 
     [Required]
@@ -51,6 +62,27 @@ public sealed class MatchPlayerBindingResponse
     public Guid UserId { get; set; }
     public int FusionActorNumber { get; set; }
     public DateTime BoundAtUtc { get; set; }
+}
+
+public sealed class DisconnectMatchPlayerRequest
+{
+    [Required]
+    public Guid ExpectedUserId { get; set; }
+}
+
+public sealed class TakeoverMatchAuthorityRequest
+{
+    [Required, StringLength(128, MinimumLength = 1)]
+    public string FusionSessionName { get; set; } = string.Empty;
+
+    [Range(1, int.MaxValue)]
+    public int FusionActorNumber { get; set; }
+}
+
+public sealed class MatchPlayerEntitlementsResponse
+{
+    public Guid UserId { get; set; }
+    public Guid[] ShopItemIds { get; set; } = [];
 }
 
 public sealed class EndMatchAuthorityRequest

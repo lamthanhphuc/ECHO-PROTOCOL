@@ -292,7 +292,9 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
             projected.OrderByDescending(item => item.CreatedAtUtc)
                 .ThenByDescending(item => item.PurchaseId),
             query, "Admin purchases retrieved", cancellationToken);
-    }    public async Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
+    }
+
+    public async Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
         Guid userId,
         AdminGrantCreditsRequest request,
         CancellationToken cancellationToken = default)
@@ -317,11 +319,14 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
                 ErrorCodes.ValidationError);
         }
 
-        var wallet =
-            await db.Wallets
-                .SingleOrDefaultAsync(
-                    item => item.UserId == userId,
-                    cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Serialize with purchases, rewards and payment fulfillment before reading the balance.
+        var wallet = db.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL"
+            ? await db.Wallets.FromSqlInterpolated(
+                    $"SELECT * FROM \"Wallets\" WHERE \"UserId\" = {userId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken)
+            : await db.Wallets.SingleOrDefaultAsync(
+                item => item.UserId == userId, cancellationToken);
 
         if (wallet is null)
         {
@@ -329,6 +334,10 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
                 "User wallet not found",
                 ErrorCodes.NotFound);
         }
+
+        // A scoped DbContext can already track this wallet; use the balance protected by
+        // the current transaction instead of a stale first-level cache entry.
+        await db.Entry(wallet).ReloadAsync(cancellationToken);
 
         if (wallet.Balance > int.MaxValue - request.Amount)
         {
@@ -375,8 +384,8 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
                 CreatedAtUtc = now
             });
 
-        await db.SaveChangesAsync(
-            cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return ServiceResult<AdminGrantCreditsResponse>.Success(
             new AdminGrantCreditsResponse

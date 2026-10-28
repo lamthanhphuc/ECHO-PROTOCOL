@@ -129,9 +129,16 @@ public sealed class PayOSPaymentProvider : IPaymentProvider
         var dataCode = data.TryGetProperty("code", out var dataCodeElement)
             ? ElementValue(dataCodeElement)
             : string.Empty;
+        var providerStatus = TryGetString(data, "status", out var statusValue) ? statusValue : null;
         var status = dataCode == "00"
             ? PaymentProviderEventStatus.PAID
-            : PaymentProviderEventStatus.FAILED;
+            : PaymentProviderStatusRules.TerminalOrderStatus(providerStatus) switch
+            {
+                PaymentOrderStatus.CANCELLED => PaymentProviderEventStatus.CANCELLED,
+                PaymentOrderStatus.EXPIRED => PaymentProviderEventStatus.EXPIRED,
+                PaymentOrderStatus.FAILED => PaymentProviderEventStatus.FAILED,
+                _ => PaymentProviderEventStatus.UNKNOWN
+            };
         var paidAtUtc = TryParseProviderTimestamp(data);
         var fingerprint = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(canonicalData)));

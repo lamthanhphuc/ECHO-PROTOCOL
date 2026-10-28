@@ -34,6 +34,9 @@ public sealed class PaymentOrderServiceTests
         Assert.Equal(125_000m, result.Data.Amount);
         Assert.Equal("VND", result.Data.Currency);
         Assert.Equal("AUTOMATED_TEST_ONLY", result.Data.Purpose);
+        var stored = await harness.Db.PaymentOrders.SingleAsync();
+        Assert.Equal(PaymentFulfillmentKind.WALLET_CREDIT, stored.FulfillmentKind);
+        Assert.Equal(150, stored.WalletCreditAmount);
         Assert.Single(await harness.Db.PaymentOrders.ToListAsync());
     }
 
@@ -293,7 +296,9 @@ public sealed class PaymentOrderServiceTests
             Amount = amount,
             Currency = "VND",
             IsActive = true,
-            ExpiresAfterMinutes = 30
+            ExpiresAfterMinutes = 30,
+            FulfillmentKind = "WALLET_CREDIT",
+            WalletCreditAmount = 150
         };
 
         private static User User(Guid id, string name) => new()

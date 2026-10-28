@@ -58,7 +58,7 @@ public sealed class PaymentFulfillmentService(
             if (wallet is null)
                 return Fail("Wallet required by fulfillment was not found",
                     ErrorCodes.PaymentFulfillmentTargetInvalid);
-            var amount = product.Product!.WalletCreditAmount!.Value;
+            var amount = product.WalletCreditAmount!.Value;
             var balanceAfter = checked(wallet.Balance + amount);
             var walletTransaction = new WalletTransaction
             {
@@ -79,7 +79,7 @@ public sealed class PaymentFulfillmentService(
         }
         else
         {
-            var shopItemId = product.Product!.ShopItemId!.Value;
+            var shopItemId = product.ShopItemId!.Value;
             var itemExists = await db.ShopItems.AsNoTracking()
                 .AnyAsync(item => item.ItemId == shopItemId, cancellationToken);
             if (!itemExists)
@@ -126,6 +126,19 @@ public sealed class PaymentFulfillmentService(
 
     private ProductResolution ResolveProduct(PaymentOrder order)
     {
+        if (order.FulfillmentKind is { } storedKind)
+        {
+            if (storedKind == PaymentFulfillmentKind.WALLET_CREDIT &&
+                order.WalletCreditAmount is > 0 && order.FulfillmentShopItemId is null)
+                return ProductResolution.Ok(storedKind, order.WalletCreditAmount, null);
+            if (storedKind == PaymentFulfillmentKind.INVENTORY_ITEM &&
+                order.FulfillmentShopItemId is not null && order.WalletCreditAmount is null)
+                return ProductResolution.Ok(storedKind, null, order.FulfillmentShopItemId);
+            return ProductResolution.Fail("Stored payment fulfillment terms are invalid",
+                ErrorCodes.PaymentFulfillmentNotConfigured);
+        }
+
+        // Orders created before the entitlement snapshot migration retain the legacy catalog fallback.
         var matches = _catalog.Products.Where(item =>
             string.Equals(item.ProductReference.Trim(), order.ProductReference, StringComparison.Ordinal) &&
             string.Equals(item.Purpose.Trim(), order.Purpose, StringComparison.Ordinal)).ToArray();
@@ -141,7 +154,7 @@ public sealed class PaymentFulfillmentService(
         if (kind == PaymentFulfillmentKind.INVENTORY_ITEM && matches[0].ShopItemId is null)
             return ProductResolution.Fail("Inventory fulfillment target is invalid",
                 ErrorCodes.PaymentFulfillmentNotConfigured);
-        return ProductResolution.Ok(matches[0], kind);
+        return ProductResolution.Ok(kind, matches[0].WalletCreditAmount, matches[0].ShopItemId);
     }
 
     private async Task<PaymentOrder?> LoadOrderForUpdateAsync(Guid id, CancellationToken cancellationToken)
@@ -179,14 +192,15 @@ public sealed class PaymentFulfillmentService(
 
     private sealed record ProductResolution(
         bool IsSuccess,
-        PaymentProductSettings? Product,
         PaymentFulfillmentKind Kind,
+        int? WalletCreditAmount,
+        Guid? ShopItemId,
         string Message,
         string? ErrorCode)
     {
-        public static ProductResolution Ok(PaymentProductSettings product, PaymentFulfillmentKind kind) =>
-            new(true, product, kind, string.Empty, null);
+        public static ProductResolution Ok(PaymentFulfillmentKind kind, int? walletCreditAmount, Guid? shopItemId) =>
+            new(true, kind, walletCreditAmount, shopItemId, string.Empty, null);
         public static ProductResolution Fail(string message, string code) =>
-            new(false, null, default, message, code);
+            new(false, default, null, null, message, code);
     }
 }

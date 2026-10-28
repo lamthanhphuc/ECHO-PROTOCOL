@@ -94,6 +94,22 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (EchoProtocol.Networking.AlienHuntMission.TryDescribe(out var huntTitle, out var huntDetail, out var huntProgress))
+            {
+                ResolveComponents();
+                RefreshVisibility();
+                SetPhaseBadge("SĂN ALIEN", "#7EA6A4");
+                SetObjective(huntTitle, huntDetail, huntProgress, new Color(.49f, .65f, .64f));
+                return;
+            }
+            if (EchoProtocol.Networking.FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out var mapProgress))
+            {
+                ResolveComponents();
+                RefreshVisibility();
+                SetPhaseBadge("VÙNG NGẬP", "#7EA6A4");
+                SetObjective(mapTitle, mapDetail, mapProgress, new Color(.49f, .65f, .64f));
+                return;
+            }
             if (matchFlow == null)
             {
                 ResolveReferences();
@@ -139,7 +155,8 @@ namespace EchoProtocol.UI.HUD
             bool isZone1 = director != null
                 ? director.CurrentStage == EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective
                 : matchFlow == null || matchFlow.Phase == MatchPhase.ExploreCore;
-            bool visible = (! _hideZone1Objective || !isZone1) && !PlayerInteractionControlLock.HasModal;
+            bool visible = (EchoProtocol.Networking.AlienHuntMission.Instance != null || ! _hideZone1Objective || !isZone1)
+                && !PlayerInteractionControlLock.HasModal;
             _visibilityGroup.alpha = visible ? 1f : 0f;
             _visibilityGroup.blocksRaycasts = visible;
         }
@@ -152,6 +169,83 @@ namespace EchoProtocol.UI.HUD
             if (securityTerminal == null) securityTerminal = FindAnyObjectByType<SecurityTerminalDownload>();
             if (escapeDoor == null) escapeDoor = FindAnyObjectByType<EscapeDoorCountdown>();
             ResolveComponents();
+        }
+
+        // Fusion is the authoritative source for Core progress in multiplayer.
+        // Log only when the authoritative value changes, so a failed read can be diagnosed
+        // without producing one Console entry per frame.
+        private int _coreObjectiveRequiredCount = 4;
+        private string _lastCoreProgressLogKey;
+        private string _lastCoreProgressFailureKey;
+
+        private bool TryGetCoreObjectiveProgress(out int placed, out int required)
+        {
+            placed = 0;
+            required = 4;
+
+            var networkMatch = EchoProtocol.Networking.NetworkMatchState.Instance;
+            if (!IsRunningNetworkMatch(networkMatch))
+            {
+                networkMatch = null;
+                var candidates = FindObjectsByType<EchoProtocol.Networking.NetworkMatchState>(FindObjectsInactive.Exclude);
+                for (int i = 0; i < candidates.Length; i++)
+                {
+                    if (!IsRunningNetworkMatch(candidates[i])) continue;
+                    networkMatch = candidates[i];
+                    break;
+                }
+            }
+
+            if (IsRunningNetworkMatch(networkMatch))
+            {
+                if (networkMatch.TryGetObjectiveProgress(out int networkPlaced, out int networkRequired))
+                {
+                    required = Mathf.Max(1, networkRequired);
+                    placed = Mathf.Clamp(networkPlaced, 0, required);
+                    _coreObjectiveRequiredCount = required;
+
+                    string logKey = $"{networkMatch.Object.Id}:{placed}/{required}:{networkMatch.CurrentPhase}";
+                    if (_lastCoreProgressLogKey != logKey)
+                    {
+                        Debug.Log($"[HUDObjectiveTracker] HUD_CORE_PROGRESS|source=Fusion|match={networkMatch.Object.Id}|phase={networkMatch.CurrentPhase}|placed={placed}|required={required}");
+                        _lastCoreProgressLogKey = logKey;
+                    }
+                    _lastCoreProgressFailureKey = null;
+                    return true;
+                }
+
+                // Never fall back to a potentially stale legacy counter during an active
+                // network match. That fallback can silently keep showing 0/4 after migration.
+                string failureKey = $"{networkMatch.Object.Id}:{networkMatch.ObjectiveSourceId}:{networkMatch.CurrentPhase}";
+                if (_lastCoreProgressFailureKey != failureKey)
+                {
+                    Debug.LogWarning($"[HUDObjectiveTracker] HUD_CORE_PROGRESS_UNAVAILABLE|match={networkMatch.Object.Id}|phase={networkMatch.CurrentPhase}|objectiveSource={networkMatch.ObjectiveSourceId}|reason=TryGetObjectiveProgress returned false");
+                    _lastCoreProgressFailureKey = failureKey;
+                }
+                _coreObjectiveRequiredCount = 4;
+                return false;
+            }
+
+            // Offline/legacy fallback only when there is no active Fusion match.
+            if (coreProgress != null)
+            {
+                required = Mathf.Max(1, coreProgress.RequiredCoreCount);
+                placed = Mathf.Clamp(coreProgress.PlacedCoreCount, 0, required);
+                _coreObjectiveRequiredCount = required;
+                return true;
+            }
+
+            _coreObjectiveRequiredCount = required;
+            return false;
+        }
+
+        private static bool IsRunningNetworkMatch(EchoProtocol.Networking.NetworkMatchState match)
+        {
+            return match != null
+                && match.Object != null
+                && match.Object.IsValid
+                && match.Runner != null
+                && match.Runner.IsRunning;
         }
 
         private void UpdateUI(MatchPhase phase)
@@ -169,13 +263,14 @@ namespace EchoProtocol.UI.HUD
                 {
                     case EchoProtocol.MatchFlow.Zone2MissionStage.Zone1CoreObjective:
                         SetPhaseBadge("ZONE 1", "#00E5FF");
-                        int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
-                        int required = coreProgress != null ? coreProgress.RequiredCoreCount : 4;
-                        if (required <= 0) required = 4;
+                        bool hasCoreProgress = TryGetCoreObjectiveProgress(out int placed, out int required);
+                        string coreProgressText = hasCoreProgress
+                            ? $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}"
+                            : "Đang đồng bộ tiến độ Core với Host...";
                         SetObjective(
                             "Khôi phục nguồn điện",
-                            $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}",
-                            required > 0 ? (float)placed / required : 0f,
+                            coreProgressText,
+                            hasCoreProgress && required > 0 ? (float)placed / required : 0f,
                             new Color(0f, 0.85f, 1f, 1f));
                         return;
 
@@ -296,13 +391,14 @@ namespace EchoProtocol.UI.HUD
 
                 case MatchPhase.ExploreCore:
                     SetPhaseBadge("PHASE 1 // COLLECT ENERGY CORES", "#00E5FF");
-                    int placed = coreProgress != null ? coreProgress.PlacedCoreCount : 0;
-                    int required = coreProgress != null ? coreProgress.RequiredCoreCount : 4;
-                    if (required <= 0) required = 4;
+                    bool hasCoreProgress = TryGetCoreObjectiveProgress(out int placed, out int required);
+                    string coreProgressText = hasCoreProgress
+                        ? $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}"
+                        : "Đang đồng bộ tiến độ Core với Host...";
                     SetObjective(
                         "Khôi phục nguồn điện",
-                        $"Lắp lõi năng lượng vào trạm cấp điện    {placed}/{required}",
-                        required > 0 ? (float)placed / required : 0f,
+                        coreProgressText,
+                        hasCoreProgress && required > 0 ? (float)placed / required : 0f,
                         new Color(0f, 0.85f, 1f, 1f));
                     break;
 
@@ -478,8 +574,8 @@ namespace EchoProtocol.UI.HUD
         private void UpdateProgressSteps(string title, float progress)
         {
             bool discrete = title == "Khôi phục nguồn điện" || title == "Khôi phục hệ thống relay";
-            int count = title == "Khôi phục nguồn điện" && coreProgress != null
-                ? Mathf.Clamp(coreProgress.RequiredCoreCount, 1, 12) : 4;
+            int count = title == "Khôi phục nguồn điện"
+                ? Mathf.Clamp(_coreObjectiveRequiredCount, 1, 12) : 4;
             if (discrete && (_progressSteps == null || _progressSteps.Length != count))
             {
                 if (_progressSteps != null)

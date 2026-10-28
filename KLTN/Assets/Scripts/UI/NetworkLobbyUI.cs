@@ -1,4 +1,4 @@
-using EchoProtocol.Pets;
+﻿using EchoProtocol.Pets;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -382,11 +382,11 @@ RefreshMemberList();
 
         private static string MemberToolName(int toolId) => toolId switch
         {
-            LobbyPlayerState.FieldScannerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy quét", "Field Scanner"),
-            LobbyPlayerState.NoiseMakerToolId => EchoProtocol.Settings.GameLanguage.Choose("Máy tạo tiếng động", "Noise Maker"),
-            LobbyPlayerState.FirstAidKitToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ sơ cứu", "First Aid Kit"),
-            LobbyPlayerState.DoorJammerToolId => EchoProtocol.Settings.GameLanguage.Choose("Thiết bị chặn cửa", "Door Jammer"),
-            LobbyPlayerState.CoreStabilizerToolId => EchoProtocol.Settings.GameLanguage.Choose("Bộ ổn định lõi", "Core Stabilizer"),
+            LobbyPlayerState.FieldScannerToolId => EchoProtocol.Settings.GameLanguage.TeamToolName(LobbyPlayerState.FieldScannerToolId),
+            LobbyPlayerState.NoiseMakerToolId => EchoProtocol.Settings.GameLanguage.TeamToolName(LobbyPlayerState.NoiseMakerToolId),
+            LobbyPlayerState.FirstAidKitToolId => EchoProtocol.Settings.GameLanguage.TeamToolName(LobbyPlayerState.FirstAidKitToolId),
+            LobbyPlayerState.DoorJammerToolId => EchoProtocol.Settings.GameLanguage.TeamToolName(LobbyPlayerState.DoorJammerToolId),
+            LobbyPlayerState.CoreStabilizerToolId => EchoProtocol.Settings.GameLanguage.TeamToolName(LobbyPlayerState.CoreStabilizerToolId),
             _ => EchoProtocol.Settings.GameLanguage.Choose("Chưa chọn", "Not selected"),
         };
 
@@ -1162,7 +1162,7 @@ int petId = 0;
             {
                 if (bootstrap != null)
                     await bootstrap.LeaveToMainMenuAsync();
-                else SceneManager.LoadScene(GameConstants.SceneMainMenu);
+                else GameUIFeedback.LoadScene(GameConstants.SceneMainMenu);
             }
             catch (Exception exception)
             {

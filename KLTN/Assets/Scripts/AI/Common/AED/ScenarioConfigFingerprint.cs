@@ -71,6 +71,7 @@ namespace EchoProtocol.AI.Common.AED
             Append(builder, "DecisionPoint", input.Request.DecisionPoint.ToString());
             Append(builder, "PhaseContext", input.Request.PhaseContext);
             Append(builder, "ExperimentCondition", input.Request.ExperimentCondition);
+            Append(builder, "MapId", input.Request.MapId);
 
             Append(
                 builder,
@@ -81,7 +82,7 @@ namespace EchoProtocol.AI.Common.AED
 
             var baseConfig =
                 input.CurrentAppliedConfig
-                ?? FixedDirector.CreateFixedBaseline();
+                ?? FixedDirector.CreateFixedBaseline(input.Request.MapId);
 
             var baseRef =
                 input.Request.DecisionPoint

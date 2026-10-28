@@ -36,6 +36,8 @@ namespace EchoProtocol.Audio
         private float _lastRelayWindowRemaining = -1f;
         private int _lastTerminalHolderCount;
         private int _step;
+        private float _previousPlayerHealth = -1f;
+        private bool _exhausted;
 
         private void Awake()
         {
@@ -261,6 +263,13 @@ namespace EchoProtocol.Audio
             if (local && Changed("hidden", hidden))
                 Play(hidden ? "locker_hiding/enter_hiding" : "locker_hiding/locker_open");
             var alive = _life == null || _life.Status == NetworkPlayerLifeStatus.Alive;
+            // Life transition ordinals do not advance for non-fatal damage.
+            if (_life != null)
+            {
+                if (alive && PlayerCameraFeedback.IsDamage(_previousPlayerHealth, _life.Health))
+                    Play("player/damage_grunt", .85f);
+                _previousPlayerHealth = _life.Health;
+            }
             if (_life != null)
             {
                 if (Changed("lifeOrdinal", _life.TransitionOrdinal))
@@ -268,7 +277,8 @@ namespace EchoProtocol.Audio
                     switch (_life.LastTransitionCause)
                     {
                         case NetworkPlayerLifeTransitionCause.Damage:
-                            Play(_life.Status == NetworkPlayerLifeStatus.Downed ? "player/death_downed" : "player/damage_grunt"); break;
+                            if (_life.Status == NetworkPlayerLifeStatus.Downed) Play("player/death_downed");
+                            break;
                         case NetworkPlayerLifeTransitionCause.ReviveCompleted: Play("first_aid/revive_complete"); break;
                         case NetworkPlayerLifeTransitionCause.ReviveStarted: Play("first_aid/use_kit"); break;
                         case NetworkPlayerLifeTransitionCause.ReviveCancelled: Play("first_aid/revive_cancel"); break;
@@ -279,11 +289,23 @@ namespace EchoProtocol.Audio
             }
             var downed = _life != null && _life.Status == NetworkPlayerLifeStatus.Downed;
             var reviving = downed && _life.Reviver != PlayerRef.None;
-            GameAudioRuntime.Loop(_loop, reviving ? "first_aid/revive_progress_loop" :
+            float stamina = _player.CurrentStamina / Mathf.Max(1, _player.MaxStamina);
+            _exhausted = alive && (stamina < .22f || _exhausted && stamina < .55f);
+            bool modal = local && PlayerInteractionControlLock.HasModal
+                || NetworkMatchState.Instance != null && NetworkMatchState.Instance.CurrentPhase == NetworkMatchPhase.MatchEnded;
+            GameAudioRuntime.Loop(_loop, modal ? null : reviving ? "first_aid/revive_progress_loop" :
                 local && downed ? "player/downed_heartbeat_loop" :
-                local && hidden ? "locker_hiding/player_breathing_inside_loop" : null, 0.3f);
-            if (alive && !hidden) Footstep(speed, _player.IsAnimationSprinting ? "player/sprint_footstep_" : "player/concrete_footstep_",
-                _player.IsAnimationSprinting ? 0.3f : 0.5f, local ? 0.45f : 0.65f);
+                local && alive && hidden ? "locker_hiding/player_breathing_inside_loop" :
+                local && alive && _exhausted ? "player/low_stamina_breathing_loop" :
+                local && alive && speed < .2f ? "player/breathing_loop" : null,
+                downed || reviving || hidden || _exhausted ? .3f : .09f);
+            if (alive && !hidden && !modal && _player.IsPresentationGrounded)
+            {
+                bool crouch = _player.IsAnimationCrouching;
+                Footstep(speed, crouch ? "player/crouch_footstep_" : _player.IsAnimationSprinting ? "player/sprint_footstep_" : "player/concrete_footstep_",
+                    crouch ? .8f : _player.IsAnimationSprinting ? .4f : .56f,
+                    crouch ? (local ? .25f : .35f) : local ? .45f : .65f);
+            }
         }
 
         private void UpdateStalker(float speed)

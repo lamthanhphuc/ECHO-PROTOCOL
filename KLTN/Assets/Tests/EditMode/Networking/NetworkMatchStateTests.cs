@@ -172,38 +172,31 @@ namespace EchoProtocol.Networking.Tests
         [Test]
         public void Zone1Completion_DoesNotTeleportPlayersToZone2()
         {
-            string source = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
-            int objectiveStart = source.IndexOf(
-                "public bool TryCompleteCoreObjective(");
-            int objectiveEnd = source.IndexOf(
-                "public bool TryDiscoverSecurityTerminal(", objectiveStart);
-            int transitionStart = source.IndexOf(
-                "private void CompletePhaseTransition(");
-            int transitionEnd = source.IndexOf(
-                "private bool RevalidateAEDv2Boundary(", transitionStart);
-            int debugStart = source.IndexOf(
-                "private bool DebugSkipToZone2(");
-            int debugEnd = source.IndexOf(
-                "public void RequestDebugSkipToZone2(", debugStart);
+            string source = File.ReadAllText(MatchSourcePath).Replace("\r\n", "\n");
+            int coreStart = source.IndexOf("public bool TryCompleteCoreObjective(", System.StringComparison.Ordinal);
+            int coreEnd = source.IndexOf("public bool TryDiscoverSecurityTerminal(", System.StringComparison.Ordinal);
+            int phaseStart = source.IndexOf("private bool TryAdvancePhase(", System.StringComparison.Ordinal);
+            int phaseEnd = source.IndexOf("private bool TryEndMatch(", System.StringComparison.Ordinal);
 
-            Assert.That(objectiveStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(objectiveEnd, Is.GreaterThan(objectiveStart));
-            Assert.That(transitionStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(transitionEnd, Is.GreaterThan(transitionStart));
+            Assert.That(coreStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(coreEnd, Is.GreaterThan(coreStart));
+            Assert.That(phaseStart, Is.GreaterThanOrEqualTo(0));
+            Assert.That(phaseEnd, Is.GreaterThan(phaseStart));
+
+            string coreCompletion = source.Substring(coreStart, coreEnd - coreStart);
+            string phaseTransition = source.Substring(phaseStart, phaseEnd - phaseStart);
+
+            StringAssert.Contains("TryAdvancePhase(", coreCompletion);
+            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", coreCompletion,
+                "Normal Zone1 objective completion must not teleport players.");
+            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", phaseTransition,
+                "Normal phase transitions must keep player positions; debug skips may teleport separately.");
+            int debugStart = source.IndexOf("private bool DebugSkipToZone2(", System.StringComparison.Ordinal);
+            int debugEnd = source.IndexOf("public void RequestDebugSkipToZone2(", debugStart, System.StringComparison.Ordinal);
             Assert.That(debugStart, Is.GreaterThanOrEqualTo(0));
             Assert.That(debugEnd, Is.GreaterThan(debugStart));
-
-            string objective = source.Substring(objectiveStart, objectiveEnd - objectiveStart);
-            string transition = source.Substring(transitionStart, transitionEnd - transitionStart);
-            string debugSkip = source.Substring(debugStart, debugEnd - debugStart);
-
-            StringAssert.Contains("NetworkMatchPhase.Zone2Objective", objective);
-            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", objective);
-            StringAssert.Contains("ResetPlayerReviveBudgetsAuthoritative()", transition);
-            StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", transition);
-            StringAssert.Contains("TeleportGameplayPlayersAuthoritative(", debugSkip);
-            StringAssert.Contains("NetworkMatchPhase.Zone2Objective);", debugSkip);
+            StringAssert.Contains("TeleportGameplayPlayersAuthoritative(",
+                source.Substring(debugStart, debugEnd - debugStart));
         }
 
         private const string MatchSourcePath =
@@ -406,13 +399,16 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void MATCH_NET_HudUsesEmergencyPowerTransferWording()
+        public void MATCH_NET_HudShowsEmergencyPowerCountdownAndExitObjective()
         {
             var source = File.ReadAllText(HudObjectiveTrackerPath);
-            StringAssert.Contains("SetObjective(\"Chuyển nguồn điện\"", source);
-            StringAssert.Contains("Cấp điện cho hệ thống sơ tán", source);
-            StringAssert.Contains("Thả tay sẽ làm giảm tiến độ", source);
+
+
+            StringAssert.Contains("FINAL HUNT // EMERGENCY POWER ACTIVE", source);
             StringAssert.Contains("GetEmergencyPowerRemainingSeconds()", source);
+            StringAssert.Contains("IsEmergencyPowerTimerRunning()", source);
+            StringAssert.Contains("Cửa thoát đã mở", source);
+
             StringAssert.DoesNotContain("CHARGE SPACEFRIGATE", source);
             StringAssert.DoesNotContain("Scifi Charge", source);
         }

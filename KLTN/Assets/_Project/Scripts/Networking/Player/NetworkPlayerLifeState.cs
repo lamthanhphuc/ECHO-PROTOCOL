@@ -75,6 +75,13 @@ namespace EchoProtocol.Networking
 
         public static bool CanInitiateAction(NetworkPlayerLifeStatus status) =>
             status == NetworkPlayerLifeStatus.Alive;
+
+        public static bool SurvivedMatch(
+            NetworkPlayerLifeStatus status, bool isPurge, bool won, bool disconnected) =>
+            !disconnected && (status == NetworkPlayerLifeStatus.Escaped
+                || isPurge && won && (status == NetworkPlayerLifeStatus.Alive
+                    || status == NetworkPlayerLifeStatus.Downed
+                    || status == NetworkPlayerLifeStatus.Caught));
     }
 
     /// <summary>Single State-Authority owner for health, down, revive, protection and elimination.</summary>
@@ -145,6 +152,7 @@ namespace EchoProtocol.Networking
         private bool _hasCharacterVisualRootDefault;
 
         private int MaximumRevivesPerZone =>
+            AlienHuntMission.Instance != null ? int.MaxValue :
             MatchDifficultyProfiles.Get(
                 MatchAuthorityRuntime.Instance != null
                     ? MatchAuthorityRuntime.Instance.Difficulty
@@ -180,7 +188,8 @@ namespace EchoProtocol.Networking
         public override void Spawned()
         {
             EnsureLegacyPresentationComponents();
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority
+                && !NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 DebugGodMode = false;
                 Status = NetworkPlayerLifeStatus.Alive;
@@ -196,6 +205,7 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 ReviveTimer = TickTimer.None;
                 ProtectionTimer = TickTimer.None;
+                PurgeFishcatDamageProtection = TickTimer.None;
                 PausedBleedoutRemainingSeconds = 0f;
                 CatchTimer = TickTimer.None;
                 CaughtByGhostId = default;
@@ -323,6 +333,17 @@ namespace EchoProtocol.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             GetComponent<PlayerJumpscareController>()?.StopJumpscare();
+        }
+
+        [Networked] private TickTimer PurgeFishcatDamageProtection { get; set; }
+
+        public bool TryApplyPurgeFishcatDamage(Vector3 hitPosition)
+        {
+            if (Object == null || !Object.HasStateAuthority || Runner == null
+                || !PurgeFishcatDamageProtection.ExpiredOrNotRunning(Runner)) return false;
+            if (!TryApplyAuthoritativeDamage(12f, "PURGE_FISHCAT", hitPosition)) return false;
+            PurgeFishcatDamageProtection = TickTimer.CreateFromSeconds(Runner, .5f);
+            return true;
         }
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
@@ -671,7 +692,6 @@ namespace EchoProtocol.Networking
 
             if (!directFromHit)
                 DropHeldItemsForForcedTransition("ELIMINATED");
-
             Health = 0f;
             IsCrawling = false;
             ClearSurvivalTimers();

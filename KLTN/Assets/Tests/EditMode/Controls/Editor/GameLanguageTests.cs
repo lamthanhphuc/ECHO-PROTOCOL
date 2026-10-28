@@ -1,6 +1,9 @@
 using EchoProtocol.Settings;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
+using EchoProtocol.UI;
+using EchoProtocol.UI.Result;
 
 namespace EchoProtocol.Tests.EditMode.Controls
 {
@@ -62,6 +65,36 @@ namespace EchoProtocol.Tests.EditMode.Controls
         {
             GameLanguage.Set(GameLocale.English);
             Assert.That(GameLanguage.Translate(value), Is.EqualTo(value));
+        }
+        [Test]
+        public void ResultPlayerNameSurvivesLanguageChanges()
+        {
+            var root = new GameObject("ResultRoot", typeof(RectTransform), typeof(Canvas));
+            var child = new GameObject("TeamName0", typeof(RectTransform), typeof(Text));
+            child.transform.SetParent(root.transform);
+            var status = new GameObject("StatusLabel", typeof(RectTransform), typeof(Text));
+            status.transform.SetParent(root.transform);
+            root.AddComponent<CinematicResultSceneController>();
+            var localization = root.AddComponent<LocalizedCanvas>();
+            var name = child.GetComponent<Text>();
+            var statusText = status.GetComponent<Text>();
+            name.text = "READY";
+            statusText.text = "READY";
+            var update = typeof(LocalizedCanvas).GetMethod("LateUpdate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            try
+            {
+                update.Invoke(localization, null);
+                Assert.That(name.text, Is.EqualTo("READY"));
+                Assert.That(statusText.text, Is.EqualTo("SẴN SÀNG"));
+                GameLanguage.Set(GameLocale.English);
+                update.Invoke(localization, null);
+                Assert.That(name.text, Is.EqualTo("READY"));
+                Assert.That(statusText.text, Is.EqualTo("READY"));
+                GameLanguage.Set(GameLocale.Vietnamese);
+                update.Invoke(localization, null);
+                Assert.That(name.text, Is.EqualTo("READY"));
+            }
+            finally { Object.DestroyImmediate(root); }
         }
     }
 }

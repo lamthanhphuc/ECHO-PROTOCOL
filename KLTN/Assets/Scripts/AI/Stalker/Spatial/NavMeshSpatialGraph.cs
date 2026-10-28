@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace EchoProtocol.AI.Stalker.Spatial
 {
@@ -7,6 +8,7 @@ namespace EchoProtocol.AI.Stalker.Spatial
     {
         private readonly SpatialNode[] _nodes;
         private readonly IReadOnlyList<SpatialNode> _readOnlyNodes;
+        private readonly int[] _nodeIndicesByX;
 
         public NavMeshSpatialGraph(IReadOnlyList<SpatialNode> nodes)
         {
@@ -21,6 +23,9 @@ namespace EchoProtocol.AI.Stalker.Spatial
             }
 
             _readOnlyNodes = Array.AsReadOnly(_nodes);
+            _nodeIndicesByX = new int[_nodes.Length];
+            for (var i = 0; i < _nodes.Length; i++) _nodeIndicesByX[i] = i;
+            Array.Sort(_nodeIndicesByX, (left, right) => _nodes[left].Position.x.CompareTo(_nodes[right].Position.x));
             EdgeCount = directedEdgeCount / 2;
             CompatibilityIdentity = CalculateCompatibilityIdentity(_nodes);
         }
@@ -30,6 +35,43 @@ namespace EchoProtocol.AI.Stalker.Spatial
         public int EdgeCount { get; }
         public bool IsEmpty => _nodes.Length == 0;
         public SpatialGraphCompatibilityIdentity CompatibilityIdentity { get; }
+
+        public bool TryResolveNearestNode(Vector3 position, out int nodeId)
+        {
+            nodeId = -1;
+            var lower = 0;
+            var upper = _nodeIndicesByX.Length;
+            while (lower < upper)
+            {
+                var middle = lower + (upper - lower) / 2;
+                if (_nodes[_nodeIndicesByX[middle]].Position.x < position.x) lower = middle + 1;
+                else upper = middle;
+            }
+
+            var left = lower - 1;
+            var right = lower;
+            var bestIndex = -1;
+            var bestSqrDistance = float.PositiveInfinity;
+            while (left >= 0 || right < _nodeIndicesByX.Length)
+            {
+                var leftDelta = left >= 0 ? position.x - _nodes[_nodeIndicesByX[left]].Position.x : float.PositiveInfinity;
+                var rightDelta = right < _nodeIndicesByX.Length ? _nodes[_nodeIndicesByX[right]].Position.x - position.x : float.PositiveInfinity;
+                var leftBound = leftDelta * leftDelta;
+                var rightBound = rightDelta * rightDelta;
+                // X distance is a lower bound on 3D distance; retain equal-distance nodes for the original tie rule.
+                if (leftBound > bestSqrDistance && rightBound > bestSqrDistance) break;
+                var index = left >= 0 && (right >= _nodeIndicesByX.Length || leftBound <= rightBound)
+                    ? _nodeIndicesByX[left--] : _nodeIndicesByX[right++];
+                var sqrDistance = (_nodes[index].Position - position).sqrMagnitude;
+                if (sqrDistance < bestSqrDistance || (sqrDistance == bestSqrDistance && index < bestIndex))
+                {
+                    bestSqrDistance = sqrDistance;
+                    bestIndex = index;
+                    nodeId = _nodes[index].Id;
+                }
+            }
+            return nodeId >= 0;
+        }
 
         public bool TryGetNode(int id, out SpatialNode node)
         {

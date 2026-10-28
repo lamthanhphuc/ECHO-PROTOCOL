@@ -1,4 +1,4 @@
-using EchoProtocol.Settings;
+﻿using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -10,7 +10,7 @@ namespace EchoProtocol.Networking
     /// Networked flashlight behaviour for PlayerNetwork.
     /// Synchronizes flashlight state across clients via Fusion.
     /// </summary>
-    public sealed class NetworkPlayerFlashlight : NetworkBehaviour
+    public sealed partial class NetworkPlayerFlashlight : NetworkBehaviour
     {
         [Header("References")]
         [SerializeField] private Light _flashlight;
@@ -32,6 +32,7 @@ namespace EchoProtocol.Networking
         private PlayerCamera _playerCamera;
         private NetworkPlayerMovement _networkMovement;
         private NetworkPlayerLifeState _lifeState;
+        private Light _configuredLight;
 
         public bool IsOn
         {
@@ -45,7 +46,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public bool IsEmittingLight => IsOn && CanUseFlashlight();
+        public bool IsEmittingLight => (IsOn || Object != null && Object.IsValid && ResonanceActive) && CanUseFlashlight();
 
         public Transform BeamTransform
         {
@@ -56,7 +57,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public float BeamRange => Mathf.Max(0f, _beamRange);
+        public float BeamRange => Object != null && Object.IsValid && ResonanceActive ? ResonanceVisualRange : Mathf.Max(0f, _beamRange);
         public float BeamSpotAngle => Mathf.Clamp(_beamSpotAngle, 1f, 179f);
 
         private bool HasLocalControl()
@@ -120,9 +121,10 @@ namespace EchoProtocol.Networking
         {
             ResolveLight();
 
-            if (Object.HasStateAuthority)
+            if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 IsFlashlightOn = _startOn;
+                ResonanceEnergy = 100f;
             }
 
             if (HasLocalControl())
@@ -131,6 +133,8 @@ namespace EchoProtocol.Networking
             }
 
             ApplyVisuals();
+            if (Object.HasInputAuthority && GetComponent<ResonanceHUD>() == null)
+                gameObject.AddComponent<ResonanceHUD>();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -298,7 +302,14 @@ namespace EchoProtocol.Networking
                 _flashlight.color = new Color(1f, 0.96f, 0.88f);
             }
 
-            ApplyBeamTuning();
+            // Resolving the light also happens while aiming and querying beam
+            // position. Reapplying defaults here every time overwrote Resonance
+            // colour/intensity in LateUpdate, after Render had set them.
+            if (_configuredLight != _flashlight)
+            {
+                ApplyBeamTuning();
+                _configuredLight = _flashlight;
+            }
         }
 
         private void ResolveLifeState()
@@ -344,7 +355,7 @@ namespace EchoProtocol.Networking
                 bool isOn;
                 if (Runner != null && Object != null && Object.IsValid)
                 {
-                    isOn = IsFlashlightOn && CanUseFlashlight();
+                    isOn = (IsFlashlightOn || ResonanceActive) && CanUseFlashlight();
                 }
                 else
                 {
@@ -352,6 +363,7 @@ namespace EchoProtocol.Networking
                 }
 
                 _flashlight.enabled = isOn;
+                ApplyResonanceVisuals();
                 RemoveBeamVisual();
             }
         }

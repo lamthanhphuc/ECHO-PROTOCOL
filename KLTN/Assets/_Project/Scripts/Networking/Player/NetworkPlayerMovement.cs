@@ -17,10 +17,13 @@ namespace EchoProtocol.Networking
         public NetworkBool JumpPressed;
         public NetworkBool SprintHeld;
         public NetworkBool CrouchHeld;
+        public NetworkBool ResonanceHeld;
     }
 
     [RequireComponent(typeof(NetworkCharacterController))]
-    public sealed class NetworkPlayerMovement : NetworkBehaviour
+    public sealed class NetworkPlayerMovement : NetworkBehaviour,
+        IInputAuthorityGained,
+        IInputAuthorityLost
     {
         [SerializeField] private InputActionAsset _inputActions;
         [SerializeField, Min(0f)] private float _walkSpeed = 4f;
@@ -34,7 +37,7 @@ namespace EchoProtocol.Networking
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
-                _maxStamina * 0.3f);
+                MaxStamina * 0.3f);
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
@@ -47,6 +50,7 @@ namespace EchoProtocol.Networking
         private PlayerUpperBodyAim _upperBodyAim;
         private NetworkBootstrap _bootstrap;
         private bool _isSceneLoadDoneSubscribed;
+        private bool _localInputInitialized;
         private TickTimer _nextMovementNoise;
         private RuntimeNoiseType _lastMovementNoiseType;
         private bool _hasLastMovementNoiseType;
@@ -82,11 +86,25 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool IsCrouching { get; set; }
         [Networked] private TickTimer ExternalSlowTimer { get; set; }
         [Networked] private float ExternalSlowMultiplier { get; set; }
+        [Networked] private TickTimer ExternalKnockbackTimer { get; set; }
+        [Networked] private Vector3 ExternalKnockbackDirection { get; set; }
+        [Networked] private float ExternalKnockbackSpeed { get; set; }
+        [Networked] private TickTimer Zone2InterruptTimer { get; set; }
+
+        public bool IsZone2InteractionDisrupted => Runner != null
+            && Zone2InterruptTimer.IsRunning && !Zone2InterruptTimer.Expired(Runner);
 
         public float CurrentPitch => LookPitch;
         public long V02SlowUntilTick => Object != null && Object.IsValid && Runner != null && ExternalSlowTimer.IsRunning
             ? Runner.Tick.Raw + System.Math.Max(0, ExternalSlowTimer.RemainingTicks(Runner) ?? 0) : 0;
-        public float MaxStamina => _maxStamina;
+        private bool UsesPurgeStamina => SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
+        public float MaxStamina => UsesPurgeStamina ? 250f : _maxStamina;
+        private float SprintStaminaDrain => UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
+        private float StaminaRegen => UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
+        public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
+            ? _controller != null && _controller.Grounded
+            : _unityCharacterController != null && _unityCharacterController.isGrounded;
+
         public float CurrentStamina
         {
             get
@@ -191,6 +209,51 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool TryApplyKnockbackAuthoritative(Vector3 direction, float speed, float durationSeconds)
+        {
+            direction = Vector3.ProjectOnPlane(direction, Vector3.up);
+            if (direction.sqrMagnitude < 0.001f) direction = transform.forward;
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || speed <= 0f || durationSeconds <= 0f)
+                return false;
+
+            ExternalKnockbackDirection = direction.normalized;
+            ExternalKnockbackSpeed = speed;
+            ExternalKnockbackTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            Vector3 motion = ExternalKnockbackDirection * speed * durationSeconds;
+            motion = FloodedWaterBoundary.ConstrainMotion(_unityCharacterController, motion);
+            _unityCharacterController.Move(motion);
+            _controller.Teleport(transform.position, transform.rotation);
+            Physics.SyncTransforms();
+            return true;
+        }
+
+        private bool TickExternalKnockback()
+        {
+            if (!ExternalKnockbackTimer.IsRunning) return false;
+            if (ExternalKnockbackTimer.Expired(Runner))
+            {
+                ExternalKnockbackTimer = TickTimer.None;
+                return false;
+            }
+
+            return true;
+        }
+
+        public void InterruptZone2InteractionAuthoritative(float durationSeconds)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || !Object.InputAuthority.IsRealPlayer || durationSeconds <= 0f) return;
+            Zone2InterruptTimer = TickTimer.CreateFromSeconds(Runner, durationSeconds);
+            RpcInterruptZone2Interaction(Object.InputAuthority);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
+        private void RpcInterruptZone2Interaction([RpcTarget] PlayerRef target)
+        {
+            EchoProtocol.MatchFlow.Zone2MinigameUIFocus.CloseOthers(null);
+        }
+
         private float GetExternalSlowMultiplier()
         {
             if (!ExternalSlowTimer.IsRunning) return 1f;
@@ -211,7 +274,7 @@ namespace EchoProtocol.Networking
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             _controller = GetComponent<NetworkCharacterController>();
             _unityCharacterController = GetComponent<CharacterController>();
-            _offlineCurrentStamina = _maxStamina;
+            _offlineCurrentStamina = MaxStamina;
             ApplyCharacterControllerDimensions(_standingHeight, immediate: true);
 
             if (_inputActions != null)
@@ -365,40 +428,88 @@ namespace EchoProtocol.Networking
             }
 
             Vector3 finalMotion = (worldDirection + Vector3.up * _offlineVelocity.y) * Time.deltaTime;
+            finalMotion = FloodedWaterBoundary.ConstrainMotion(_unityCharacterController, finalMotion);
             _unityCharacterController.Move(finalMotion);
 
         }
 
         public override void Spawned()
         {
+            bool migrationResume =
+                NetworkBootstrap.IsHostMigrationResumeActive;
+
             if (Object.HasStateAuthority)
             {
-                IsHidden = false;
-                CurrentHideSpotId = 0UL;
-                AEDV02HideTokenId = default;
-                AEDV02ProtectedHideSpotId = 0;
-                AEDV02HideProtectionTimer = TickTimer.None;
-                AEDV02HideGraceTimer = TickTimer.None;
-                AEDV02HidePlanRevision = 0;
-                AEDV02HideGrantsUsed = 0;
+                if (!migrationResume)
+                {
+                    IsHidden = false;
+                    CurrentHideSpotId = 0UL;
+                    AEDV02HideTokenId = default;
+                    AEDV02ProtectedHideSpotId = 0;
+                    AEDV02HideProtectionTimer = TickTimer.None;
+                    AEDV02HideGraceTimer = TickTimer.None;
+                    AEDV02HidePlanRevision = 0;
+                    AEDV02HideGrantsUsed = 0;
 
-                NetworkCurrentStamina =
-                    _maxStamina;
+                    NetworkCurrentStamina =
+                        MaxStamina;
 
-                StaminaExhausted =
-                    false;
+                    StaminaExhausted =
+                        false;
 
-                ExternalSlowTimer =
-                    TickTimer.None;
+                    ExternalSlowTimer =
+                        TickTimer.None;
 
-                ExternalSlowMultiplier =
-                    1f;
+                    ExternalSlowMultiplier =
+                        1f;
+                }
+                else
+                {
+                    RestoreMigratedHidingAuthority();
+                }
             }
 
-            if (!Object.HasInputAuthority) return;
+            if (Object.HasInputAuthority)
+            {
+                ActivateLocalInput(
+                    preserveReplicatedState: migrationResume);
+            }
+        }
 
-            var hiding = GetComponent<PlayerHidingController>();
-            if (hiding != null && hiding.IsHidden)
+        public void InputAuthorityGained()
+        {
+            // Spawned is not invoked again when a restored/reconnected
+            // PlayerObject receives InputAuthority after its initial spawn.
+            ActivateLocalInput(
+                preserveReplicatedState: true);
+        }
+
+        public void InputAuthorityLost()
+        {
+            DeactivateLocalInput();
+        }
+
+        private void ActivateLocalInput(
+            bool preserveReplicatedState)
+        {
+            if (Object == null
+                || !Object.IsValid
+                || !Object.HasInputAuthority)
+            {
+                return;
+            }
+
+            var hiding =
+                GetComponent<PlayerHidingController>();
+
+            if (!_localInputInitialized
+                && preserveReplicatedState)
+            {
+                RestoreMigratedLocalHiding(hiding);
+            }
+            else if (!_localInputInitialized
+                     && hiding != null
+                     && hiding.IsHidden)
             {
                 hiding.ExitHiding();
             }
@@ -416,10 +527,126 @@ namespace EchoProtocol.Networking
             _jumpAction?.Enable();
             _sprintAction?.Enable();
             _crouchAction?.Enable();
-            _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+
+            if (_bootstrap == null
+                || !_bootstrap.RegisterLocalInputProvider(
+                    Object,
+                    ReadLocalInput))
+            {
+                _moveAction?.Disable();
+                _jumpAction?.Disable();
+                _sprintAction?.Disable();
+                _crouchAction?.Disable();
+                return;
+            }
+
+            var firstInitialization =
+                !_localInputInitialized;
+
+            _localInputInitialized = true;
+
+            if (!firstInitialization)
+            {
+                return;
+            }
+
             RuntimeLog.Log(
                 RuntimeLogCategory.PlayerMovement,
                 $"[NetworkMovement] Local input provider registered for {Object.InputAuthority}.");
+        }
+
+        private void DeactivateLocalInput()
+        {
+            if (_bootstrap != null
+                && _isSceneLoadDoneSubscribed)
+            {
+                _bootstrap.NetworkSceneLoadDone -=
+                    HandleNetworkSceneLoadDone;
+
+                _isSceneLoadDoneSubscribed = false;
+            }
+
+            _bootstrap?.UnregisterLocalInputProvider(
+                Object);
+
+            _moveAction?.Disable();
+            _jumpAction?.Disable();
+            _sprintAction?.Disable();
+            _crouchAction?.Disable();
+            _playerCamera = null;
+            _localInputInitialized = false;
+        }
+
+        private void RestoreMigratedHidingAuthority()
+        {
+            if (!IsHidden || CurrentHideSpotId == 0UL)
+            {
+                return;
+            }
+
+            if (!global::HidingSpot.TryResolveByStableId(
+                    CurrentHideSpotId,
+                    out var spot))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not resolve migrated hiding spot {CurrentHideSpotId} for {Object.InputAuthority}.");
+                return;
+            }
+
+            if (!global::HidingSpot.TryReserveNetworkSpot(
+                    Runner,
+                    CurrentHideSpotId,
+                    Object.InputAuthority))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not rebuild migrated hiding reservation spot={CurrentHideSpotId}, player={Object.InputAuthority}.");
+                return;
+            }
+
+            var hiding =
+                GetComponent<PlayerHidingController>();
+
+            if (hiding != null
+                && !hiding.RestoreMigratedHiding(
+                    spot,
+                    false))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Could not rebuild Host hiding occupant spot={CurrentHideSpotId}, player={Object.InputAuthority}.");
+            }
+        }
+
+        private void RestoreMigratedLocalHiding(
+            PlayerHidingController hiding)
+        {
+            if (!IsHidden || CurrentHideSpotId == 0UL)
+            {
+                return;
+            }
+
+            if (hiding == null)
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local migrated hidden player {Object.InputAuthority} has no PlayerHidingController.");
+                return;
+            }
+
+            if (!global::HidingSpot.TryResolveByStableId(
+                    CurrentHideSpotId,
+                    out var spot))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local migrated hiding spot {CurrentHideSpotId} could not be resolved.");
+                return;
+            }
+
+            if (!hiding.RestoreMigratedHiding(
+                    spot,
+                    true))
+            {
+                Debug.LogWarning(
+                    $"[NetworkMovement] Local hiding presentation could not be restored for spot={CurrentHideSpotId}.");
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -433,17 +660,7 @@ namespace EchoProtocol.Networking
                     Object.InputAuthority);
             }
 
-            if (_bootstrap != null && _isSceneLoadDoneSubscribed)
-            {
-                _bootstrap.NetworkSceneLoadDone -= HandleNetworkSceneLoadDone;
-                _isSceneLoadDoneSubscribed = false;
-            }
-
-            _bootstrap?.UnregisterLocalInputProvider(Object);
-            _moveAction?.Disable();
-            _jumpAction?.Disable();
-            _sprintAction?.Disable();
-            _crouchAction?.Disable();
+            DeactivateLocalInput();
         }
 
         public override void FixedUpdateNetwork()
@@ -451,10 +668,18 @@ namespace EchoProtocol.Networking
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
             {
-                if (!lobbyState.IsGameplayPlayer && SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+                if (!lobbyState.IsGameplayPlayer && !LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name))
                 {
                     return;
                 }
+            }
+
+            if (TickExternalKnockback())
+            {
+                AnimationMoveX = AnimationMoveY = 0f;
+                AnimationSprintHeld = false;
+                AnimationPushHeld = false;
+                return;
             }
 
             var lifeState = GetComponent<NetworkPlayerLifeState>();
@@ -500,8 +725,8 @@ namespace EchoProtocol.Networking
             bool canInitiateAction = lifeState == null || lifeState.CanInitiateAction;
             bool wantsCrouch = input.CrouchHeld
                 && canInitiateAction
-                && CoreStabilizerRules.AllowsCrouch(isCarryingCore,
-                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId);
+                && (NetworkPlayerFlashlight.IsResonating(gameObject) || CoreStabilizerRules.AllowsCrouch(isCarryingCore,
+                    lobbyState != null && lobbyState.ToolId == LobbyPlayerState.CoreStabilizerToolId));
             if (Object.HasStateAuthority)
             {
                 IsCrouching = wantsCrouch;
@@ -514,6 +739,7 @@ namespace EchoProtocol.Networking
                 canInitiateAction
                 && !effectiveCrouch
                 && coreAllowsSprint
+                && !NetworkPlayerFlashlight.IsResonating(gameObject)
                 && !StaminaExhausted
                 && input.SprintHeld
                 && NetworkCurrentStamina
@@ -548,7 +774,8 @@ namespace EchoProtocol.Networking
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
                 * coreCarryMultiplier * GetExternalSlowMultiplier();
 
-            _controller.Move(direction);
+            if (!FloodedWaterBoundary.TryMove(_controller, _unityCharacterController, direction))
+                _controller.Move(direction);
 
             transform.rotation = lookRotation;
             LookPitch = Mathf.Clamp(input.LookPitch, -85f, 85f);
@@ -649,7 +876,7 @@ namespace EchoProtocol.Networking
                 && lifeState.DebugGodMode)
             {
                 NetworkCurrentStamina =
-                    _maxStamina;
+                    MaxStamina;
 
                 StaminaExhausted =
                     false;
@@ -674,10 +901,10 @@ namespace EchoProtocol.Networking
                 NetworkCurrentStamina =
                     Mathf.Clamp(
                         NetworkCurrentStamina
-                        + _staminaRegenPerSecond
+                        + StaminaRegen
                         * delta,
                         0f,
-                        _maxStamina);
+                        MaxStamina);
 
                 AnimationSprintHeld =
                     false;
@@ -695,13 +922,13 @@ namespace EchoProtocol.Networking
             if (isSprinting)
             {
                 NetworkCurrentStamina -=
-                    _sprintStaminaDrainPerSecond
+                    SprintStaminaDrain
                     * delta;
             }
             else
             {
                 NetworkCurrentStamina +=
-                    _staminaRegenPerSecond
+                    StaminaRegen
                     * delta;
             }
 
@@ -709,7 +936,7 @@ namespace EchoProtocol.Networking
                 Mathf.Clamp(
                     NetworkCurrentStamina,
                     0f,
-                    _maxStamina);
+                    MaxStamina);
 
             if (NetworkCurrentStamina
                 <= _minStaminaToSprint)
@@ -740,10 +967,10 @@ namespace EchoProtocol.Networking
                 _offlineCurrentStamina =
                     Mathf.Clamp(
                         _offlineCurrentStamina
-                        + _staminaRegenPerSecond
+                        + StaminaRegen
                         * delta,
                         0f,
-                        _maxStamina);
+                        MaxStamina);
 
                 _offlineAnimationSprinting =
                     false;
@@ -761,13 +988,13 @@ namespace EchoProtocol.Networking
             if (isSprinting)
             {
                 _offlineCurrentStamina -=
-                    _sprintStaminaDrainPerSecond
+                    SprintStaminaDrain
                     * delta;
             }
             else
             {
                 _offlineCurrentStamina +=
-                    _staminaRegenPerSecond
+                    StaminaRegen
                     * delta;
             }
 
@@ -775,7 +1002,7 @@ namespace EchoProtocol.Networking
                 Mathf.Clamp(
                     _offlineCurrentStamina,
                     0f,
-                    _maxStamina);
+                    MaxStamina);
 
             if (_offlineCurrentStamina
                 <= _minStaminaToSprint)
@@ -1179,14 +1406,10 @@ namespace EchoProtocol.Networking
 
         private void HandleNetworkSceneLoadDone(NetworkRunner runner)
         {
-            BindLocalPlayerCameraIfNeeded();
             if (Object != null && Object.IsValid && Object.HasInputAuthority)
             {
-                _moveAction?.Enable();
-                _jumpAction?.Enable();
-                _sprintAction?.Enable();
-                _crouchAction?.Enable();
-                _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+                ActivateLocalInput(
+                    preserveReplicatedState: true);
             }
         }
 
@@ -1276,8 +1499,10 @@ namespace EchoProtocol.Networking
                     : 0f,
                 JumpPressed = _allowJump && (_jumpAction?.WasPressedThisFrame() ?? false),
                 SprintHeld = _sprintAction?.IsPressed() ?? false,
-                CrouchHeld = CoreStabilizerRules.AllowsCrouch(
-                    IsCarryingCore(), IsHoldingCoreStabilizer()) && IsCrouchPressed(),
+                ResonanceHeld = Application.isFocused && Keyboard.current != null && Keyboard.current.qKey.isPressed
+                    && !PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject),
+                CrouchHeld = (NetworkPlayerFlashlight.IsResonating(gameObject) || CoreStabilizerRules.AllowsCrouch(
+                    IsCarryingCore(), IsHoldingCoreStabilizer())) && IsCrouchPressed(),
             };
         }
 

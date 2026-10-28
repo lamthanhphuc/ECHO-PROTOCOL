@@ -1,5 +1,6 @@
-using System.Reflection;
-using UnityEngine;
+﻿using UnityEngine;
+
+using UnityEngine.Rendering.Universal;
 
 namespace EchoProtocol.UI.MainMenu
 {
@@ -46,6 +47,13 @@ namespace EchoProtocol.UI.MainMenu
         {
             _rig = null;
             _nextApply = 0f;
+        }
+        private void OnDisable()
+        {
+            ResolveRig();
+            if (_rig == null) return;
+            var front = FindRecursive(_rig.transform, FrontFillName)?.GetComponent<Light>();
+            if (front != null) front.enabled = false;
         }
 
         private void Update()
@@ -101,7 +109,7 @@ namespace EchoProtocol.UI.MainMenu
                 if (light.name == "Key Light")
                 {
                     light.intensity =
-                        keyIntensity;
+                        keyIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -115,7 +123,7 @@ namespace EchoProtocol.UI.MainMenu
                 else if (light.name == "Fill Light")
                 {
                     light.intensity =
-                        fillIntensity;
+                        fillIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -129,7 +137,7 @@ namespace EchoProtocol.UI.MainMenu
                 else if (light.name == "Rim Light")
                 {
                     light.intensity =
-                        rimIntensity;
+                        rimIntensity * 4f;
 
                     light.color =
                         new Color(
@@ -149,7 +157,8 @@ namespace EchoProtocol.UI.MainMenu
             if (front != null)
             {
                 front.intensity =
-                    frontFillIntensity;
+                    frontFillIntensity * 4f;
+                front.enabled = camera != null && camera.enabled && camera.gameObject.activeInHierarchy;
             }
 
             Renderer[] renderers =
@@ -229,8 +238,7 @@ namespace EchoProtocol.UI.MainMenu
                 light =
                     owner.GetComponent<Light>();
 
-                light.type =
-                    LightType.Directional;
+                light.enabled = false;
 
                 light.color =
                     Color.white;
@@ -240,7 +248,14 @@ namespace EchoProtocol.UI.MainMenu
             }
 
             if (camera != null)
+            {
                 light.cullingMask = camera.cullingMask;
+                light.transform.position = camera.transform.position + camera.transform.forward * 2f;
+            }
+            // A preview fill must never illuminate the world, even when URP
+            // ignores GameObject culling masks or the shop is closed.
+            light.type = LightType.Point;
+            light.range = 12f;
 
             FixRenderingLayer(
                 light);
@@ -280,40 +295,14 @@ namespace EchoProtocol.UI.MainMenu
             if (component == null)
                 return;
 
-            PropertyInfo property =
-                component.GetType()
-                    .GetProperty(
-                        "renderingLayerMask",
-                        BindingFlags.Instance
-                        | BindingFlags.Public);
+            const uint previewMask = 1u << 7;
+            if (component is Light light)
+            {
+                light.renderingLayerMask = (int)previewMask;
+                light.GetUniversalAdditionalLightData().renderingLayers = previewMask;
+            }
+            else if (component is Renderer renderer) renderer.renderingLayerMask = previewMask;
 
-            if (property == null
-                || !property.CanWrite)
-            {
-                return;
-            }
-
-            try
-            {
-                if (property.PropertyType
-                    == typeof(uint))
-                {
-                    property.SetValue(
-                        component,
-                        1u);
-                }
-                else if (
-                    property.PropertyType
-                    == typeof(int))
-                {
-                    property.SetValue(
-                        component,
-                        1);
-                }
-            }
-            catch
-            {
-            }
         }
     }
 }

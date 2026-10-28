@@ -18,6 +18,7 @@ public class PlayerInteraction : MonoBehaviour
     private InputAction _interactAction;
     private IInteractable _currentInteractable;
     private IHoldInteractable _heldInteractable;
+    public bool IsHoldingInteraction => _heldInteractable != null;
     private string _currentPrompt = string.Empty;
     private bool _suppressInteractionPrompt;
     private float _nextSecurityHoldRefresh;

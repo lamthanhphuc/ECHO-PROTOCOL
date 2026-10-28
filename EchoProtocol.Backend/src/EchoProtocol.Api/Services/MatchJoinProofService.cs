@@ -54,11 +54,15 @@ public sealed class MatchJoinProofService : IMatchJoinProofService
 
             payload = JsonSerializer.Deserialize<MatchJoinProofPayload>(
                 WebEncoders.Base64UrlDecode(parts[0]));
+            // Fusion actor numbers are allocated per connection and may grow
+            // beyond room capacity after leaves/rejoins or Host migration.
+            // MatchAuthorityService.BindPlayerAsync enforces MaxPlayers by
+            // counting concurrently connected roster members.
             return payload is not null
                 && payload.ProofId != Guid.Empty
                 && payload.MatchId != Guid.Empty
                 && payload.UserId != Guid.Empty
-                && payload.FusionActorNumber is >= 1 and <= 4
+                && payload.FusionActorNumber >= 1
                 && payload.ExpiresAtUtc > _timeProvider.GetUtcNow().UtcDateTime;
         }
         catch (Exception)

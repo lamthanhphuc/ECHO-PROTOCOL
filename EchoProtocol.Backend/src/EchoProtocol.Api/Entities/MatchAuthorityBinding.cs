@@ -6,8 +6,11 @@ public sealed class MatchAuthorityBinding
 {
     public Guid MatchId { get; set; }
     public string FusionSessionName { get; set; } = string.Empty;
+    [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
     public Guid HostUserId { get; set; }
     public int MaxPlayers { get; set; }
+    public string? MapId { get; set; }
+    public string? Difficulty { get; set; }
     public MatchAuthorityStatus Status { get; set; }
     public DateTime LeaseExpiresAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }

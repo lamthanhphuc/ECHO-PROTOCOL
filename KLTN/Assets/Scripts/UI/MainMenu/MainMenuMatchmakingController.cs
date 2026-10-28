@@ -38,6 +38,10 @@ namespace EchoProtocol.UI.MainMenu
         private MatchDifficulty _difficulty =
             MatchDifficulty.Normal;
         private ScenarioResolutionMode _resolutionMode = ScenarioResolutionMode.Fixed;
+        private GameObject _gameModeRow;
+        private Button _gameModeButton;
+        private Text _gameModeValue;
+        private int _gameMode;
 
         private bool _hostMode;
         private bool _busy;
@@ -45,6 +49,7 @@ namespace EchoProtocol.UI.MainMenu
         private void Awake()
         {
             ResolveServices();
+            BuildGameModePicker();
             RefreshDifficultyText();
             RefreshResolutionModeText();
 
@@ -52,6 +57,44 @@ namespace EchoProtocol.UI.MainMenu
             {
                 dialog.SetActive(false);
             }
+        }
+
+        private void BuildGameModePicker()
+        {
+            var template = resolutionModeRow != null ? resolutionModeRow : difficultyRow;
+            if (template == null || _gameModeRow != null) return;
+            _gameModeRow = Instantiate(template, template.transform.parent, false);
+            _gameModeRow.name = "GameModeRow";
+            var row = (RectTransform)_gameModeRow.transform;
+            row.anchoredPosition = ((RectTransform)template.transform).anchoredPosition + Vector2.down * 54;
+            var label = row.Find("Label")?.GetComponent<Text>();
+            if (label != null) label.text = GameLanguage.Choose("CHẾ ĐỘ CHƠI", "GAME MODE");
+            _gameModeButton = row.GetComponentInChildren<Button>(true);
+            if (_gameModeButton != null)
+            {
+                _gameModeButton.onClick = new Button.ButtonClickedEvent();
+                _gameModeValue = _gameModeButton.GetComponentInChildren<Text>(true);
+                _gameModeButton.onClick.AddListener(() =>
+                {
+                    if (_busy || !_hostMode) return;
+                    _gameMode = 1 - _gameMode;
+                    RefreshGameMode();
+                });
+            }
+            foreach (var component in new Component[] { confirmButton, backButton, statusText })
+                if (component != null)
+                    ((RectTransform)component.transform).anchoredPosition += Vector2.down * 54;
+            if (template.transform.parent is RectTransform window)
+                window.sizeDelta += Vector2.up * 54;
+            RefreshGameMode();
+        }
+
+        private void RefreshGameMode()
+        {
+            if (_gameModeValue != null)
+                _gameModeValue.text = _gameMode == 1
+                    ? GameLanguage.Choose("<  THANH TRỪNG  >", "<  PURGE  >")
+                    : GameLanguage.Choose("<  KHÁM PHÁ  >", "<  EXPEDITION  >");
         }
 
         private void OnEnable()
@@ -130,6 +173,8 @@ namespace EchoProtocol.UI.MainMenu
                 difficultyRow.SetActive(true);
             if (resolutionModeRow != null)
                 resolutionModeRow.SetActive(true);
+            if (_gameModeRow != null)
+                _gameModeRow.SetActive(true);
 
             SetConfirmLabel("CREATE ROOM");
             SetStatus(string.Empty);
@@ -150,6 +195,8 @@ namespace EchoProtocol.UI.MainMenu
                 difficultyRow.SetActive(false);
             if (resolutionModeRow != null)
                 resolutionModeRow.SetActive(false);
+            if (_gameModeRow != null)
+                _gameModeRow.SetActive(false);
 
             SetConfirmLabel("JOIN ROOM");
             SetStatus(string.Empty);
@@ -279,6 +326,7 @@ namespace EchoProtocol.UI.MainMenu
                             roomCode,
                             maxPlayers,
                             _difficulty,
+                            _gameMode,
                             _resolutionMode)
                         : await bootstrap.JoinRoomAsync(
                             roomCode);
@@ -397,6 +445,8 @@ namespace EchoProtocol.UI.MainMenu
             if (difficultyButton != null)
                 difficultyButton.interactable =
                     !_busy && _hostMode;
+            if (_gameModeButton != null)
+                _gameModeButton.interactable = !_busy && _hostMode;
 
             if (confirmButton != null)
                 confirmButton.interactable = !_busy;

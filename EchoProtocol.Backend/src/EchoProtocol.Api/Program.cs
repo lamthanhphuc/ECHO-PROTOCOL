@@ -214,6 +214,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IMatchAuthorityService, MatchAuthorityService>();
 builder.Services.AddScoped<IMatchResultService, MatchResultService>();
+builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddSingleton<IRewardPolicy, RewardPolicyV1>();
 builder.Services.AddScoped<IPlayerProfileService, PlayerProfileService>();
@@ -250,6 +251,10 @@ builder.Services.AddScoped<IPaymentProvider>(services =>
 builder.Services.AddScoped<IPaymentProviderRegistry, PaymentProviderRegistry>();
 builder.Services.AddScoped<IPaymentCheckoutService, PaymentCheckoutService>();
 builder.Services.AddScoped<IPaymentFulfillmentService, PaymentFulfillmentService>();
+builder.Services.AddScoped<PaymentRecoveryService>();
+builder.Services.AddHostedService<PaymentFulfillmentRecoveryWorker>();
+builder.Services.AddScoped<PaymentOrderReconciliationService>();
+builder.Services.AddHostedService<PaymentOrderReconciliationWorker>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 builder.Services.AddSingleton<IMatchJoinProofService, MatchJoinProofService>();
 builder.Services.AddSingleton(TimeProvider.System);
