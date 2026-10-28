@@ -1,12 +1,28 @@
 using System;
+using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using EchoProtocol.UI.MainMenu;
 using NUnit.Framework;
 using UnityEngine;
 
 public sealed class LobbyEntitlementTests
 {
+    [Test]
+    public void MatchEntitlementsResponseDeserializesPurchasedJammo()
+    {
+        var userId = Guid.NewGuid().ToString("D");
+        var json = "{\"success\":true,\"data\":{\"userId\":\"" + userId
+                   + "\",\"shopItemIds\":[\"" + CharacterShopAssets.JammoItemId + "\"]}}";
+
+        var response = JsonUtility.FromJson<ApiResponse<MatchPlayerEntitlementsDto>>(json);
+
+        Assert.That(response.success, Is.True);
+        Assert.That(response.data.userId, Is.EqualTo(userId));
+        Assert.That(response.data.shopItemIds, Does.Contain(CharacterShopAssets.JammoItemId));
+    }
+
     [TearDown]
     public void TearDown()
     {
