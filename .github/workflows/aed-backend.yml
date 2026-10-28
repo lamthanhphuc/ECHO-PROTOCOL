@@ -33,7 +33,7 @@ jobs:
           dotnet-version: 8.0.x
       - name: Start isolated MongoDB replica set
         run: |
-          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 mongo:8 --replSet rs0 --bind_ip_all
           for attempt in $(seq 1 30); do
             if docker exec aed_mongo_ci mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; then break; fi
             sleep 1
@@ -68,10 +68,12 @@ jobs:
               print('Backend TRX unavailable')
               raise SystemExit(0)
           counts = ElementTree.parse(results).getroot().find('.//{*}Counters').attrib
-          summary = f"Backend: {counts['passed']} passed, {counts['failed']} failed, {counts['notExecuted']} not executed of {counts['total']} total"
+          summary = f"Backend: {counts['passed']} passed, {counts['failed']} failed, {counts['notExecuted']} skipped/not executed of {counts['total']} total"
           print(summary)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as output:
               output.write(summary + '\n')
+          if int(counts['total']) == 0:
+              raise SystemExit('No Backend tests executed')
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
