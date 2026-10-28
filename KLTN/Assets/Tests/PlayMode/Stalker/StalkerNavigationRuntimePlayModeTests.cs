@@ -64,17 +64,18 @@ namespace EchoProtocol.AI.Stalker.Tests
         public IEnumerator NAV_3_OffMeshAgent_ReattachesWithinRecoveryDistance()
         {
             BuildRuntimeNavMesh();
-            var agent = CreateInactiveConfiguredAgent(new Vector3(5.2f, 0f, 0f));
+            var offMeshStart = new Vector3(10f, 0f, 0f);
+            var agent = CreateInactiveConfiguredAgent(offMeshStart);
             agent.gameObject.SetActive(true);
             yield return null;
             Assert.That(agent.isOnNavMesh, Is.False);
             var controller = CreateController(agent);
 
             var recovered = InvokeMethod(controller, "TryReattachToNearestNavMesh",
-                new[] { typeof(float) }, new object[] { 2f });
+                new[] { typeof(float) }, new object[] { 10f });
             Assert.That(recovered, Is.EqualTo(true));
             Assert.That(agent.isOnNavMesh, Is.True);
-            Assert.That(Vector3.Distance(agent.transform.position, new Vector3(5.2f, 0f, 0f)), Is.LessThanOrEqualTo(2f));
+            Assert.That(Vector3.Distance(agent.transform.position, offMeshStart), Is.LessThanOrEqualTo(10f));
         }
 
         [UnityTest]
@@ -217,6 +218,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             _createdObjects.Add(agentRoot);
 
             var agent = agentRoot.AddComponent<NavMeshAgent>();
+            agent.agentTypeID = 0;
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;

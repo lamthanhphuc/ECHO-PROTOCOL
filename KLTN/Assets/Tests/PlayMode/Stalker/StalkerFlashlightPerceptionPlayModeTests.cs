@@ -246,6 +246,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             LayerMask mask = Physics.DefaultRaycastLayers;
             SetPrivate(sensor, "losBlockerMask", mask);
             Component controller = stalker.AddComponent(Resolve("EchoProtocol.AI.Stalker.StalkerController"));
+            stalker.GetComponent<NavMeshAgent>().agentTypeID = 0;
             SetPrivate(controller, "visionSensor", sensor);
             ((Behaviour)controller).enabled = false;
             ((Behaviour)sensor).enabled = false;

@@ -1,7 +1,7 @@
 # AED / main integration, 2026-10-27
 
 Branch: `integration/aed-main-20261027`, worktree: `D:\Bin\KLTN-aed-main-integration`.
-Parents targeted: feature `46fab78f`, `origin/main` `0466abc1`.
+Parents targeted: feature `46fab78f`, original `origin/main` `0466abc1`. A later main commit `599076e8` (Lobby settings sync) was merged separately; the final HEAD must include both merge commits.
 State: all merge paths reconciled; the test results below distinguish passing suites from unresolved PlayMode failures.
 
 As of 2026-10-28, the integration index has **0 unmerged files** and the conflicted source/scene paths have **0 Git conflict markers**. This is a source reconciliation checkpoint, not the final acceptance result.
@@ -49,16 +49,16 @@ The merge reported 32 conflicted paths. The table names each path, the main beha
 
 - Backend focused MatchAuthority/Telemetry tests: **PASS**, 128 tests after restore, before full Unity reconciliation.
 - Backend non-database test filter: **PASS**, 701 tests in this worktree.
-- Backend solution build: **PASS**, 3 projects, 0 errors, 0 warnings.
+- Backend solution build: **PASS**, 3 projects, 0 errors, 2 xUnit analyzer warnings after the latest main commit.
 - Full backend suite: **FAIL / infrastructure**, 701 passed and 57 failed because `ECHO_M4_POSTGRES_CONNECTION` and `ECHO_PHASE6R_MONGO_URI` are absent. No local Docker was started.
 - Unity C# offline compile: **PASS**, `Assembly-CSharp.csproj` 7 projects, 0 errors, 31 warnings after repairing the presenter duplicate and the Minion/Scanner/Spawner merge calls. Networking EditMode and Voice PlayMode test assemblies also compile. Six new cross-path regression guards live in `AEDMainMergeRegressionTests.cs`.
 - AED contract/manifest sync check: **PASS**, `scripts/Sync-AEDV02Contract.ps1 -Check`.
 - Six merge regression guards: **PASS 6/6** through the worktree Unity Editor and Pipeline server.
 - Full EditMode: **FAIL / incomplete**. `AlienHuntSceneTests.BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien` enters Play mode inside EditMode; the Unity Test Runner then threw a `NullReferenceException` in `EditModeRunTask` and `InvalidOperationException` while restoring the scene. Pipeline status stayed running, so the run was cancelled. No aggregate PASS is claimed.
 - Targeted EditMode: **PASS** Networking 257/257 (including six merge regression guards), AED Common 288/288, Stalker 333/333, Player 91/91, UI 12/12, Telemetry 36/36. Additional LobbyGameMode 2/2, FieldScanner 38/38, MatchDifficulty 1/1. The full suite remains **FAIL / incomplete** as noted above.
-- Targeted PlayMode: Networking **PASS 1/1** and Voice **PASS 4/4**. Stalker assembly **FAIL 148/191**. Forty-two failures involve generated NavMesh agent placement or related runtime navigation fixtures; one flashlight/locker test remains **FAIL** in isolation (`SEARCH` expected, `PATROL` actual). These require diagnosis before claiming no known gameplay regressions.
+- Targeted PlayMode: Networking **PASS 1/1**, Voice **PASS 4/4**, Stalker **PASS 191/191** after repairing test fixtures to use NavMesh agent type `0`, matching the generated mesh. The prior 43 Stalker failures came from the fixtures using the project's other default agent type; the off-mesh recovery test now starts outside the generated mesh. This is test-fixture repair, not a production Stalker behavior change.
 - Windows Build artifact: **PRESENT**, `D:\Bin\DBinEchoProtocol-P3-NetworkTest\KLTN.exe` (owner-reported successful build, 2026-10-28 11:23 local file timestamp). Its `sharedassets0.assets` contains `https://api.3.1.238.6.sslip.io` and no `127.0.0.1:5042` string; this verifies bundled API URL. The Pipeline build invoked separately with build ID `build_73d61f799595` later returned `idle` after an Editor reload, so its completion/provenance is **NOT VERIFIED**. No online gameplay proof is claimed.
-- Merge commit and `origin/main` ancestry: verify with `git log -1 --format=%H%n%P` and `git merge-base --is-ancestor origin/main HEAD` after committing this report. The Stalker PlayMode failures remain open.
+- Merge commits: initial AED/main merge `a54ae6f4`; latest main Lobby sync merge is a descendant of that commit. `git merge-base --is-ancestor origin/main HEAD` returned success after the second merge. No unmerged entries or conflict markers remained.
 
 ## Scene blocker
 

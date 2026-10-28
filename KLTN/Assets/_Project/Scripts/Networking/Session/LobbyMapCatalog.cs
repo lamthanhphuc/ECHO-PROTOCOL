@@ -6,7 +6,8 @@ namespace EchoProtocol.Networking
     {
         public const string PropertyKey = "map";
         public const string GameModeKey = "gamemode";
-        public static int RoomGameMode(NetworkRunner runner) => runner != null && runner.SessionInfo.IsValid
+        public static int RoomGameMode(NetworkRunner runner) => runner != null
+            && runner.SessionInfo.Properties != null
             && runner.SessionInfo.Properties.TryGetValue(GameModeKey, out var value) && (int)value == 1 ? 1 : 0;
         public static bool IsMapAllowed(int mode, int map) => mode == 1 ? map == 2 : map == 0 || map == 1;
         public static bool MapLocked(NetworkRunner runner) => RoomGameMode(runner) == 1;
@@ -23,7 +24,7 @@ namespace EchoProtocol.Networking
         {
             if (MapLocked(runner)) return 2;
             if (runner != null && runner.IsServer && runner == _hostRunner) return _hostSelection;
-            if (runner != null && runner.SessionInfo.IsValid
+            if (runner != null && runner.SessionInfo.Properties != null
                 && runner.SessionInfo.Properties.TryGetValue(PropertyKey, out var value))
                 return UnityEngine.Mathf.Clamp((int)value, 0, 1);
             return 0;

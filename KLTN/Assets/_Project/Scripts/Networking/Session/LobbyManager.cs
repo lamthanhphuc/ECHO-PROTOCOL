@@ -489,7 +489,7 @@ namespace EchoProtocol.Networking
 
                 if (this == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || _bootstrap.State != NetworkSessionState.InLobby
-                    || !_bootstrap.UpdateRoomProperties(authority.BuildHostSessionProperties()))
+                    || !_bootstrap.UpdateRoomProperties(authority.BuildBindingSessionProperties()))
                 {
                     await authority.EndAsync("LOBBY_BINDING_NOT_PUBLISHED");
                     return false;

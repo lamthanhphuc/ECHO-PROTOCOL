@@ -1213,6 +1213,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static void ConfigureAgent(NavMeshAgent agent)
         {
+            agent.agentTypeID = 0;
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;
