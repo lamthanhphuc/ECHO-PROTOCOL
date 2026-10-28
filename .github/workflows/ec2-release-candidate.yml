@@ -10,6 +10,7 @@ on:
         options: [backend, web, both]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ec2-release-candidate-${{ github.ref }}
   cancel-in-progress: false
@@ -20,6 +21,21 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require successful CI on this exact branch commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo, sha, branch = os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA'], os.environ['GITHUB_REF_NAME']
+          url = f'https://api.github.com/repos/{repo}/actions/workflows/aed-backend.yml/runs?head_sha={sha}&event=push&status=success&per_page=100'
+          request = urllib.request.Request(url, headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              runs = json.load(response)['workflow_runs']
+          if not any(run['head_sha'] == sha and run['head_branch'] == branch and run['conclusion'] == 'success' for run in runs):
+              raise SystemExit(f'No successful push CI for {branch}@{sha}')
+          print(f'Verified successful push CI for {branch}@{sha}')
+          PY
       - name: Build immutable linux/amd64 images
         env:
           SERVICES: ${{ inputs.services }}
@@ -33,12 +49,20 @@ jobs:
               -t "aws-lightsail-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
             docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}' > release/backend-image-id.txt
             docker save "aws-lightsail-backend:$GITHUB_SHA" | gzip -1 > release/backend-image.tar.gz
+            gzip -t release/backend-image.tar.gz
+            docker image rm "aws-lightsail-backend:$GITHUB_SHA"
+            gzip -dc release/backend-image.tar.gz | docker load
+            test "$(docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/backend-image-id.txt)"
           fi
           if [[ "$SERVICES" == web || "$SERVICES" == both ]]; then
             docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
               -t "aws-lightsail-web:$GITHUB_SHA" -f EchoProtocol.Web/Dockerfile EchoProtocol.Web
             docker image inspect "aws-lightsail-web:$GITHUB_SHA" --format '{{.Id}}' > release/web-image-id.txt
             docker save "aws-lightsail-web:$GITHUB_SHA" | gzip -1 > release/web-image.tar.gz
+            gzip -t release/web-image.tar.gz
+            docker image rm "aws-lightsail-web:$GITHUB_SHA"
+            gzip -dc release/web-image.tar.gz | docker load
+            test "$(docker image inspect "aws-lightsail-web:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/web-image-id.txt)"
           fi
           (cd release && sha256sum *-image.tar.gz > SHA256SUMS)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
