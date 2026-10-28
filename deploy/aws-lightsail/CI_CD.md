@@ -2,11 +2,15 @@
 
 ## What runs now
 
-- `.github/workflows/aed-backend.yml` checks pull requests and pushes to `LTP` and `main`: the mirrored AED contract when that script exists, .NET 8 solution build, all Backend tests with isolated PostgreSQL 16 and a MongoDB replica set, plus Next.js lint, typecheck and build. A separate job also builds both `linux/amd64` Docker images on the hosted runner. It uploads Backend TRX, Web check logs and image IDs.
-- `.github/workflows/ec2-release-candidate.yml` is manual. From `LTP` or `main`, it builds `linux/amd64` Backend and/or Web images on a GitHub runner, tags each with the **full** Git commit SHA, and uploads compressed `docker save` archives with SHA-256 and image IDs. It does not access EC2 or production secrets.
+- `.github/workflows/aed-backend.yml` checks pull requests and pushes to `LTP` and `main`: the mirrored AED contract when that script exists, .NET 8 solution build, all Backend tests with isolated PostgreSQL 16 and MongoDB 8 (`GLIBC_TUNABLES=glibc.pthread.rseq=1`), plus Next.js lint, typecheck and build. A separate job also builds both `linux/amd64` Docker images on the hosted runner. It uploads Backend TRX, Web check logs and image IDs. A zero-test run fails.
+- `.github/workflows/ec2-release-candidate.yml` is manual. From `LTP` or `main`, it requires successful **push** CI for the exact branch SHA, then builds `linux/amd64` Backend and/or Web images on a GitHub runner, tags each with the **full** Git commit SHA, and uploads compressed `docker save` archives with SHA-256 and image IDs. It verifies gzip integrity and reloads each archive to compare image IDs. It does not access EC2 or production secrets. CI image checks and release archives are separate builds because CI currently uploads only image IDs; retaining full archives for every PR would consume unnecessary artifact storage.
 - GitHub requires a `workflow_dispatch` workflow file on the default branch before it can be dispatched. The workflow must land on `main` before its first candidate build; a PR that exists only on `LTP` is insufficient.
 - Unity EditMode/PlayMode are not CI gates yet. A licensed Unity 6000.5.8f1 runner with the required Photon Fusion packages and a reproducible noninteractive test setup is needed before those results can be trusted in GitHub Actions. Current local Editor results cannot certify a different CI commit.
-- At implementation time, `npm audit --omit=dev` found 3 production dependency advisories (Next.js critical; `sharp` and `source-map-js` high). This PR records the risk; dependency remediation and Web release require a separately reviewed change.
+- At implementation time, `npm audit --omit=dev` found 3 production dependency advisories (Next.js critical; `sharp` and `source-map-js` high). Separate Web-only security PRs #28 (`LTP`) and #29 (`main`) update Next.js to 16.4.3 and the transitive packages; the updated lockfile has 0 production advisories. Review and merge those PRs independently before a Web release.
+
+## SWP490 evidence boundary
+
+The verified PR runs before these final workflow changes reported 758/758 Backend tests on `LTP` and 387/387 on `main`, with Web and image jobs passing. Record the final run URLs and TRX artifacts in Report 5 only after the final SHA checks pass. The repository does not contain a committed SWP490 test-case ID ledger, Report 4/5 source, or a `review-2` ref. Therefore neither the required source baseline nor the fraction of committed test cases automated can be verified here; xUnit counts are not a system-wide coverage denominator. Create the ID ledger and map each CI test to its committed case before claiming the 50% criterion. Unity EditMode, PlayMode and manual Fusion Host–Client tests remain separate evidence.
 
 ## Existing EC2 deployment and drift
 
@@ -51,7 +55,7 @@ If health, critical APIs or startup fail, stop the rollout. Point the image-only
 
 ## Automated CD prerequisites
 
-No automatic production job is enabled. This private repository currently has no `production` GitHub environment with verified required reviewers. Standard GitHub-hosted runner IPs are unsuitable for the instance's restricted TCP/22 allowlist. The instance has no IAM instance profile and is not managed by SSM.
+No automatic production job is enabled. This private repository currently has no `production` GitHub environment with verified required reviewers. Standard GitHub-hosted runner IPs are unsuitable for the instance's restricted TCP/22 allowlist. The instance has no IAM instance profile and is not managed by SSM. The smallest current transport is an operator on an already allowlisted network using the existing restricted SSH key and the verified release artifact. Production deployment still requires explicit human approval, fresh backup/restore evidence and a rollback compatibility decision.
 
 Preferred future path: provision and verify SSM managed-instance access, an OIDC-trusted GitHub deployment role restricted to this repository and `production` environment, and a private image transport path. The GitHub role should have only the required `ssm:SendCommand`, `ssm:GetCommandInvocation`/`ssm:ListCommandInvocations` and read-only EC2 discovery permissions on the intended instance/document; the instance needs the SSM managed-instance permissions. This requires an approved IAM/SSM change and an image delivery decision (for example private registry or object storage), neither of which is part of this PR.
 
