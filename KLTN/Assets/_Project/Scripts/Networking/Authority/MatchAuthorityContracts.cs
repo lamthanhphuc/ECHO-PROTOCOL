@@ -56,6 +56,7 @@ namespace EchoProtocol.Networking.Authority
         public int fusionActorNumber;
     }
 
+    [Serializable]
     public sealed class MatchPlayerEntitlementsDto
     {
         public string userId;
