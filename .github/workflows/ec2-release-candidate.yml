@@ -16,10 +16,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   images:
-    if: github.ref == 'refs/heads/LTP' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Reject untrusted branch
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/LTP || "$GITHUB_REF" == refs/heads/main ]] || exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Require successful CI on this exact branch commit
         env:

@@ -65,8 +65,7 @@ jobs:
 
           results = Path('TestResults/backend.trx')
           if not results.exists():
-              print('Backend TRX unavailable')
-              raise SystemExit(0)
+              raise SystemExit('Backend TRX unavailable')
           counts = ElementTree.parse(results).getroot().find('.//{*}Counters').attrib
           summary = f"Backend: {counts['passed']} passed, {counts['failed']} failed, {counts['notExecuted']} skipped/not executed of {counts['total']} total"
           print(summary)
