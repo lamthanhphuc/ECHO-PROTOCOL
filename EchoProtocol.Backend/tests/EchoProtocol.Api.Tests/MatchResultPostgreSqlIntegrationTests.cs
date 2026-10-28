@@ -1500,12 +1500,14 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             new PaymentProductSettings
             {
                 ProductReference = "TEST_PRODUCT", Purpose = "AUTOMATED_TEST_ONLY",
-                Amount = 125_000m, Currency = "VND", IsActive = true, ExpiresAfterMinutes = 30
+                Amount = 125_000m, Currency = "VND", IsActive = true, ExpiresAfterMinutes = 30,
+                FulfillmentKind = "WALLET_CREDIT", WalletCreditAmount = 150
             },
             new PaymentProductSettings
             {
                 ProductReference = "SECOND_TEST_PRODUCT", Purpose = "AUTOMATED_TEST_ONLY",
-                Amount = 250_000m, Currency = "VND", IsActive = true, ExpiresAfterMinutes = 30
+                Amount = 250_000m, Currency = "VND", IsActive = true, ExpiresAfterMinutes = 30,
+                FulfillmentKind = "WALLET_CREDIT", WalletCreditAmount = 300
             }
         ]
     };
