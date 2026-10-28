@@ -1,7 +1,9 @@
-name: AED Backend regression
+name: ECHO PROTOCOL CI
 on:
   pull_request:
-    branches: [LTP]
+    branches: [LTP, main]
+  push:
+    branches: [LTP, main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,7 +33,7 @@ jobs:
           dotnet-version: 8.0.x
       - name: Start isolated MongoDB replica set
         run: |
-          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          docker run -d --name aed_mongo_ci -p 127.0.0.1:27017:27017 -e GLIBC_TUNABLES=glibc.pthread.rseq=1 mongo:8 --replSet rs0 --bind_ip_all
           for attempt in $(seq 1 30); do
             if docker exec aed_mongo_ci mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; then break; fi
             sleep 1
@@ -43,13 +45,88 @@ jobs:
           done
           exit 1
       - name: Check mirrored contract and scene manifest
+        if: hashFiles('scripts/Sync-AEDV02Contract.ps1') != ''
         shell: pwsh
         run: ./scripts/Sync-AEDV02Contract.ps1 -Check
+      - name: Restore and build Backend solution
+        run: |
+          dotnet restore EchoProtocol.Backend/EchoProtocol.sln
+          dotnet build EchoProtocol.Backend/EchoProtocol.sln --configuration Release --no-restore
       # RTK is unavailable on the hosted runner; execute the SDK directly.
       - name: Run all Backend tests with isolated PostgreSQL schemas
-        run: dotnet test EchoProtocol.Backend/tests/EchoProtocol.Api.Tests/EchoProtocol.Api.Tests.csproj --verbosity minimal --logger 'trx;LogFileName=backend.trx' --results-directory TestResults
+        run: dotnet test EchoProtocol.Backend/tests/EchoProtocol.Api.Tests/EchoProtocol.Api.Tests.csproj --configuration Release --no-restore --no-build --verbosity minimal --logger 'trx;LogFileName=backend.trx' --results-directory TestResults
+      - name: Summarize Backend test results
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          results = Path('TestResults/backend.trx')
+          if not results.exists():
+              raise SystemExit('Backend TRX unavailable')
+          counts = ElementTree.parse(results).getroot().find('.//{*}Counters').attrib
+          summary = f"Backend: {counts['passed']} passed, {counts['failed']} failed, {counts['notExecuted']} skipped/not executed of {counts['total']} total"
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as output:
+              output.write(summary + '\n')
+          if int(counts['total']) == 0:
+              raise SystemExit('No Backend tests executed')
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: backend-test-results
           path: TestResults/*.trx
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: EchoProtocol.Web
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: EchoProtocol.Web/package-lock.json
+      - name: Install locked Web dependencies
+        run: npm ci
+      - name: Lint Web
+        run: |
+          mkdir -p ../TestResults/web
+          npm run lint 2>&1 | tee ../TestResults/web/lint.log
+      - name: Typecheck Web
+        run: npm run typecheck 2>&1 | tee ../TestResults/web/typecheck.log
+      - name: Build Web
+        run: npm run build 2>&1 | tee ../TestResults/web/build.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: web-check-results
+          path: TestResults/web/*.log
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build linux/amd64 application images
+        run: |
+          docker build --platform linux/amd64 -t "echo-ci-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
+          docker build --platform linux/amd64 -t "echo-ci-web:$GITHUB_SHA" -f EchoProtocol.Web/Dockerfile EchoProtocol.Web
+          mkdir -p TestResults/images
+          printf '%s\n' "$GITHUB_SHA" > TestResults/images/COMMIT
+          docker image inspect "echo-ci-backend:$GITHUB_SHA" --format '{{.Id}}' > TestResults/images/backend-image-id.txt
+          docker image inspect "echo-ci-web:$GITHUB_SHA" --format '{{.Id}}' > TestResults/images/web-image-id.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: image-build-provenance
+          path: TestResults/images/
