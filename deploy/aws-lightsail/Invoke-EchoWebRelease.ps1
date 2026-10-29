@@ -3,14 +3,14 @@ param(
     [Parameter(Mandatory)][string]$ReviewedHashesFile,
     [string]$ReleaseDirectory,
     [string]$BackupEvidenceDirectory = 'D:\ECHO_PROTOCOL_SECURE_BACKUPS\pre-release-ltp-20261029T061910Z',
-    [string]$KeyPath = "$HOME\Downloads\echo-protocol-ec2-key.pem"
+    [string]$ConfigPath = "$HOME\.ssh\echo-ssm.conf"
 )
 
 $ErrorActionPreference = 'Stop'
 $sha = '164d078ee0eb1bcfa2aa8c6379067d658e7904f8'
 $remoteDir = "/home/ubuntu/echo-protocol/deploy-artifacts/$sha/operator-scripts"
 $remoteRelease = "/home/ubuntu/echo-protocol/deploy-artifacts/$sha"
-$hostName = 'ubuntu@3.1.238.6'
+$hostName = 'echo-ec2-ssm'
 $scriptDir = $PSScriptRoot
 $files = @('web-deploy.sh', 'web-rollback.sh', 'web-smoke.sh', 'web-audit.sh')
 
@@ -35,7 +35,15 @@ function Assert-ChecksumFile([string]$directory, [string]$file, [string[]]$requi
     foreach ($name in $required) { if ($name -notin $found) { throw "Missing checksum: $name" } }
 }
 
-if (-not (Test-Path -LiteralPath $KeyPath -PathType Leaf)) { throw 'SSH key unavailable' }
+if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { throw 'SSM SSH config unavailable' }
+$effectiveSsh = (& ssh -G -T -F $ConfigPath $hostName) -join "`n"
+if ($LASTEXITCODE -ne 0 -or
+    $effectiveSsh -notmatch '(?m)^hostname i-00689d79dfa51a384$' -or
+    $effectiveSsh -notmatch '(?m)^stricthostkeychecking (true|yes)$' -or
+    $effectiveSsh -notmatch '(?m)^hostkeyalias 3\.1\.238\.6$' -or
+    $effectiveSsh -notmatch '(?m)^proxycommand aws(\.exe)? ssm start-session\b') {
+    throw 'SSM SSH target or host-key verification differs from the reviewed config'
+}
 if (-not (Test-Path -LiteralPath $ReviewedHashesFile -PathType Leaf)) { throw 'Reviewed Compose hash manifest unavailable' }
 $hashLines = @(Get-Content -LiteralPath $ReviewedHashesFile)
 $requiredHashes = @('docker-compose.prod.yml', 'docker-compose.mongo-kernel.yml', 'docker-compose.backend-migration.override.yml')
@@ -80,7 +88,7 @@ try {
     $reviewedDigest = Get-Sha256 (Join-Path $tempDir 'reviewed-compose.sha256')
     $manifest += "$reviewedDigest  reviewed-compose.sha256"
     [IO.File]::WriteAllText((Join-Path $tempDir 'scripts.sha256'), (($manifest -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
-    $sshOptions = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '-i', $KeyPath)
+    $sshOptions = @('-F', $ConfigPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10')
     & ssh @sshOptions $hostName "install -d -m 700 '$remoteDir' '$remoteRelease'"
     if ($LASTEXITCODE -ne 0) { throw 'SSH unavailable; production state unchanged by this invocation' }
     foreach ($name in $files) {

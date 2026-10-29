@@ -6,15 +6,15 @@ Target: `LTP@164d078ee0eb1bcfa2aa8c6379067d658e7904f8`, [release run 40823239311
 
 ## 1. Read-only state audit
 
-From Windows PowerShell on an existing SSH-allowlisted network, with the reviewed PR branch checked out. The `.gitattributes` file keeps `web-audit.sh` in LF format; the command pipes UTF-8 text to remote `bash -s` without a long SSH argument:
+From Windows PowerShell with the reviewed PR branch checked out and the existing `$HOME\.ssh\echo-ssm.conf` configured. The `.gitattributes` file keeps `web-audit.sh` in LF format; the command pipes UTF-8 text to remote `bash -s` through AWS SSM without a long SSH argument:
 
 ```powershell
 $OutputEncoding = [Text.UTF8Encoding]::new($false)
 Get-Content -LiteralPath .\deploy\aws-lightsail\web-audit.sh -Raw -Encoding UTF8 |
-  ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$HOME\Downloads\echo-protocol-ec2-key.pem" ubuntu@3.1.238.6 'sudo -n bash -s'
+  ssh -T -F "$HOME\.ssh\echo-ssm.conf" -o BatchMode=yes -o StrictHostKeyChecking=yes echo-ec2-ssm 'sudo -n bash -s'
 ```
 
-Record the three Compose SHA-256 hashes, image IDs, container IDs, mounts, health, restart counts and resources. Check for `docker-compose.web-release.yml` without printing `.env.production` or unfiltered `docker compose config`. Compare the actual Compose files with the reviewed copies. If any live state is unknown, stop and investigate; the scripts refuse an unknown Web image or override. The original SSH failure occurred before the final preflight marker, consistent with an oversized Base64 command losing quoting. Its exact mutation point must be established from this audit; public HTTP 200 alone does not prove which image runs.
+Record the three Compose SHA-256 hashes, image IDs, container IDs, mounts, health, restart counts and resources. Containers without Docker health checks show `HEALTH none`; bind mounts without a volume name show their source path. Check for `docker-compose.web-release.yml` without printing `.env.production` or unfiltered `docker compose config`. Compare the actual Compose files with the reviewed copies. The operator's SSM audit found all five containers running with zero restarts, matching reviewed Compose hashes, the old Web image active and no Web override. Repeat the audit immediately before deployment to catch drift. The original SSH failure occurred before the final preflight marker, consistent with an oversized Base64 command losing quoting; public HTTP 200 alone does not prove which image runs.
 
 Create a local UTF-8 `reviewed-compose.sha256` containing exactly the three **approved live** hashes and names, in the standard `sha256sum` format:
 
@@ -24,7 +24,7 @@ Create a local UTF-8 `reviewed-compose.sha256` containing exactly the three **ap
 <64 hex digits>  docker-compose.backend-migration.override.yml
 ```
 
-Never fill this manifest from old notes. If SSH times out, use an already allowlisted operator network. These scripts do not add or revoke any security group rule; they cannot leave temporary access behind or remove another operator's rule. Do not open TCP/22 to the world.
+Never fill this manifest from old notes. SSM transport requires the configured AWS profile and pinned SSH host key; it does not require a fixed operator IP or inbound TCP/22. These scripts do not change security group rules.
 
 ## 2. Review the release gate
 
@@ -37,6 +37,7 @@ From Windows PowerShell, after the audit and approval:
 ```powershell
 .\deploy\aws-lightsail\Invoke-EchoWebRelease.ps1 `
   -ReviewedHashesFile .\reviewed-compose.sha256 `
+  -ConfigPath "$HOME\.ssh\echo-ssm.conf" `
   -ReleaseDirectory "$HOME\Downloads\echo-release-LTP-164d078ee0eb1bcfa2aa8c6379067d658e7904f8"
 ```
 
@@ -49,11 +50,11 @@ The smoke check requires Web `/login` HTTP 200, API `/health` HTTP 200, and both
 If rollout fails or SSH disconnects, audit first. If Web runs the target image and the known image-only override exists, this command can restore the existing immutable rollback tag:
 
 ```powershell
-.\deploy\aws-lightsail\Invoke-EchoWebRollback.ps1 -ReviewedHashesFile .\reviewed-compose.sha256
+.\deploy\aws-lightsail\Invoke-EchoWebRollback.ps1 -ReviewedHashesFile .\reviewed-compose.sha256 -ConfigPath "$HOME\.ssh\echo-ssm.conf"
 ```
 
 The wrapper prompts for `ROLLBACK WEB 164d078`. The remote rollback script verifies the rollback tag resolves to the exact previous image, recreates only Web with `--pull never --no-deps --no-build`, and verifies image identity, Web/API health and unchanged IDs of other services. It never restores PostgreSQL or MongoDB. If the current image or override is unknown, do not force the command; inspect and resolve the drift manually.
 
 ## CI/CD boundary
 
-CI validates Backend, Web, Linux images and release script syntax. The manual release workflow builds an immutable archive only after successful push CI for the exact SHA. Production credentials never enter GitHub Actions. The repository remains at **CI PASS → verified release → human approval/operator transport → smoke/rollback evidence**. Hosted runners cannot SSH through the restricted allowlist; OIDC/SSM would require approved IAM/instance changes and is outside this release.
+CI validates Backend, Web, Linux images and release script syntax. The manual release workflow builds an immutable archive only after successful push CI for the exact SHA. Production credentials never enter GitHub Actions. The repository remains at **CI PASS → verified release → human approval/operator SSM transport → smoke/rollback evidence**. The existing operator SSM profile is local; unattended GitHub deployment still requires a separately approved authentication and approval design.

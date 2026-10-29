@@ -31,7 +31,13 @@ if [[ "$1 $2" == 'image inspect' ]]; then
   elif [[ $format == *'RootFS.Layers'* ]]; then echo 9
   else exit 1; fi
 elif [[ $1 == inspect ]]; then
-  if [[ $3 == *'.RestartCount'* ]]; then echo 0
+  if [[ $3 == '{{json .}}' ]]; then
+    if [[ $4 == web-* ]]; then
+      printf '{"Id":"%s","Image":"%s","State":{"Status":"running"},"RestartCount":0,"Config":{"Labels":{}},"Mounts":[{"Type":"bind","Source":"/tmp/Caddyfile","Destination":"/etc/caddy/Caddyfile"}]}' "$4" "$MOCK_TARGET"
+    else
+      printf '{"Id":"%s","Image":"%s","State":{"Status":"running","Health":{"Status":"healthy"}},"RestartCount":0,"Config":{"Labels":{}},"Mounts":[{"Type":"volume","Name":"postgres_data","Destination":"/var/lib/postgresql/data"}]}' "$4" "$MOCK_OLD"
+    fi
+  elif [[ $3 == *'.RestartCount'* ]]; then echo 0
   elif [[ $4 == web-* ]]; then
     if [[ $(cat "$MOCK_STATE") == old ]]; then echo "$MOCK_OLD"; else echo "$MOCK_TARGET"; fi
   else exit 1; fi
@@ -107,9 +113,10 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
     (release / 'SHA256SUMS').write_bytes((combined_prefix + web_checksum + '  web-image.tar.gz\n').encode())
     (fakebin / 'docker').write_text(MOCK_DOCKER)
     (fakebin / 'curl').write_text(MOCK_CURL)
+    (fakebin / 'free').write_bytes(b'#!/usr/bin/env bash\necho memory-mock\n')
     if os.name == 'nt':
         (fakebin / 'python3').write_bytes(("#!/usr/bin/env bash\nexec '" + bash_path(sys.executable) + "' \"$@\"\n").encode())
-    for name in ('docker', 'curl', 'python3') if os.name == 'nt' else ('docker', 'curl'):
+    for name in ('docker', 'curl', 'free', 'python3') if os.name == 'nt' else ('docker', 'curl', 'free'):
         (fakebin / name).chmod(0o755)
     state = root / 'state'
     count = root / 'up-count'
@@ -158,4 +165,12 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
     result = run()
     assert result.returncode == 0 and 'WEB_DEPLOYED_ALREADY' in result.stdout
     assert count.read_text() == before, 'safe retry recreated Web'
+    audit = subprocess.run([BASH, '-c', 'PATH="$1:$PATH"; shift; export PATH; exec bash "$@"', 'bash',
+                            bash_path(fakebin), bash_path(ROOT / 'web-audit.sh')],
+                           env=env, capture_output=True, text=True)
+    assert audit.returncode == 0, audit.stderr
+    assert 'SERVICE web' in audit.stdout and 'HEALTH none' in audit.stdout
+    assert '/tmp/Caddyfile:/etc/caddy/Caddyfile' in audit.stdout
+    assert 'HEALTH healthy' in audit.stdout and 'postgres_data:/var/lib/postgresql/data' in audit.stdout
+    assert 'TEST_ONLY' not in audit.stdout
     print('CHECKSUM_IMAGE_ROLLBACK_RETRY_TESTS_PASS')
