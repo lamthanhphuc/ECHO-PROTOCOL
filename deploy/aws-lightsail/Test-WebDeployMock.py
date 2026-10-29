@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
     assert bash_path(fakebin) in curl_path, curl_path
 
     def run(**extra):
-        return subprocess.run([BASH, '-c', 'PATH="$1:$PATH"; shift; export PATH; exec "$@"', 'bash', bash_path(fakebin),
+        return subprocess.run([BASH, '-c', 'PATH="$1:$PATH"; shift; export PATH; exec bash "$@"', 'bash', bash_path(fakebin),
                                bash_path(ROOT / 'web-deploy.sh'), bash_path(scripts)],
                               env=env | extra, capture_output=True, text=True)
 
