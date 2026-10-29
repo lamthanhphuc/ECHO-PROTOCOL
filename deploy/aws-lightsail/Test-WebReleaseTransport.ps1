@@ -1,7 +1,32 @@
+param([string]$RealReleaseDirectory, [string]$RealBackupEvidenceDirectory)
 $ErrorActionPreference = 'Stop'
+function Get-Sha256([string]$path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($path)
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
 $temp = Join-Path ([IO.Path]::GetTempPath()) "echo-web-transport-test-$PID"
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
+    $audit = Join-Path $PSScriptRoot 'web-audit.sh'
+    if ([IO.File]::ReadAllBytes($audit) -contains 13) { throw 'Audit script has CRLF line endings' }
+    $bash = if (Test-Path -LiteralPath 'D:\Git\bin\bash.exe') { 'D:\Git\bin\bash.exe' } else { 'bash' }
+    $OutputEncoding = [Text.UTF8Encoding]::new($false)
+    Get-Content -LiteralPath $audit -Raw -Encoding UTF8 | & $bash -n
+    if ($LASTEXITCODE -ne 0) { throw 'Windows audit stdin transport failed Bash parsing' }
+    $global:AuditArgs = @()
+    $global:AuditInput = ''
+    function ssh {
+        begin { $global:AuditArgs = @($args) }
+        process { $global:AuditInput += [string]$_ }
+        end { $global:LASTEXITCODE = 0 }
+    }
+    Get-Content -LiteralPath $audit -Raw -Encoding UTF8 |
+        ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i 'fake-key' ubuntu@3.1.238.6 'sudo -n bash -s'
+    if ($global:AuditArgs[-1] -cne 'sudo -n bash -s' -or -not $global:AuditInput.StartsWith('#!/usr/bin/env bash')) {
+        throw 'Windows SSH audit argument or stdin quoting changed'
+    }
     $key = Join-Path $temp 'fake-key.pem'
     [IO.File]::WriteAllText($key, 'test-only')
     $reviewed = Join-Path $temp 'reviewed.sha256'
@@ -32,10 +57,10 @@ try {
     foreach ($name in @('postgres.dump', 'mongodb.archive.gz', 'production-comparison.csv')) {
         [IO.File]::WriteAllText((Join-Path $backup $name), 'test-only')
     }
-    $archiveHash = (Get-FileHash -LiteralPath (Join-Path $release 'web-image.tar.gz') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $archiveHash = Get-Sha256 (Join-Path $release 'web-image.tar.gz')
     [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), "$archiveHash  web-image.tar.gz`n")
     $backupLines = foreach ($name in @('postgres.dump', 'mongodb.archive.gz')) {
-        $hash = (Get-FileHash -LiteralPath (Join-Path $backup $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hash = Get-Sha256 (Join-Path $backup $name)
         "$hash  $name"
     }
     [IO.File]::WriteAllText((Join-Path $backup 'SHA256SUMS'), (($backupLines -join "`n") + "`n"))
@@ -44,14 +69,27 @@ try {
     if (@($global:Calls | Where-Object { $_ -match '^scp ' }).Count -ne 10) { throw 'Deploy transfer count mismatch' }
     if (-not @($global:Calls | Where-Object { $_ -match 'web-deploy\.sh' }).Count) { throw 'Deploy command missing' }
     $global:Calls = @()
-    [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (('0' * 64) + '  web-image.tar.gz'))
+    [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (('0' * 64) + "  backend-image.tar.gz`n$archiveHash  web-image.tar.gz`n"))
+    & (Join-Path $PSScriptRoot 'Invoke-EchoWebRelease.ps1') -ReviewedHashesFile $reviewed -ReleaseDirectory $release -BackupEvidenceDirectory $backup -KeyPath $key
+    if (@($global:Calls | Where-Object { $_ -match '^scp ' }).Count -ne 10 -or
+        @($global:Calls | Where-Object { $_ -match 'backend-image\.tar\.gz' }).Count -ne 0) { throw 'Combined release transferred Backend archive' }
+    $global:Calls = @()
+    [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (('0' * 64) + "  backend-image.tar.gz`n" + ('0' * 64) + '  web-image.tar.gz'))
     try {
-        & (Join-Path $PSScriptRoot 'Invoke-EchoWebRelease.ps1') -ReviewedHashesFile $reviewed -ReleaseDirectory $release -KeyPath $key
+        & (Join-Path $PSScriptRoot 'Invoke-EchoWebRelease.ps1') -ReviewedHashesFile $reviewed -ReleaseDirectory $release -BackupEvidenceDirectory $backup -KeyPath $key
         throw 'Checksum mismatch was accepted'
     } catch {
         if ($_.Exception.Message -notmatch 'Checksum mismatch') { throw }
     }
     if ($global:Calls.Count -ne 0) { throw 'Transport ran after checksum mismatch' }
+    [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (('0' * 64) + '  web-image.tar.gz'))
+    try {
+        & (Join-Path $PSScriptRoot 'Invoke-EchoWebRelease.ps1') -ReviewedHashesFile $reviewed -ReleaseDirectory $release -BackupEvidenceDirectory $backup -KeyPath $key
+        throw 'Web-only checksum mismatch was accepted'
+    } catch {
+        if ($_.Exception.Message -notmatch 'Checksum mismatch') { throw }
+    }
+    if ($global:Calls.Count -ne 0) { throw 'Transport ran after Web-only checksum mismatch' }
     $global:Calls = @()
     $global:FailRemote = $true
     $global:Approval = 'ROLLBACK WEB 164d078'
@@ -63,6 +101,13 @@ try {
     }
     if (-not @($global:Calls | Where-Object { $_ -match 'web-rollback\.sh' }).Count) { throw 'Remote failure was not exercised' }
     if (Test-Path -LiteralPath (Join-Path ([IO.Path]::GetTempPath()) "echo-web-cd-$PID")) { throw 'Temporary transport files survived failure' }
+    if ($RealReleaseDirectory) {
+        $global:FailRemote = $false
+        $global:Approval = 'DEPLOY WEB 164d078'
+        $global:Calls = @()
+        & (Join-Path $PSScriptRoot 'Invoke-EchoWebRelease.ps1') -ReviewedHashesFile $reviewed -ReleaseDirectory $RealReleaseDirectory -BackupEvidenceDirectory $RealBackupEvidenceDirectory -KeyPath $key
+        if (@($global:Calls | Where-Object { $_ -match 'backend-image\.tar\.gz' }).Count -ne 0) { throw 'Real combined release transferred Backend archive' }
+    }
     'TRANSPORT_AND_CHECKSUM_TESTS_PASS'
 }
 finally {

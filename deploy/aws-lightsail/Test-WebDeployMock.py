@@ -101,7 +101,10 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
     (release / 'web-image-id.txt').write_text('sha256:' + hashlib.sha256(config).hexdigest())
     (release / 'COMMIT').write_text(SHA)
     archive = release / 'web-image.tar.gz'
-    (release / 'SHA256SUMS').write_bytes((hashlib.sha256(archive.read_bytes()).hexdigest() + '  web-image.tar.gz\n').encode())
+    web_checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+    combined_prefix = '0' * 64 + '  backend-image.tar.gz\n'
+    assert not (release / 'backend-image.tar.gz').exists()
+    (release / 'SHA256SUMS').write_bytes((combined_prefix + web_checksum + '  web-image.tar.gz\n').encode())
     (fakebin / 'docker').write_text(MOCK_DOCKER)
     (fakebin / 'curl').write_text(MOCK_CURL)
     if os.name == 'nt':
@@ -124,10 +127,10 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
                               env=env | extra, capture_output=True, text=True)
 
     state.write_bytes(b'old\n')
-    (release / 'SHA256SUMS').write_bytes(('0' * 64 + '  web-image.tar.gz\n').encode())
+    (release / 'SHA256SUMS').write_bytes((combined_prefix + '0' * 64 + '  web-image.tar.gz\n').encode())
     result = run()
     assert result.returncode != 0 and not count.exists(), 'checksum mismatch reached deployment'
-    (release / 'SHA256SUMS').write_bytes((hashlib.sha256(archive.read_bytes()).hexdigest() + '  web-image.tar.gz\n').encode())
+    (release / 'SHA256SUMS').write_bytes((combined_prefix + web_checksum + '  web-image.tar.gz\n').encode())
     result = run(MOCK_TARGET_ID='sha256:wrong')
     assert result.returncode != 0 and not count.exists(), 'image mismatch reached deployment'
     result = run(MOCK_UP_FAIL='1')
@@ -145,6 +148,7 @@ with tempfile.TemporaryDirectory(prefix='echo-web-mock-') as folder:
     assert state.read_text().strip() == 'old', 'health failure did not roll back'
     result = run(MOCK_UP_FAIL='1', MOCK_ROLLBACK_FAIL='1')
     assert result.returncode == 2 and 'CRITICAL_WEB_ROLLBACK_FAILED' in result.stderr, (result.stdout, result.stderr)
+    (release / 'SHA256SUMS').write_bytes((web_checksum + '  web-image.tar.gz\n').encode())
     override.write_bytes(('services:\n  web:\n    image: aws-lightsail-web:' + SHA + '\n').encode())
     state.write_bytes(b'old\n')
     result = run()

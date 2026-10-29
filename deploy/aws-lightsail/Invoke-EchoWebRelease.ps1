@@ -14,6 +14,13 @@ $hostName = 'ubuntu@3.1.238.6'
 $scriptDir = $PSScriptRoot
 $files = @('web-deploy.sh', 'web-rollback.sh', 'web-smoke.sh', 'web-audit.sh')
 
+function Get-Sha256([string]$path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($path)
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
+
 function Assert-ChecksumFile([string]$directory, [string]$file, [string[]]$required) {
     $lines = @(Get-Content -LiteralPath (Join-Path $directory $file))
     $found = @()
@@ -22,7 +29,7 @@ function Assert-ChecksumFile([string]$directory, [string]$file, [string[]]$requi
         $expected = $Matches[1]
         $name = $Matches[2]
         $found += $name
-        $actual = (Get-FileHash -LiteralPath (Join-Path $directory $name) -Algorithm SHA256).Hash
+        $actual = Get-Sha256 (Join-Path $directory $name)
         if ($actual -ine $expected) { throw "Checksum mismatch: $name" }
     }
     foreach ($name in $required) { if ($name -notin $found) { throw "Missing checksum: $name" } }
@@ -42,8 +49,19 @@ foreach ($name in $requiredHashes) { if ($name -notin $hashNames) { throw "Missi
 if ($Action -eq 'Deploy') {
     if (-not $ReleaseDirectory) { throw 'ReleaseDirectory is required' }
     if ((Get-Content -LiteralPath (Join-Path $ReleaseDirectory 'COMMIT') -Raw).Trim() -cne $sha) { throw 'Release commit mismatch' }
-    Assert-ChecksumFile $ReleaseDirectory 'SHA256SUMS' @('web-image.tar.gz')
-    if (@(Get-Content -LiteralPath (Join-Path $ReleaseDirectory 'SHA256SUMS')).Count -ne 1) { throw 'Expected a Web-only release archive' }
+    $releaseEntries = @(Get-Content -LiteralPath (Join-Path $ReleaseDirectory 'SHA256SUMS'))
+    $releaseNames = @()
+    foreach ($line in $releaseEntries) {
+        if ($line -cnotmatch '^([0-9a-fA-F]{64})  (backend-image\.tar\.gz|web-image\.tar\.gz)$') { throw 'Invalid release checksum manifest' }
+        $releaseNames += $Matches[2]
+        if ($Matches[2] -eq 'web-image.tar.gz') {
+            $actual = Get-Sha256 (Join-Path $ReleaseDirectory 'web-image.tar.gz')
+            if ($actual -ine $Matches[1]) { throw 'Checksum mismatch: web-image.tar.gz' }
+        }
+    }
+    if ($releaseNames.Count -lt 1 -or $releaseNames.Count -gt 2 -or
+        @($releaseNames | Sort-Object -Unique).Count -ne $releaseNames.Count -or
+        'web-image.tar.gz' -notin $releaseNames) { throw 'Expected a Web-only or combined release manifest' }
     Assert-ChecksumFile $BackupEvidenceDirectory 'SHA256SUMS' @('postgres.dump', 'mongodb.archive.gz')
     if (-not (Test-Path -LiteralPath (Join-Path $BackupEvidenceDirectory 'production-comparison.csv'))) { throw 'Restore comparison evidence missing' }
 }
@@ -56,10 +74,10 @@ New-Item -ItemType Directory -Path $tempDir -ErrorAction Stop | Out-Null
 try {
     [IO.File]::WriteAllText((Join-Path $tempDir 'reviewed-compose.sha256'), (($hashLines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
     $manifest = foreach ($name in $files) {
-        $digest = (Get-FileHash -LiteralPath (Join-Path $scriptDir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        $digest = Get-Sha256 (Join-Path $scriptDir $name)
         "$digest  $name"
     }
-    $reviewedDigest = (Get-FileHash -LiteralPath (Join-Path $tempDir 'reviewed-compose.sha256') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $reviewedDigest = Get-Sha256 (Join-Path $tempDir 'reviewed-compose.sha256')
     $manifest += "$reviewedDigest  reviewed-compose.sha256"
     [IO.File]::WriteAllText((Join-Path $tempDir 'scripts.sha256'), (($manifest -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
     $sshOptions = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '-i', $KeyPath)

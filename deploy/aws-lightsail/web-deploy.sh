@@ -31,14 +31,23 @@ on_exit() {
 trap on_exit EXIT
 trap 'exit 1' HUP INT TERM
 test "$(cat "$release/COMMIT")" = "$sha"
-(cd "$release" && sha256sum -c SHA256SUMS >/dev/null)
-python3 - "$release/web-image.tar.gz" "$release/web-image-id.txt" <<'PY'
-import hashlib, json, sys, tarfile
-with tarfile.open(sys.argv[1], 'r:gz') as archive:
+python3 - "$release/SHA256SUMS" "$release/web-image.tar.gz" "$release/web-image-id.txt" <<'PY'
+import hashlib, json, pathlib, re, sys, tarfile
+entries = [re.fullmatch(r'([0-9a-fA-F]{64})  (backend-image\.tar\.gz|web-image\.tar\.gz)', line)
+           for line in pathlib.Path(sys.argv[1]).read_text().splitlines()]
+assert entries and all(entries)
+checksums = {entry[2]: entry[1].lower() for entry in entries}
+assert len(entries) == len(checksums) and 'web-image.tar.gz' in checksums
+digest = hashlib.sha256()
+with open(sys.argv[2], 'rb') as image:
+    for chunk in iter(lambda: image.read(1024 * 1024), b''):
+        digest.update(chunk)
+assert digest.hexdigest() == checksums['web-image.tar.gz'], 'Web archive checksum mismatch'
+with tarfile.open(sys.argv[2], 'r:gz') as archive:
     manifest = json.load(archive.extractfile('manifest.json'))
     assert len(manifest) == 1
     config = archive.extractfile(manifest[0]['Config']).read()
-    assert 'sha256:' + hashlib.sha256(config).hexdigest() == open(sys.argv[2], encoding='utf-8').read().strip()
+    assert 'sha256:' + hashlib.sha256(config).hexdigest() == pathlib.Path(sys.argv[3]).read_text().strip()
 PY
 test "$(docker image inspect "$tag" --format '{{.Id}}')" = "$target"
 test "$(docker image inspect "$tag" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$sha"

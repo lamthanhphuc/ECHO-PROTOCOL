@@ -6,11 +6,12 @@ Target: `LTP@164d078ee0eb1bcfa2aa8c6379067d658e7904f8`, [release run 40823239311
 
 ## 1. Read-only state audit
 
-From Windows PowerShell on an existing SSH-allowlisted network, with the reviewed repository checked out:
+From Windows PowerShell on an existing SSH-allowlisted network, with the reviewed PR branch checked out. The `.gitattributes` file keeps `web-audit.sh` in LF format; the command pipes UTF-8 text to remote `bash -s` without a long SSH argument:
 
 ```powershell
-Get-Content -LiteralPath .\deploy\aws-lightsail\web-audit.sh -Raw |
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$HOME\Downloads\echo-protocol-ec2-key.pem" ubuntu@3.1.238.6 'sudo -n bash -s'
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+Get-Content -LiteralPath .\deploy\aws-lightsail\web-audit.sh -Raw -Encoding UTF8 |
+  ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -i "$HOME\Downloads\echo-protocol-ec2-key.pem" ubuntu@3.1.238.6 'sudo -n bash -s'
 ```
 
 Record the three Compose SHA-256 hashes, image IDs, container IDs, mounts, health, restart counts and resources. Check for `docker-compose.web-release.yml` without printing `.env.production` or unfiltered `docker compose config`. Compare the actual Compose files with the reviewed copies. If any live state is unknown, stop and investigate; the scripts refuse an unknown Web image or override. The original SSH failure occurred before the final preflight marker, consistent with an oversized Base64 command losing quoting. Its exact mutation point must be established from this audit; public HTTP 200 alone does not prove which image runs.
@@ -27,7 +28,7 @@ Never fill this manifest from old notes. If SSH times out, use an already allowl
 
 ## 2. Review the release gate
 
-Confirm the approved Web-only maintenance window and absence of live work that cannot tolerate a Web restart. Verify the existing secure backup at `D:\ECHO_PROTOCOL_SECURE_BACKUPS\pre-release-ltp-20261029T061910Z` and its restore/count comparison. Verify that the artifact directory contains `COMMIT`, `SHA256SUMS`, `web-image-id.txt`, and `web-image.tar.gz`. Its `COMMIT` must be the full target SHA. The PowerShell wrapper checks backup and release hashes before requesting the operator confirmation. No backup contents or secrets are uploaded; only the Web release archive and reviewed scripts are transferred.
+Confirm the approved Web-only maintenance window and absence of live work that cannot tolerate a Web restart. Verify the existing secure backup at `D:\ECHO_PROTOCOL_SECURE_BACKUPS\pre-release-ltp-20261029T061910Z` and its restore/count comparison. Release run `40823239311` used `services=both`: `SHA256SUMS` contains Backend and Web archive entries. The Web-only operator path requires `COMMIT`, `SHA256SUMS`, `web-image-id.txt`, and `web-image.tar.gz`; it accepts either one Web entry or Backend plus Web entries, verifies the **Web** archive hash and target commit, and transfers only Web files. The Backend archive is never loaded or deployed by this path. No backup contents or secrets are uploaded.
 
 ## 3. Human-approved Web rollout
 
@@ -39,7 +40,7 @@ From Windows PowerShell, after the audit and approval:
   -ReleaseDirectory "$HOME\Downloads\echo-release-LTP-164d078ee0eb1bcfa2aa8c6379067d658e7904f8"
 ```
 
-The wrapper prompts for `DEPLOY WEB 164d078`, transfers reviewed Bash files through SCP, verifies their SHA-256 and syntax on EC2, then calls a short remote command. The remote script compares the effective three-file Compose JSON with a fourth image-only override and requires that **only `services.web.image` changes**. It rejects unknown overrides, missing backups/release files, incorrect image identity, or baseline health failures. `docker compose up -d --pull never --no-deps --no-build --force-recreate web` is the only service replacement. On failure after replacement begins, it attempts Web-only rollback and reports an explicit critical state if rollback fails. An interrupted SSH session has an unknown result: repeat the read-only audit before retrying.
+The wrapper prompts for `DEPLOY WEB 164d078`, transfers reviewed Bash files through SCP, verifies their SHA-256 and syntax on EC2, then calls a short remote command. The remote script validates the transferred Web archive against its entry in the original `SHA256SUMS`; it does not require the Backend archive. It compares the effective three-file Compose JSON with a fourth image-only override and requires that **only `services.web.image` changes**. It rejects unknown overrides, missing Web files, incorrect image identity, or baseline health failures. `docker compose up -d --pull never --no-deps --no-build --force-recreate web` is the only service replacement. On failure after replacement begins, it attempts Web-only rollback and reports an explicit critical state if rollback fails. An interrupted SSH session has an unknown result: repeat the read-only audit before retrying.
 
 The smoke check requires Web `/login` HTTP 200, API `/health` HTTP 200, and both database checks Healthy. The deploy script also verifies the running Web image and unchanged Backend, PostgreSQL, MongoDB and Caddy IDs. The operator must review fresh Web logs and test authentication with a designated account without printing credentials. Record the final Web container ID, image ID and restart counts.
 
