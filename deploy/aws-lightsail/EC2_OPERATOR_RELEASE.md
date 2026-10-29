@@ -43,31 +43,32 @@ test -n "$pg" && test -n "$mongo"
 docker exec "$pg" sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom --no-owner --no-acl' > "$backup/postgres.dump"
 docker exec "$mongo" sh -c 'exec mongodump --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive --gzip' > "$backup/mongodb.archive.gz"
 test -s "$backup/postgres.dump" && test -s "$backup/mongodb.archive.gz"
-gzip -t "$backup/mongodb.archive.gz"
 docker exec -i "$pg" pg_restore --list < "$backup/postgres.dump" > "$backup/postgres.contents.txt"
 (cd "$backup" && sha256sum postgres.dump mongodb.archive.gz > SHA256SUMS)
 ```
 
-Restore **both** backups on disposable containers before changing production. Use a unique test network and no production volume; the example keeps test data in disposable container filesystems. Docker removal below applies only to these named test containers/network after evidence is captured.
+MongoDB 8 Database Tools produced a standard gzip stream in an isolated test of `mongodump --archive --gzip` to stdout (`1f 8b` header; `gzip -t` passed). Still validate the actual backup with `mongorestore --dryRun` and a real restore. Running two more databases beside five production containers on a 2 GiB `t3.small` risks memory exhaustion. With explicit approval to transfer production backups, copy them to a trusted operator workstation with sufficient disk/RAM and encrypted local storage; never upload them to GitHub or a public artifact. Verify `SHA256SUMS` after transfer. Run the following **off EC2**, in a Bash shell with Docker Engine, from the transferred backup directory. The test containers have no network or production volume and run one at a time. If migrations are pending, apply and check the reviewed SQL on the restored PostgreSQL database before its `docker rm` line.
 
 ```bash
-docker network create --internal echo-release-restore-test
-docker run -d --name echo-release-pg-test --network echo-release-restore-test -e POSTGRES_PASSWORD=isolated-test-only postgres:16
-docker run -d --name echo-release-mongo-test --network echo-release-restore-test -e GLIBC_TUNABLES=glibc.pthread.rseq=1 mongo:8.0
+backup=$PWD
+sha256sum -c SHA256SUMS
+docker run -d --name echo-release-pg-test --network none -e POSTGRES_PASSWORD=isolated-test-only postgres:16
 until docker exec echo-release-pg-test pg_isready -U postgres >/dev/null 2>&1; do sleep 2; done
-until docker exec echo-release-mongo-test mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; do sleep 2; done
 docker exec echo-release-pg-test createdb -U postgres release_restore
 docker exec -i echo-release-pg-test pg_restore -U postgres -d release_restore --exit-on-error < "$backup/postgres.dump"
 docker exec echo-release-pg-test psql -U postgres -d release_restore -Atqc 'SELECT count(*) FROM "__EFMigrationsHistory"'
+docker rm -f echo-release-pg-test
+docker run -d --name echo-release-mongo-test --network none -e GLIBC_TUNABLES=glibc.pthread.rseq=1 mongo:8.0
+until docker exec echo-release-mongo-test mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; do sleep 2; done
+docker exec -i echo-release-mongo-test mongorestore --dryRun --archive --gzip < "$backup/mongodb.archive.gz"
 docker exec -i echo-release-mongo-test mongorestore --archive --gzip < "$backup/mongodb.archive.gz"
 docker exec echo-release-mongo-test mongosh --quiet --eval 'printjson(db.adminCommand({listDatabases:1}).databases.map(x=>[x.name,x.sizeOnDisk]))'
 ```
 
-Review collection counts and representative PostgreSQL table counts against read-only production queries. Apply any proposed idempotent EF SQL to the **isolated** restored database first, check data retention, then approve a separate production migration. Startup migration and admin seed must remain disabled. A changed schema may make the old Backend image unsafe; decide rollback compatibility before rollout. Cleanup only the named disposable containers/network after recording restore evidence:
+Review collection counts and representative PostgreSQL table counts against read-only production queries. Apply any proposed idempotent EF SQL to the **isolated** restored database before removing it, check data retention, then approve a separate production migration. Startup migration and admin seed must remain disabled. A changed schema may make the old Backend image unsafe; decide rollback compatibility before rollout. Cleanup only the named disposable Mongo container after recording restore evidence:
 
 ```bash
-docker rm -f echo-release-pg-test echo-release-mongo-test
-docker network rm echo-release-restore-test
+docker rm -f echo-release-mongo-test
 ```
 
 ## Approved Backend rollout
@@ -99,7 +100,7 @@ printf '%s\n' "$old_id" > "$backup/backend-image-id-before.txt"
 chmod 600 "$backup/.env.production"
 gzip -dc "$release/backend-image.tar.gz" | docker load
 test "$(docker image inspect "aws-lightsail-backend:$sha" --format '{{.Id}}')" = "$(cat "$release/backend-image-id.txt")"
-test "$(docker image inspect "aws-lightsail-backend:$sha" --format '{{.Config.Labels.org.opencontainers.image.revision}}')" = "$sha"
+test "$(docker image inspect "aws-lightsail-backend:$sha" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$sha"
 test "$(docker image inspect "aws-lightsail-backend:$sha" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
 printf 'services:\n  backend:\n    image: aws-lightsail-backend:%s\n' "$sha" > docker-compose.backend-release.yml
 chmod 600 docker-compose.backend-release.yml
