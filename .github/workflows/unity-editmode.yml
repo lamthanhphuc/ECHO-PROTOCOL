@@ -1,0 +1,79 @@
+name: Unity EditMode Phase 1
+
+on:
+  pull_request:
+    branches: [LTP]
+    paths:
+      - ".github/workflows/unity-editmode.yml"
+      - "scripts/check_unity_editmode_results.py"
+      - "tests/test_check_unity_editmode_results.py"
+      - "KLTN/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  result-gate-tests:
+    name: Unity XML gate unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test result validator
+        run: |
+          python3 -m unittest discover \
+            -s tests \
+            -p "test_check_unity_editmode_results.py" \
+            -v
+
+  unity-editmode:
+    name: Unity EditMode (manual baseline)
+    if: github.event_name == 'workflow_dispatch'
+    needs: result-gate-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Require Unity license
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [[ -z "$UNITY_LICENSE" ]]; then
+            echo "::error::UNITY_LICENSE is not configured"
+            exit 1
+          fi
+
+      - name: Run Unity EditMode tests
+        id: unity
+        continue-on-error: true
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: KLTN
+          unityVersion: 6000.5.8f1
+          testMode: editmode
+          artifactsPath: artifacts/editmode
+
+      - name: Validate NUnit results
+        if: always()
+        run: |
+          python3 scripts/check_unity_editmode_results.py \
+            artifacts/editmode \
+            "${{ steps.unity.outcome }}"
+
+      - name: Upload Unity test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-editmode-results
+          path: artifacts/editmode/
+          if-no-files-found: warn
+          retention-days: 14
