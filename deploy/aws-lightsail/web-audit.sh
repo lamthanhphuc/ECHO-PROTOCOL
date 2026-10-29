@@ -21,7 +21,13 @@ fi
 for service in backend web caddy postgres mongodb; do
   id=$(docker compose -p echo-protocol --env-file .env.production "${files[@]}" ps -q "$service")
   test -n "$id" || { echo "Missing container: $service" >&2; exit 1; }
-  docker inspect --format "SERVICE $service ID={{.Id}} IMAGE={{.Image}} STATUS={{.State.Status}} HEALTH={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} RESTARTS={{.RestartCount}} COMPOSE_FILES={{index .Config.Labels \"com.docker.compose.project.config_files\"}} MOUNTS={{range .Mounts}}{{.Name}}:{{.Destination}} {{end}}" "$id"
+  docker inspect --format '{{json .}}' "$id" | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+state=d.get("State") or {}
+health=(state.get("Health") or {}).get("Status") or "none"
+mounts=[(m.get("Name") or m.get("Source") or "?")+":"+(m.get("Destination") or "?") for m in d.get("Mounts") or []]
+files=(d.get("Config") or {}).get("Labels") or {}
+print("SERVICE",sys.argv[1],"ID",d.get("Id"),"IMAGE",d.get("Image"),"STATUS",state.get("Status"),"HEALTH",health,"RESTARTS",d.get("RestartCount"),"COMPOSE_FILES",files.get("com.docker.compose.project.config_files"),"MOUNTS",mounts)' "$service"
 done
 df -h "$root"
 free -h
