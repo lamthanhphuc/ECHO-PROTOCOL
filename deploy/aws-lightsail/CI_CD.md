@@ -1,5 +1,7 @@
 # ECHO PROTOCOL CI and EC2 release candidates
 
+For the current LTP Web-only operator release, see [WEB_RELEASE_164d078.md](WEB_RELEASE_164d078.md). It uses SCP-transferred, checksum-checked scripts and keeps production deployment behind the human gate.
+
 ## What runs now
 
 - `.github/workflows/aed-backend.yml` checks pull requests and pushes to `LTP` and `main`: the mirrored AED contract when that script exists, .NET 8 solution build, all Backend tests with isolated PostgreSQL 16 and MongoDB 8 (`GLIBC_TUNABLES=glibc.pthread.rseq=1`), plus Next.js lint, typecheck and build. A separate job also builds both `linux/amd64` Docker images on the hosted runner. It uploads Backend TRX, Web check logs and image IDs. A zero-test run fails.
