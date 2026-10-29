@@ -117,6 +117,14 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate operator release scripts
+        run: |
+          bash -n deploy/aws-lightsail/web-{audit,smoke,deploy,rollback}.sh
+          shellcheck deploy/aws-lightsail/web-{audit,smoke,deploy,rollback}.sh
+          pwsh -NoProfile -Command '$errors = $null; Get-ChildItem deploy/aws-lightsail/Invoke-EchoWeb*.ps1 | ForEach-Object { [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null }; if ($errors) { $errors | Write-Output; exit 1 }'
+          pwsh -NoProfile -File deploy/aws-lightsail/Test-WebReleaseTransport.ps1
+          python3 deploy/aws-lightsail/Test-WebDeployMock.py
+          python3 deploy/aws-lightsail/Test-WebComposeConfig.py
       - name: Build linux/amd64 application images
         run: |
           docker build --platform linux/amd64 -t "echo-ci-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
