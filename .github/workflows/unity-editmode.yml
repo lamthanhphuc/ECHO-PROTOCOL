@@ -1,4 +1,4 @@
-name: Unity EditMode Phase 1
+name: Unity CI Phase 1
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
     name: Unity XML gate unit tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Test result validator
         run: |
@@ -27,53 +27,72 @@ jobs:
             -p "test_check_unity_editmode_results.py" \
             -v
 
-  unity-editmode:
-    name: Unity EditMode (manual baseline)
+  unity-tests:
+    name: Unity ${{ matrix.mode }} (manual baseline)
     if: github.event_name == 'workflow_dispatch'
     needs: result-gate-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: EditMode
+            runner: editmode
+          - mode: PlayMode
+            runner: playmode
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-
       - name: Require Unity license
+        id: license
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         run: |
-          if [[ -z "$UNITY_LICENSE" ]]; then
-            echo "::error::UNITY_LICENSE is not configured"
+          if [[ -z "$UNITY_LICENSE" && -z "$UNITY_SERIAL" ]]; then
+            echo "::error::Unity license activation is not configured"
             exit 1
           fi
 
-      - name: Run Unity EditMode tests
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          lfs: true
+
+      - name: Verify LFS checkout and runner disk
+        run: |
+          git lfs fsck
+          df -h .
+
+      - name: Run Unity ${{ matrix.mode }} tests
         id: unity
         continue-on-error: true
-        uses: game-ci/unity-test-runner@v4
+        uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         with:
           projectPath: KLTN
           unityVersion: 6000.5.8f1
-          testMode: editmode
-          artifactsPath: artifacts/editmode
+          testMode: ${{ matrix.runner }}
+          cliVersion: v0.1.72
+          coverageEnabled: false
+          artifactsPath: artifacts/${{ matrix.mode }}
 
       - name: Validate NUnit results
-        if: always()
+        if: always() && steps.license.outcome == 'success'
         run: |
           python3 scripts/check_unity_editmode_results.py \
-            artifacts/editmode \
-            "${{ steps.unity.outcome }}"
+            artifacts/${{ matrix.mode }} \
+            "${{ steps.unity.outcome }}" \
+            "${{ matrix.mode }}"
 
       - name: Upload Unity test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: unity-editmode-results
-          path: artifacts/editmode/
+          name: unity-${{ matrix.mode }}-results
+          path: artifacts/${{ matrix.mode }}/
           if-no-files-found: warn
           retention-days: 14

@@ -37,8 +37,20 @@ class NUnitGateTests(unittest.TestCase):
         self.write_report()
         summary = verify_results(self.folder, "success")
         self.assertIn("2 passed", summary)
+        self.assertIn("0 failed", summary)
         self.assertIn("0 skipped", summary)
+        self.assertIn("0 inconclusive", summary)
         self.assertIn("2 total", summary)
+
+    def test_nested_gameci_result(self):
+        (self.folder / "editmode").mkdir()
+        self.folder = self.folder / "editmode"
+        self.write_report()
+        self.assertIn("2 total", verify_results(self.folder.parent, "success"))
+
+    def test_playmode_summary(self):
+        self.write_report()
+        self.assertIn("Unity PlayMode:", verify_results(self.folder, "success", "PlayMode"))
 
     def test_runner_outcome_not_success(self):
         self.write_report()
@@ -80,6 +92,21 @@ class NUnitGateTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             verify_results(self.folder, "success")
         self.assertIn("Negative NUnit counter", str(ctx.exception))
+
+    def test_multiple_results_rejected(self):
+        self.write_report()
+        (self.folder / "other.xml").write_text(
+            (self.folder / "editmode-results.xml").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "Expected one NUnit XML"):
+            verify_results(self.folder, "success")
+
+    def test_missing_counter_rejected(self):
+        (self.folder / "editmode-results.xml").write_text(
+            '<test-run total="1" passed="1" result="Passed"/>', encoding="utf-8"
+        )
+        with self.assertRaises(KeyError):
+            verify_results(self.folder, "success")
 
 
 if __name__ == "__main__":

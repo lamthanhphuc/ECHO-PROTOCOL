@@ -12,6 +12,8 @@ using Assert = NUnit.Framework.Assert;
 
 public sealed class AlienHuntSceneTests
 {
+    [System.Serializable] private sealed class HomePositions { public Vector3[] Values; }
+
     [Test]
     public void PreparedSceneHasNineSingleColorAliensAndUsableFurnaces() => Validate();
 
@@ -87,7 +89,12 @@ public sealed class AlienHuntSceneTests
             .Select(a => a.transform.position)
             .ToArray();
 
-        yield return new EnterPlayMode(false);
+        SessionState.SetString("EchoProtocol.AlienHuntTestHomes", JsonUtility.ToJson(new HomePositions { Values = authoredHomes }));
+        yield return new EnterPlayMode(!EditorSettings.enterPlayModeOptionsEnabled ||
+            (EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload) == 0);
+        var savedHomes = JsonUtility.FromJson<HomePositions>(SessionState.GetString("EchoProtocol.AlienHuntTestHomes", ""));
+        Assert.That(savedHomes, Is.Not.Null, "Pre-Play alien homes were lost during domain reload.");
+        authoredHomes = savedHomes.Values;
         float initializationDeadline = Time.realtimeSinceStartup + 10f;
         while ((!AlienHuntMission.Instance || !AlienHuntMission.Instance.Ready)
             && Time.realtimeSinceStartup < initializationDeadline) yield return null;
