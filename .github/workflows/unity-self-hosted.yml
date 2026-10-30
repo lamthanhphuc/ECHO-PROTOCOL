@@ -1,0 +1,66 @@
+name: Unity tests (trusted Windows runner)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unity-tests:
+    if: github.ref == 'refs/heads/LTP' || github.ref == 'refs/heads/ci/unity-editmode-phase1'
+    name: Unity ${{ matrix.mode }}
+    runs-on: [self-hosted, Windows, X64, echo-unity-ci]
+    timeout-minutes: 120
+    concurrency:
+      group: echo-unity-ci-runner
+      cancel-in-progress: false
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        mode: [EditMode, PlayMode]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Verify LFS checkout
+        run: git lfs fsck
+
+      - name: Run Unity ${{ matrix.mode }} tests
+        id: unity
+        continue-on-error: true
+        shell: pwsh
+        env:
+          TEST_MODE: ${{ matrix.mode }}
+        run: |
+          $editor = 'C:\Program Files\Unity\Hub\Editor\6000.5.8f1\Editor\Unity.exe'
+          if (-not (Test-Path -LiteralPath $editor)) { throw "Unity 6000.5.8f1 is missing: $editor" }
+          $project = Join-Path $env:GITHUB_WORKSPACE 'KLTN'
+          $output = Join-Path $env:GITHUB_WORKSPACE "artifacts/$env:TEST_MODE"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $arguments = @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $env:TEST_MODE,
+            '-testResults', (Join-Path $output 'results.xml'), '-logFile', (Join-Path $output 'Editor.log'))
+          if ($env:TEST_MODE -eq 'EditMode') { $arguments += '-nographics' }
+          & $editor @arguments
+          exit $LASTEXITCODE
+
+      - name: Validate NUnit results
+        if: always()
+        shell: pwsh
+        env:
+          TEST_MODE: ${{ matrix.mode }}
+          RUNNER_OUTCOME: ${{ steps.unity.outcome }}
+        run: python scripts/check_unity_editmode_results.py "artifacts/$env:TEST_MODE" $env:RUNNER_OUTCOME $env:TEST_MODE
+
+      - name: Upload Unity test artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unity-${{ matrix.mode }}-results
+          path: artifacts/${{ matrix.mode }}/
+          if-no-files-found: warn
+          retention-days: 14
