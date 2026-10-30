@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using EchoProtocol.Settings;
 using UnityEngine.EventSystems;
 using UnityEngine;
 using UnityEngine.UI;
@@ -52,10 +53,9 @@ namespace EchoProtocol.UI.MainMenu
             }
             if (avatarImage != null)
             {
-                avatarImage.sprite = portrait;
+                avatarImage.sprite = null;
                 avatarImage.preserveAspect = true;
-                avatarImage.color = portrait != null
-                    ? Hex("B4B0A3") : Hex("37302A");
+                avatarImage.color = Hex("37302A");
                 avatarImage.raycastTarget = false;
             }
             if (avatarInitialsText != null)
@@ -69,10 +69,10 @@ namespace EchoProtocol.UI.MainMenu
             {
                 nameText.text = mode == LeaderboardMode.Team
                     ? (string.IsNullOrWhiteSpace(entry.squadLabel)
-                        ? "UNNAMED SQUAD" : entry.squadLabel)
+                        ? GameLanguage.Choose("ĐỘI CHƯA ĐẶT TÊN", "UNNAMED SQUAD") : entry.squadLabel)
                         + "\n" + SquadMembers(entry.players)
                     : (string.IsNullOrWhiteSpace(entry.displayName)
-                        ? "UNKNOWN OPERATIVE" : entry.displayName);
+                        ? GameLanguage.Choose("NGƯỜI CHƠI", "UNKNOWN OPERATIVE") : entry.displayName);
                 nameText.fontSize = mode == LeaderboardMode.Team ? 12 : 15;
                 nameText.fontStyle = mode == LeaderboardMode.Team
                     ? FontStyle.Normal : FontStyle.Bold;

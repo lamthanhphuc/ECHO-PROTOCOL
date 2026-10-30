@@ -21,5 +21,18 @@ namespace EchoProtocol.Profile
     public long experiencePoints;
     public int level;
     public int walletBalance;
+    public PlayerActivityDto recentMatch;
+    public PlayerActivityDto latestWin;
+    public PlayerActivityDto latestNonSurvival;
+  }
+
+  [Serializable]
+  public sealed class PlayerActivityDto
+  {
+    public string matchId;
+    public string endedAtUtc;
+    public string mapId;
+    public string outcome;
+    public int durationSeconds;
   }
 }

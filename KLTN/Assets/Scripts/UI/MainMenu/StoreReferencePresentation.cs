@@ -78,8 +78,11 @@ namespace EchoProtocol.UI.MainMenu
                     var caption=node.GetComponentInChildren<Text>();
                     if(caption!=null)caption.text=EchoProtocol.Settings.GameLanguage.Choose("Quay lại","Back");
                 }
-                if(graphic!=null && node.name=="CreditsBox")graphic.color=Color.clear;
             }
+            var creditsBox=window.Find("CreditsBox") as RectTransform;
+            UtilityBarStyle.Credits(creditsBox);
+            UtilityBarStyle.PositionAtSafeTopRight(creditsBox,UtilityBarStyle.CreditsWidth,
+                4f*(UtilityBarStyle.ButtonSize+UtilityBarStyle.Gap));
             string[] names={"CharacterButton","TeamToolButton","PetButton"};
             for(int i=0;i<names.Length;i++)
             {
@@ -104,6 +107,8 @@ namespace EchoProtocol.UI.MainMenu
             foreach(var label in GetComponentsInChildren<Text>(true))Names.Remove(label);
         }
         private Transform _headerContent;
+        private Vector2Int _utilityScreenSize;
+        private Rect _utilitySafeArea;
         private Text _headerName, _headerTitle;
         private string _headerSource, _headerOutput;
         private static readonly System.Collections.Generic.Dictionary<Text,string> Names = new System.Collections.Generic.Dictionary<Text,string>();
@@ -130,11 +135,21 @@ namespace EchoProtocol.UI.MainMenu
         }
         private void LateUpdate()
         {
+            if(_utilityScreenSize.x!=Screen.width || _utilityScreenSize.y!=Screen.height
+                || !_utilitySafeArea.Equals(Screen.safeArea)) {
+                var window=transform.Find("Window");
+                UtilityBarStyle.PositionAtSafeTopRight(window?.Find("StoreUtilities") as RectTransform,
+                    4f*UtilityBarStyle.ButtonSize+3f*UtilityBarStyle.Gap);
+                UtilityBarStyle.PositionAtSafeTopRight(window?.Find("CreditsBox") as RectTransform,
+                    UtilityBarStyle.CreditsWidth,4f*(UtilityBarStyle.ButtonSize+UtilityBarStyle.Gap));
+                _utilityScreenSize=new Vector2Int(Screen.width,Screen.height);
+                _utilitySafeArea=Screen.safeArea;
+            }
             var content=transform.Find("Window/Content");
             if(content==null)return;
             FitCatalogs(content);
             var credits=transform.Find("Window/CreditsBox");
-            if(credits!=null)foreach(var label in credits.GetComponentsInChildren<Text>(true))if(label.name!="Amount")label.text=EchoProtocol.Settings.GameLanguage.Choose("Tín dụng","Credits");
+            UtilityBarStyle.RefreshCreditsLabel(credits as RectTransform);
             Transform visible=null;
             foreach(Transform child in content)
                 if(child.gameObject.activeInHierarchy && (child.name=="PetContent" || child.name=="CharacterContent" || child.name=="TeamTools"))visible=child;
@@ -215,44 +230,44 @@ namespace EchoProtocol.UI.MainMenu
 
         private static void EnsureUtilities(Transform root,Transform window)
         {
-            if(window.Find("StoreUtilities")!=null)return;
+            if(window.Find("StoreUtilities/SettingsButton")!=null)return;
+            var old=window.Find("StoreUtilities");
+            if(old!=null){old.gameObject.SetActive(false);if(Application.isPlaying)Object.Destroy(old.gameObject);else Object.DestroyImmediate(old.gameObject);}
             var row=new GameObject("StoreUtilities",typeof(RectTransform)).GetComponent<RectTransform>();row.SetParent(window,false);
-            Place(row,1668,26,202,44);
-            for(int i=0;i<4;i++)
+            UtilityBarStyle.PositionAtSafeTopRight(row,4f*UtilityBarStyle.ButtonSize+3f*UtilityBarStyle.Gap);
+            var names=new[]{"ProfileButton","LeaderboardButton","WebButton","SettingsButton"};
+            var icons=new[]{SettingsIcon.Profile,SettingsIcon.Trophy,SettingsIcon.Web,SettingsIcon.Gear};
+            for(int i=0;i<names.Length;i++)
             {
-                int action=i;
-                var rect=new GameObject("Utility"+i,typeof(RectTransform),typeof(Image),typeof(Button)).GetComponent<RectTransform>();rect.SetParent(row,false);
-                rect.anchorMin=new Vector2(i*54f/202f,0);rect.anchorMax=new Vector2((i*54f+40f)/202f,1);rect.offsetMin=rect.offsetMax=Vector2.zero;
-                var button=rect.GetComponent<Button>();button.targetGraphic=rect.GetComponent<Image>();StyleButton(button,_navigation);
-                var icon=new GameObject("Icon",typeof(RectTransform),typeof(Image)).GetComponent<RectTransform>();icon.SetParent(rect,false);
-                icon.anchorMin=new Vector2(0.12f,0.12f);icon.anchorMax=new Vector2(0.88f,0.88f);icon.offsetMin=icon.offsetMax=Vector2.zero;
-                icon.GetComponent<Image>().sprite=UtilityIcon(i);icon.GetComponent<Image>().color=Gold;icon.GetComponent<Image>().raycastTarget=false;
+                var button=UtilityBarStyle.EnsureButton(row,names[i],icons[i],
+                    i*(UtilityBarStyle.ButtonSize+UtilityBarStyle.Gap));
                 EchoProtocol.Audio.GameAudioRuntime.RegisterButton(button);
-                if(i==1){button.interactable=false;continue;}
-                button.onClick.AddListener(()=>{
-                    if(action==0) {
-                        EchoProtocol.Voice.VoiceManager.EnsureExists();
-                        EchoProtocol.Voice.VoiceManager.Instance.GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>().OpenFromMainMenu();
-                    } else if(action==2)EchoProtocol.Settings.GameLanguage.Set(EchoProtocol.Settings.GameLanguage.Current==EchoProtocol.Settings.GameLocale.English
-                        ? EchoProtocol.Settings.GameLocale.Vietnamese : EchoProtocol.Settings.GameLocale.English);
-                    else root.GetComponent<TeamToolShopPanel>()?.Close();
-                });
+                if(i==0)button.onClick.AddListener(()=>OpenProfile(root));
+                else if(i==1)MainMenuLeaderboardController.Install(
+                    root.GetComponentInParent<Canvas>(),button);
+                else if(i==2)button.onClick.AddListener(OpenWebsite);
+                else button.onClick.AddListener(OpenSettings);
             }
         }
-        private static readonly Sprite[] UtilityIcons=new Sprite[4];
-        private static Sprite UtilityIcon(int kind)
+        private static void OpenProfile(Transform root)
         {
-            if(UtilityIcons[kind]!=null)return UtilityIcons[kind];
-            UtilityIcons[kind]=TextureSprite(64,64,(x,y)=>{
-                float px=(x-32)/28f,py=(y-32)/28f,r=Mathf.Sqrt(px*px+py*py);bool fill=false;
-                if(kind==0)fill=r>0.3f && r<(0.68f+0.13f*Mathf.Cos(Mathf.Atan2(py,px)*8f));
-                else if(kind==1)fill=Mathf.Abs(px)<0.65f && py<0.36f && py> -0.7f && (Mathf.Abs(px)>0.5f || py< -0.52f || py>0.22f)
-                    || r>0.34f && r<0.46f && py>0.2f;
-                else if(kind==2)fill=Mathf.Abs(r-0.73f)<0.07f || r<0.73f && (Mathf.Abs(py)<0.045f || Mathf.Abs(px)<0.045f || Mathf.Abs(px*px*2f+py*py-0.53f)<0.07f);
-                else fill=Mathf.Abs(px)<0.55f && Mathf.Abs(py)<0.78f && (Mathf.Abs(px)>0.44f || Mathf.Abs(py)>0.66f)
-                    || Mathf.Abs(py)<0.07f && px<0.38f && px> -0.9f || Mathf.Abs(py-Mathf.Abs(px+0.9f))<0.07f && px< -0.55f;
-                return fill ? Color.white : Color.clear;
-            });return UtilityIcons[kind];
+            var mainMenu=Object.FindFirstObjectByType<MainMenuProfileController>();
+            if(mainMenu!=null){mainMenu.OpenProfile();return;}
+            UtilityProfileOverlay.Open(root.GetComponentInParent<Canvas>());
+        }
+        private static void OpenSettings()
+        {
+            EchoProtocol.Voice.VoiceManager.EnsureExists();
+            EchoProtocol.Voice.VoiceManager.Instance
+                .GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>()?.OpenFromMainMenu();
+        }
+        private static void OpenWebsite()
+        {
+            var mainMenu=Object.FindFirstObjectByType<MainMenuProfileController>();
+            if(mainMenu!=null){mainMenu.OpenWebsite();return;}
+            var lobby=Object.FindFirstObjectByType<LobbyUtilityBarController>();
+            if(lobby!=null){lobby.OpenWebsite();return;}
+            Application.OpenURL(UtilityBarStyle.WebsiteUrl);
         }
 
         private static void StyleButton(Button button,Sprite sprite)
