@@ -52,6 +52,7 @@ namespace EchoProtocol.Networking
         public NetworkPlayerLifeStatus LifeStatus;
         public int DownCount;
         public int ReviveCount;
+        public NetworkBool HasObjectiveContribution;
     }
 
     public enum NetworkMatchPhase
@@ -2617,7 +2618,8 @@ namespace EchoProtocol.Networking
                 HasLifeState = life != null,
                 LifeStatus = life != null ? life.Status : NetworkPlayerLifeStatus.Alive,
                 DownCount = life != null ? Mathf.Max(0, life.DownCount) : -1,
-                ReviveCount = life != null ? Mathf.Max(0, life.ReviveCount) : -1
+                ReviveCount = life != null ? Mathf.Max(0, life.ReviveCount) : -1,
+                HasObjectiveContribution = player.HasObjectiveContribution
             };
 
             var previous = GetResultRosterEntry(slot);
@@ -2628,7 +2630,8 @@ namespace EchoProtocol.Networking
                 && (bool)previous.HasLifeState == (bool)entry.HasLifeState
                 && previous.LifeStatus == entry.LifeStatus
                 && previous.DownCount == entry.DownCount
-                && previous.ReviveCount == entry.ReviveCount)
+                && previous.ReviveCount == entry.ReviveCount
+                && (bool)previous.HasObjectiveContribution == (bool)entry.HasObjectiveContribution)
                 return;
 
             switch (slot)
@@ -2728,6 +2731,7 @@ namespace EchoProtocol.Networking
             trackedCount = 0;
             downedCount = 0;
             nonDownedMatchActiveCount = 0;
+            var counted = new System.Collections.Generic.HashSet<NetworkId>();
             foreach (var player in Runner.ActivePlayers)
             {
                 if (!Runner.TryGetPlayerObject(player, out var playerObject)
@@ -2740,6 +2744,7 @@ namespace EchoProtocol.Networking
                 }
 
                 trackedCount++;
+                counted.Add(playerObject.Id);
                 if (lifeState.Status == NetworkPlayerLifeStatus.Escaped) survivorCount++;
                 else if (lifeState.IsMatchActive)
                 {
@@ -2753,6 +2758,18 @@ namespace EchoProtocol.Networking
                         nonDownedMatchActiveCount++;
                     }
                 }
+            }
+            // A living teammate with a retained reconnect reservation can still
+            // return and rescue the team. Do not declare a wipe before its deadline.
+            foreach (var state in FindObjectsByType<LobbyPlayerState>(FindObjectsSortMode.None))
+            {
+                if (state.Object == null || !state.Object.IsValid || counted.Contains(state.Object.Id)
+                    || !state.IsGameplayPlayer || !state.Disconnected
+                    || state.DisconnectExpiresAtUtc <= DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                    || !state.TryGetComponent<NetworkPlayerLifeState>(out var life) || !life.IsMatchActive) continue;
+                trackedCount++;
+                activeCount++;
+                if (life.IsDowned) downedCount++; else nonDownedMatchActiveCount++;
             }
         }
 

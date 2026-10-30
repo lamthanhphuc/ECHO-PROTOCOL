@@ -991,7 +991,11 @@ namespace EchoProtocol.Networking
 
         private IEnumerator ExpireDisconnectedPlayer(NetworkRunner runner, PlayerRef player, NetworkObject obj)
         {
-            yield return new WaitForSecondsRealtime(ReconnectGraceSeconds);
+            var retained = obj != null ? obj.GetComponent<LobbyPlayerState>() : null;
+            var remaining = retained != null && retained.DisconnectExpiresAtUtc > 0
+                ? Mathf.Max(0f, (float)(retained.DisconnectExpiresAtUtc - System.DateTimeOffset.UtcNow.ToUnixTimeSeconds()))
+                : ReconnectGraceSeconds;
+            yield return new WaitForSecondsRealtime(remaining);
             _graceTimers.Remove(player);
             if (runner == null || !runner.IsRunning || obj == null || !obj.IsValid)
                 yield break;

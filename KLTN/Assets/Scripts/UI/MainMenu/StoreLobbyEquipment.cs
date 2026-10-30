@@ -40,10 +40,12 @@ namespace EchoProtocol.UI.MainMenu
             bool equipped=pet ? state.PetId==id && state.PetSkinId==skin
                 : state.CharacterId==id && state.CharacterOutfitId==skin;
             price.text=string.Empty;
-            button.interactable=!state.IsReady && !equipped && !state.IsGameplayPlayer;
+            bool syncing = !state.HasVerifiedBackendIdentity || NetworkBootstrap.IsHostMigrationReconciliationPending
+                || NetworkBootstrap.Instance?.ReconnectIdentityPending == true;
+            button.interactable=!syncing && !state.IsReady && !equipped && !state.IsGameplayPlayer;
             var caption=button.GetComponentInChildren<Text>(true);
             caption.resizeTextForBestFit=true;caption.resizeTextMinSize=16;caption.resizeTextMaxSize=26;
-            caption.text=state.IsReady
+            caption.text=syncing ? GameLanguage.Choose("Đang đồng bộ…", "Synchronizing…") : state.IsReady
                 ? GameLanguage.Choose("Bỏ sẵn sàng để đổi","Unready to change")
                 : equipped ? GameLanguage.Choose("Đang dùng","Equipped") : GameLanguage.Choose("Trang bị","Equip");
             return true;
@@ -52,21 +54,34 @@ namespace EchoProtocol.UI.MainMenu
         {
             var state=LocalState();
             if(state==null || !owned || !root.gameObject.activeInHierarchy)return false;
+            if (!state.HasVerifiedBackendIdentity || NetworkBootstrap.IsHostMigrationReconciliationPending
+                || NetworkBootstrap.Instance?.ReconnectIdentityPending == true) return true;
             if(state.IsReady || state.IsGameplayPlayer)return true;
             var controller=root.GetComponent<StoreLobbyEquipment>() ?? root.gameObject.AddComponent<StoreLobbyEquipment>();
-            if(controller._pending!=null)controller.StopCoroutine(controller._pending);
-            controller._pending=controller.StartCoroutine(controller.Apply(state,pet,id,skin));
+            var runner = NetworkBootstrap.Instance;
+            if (runner == null) return true;
+            if(controller._pending!=null)runner.StopCoroutine(controller._pending);
+            controller._pending=runner.StartCoroutine(controller.Apply(state,pet,id,skin));
             return true;
         }
         private IEnumerator Apply(LobbyPlayerState state,bool pet,int id,int skin)
         {
             bool change=pet ? state.PetId!=id : state.CharacterId!=id;
             if(change && !(pet ? state.RequestPet(id) : state.RequestCharacter(id)))yield break;
-            float until=Time.unscaledTime+8f;
-            while(state!=null && Time.unscaledTime<until && (pet ? state.PetId!=id : state.CharacterId!=id))yield return null;
-            if(state!=null && !state.IsReady && !state.IsGameplayPlayer && (pet ? state.PetId==id : state.CharacterId==id)) {
+            float until=Time.unscaledTime+20f;
+            while(state!=null && state.Object != null && state.Object.IsValid && Time.unscaledTime<until && (pet ? state.PetId!=id : state.CharacterId!=id))yield return null;
+            if (state == null || state.Object == null || !state.Object.IsValid) { _pending = null; yield break; }
+            if(!state.IsReady && !state.IsGameplayPlayer && (pet ? state.PetId==id : state.CharacterId==id)) {
                 if(pet && state.PetSkinId!=skin)state.RequestPetSkin(skin);
                 if(!pet && state.CharacterOutfitId!=skin)state.RequestCharacterOutfit(skin);
+            }
+            if (state != null)
+            {
+                while (state != null && state.Object != null && state.Object.IsValid && Time.unscaledTime < until && (pet ? state.PetId != id || state.PetSkinId != skin
+                    : state.CharacterId != id || state.CharacterOutfitId != skin)) yield return null;
+                if (state == null || state.Object == null || !state.Object.IsValid
+                    || (pet ? state.PetId != id || state.PetSkinId != skin : state.CharacterId != id || state.CharacterOutfitId != skin))
+                    EchoProtocol.UI.GameUIFeedback.Instance?.Toast(GameLanguage.Choose("Trang bị chưa được xác nhận. Vui lòng thử lại.", "Equipment was not confirmed. Please retry."));
             }
             _pending=null;
         }
@@ -87,6 +102,7 @@ namespace EchoProtocol.UI.MainMenu
                 }
             }
         }
-        private void OnDisable(){if(_pending!=null)StopCoroutine(_pending);_pending=null;}
+        // Confirmation belongs to the persistent bootstrap, so closing Shop
+        // does not interrupt the character-then-skin transaction.
     }
 }

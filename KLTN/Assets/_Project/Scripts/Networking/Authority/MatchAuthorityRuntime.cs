@@ -73,6 +73,7 @@ namespace EchoProtocol.Networking.Authority
         private readonly Dictionary<int, Guid> _boundPlayers = new();
         private readonly HashSet<int> _disconnectedActors = new();
         private readonly HashSet<int> _objectiveContributors = new();
+        private readonly Dictionary<Guid, bool> _migratedResultRoster = new();
         private bool _eventsSubscribed;
         private TelemetryRuntimeBehaviour _telemetry;
         private DateTime _matchStartedAtUtc;
@@ -456,6 +457,10 @@ namespace EchoProtocol.Networking.Authority
 
                 if (IsSuccessful(result))
                 {
+                    _migratedResultRoster.Clear();
+                    foreach (var participant in result.Data.data.players ?? Array.Empty<MatchRosterPlayerDto>())
+                        if (Guid.TryParse(participant.userId, out var participantId))
+                            _migratedResultRoster[participantId] = participant.disconnected;
                     break;
                 }
 
@@ -1447,6 +1452,12 @@ namespace EchoProtocol.Networking.Authority
             if (_boundPlayers.ContainsKey(actorNumber))
             {
                 _objectiveContributors.Add(actorNumber);
+                if (runner.TryGetPlayerObject(actor, out var obj)
+                    && obj.TryGetComponent<LobbyPlayerState>(out var state))
+                {
+                    state.HasObjectiveContribution = true;
+                    NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(state);
+                }
             }
         }
 
@@ -1473,6 +1484,7 @@ namespace EchoProtocol.Networking.Authority
             _boundPlayers.Clear();
             _disconnectedActors.Clear();
             _objectiveContributors.Clear();
+            _migratedResultRoster.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
             _matchEndEmitted = false;
@@ -2080,8 +2092,35 @@ namespace EchoProtocol.Networking.Authority
             }
 
             var players = new List<SubmitMatchResultPlayerDto>(_boundPlayers.Count);
+            var matchSnapshot = NetworkMatchState.Instance;
+            if (matchSnapshot != null)
+            {
+                for (int slot = 0; slot < 4; slot++)
+                {
+                    var entry = matchSnapshot.GetResultRosterEntry(slot);
+                    if (!entry.Present || !Guid.TryParse(entry.BackendUserId.ToString(), out var userId)) continue;
+                    bool connected = false;
+                    foreach (var active in runner.ActivePlayers)
+                        if (runner.TryGetPlayerObject(active, out var obj)
+                            && obj.TryGetComponent<LobbyPlayerState>(out var state)
+                            && state.BackendUserId == entry.BackendUserId && !state.Disconnected)
+                            connected = true;
+                    players.Add(new SubmitMatchResultPlayerDto
+                    {
+                        userId = userId.ToString("D"), disconnected = !connected,
+                        survived = NetworkPlayerLifeStateRules.SurvivedMatch(entry.LifeStatus,
+                            matchSnapshot.HuntReady, _pendingBackendOutcome == "WIN", !connected),
+                        downedCount = Mathf.Max(0, entry.DownCount), reviveCount = Mathf.Max(0, entry.ReviveCount),
+                        objectiveContribution = entry.HasObjectiveContribution ? 1 : 0
+                    });
+                }
+            }
             foreach (var binding in _boundPlayers)
             {
+                // Lobby binding history may contain users who never started.
+                // A gameplay snapshot is the roster authority once available.
+                if (matchSnapshot != null) continue;
+                if (players.Exists(item => item.userId == binding.Value.ToString("D"))) continue;
                 var actorNumber = binding.Key;
                 var disconnected = _disconnectedActors.Contains(actorNumber);
                 var survived = false;
@@ -2113,6 +2152,11 @@ namespace EchoProtocol.Networking.Authority
                     objectiveContribution = _objectiveContributors.Contains(actorNumber) ? 1 : 0
                 });
             }
+
+            foreach (var participant in _migratedResultRoster)
+                if (!players.Exists(item => item.userId == participant.Key.ToString("D")))
+                    players.Add(new SubmitMatchResultPlayerDto { userId = participant.Key.ToString("D"),
+                        disconnected = participant.Value });
 
             players.Sort((left, right) =>
                 string.CompareOrdinal(left.userId, right.userId));

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -484,8 +484,15 @@ namespace EchoProtocol.Networking
         {
             if (SceneManager.GetActiveScene().name != sceneName)
                 EchoProtocol.UI.GameUIFeedback.Instance.BeginSceneTransition();
-            var operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
-            if (operation != null) while (!operation.isDone) await Task.Yield();
+            try
+            {
+                var operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+                if (operation != null) while (!operation.isDone) await Task.Yield();
+            }
+            finally
+            {
+                EchoProtocol.UI.GameUIFeedback.Instance.CancelSceneTransition();
+            }
         }
 
         public bool RegisterLocalInputProvider(NetworkObject owner, Func<NetworkPlayerInput> provider)
@@ -660,7 +667,7 @@ namespace EchoProtocol.Networking
                     RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Loading network scene '{LobbySceneName}'.");
-                    _ = runner.LoadScene(LobbySceneName, LoadSceneMode.Single);
+                    await EchoProtocol.UI.GameUIFeedback.LoadNetworkSceneAsync(runner, LobbySceneName);
                 }
 
                 return true;
@@ -1393,6 +1400,7 @@ namespace EchoProtocol.Networking
             if (runner == null) return;
 
             var waitingLogged = false;
+            var sceneIdleDeadline = Time.realtimeSinceStartup + 90f;
             var nextWarningAt =
                 Time.realtimeSinceStartup
                 + HostMigrationSceneFenceWarningSeconds;
@@ -1412,6 +1420,13 @@ namespace EchoProtocol.Networking
                 }
 
                 await Task.Delay(50);
+
+                if (Time.realtimeSinceStartup >= sceneIdleDeadline)
+                {
+                    Debug.LogError($"[NetworkSession] Scene cleanup timed out before {context}; forcing runner shutdown.");
+                    IsSceneLoading = false;
+                    return;
+                }
 
                 if (Time.realtimeSinceStartup
                     >= nextWarningAt)
