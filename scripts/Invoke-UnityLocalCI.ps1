@@ -38,11 +38,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Git LFS checkout is incomplete' }
 
 $lockfile = Join-Path $project 'Temp\UnityLockfile'
 if (Test-Path -LiteralPath $lockfile) { throw "Unity project lock exists: $lockfile" }
-foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'")) {
-    if (-not $process.CommandLine -or
-        $process.CommandLine.IndexOf($project, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        throw "Unity Editor process $($process.ProcessId) may already own this project"
-    }
+if (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'") {
+    throw 'Close all Unity Editor processes before local CI'
 }
 
 if (-not $EvidenceRoot) { $EvidenceRoot = Join-Path (Split-Path $repository -Parent) 'UnityCI-Evidence' }
