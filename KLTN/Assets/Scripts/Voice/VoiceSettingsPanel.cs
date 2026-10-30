@@ -25,6 +25,12 @@ namespace EchoProtocol.Voice
         private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
         private readonly System.Collections.Generic.Dictionary<string, Component> _components =
             new System.Collections.Generic.Dictionary<string, Component>();
+        private readonly Dictionary<Graphic, float> _mainMenuGraphics = new Dictionary<Graphic, float>();
+        private readonly List<Graphic> _menuGraphicsBuffer = new List<Graphic>();
+        private Transform _mainMenuRoot, _mainMenuBackground;
+        private CanvasGroup _mainMenuInputGroup;
+        private bool _mainMenuInputGroupAdded, _mainMenuWasInteractable, _mainMenuBlockedRaycasts;
+
         private VoiceManager _voice;
         private GameObject _canvas, _overlay, _confirm;
         private Transform _deviceList, _teamList;
@@ -54,6 +60,7 @@ namespace EchoProtocol.Voice
             _canvas.transform.SetParent(transform, false);
             _overlay = _canvas.transform.Find("Overlay").gameObject;
             _confirm = _canvas.transform.Find("Overlay/Confirm").gameObject;
+            VoiceSettingsCanvasFactory.EnsureWindowBackground(_canvas.transform.Find("Overlay/Window"));
             var general = _canvas.transform.Find(Body + "Mouse");
             SettingsMenuWidgets.Label("LanguageTitle", general, 34, 174, 350, 30, "Ngôn ngữ", 19);
             SettingsMenuWidgets.Button("Language", general, 405, 172, 347, 32, "Tiếng Việt / English", false, 17);
@@ -292,17 +299,28 @@ namespace EchoProtocol.Voice
             EnsureEventSystem();
             _controlLock.Acquire(player, Close, allowWhileDowned: true);
             if (!_controlLock.IsLocked) return false;
-            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
-            _open = IsOpen = true;
-            _overlay.SetActive(true);
-            _confirm.SetActive(false);
-            _deviceSignature = _teamSignature = null;
-            _voice.Devices.Refresh();
-            Find<Button>(Footer + "Inventory").gameObject.SetActive(_openInventory != null);
-            var runner = NetworkBootstrap.Instance != null ? NetworkBootstrap.Instance.Runner : null;
-            Find<Button>(Footer + "Leave").gameObject.SetActive(runner != null && runner.IsRunning);
-            SelectTab(0);
-            return true;
+            try
+            {
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+                HideMainMenuUi();
+                _open = IsOpen = true;
+                _overlay.SetActive(true);
+                _confirm.SetActive(false);
+                _deviceSignature = _teamSignature = null;
+                _voice.Devices.Refresh();
+                Find<Button>(Footer + "Inventory").gameObject.SetActive(_openInventory != null);
+                var runner = NetworkBootstrap.Instance != null ? NetworkBootstrap.Instance.Runner : null;
+                Find<Button>(Footer + "Leave").gameObject.SetActive(_parentMenuLock == null && runner != null && runner.IsRunning);
+                Find<Button>(Footer + "Quit").gameObject.SetActive(_parentMenuLock == null);
+                SelectTab(0);
+                return true;
+            }
+            catch (Exception error)
+            {
+                Debug.LogException(error, this);
+                Close();
+                return false;
+            }
         }
 
         public void CloseFromGameplayMenu(PlayerInteractionControlLock menuLock)
@@ -322,6 +340,7 @@ namespace EchoProtocol.Voice
             _onClosed = _openInventory = null;
             CancelRebind();
             if (_overlay != null) _overlay.SetActive(false);
+            RestoreMainMenuUi();
             if (_voice != null) _voice.StopTest();
             var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             if (selected != null && _canvas != null && selected.transform.IsChildOf(_canvas.transform))
@@ -332,6 +351,84 @@ namespace EchoProtocol.Voice
             GameAudioSettings.Save();
             GameGraphicsSettings.Save();
             callback?.Invoke();
+        }
+
+        private void HideMainMenuUi()
+        {
+            if (SceneManager.GetActiveScene().name != EchoProtocol.Core.GameConstants.SceneMainMenu) return;
+
+            var menu = GameObject.Find("MainMenuCanvas");
+            if (menu == null || menu.scene != SceneManager.GetActiveScene()) return;
+
+            var background = menu.transform.Find("background");
+            if (background == null)
+            {
+                Debug.LogWarning("[Settings] Main Menu background missing; menu UI was not masked.");
+                return;
+            }
+
+            _mainMenuRoot = menu.transform;
+            _mainMenuBackground = background;
+            _mainMenuInputGroup = menu.GetComponent<CanvasGroup>();
+            _mainMenuInputGroupAdded = _mainMenuInputGroup == null;
+            if (_mainMenuInputGroupAdded) _mainMenuInputGroup = menu.AddComponent<CanvasGroup>();
+            if (_mainMenuInputGroup == null) throw new InvalidOperationException("Main Menu input group could not be created.");
+            _mainMenuWasInteractable = _mainMenuInputGroup.interactable;
+            _mainMenuBlockedRaycasts = _mainMenuInputGroup.blocksRaycasts;
+            _mainMenuInputGroup.interactable = false;
+            _mainMenuInputGroup.blocksRaycasts = false;
+            KeepMainMenuUiHidden();
+            Canvas.willRenderCanvases += KeepMainMenuUiHidden;
+        }
+
+        private void KeepMainMenuUiHidden()
+        {
+            if (_mainMenuRoot == null) return;
+
+            // CanvasRenderer alpha leaves layout and existing CanvasGroups alone.
+            // Recheck before rendering so newly created menu content stays hidden.
+            if (_mainMenuInputGroup != null)
+            {
+                _mainMenuInputGroup.interactable = false;
+                _mainMenuInputGroup.blocksRaycasts = false;
+            }
+            foreach (Transform child in _mainMenuRoot)
+            {
+                if (child == _mainMenuBackground) continue;
+
+                _menuGraphicsBuffer.Clear();
+                child.GetComponentsInChildren(true, _menuGraphicsBuffer);
+                foreach (var graphic in _menuGraphicsBuffer)
+                {
+                    if (graphic == null) continue;
+                    if (!_mainMenuGraphics.ContainsKey(graphic))
+                        _mainMenuGraphics.Add(graphic, graphic.canvasRenderer.GetAlpha());
+                    graphic.canvasRenderer.SetAlpha(0f);
+                }
+            }
+        }
+
+        private void RestoreMainMenuUi()
+        {
+            Canvas.willRenderCanvases -= KeepMainMenuUiHidden;
+            _mainMenuRoot = _mainMenuBackground = null;
+
+            foreach (var state in _mainMenuGraphics)
+            {
+                if (state.Key == null) continue;
+                state.Key.canvasRenderer.SetAlpha(state.Value);
+            }
+            if (_mainMenuInputGroup != null)
+            {
+                _mainMenuInputGroup.interactable = _mainMenuWasInteractable;
+                _mainMenuInputGroup.blocksRaycasts = _mainMenuBlockedRaycasts;
+                if (_mainMenuInputGroupAdded) Destroy(_mainMenuInputGroup);
+            }
+
+            _mainMenuGraphics.Clear();
+            _menuGraphicsBuffer.Clear();
+            _mainMenuInputGroup = null;
+            _mainMenuInputGroupAdded = false;
         }
 
         private void SelectTab(int index)
@@ -372,7 +469,7 @@ namespace EchoProtocol.Voice
             TextAt(Body + "Mouse/Language/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "Tiếng Việt" : "English";
             if (!_open) return;
             bool mainMenu = SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu;
-            TextAt(Footer + "Resume/Label").text = mainMenu ? GameLanguage.Choose("Đóng", "Close") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
+            TextAt(Footer + "Resume/Label").text = _parentMenuLock != null ? GameLanguage.Choose("QUAY LẠI", "BACK") : mainMenu ? GameLanguage.Choose("Đóng", "Close") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
             Find<Button>(Footer + "Inventory").interactable = CanOpenInventory;
             SetToggle("Voice/MicToggle", _voice.MicrophoneEnabled && !_voice.SelfMuted);
             SetToggle("Voice/PushToTalkToggle", _voice.PushToTalk);

@@ -206,6 +206,7 @@ namespace EchoProtocol.Networking
             Cursor.visible = true;
             EchoProtocol.Voice.VoiceManager.EnsureExists();
             _matchAuthority = MatchAuthorityRuntime.EnsureExists(this);
+            MatchLoadingCoordinator.EnsureExists(this);
         }
 
         private void OnDestroy()
@@ -240,7 +241,7 @@ namespace EchoProtocol.Networking
 
         public Task Shutdown() => ShutdownAsync(returnToLobby: false);
 
-        private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null)
+        private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null, bool abortFailedLoading = false)
         {
             if (State == NetworkSessionState.ShuttingDown) return;
             ResultSession.Clear();
@@ -251,12 +252,28 @@ namespace EchoProtocol.Networking
             var sceneRunner =
                 Runner;
 
-            await WaitForRunnerSceneIdleAsync(
-                sceneRunner,
-                "explicit shutdown");
+            if (abortFailedLoading)
+            {
+                // A failed loading attempt has no valid world snapshot to migrate. Still never
+                // tear down a runner while Fusion owns an unfinished scene operation.
+                float sceneIdleDeadline = Time.realtimeSinceStartup + 12f;
+                while (Runner == sceneRunner && sceneRunner != null && !sceneRunner.IsShutdown
+                    && (IsSceneLoading || sceneRunner.IsSceneManagerBusy)
+                    && Time.realtimeSinceStartup < sceneIdleDeadline)
+                    await Task.Delay(50);
+                if (Runner != sceneRunner || (sceneRunner != null && !sceneRunner.IsShutdown
+                    && (IsSceneLoading || sceneRunner.IsSceneManagerBusy)))
+                {
+                    if (Runner == sceneRunner) SetState(previousState, "Loading recovery is waiting for Fusion's scene operation.");
+                    throw new TimeoutException("Scene loading is still finishing. Wait a moment, then return again.");
+                }
+            }
+            else
+                await WaitForRunnerSceneIdleAsync(sceneRunner, "explicit shutdown");
 
             var gracefulHostMigration =
-                sceneRunner != null
+                !abortFailedLoading
+                && sceneRunner != null
                 && sceneRunner.IsRunning
                 && sceneRunner.IsServer
                 && (previousState == NetworkSessionState.InLobby
@@ -305,7 +322,12 @@ namespace EchoProtocol.Networking
             ClearLocalInputProvider();
             try
             {
-                if (_matchAuthority != null) await _matchAuthority.RelinquishHostAuthorityAsync();
+                if (_matchAuthority != null)
+                {
+                    if (abortFailedLoading && sceneRunner != null && sceneRunner.IsServer)
+                        await _matchAuthority.EndAsync("MATCH_LOADING_FAILED");
+                    else await _matchAuthority.RelinquishHostAuthorityAsync();
+                }
             }
             catch (Exception exception)
             {
@@ -428,6 +450,20 @@ namespace EchoProtocol.Networking
         }
 
         public Task ShutdownRunnerAsync() => ShutdownAsync(returnToLobby: true);
+
+        public Task AbortFailedMatchLoadingAsync(NetworkRunner expectedRunner, string attemptId)
+        {
+            var loading = MatchLoadingCoordinator.Instance;
+            if (loading == null || !loading.IsFailedAttempt(expectedRunner, attemptId)
+                || (Runner != null && Runner != expectedRunner))
+                throw new InvalidOperationException("This failed loading attempt no longer owns the session.");
+            if (IsHostMigrationReconciliationPending || IsReconnecting)
+                throw new InvalidOperationException("Session recovery is still in progress. Wait for it to finish before returning.");
+            _reconnectGeneration++;
+            _reconnectSessionName = null;
+            _reconnectCancellation?.Cancel();
+            return ShutdownAsync(false, EchoProtocol.Core.GameConstants.SceneMainMenu, abortFailedLoading: true);
+        }
 
         public async Task LeaveToMainMenuAsync()
         {
@@ -785,8 +821,29 @@ namespace EchoProtocol.Networking
 
         private static void EnsureRunnerComponents(NetworkRunner runner)
         {
-            if (runner.GetComponent<INetworkSceneManager>() == null) runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
+            var sceneManager = runner.GetComponent<INetworkSceneManager>();
+            if (sceneManager is NetworkSceneManagerDefault stock && stock.GetType() == typeof(NetworkSceneManagerDefault))
+            {
+                // This runner has not been started. Replace only Fusion's stock manager with
+                // the observing subclass, preserving its options and every base loading operation.
+                bool takeover = stock.IsSceneTakeOverEnabled, logErrors = stock.LogSceneLoadErrors;
+                DestroyImmediate(stock);
+                var observed = runner.gameObject.AddComponent<MatchLoadingSceneManager>();
+                observed.IsSceneTakeOverEnabled = takeover;
+                observed.LogSceneLoadErrors = logErrors;
+            }
+            else if (sceneManager == null) runner.gameObject.AddComponent<MatchLoadingSceneManager>();
             if (runner.GetComponent<INetworkObjectProvider>() == null) runner.gameObject.AddComponent<NetworkObjectProviderDefault>();
+        }
+
+        public void ReportSceneLoadFailure(NetworkRunner runner, string message)
+        {
+            if (Runner != runner) return;
+            // Called only after the observed scene operation ended, never from a watchdog.
+            IsSceneLoading = false;
+            LastError = message;
+            if (_sceneTransitionDisconnectPending)
+                _ = FinishSceneTransitionDisconnectAsync(runner, _sceneTransitionDisconnectReason);
         }
 
         void INetworkRunnerCallbacks.OnPlayerJoined(NetworkRunner runner, PlayerRef player)
@@ -874,6 +931,7 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnShutdown(NetworkRunner runner, ShutdownReason reason)
         {
+            if (Runner == runner) MatchLoadingCoordinator.Instance?.YieldToNetworkRecovery(runner);
             if (reason == ShutdownReason.HostMigration)
             {
                 return;
@@ -949,6 +1007,7 @@ namespace EchoProtocol.Networking
             NetworkRunner runner,
             NetDisconnectReason reason)
         {
+            if (Runner == runner) MatchLoadingCoordinator.Instance?.YieldToNetworkRecovery(runner);
             if (_hostMigrationSceneFencePending
                 && Runner == runner)
             {
@@ -2681,7 +2740,19 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            input.Set(_localInputProvider());
+            var localInput = _localInputProvider();
+            if (MatchLoadingCoordinator.OwnsPresentation)
+            {
+                // Cover the first tick after scene-unload locks reset while preserving
+                // the spawn/camera orientation and existing crouch pose.
+                localInput.Move = Vector2.zero;
+                localInput.JumpPressed = false;
+                localInput.SprintHeld = false;
+                localInput.ResonanceHeld = false;
+                localInput.CrouchHeld = _localInputOwner.TryGetComponent<NetworkPlayerMovement>(out var movement)
+                    && movement.IsCrouching;
+            }
+            input.Set(localInput);
         }
         void INetworkRunnerCallbacks.OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
         void INetworkRunnerCallbacks.OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
@@ -2782,6 +2853,7 @@ namespace EchoProtocol.Networking
 
             // A valid HostMigrationToken wins over all pending
             // disconnect cleanup paths.
+            MatchLoadingCoordinator.Instance?.YieldToNetworkRecovery(runner);
             _sceneTransitionDisconnectPending = false;
             _hostMigrationDisconnectPending = false;
 
@@ -2881,7 +2953,8 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.NetworkSession,
                 "[NetworkSession] Network scene load started.");
         }
-        void INetworkRunnerCallbacks.OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ReadOnlySpan<byte> data) { }
+        void INetworkRunnerCallbacks.OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ReadOnlySpan<byte> data)
+            => MatchLoadingCoordinator.Instance?.ReceiveClientMessage(runner, player, key, data);
         void INetworkRunnerCallbacks.OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     }
 }
