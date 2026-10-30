@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     {
     }
 
+    public DbSet<UserAgreementAcceptance> UserAgreementAcceptances => Set<UserAgreementAcceptance>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
@@ -90,6 +91,16 @@ public class AppDbContext : DbContext
             entity.HasIndex(x => new { x.MatchId, x.UserId, x.Dimension, x.ComparisonContextKey }).IsUnique();
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<UserAgreementAcceptance>(entity =>
+        {
+            entity.ToTable("UserAgreementAcceptances");
+            entity.HasKey(a => new { a.UserId, a.BundleVersion });
+            entity.Property(a => a.BundleVersion).HasMaxLength(40);
+            entity.Property(a => a.ContentSha256).HasMaxLength(64).IsRequired();
+            entity.Property(a => a.DocumentVersions).HasMaxLength(500).IsRequired();
+            entity.Property(a => a.Locale).HasMaxLength(2).IsRequired();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<User>(entity =>
         {

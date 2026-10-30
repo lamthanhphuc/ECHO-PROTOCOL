@@ -27,6 +27,10 @@ namespace EchoProtocol.UI
             "https://web.3.1.238.6.sslip.io/";
 
         private float _nextRefreshAt;
+        private Vector2Int _lastScreenSize;
+        private Rect _lastSafeArea;
+        private Button _profileButton;
+        private Button _settingsButton;
 
 
         public void Configure(
@@ -48,11 +52,19 @@ namespace EchoProtocol.UI
 
         private void OnEnable()
         {
+            if (shopButton != null) shopButton.gameObject.SetActive(false);
+            UtilityBarStyle.Lobby(transform as RectTransform);
+            _profileButton = transform.Find("ProfileButton")?.GetComponent<Button>();
+            _settingsButton = transform.Find("SettingsButton")?.GetComponent<Button>();
+            var canvas = GetComponentInParent<Canvas>();
+            MainMenuLeaderboardController.Install(canvas,
+                transform.Find("LeaderboardButton")?.GetComponent<Button>());
             if (creditsButton != null)
                 creditsButton.onClick.AddListener(OpenTopUp);
-
-            if (shopButton != null)
-                shopButton.onClick.AddListener(OpenShop);
+            if (_profileButton != null)
+                _profileButton.onClick.AddListener(OpenProfile);
+            if (_settingsButton != null)
+                _settingsButton.onClick.AddListener(OpenSettings);
 
             if (webButton != null)
                 webButton.onClick.AddListener(OpenWebsite);
@@ -65,9 +77,10 @@ namespace EchoProtocol.UI
         {
             if (creditsButton != null)
                 creditsButton.onClick.RemoveListener(OpenTopUp);
-
-            if (shopButton != null)
-                shopButton.onClick.RemoveListener(OpenShop);
+            if (_profileButton != null)
+                _profileButton.onClick.RemoveListener(OpenProfile);
+            if (_settingsButton != null)
+                _settingsButton.onClick.RemoveListener(OpenSettings);
 
             if (webButton != null)
                 webButton.onClick.RemoveListener(OpenWebsite);
@@ -76,6 +89,14 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
+            if (_lastScreenSize.x != Screen.width || _lastScreenSize.y != Screen.height
+                || !_lastSafeArea.Equals(Screen.safeArea))
+            {
+                UtilityBarStyle.PositionAtSafeTopRight(transform as RectTransform,
+                    UtilityBarStyle.ToolbarWidth);
+                _lastScreenSize = new Vector2Int(Screen.width, Screen.height);
+                _lastSafeArea = Screen.safeArea;
+            }
             if (Time.unscaledTime < _nextRefreshAt)
                 return;
 
@@ -88,6 +109,8 @@ namespace EchoProtocol.UI
 
         public void RefreshCredits()
         {
+            UtilityBarStyle.RefreshCreditsLabel(creditsButton != null
+                ? creditsButton.transform as RectTransform : null);
             if (creditsText == null)
                 return;
 
@@ -112,7 +135,7 @@ namespace EchoProtocol.UI
         }
 
 
-        private void OpenWebsite()
+        public void OpenWebsite()
         {
             if (!string.IsNullOrWhiteSpace(
                     webUrl))
@@ -122,18 +145,18 @@ namespace EchoProtocol.UI
             }
         }
 
-
-        private void OpenShop()
+        private void OpenProfile()
         {
-            if (storePanel == null)
-            {
-                Debug.LogWarning(
-                    "[Lobby] StoreV2Popup reference is missing.");
-
-                return;
-            }
-
-            storePanel.Open();
+            UtilityProfileOverlay.Open(GetComponentInParent<Canvas>());
         }
+
+        private void OpenSettings()
+        {
+            EchoProtocol.Voice.VoiceManager.EnsureExists();
+            EchoProtocol.Voice.VoiceManager.Instance
+                .GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>()?.OpenFromMainMenu();
+        }
+
+
     }
 }

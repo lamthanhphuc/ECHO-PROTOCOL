@@ -139,6 +139,7 @@ namespace EchoProtocol.Auth
     }
     public void LogoutLocal()
     {
+      EchoProtocol.UI.FirstTimeAgreementController.ClearSession();
       ClearLocalAuth();
     }
 

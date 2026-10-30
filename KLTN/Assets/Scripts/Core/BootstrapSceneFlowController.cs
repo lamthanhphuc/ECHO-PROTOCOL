@@ -59,7 +59,7 @@ namespace EchoProtocol.Auth
         var destination = _returnToLobbyAfterAuthentication
           ? GameConstants.SceneLobby : GameConstants.SceneMainMenu;
         _returnToLobbyAfterAuthentication = false;
-        GameUIFeedback.LoadScene(destination);
+        FirstTimeAgreementController.Require(destination);
         yield break;
       }
 

@@ -25,6 +25,7 @@ namespace EchoProtocol.Voice
             var window = Rect("Window", overlay, 0, 0, 1480, 982);
             window.anchorMin = window.anchorMax = window.pivot = new Vector2(0.5f, 0.5f);
             window.anchoredPosition = Vector2.zero;
+            EnsureWindowBackground(window);
             Label("Title", window, 380, 0, 720, 76, "CÀI ĐẶT", 52, Foreground, TextAlignmentOptions.Center, true).characterSpacing = 7;
             Icon("SettingsIcon", window, 510, 17, 48, 48, SettingsIcon.Gear, Foreground);
             Label("Subtitle", window, 400, 76, 680, 22, "E C H O   P R O T O C O L", 12, Muted, TextAlignmentOptions.Center);
@@ -73,6 +74,18 @@ namespace EchoProtocol.Voice
             confirm.gameObject.SetActive(false);
             overlay.gameObject.SetActive(false);
             return root;
+        }
+
+        internal static void EnsureWindowBackground(Transform window)
+        {
+            // Keep the frame outside the existing content bounds without moving any controls.
+            if (window.Find("WindowBackground") != null) return;
+            var background = Frame("WindowBackground", window, 0, 0, 0, 0);
+            Stretch(background);
+            background.offsetMin = new Vector2(-18, -18);
+            background.offsetMax = new Vector2(18, 18);
+            background.SetAsFirstSibling();
+            background.GetComponent<HorrorFrameGraphic>().raycastTarget = false;
         }
 
         private static void BuildVoice(Transform body)

@@ -90,6 +90,25 @@ public sealed class PlayerProfileServiceTests
         Assert.Equal(5, result.Data.Level);
     }
 
+    [Fact, Trait("Category", "M4ProfileUnit")]
+    public async Task ActivityShowsLatestMatchWinAndNonSurvivalForOnlyTheSignedInPlayer()
+    {
+        await using var harness = await ProfileHarness.CreateAsync();
+        await harness.AddResultAsync(Now.AddMinutes(-20), MatchOutcome.WIN, survived: true);
+        await harness.AddResultAsync(Now.AddMinutes(-5), MatchOutcome.LOSE, survived: false);
+
+        var profile = await harness.Service.GetCurrentAsync(harness.FirstUserId);
+        var other = await harness.Service.GetCurrentAsync(harness.SecondUserId);
+
+        Assert.Equal("LOSE", profile.Data!.RecentMatch!.Outcome);
+        Assert.Equal("SciFi", profile.Data.RecentMatch.MapId);
+        Assert.Equal("WIN", profile.Data.LatestWin!.Outcome);
+        Assert.Equal(profile.Data.RecentMatch.MatchId, profile.Data.LatestNonSurvival!.MatchId);
+        Assert.Null(other.Data!.RecentMatch);
+        Assert.Null(other.Data.LatestWin);
+        Assert.Null(other.Data.LatestNonSurvival);
+    }
+
     private static PlayerController CreateController(
         PlayerProfileService service,
         ClaimsPrincipal user) => new(service, NullLogger<PlayerController>.Instance)
@@ -121,6 +140,48 @@ public sealed class PlayerProfileServiceTests
         public PlayerProfileService Service { get; }
         public Guid FirstUserId { get; }
         public Guid SecondUserId { get; }
+
+        public async Task AddResultAsync(DateTime endedAt, MatchOutcome outcome, bool survived)
+        {
+            var matchId = Guid.NewGuid();
+            Db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
+            {
+                MatchId = matchId,
+                FusionSessionName = "profile-activity-" + matchId.ToString("N"),
+                HostUserId = FirstUserId,
+                MaxPlayers = 2,
+                MapId = "SciFi",
+                Difficulty = "NORMAL",
+                Status = MatchAuthorityStatus.Ended,
+                LeaseExpiresAtUtc = endedAt.AddMinutes(1),
+                CreatedAtUtc = endedAt.AddMinutes(-2),
+                UpdatedAtUtc = endedAt,
+                StartedAtUtc = endedAt.AddMinutes(-2),
+                EndedAtUtc = endedAt,
+                Players = [new MatchPlayerBinding
+                {
+                    Id = Guid.NewGuid(), MatchId = matchId, UserId = FirstUserId,
+                    FusionActorNumber = 1, JoinProofId = Guid.NewGuid(),
+                    BoundAtUtc = endedAt.AddMinutes(-2), LastSeenAtUtc = endedAt
+                }],
+                Result = new MatchResult
+                {
+                    MatchId = matchId, SubmittedByUserId = FirstUserId,
+                    Outcome = outcome, StartedAtUtc = endedAt.AddMinutes(-2),
+                    EndedAtUtc = endedAt, DurationSeconds = 120,
+                    ObjectiveCompletion = outcome == MatchOutcome.WIN ? 1m : 0m,
+                    PlayerCount = 1, PayloadHash = Guid.NewGuid().ToString("N"),
+                    RewardStatus = MatchRewardStatus.Completed, SubmittedAtUtc = endedAt,
+                    Players = [new MatchResultPlayer
+                    {
+                        MatchId = matchId, UserId = FirstUserId,
+                        Survived = survived, Disconnected = false
+                    }]
+                }
+            });
+            await Db.SaveChangesAsync();
+            Db.ChangeTracker.Clear();
+        }
 
         public static async Task<ProfileHarness> CreateAsync()
         {

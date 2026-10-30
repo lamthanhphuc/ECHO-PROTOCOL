@@ -12,12 +12,20 @@ namespace EchoProtocol.Networking.Authority
     [Serializable]
     public sealed class MatchAuthorityDto
     {
+        public MatchRosterPlayerDto[] players;
         public string matchId;
         public string fusionSessionName;
         public string hostUserId;
         public int maxPlayers;
         public string status;
         public string leaseExpiresAtUtc;
+    }
+
+    [Serializable]
+    public sealed class MatchRosterPlayerDto
+    {
+        public string userId;
+        public bool disconnected;
     }
 
     [Serializable]

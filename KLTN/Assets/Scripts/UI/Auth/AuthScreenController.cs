@@ -89,13 +89,13 @@ namespace EchoProtocol.UI.Auth
     {
       if (AuthDomain.AuthSession.IsAuthenticated)
       {
-        GameUIFeedback.LoadScene(mainMenuSceneName);
+        FirstTimeAgreementController.Require(mainMenuSceneName);
         yield break;
       }
 
       if (_runtime.RestoreState == AuthDomain.SessionRestoreState.Succeeded)
       {
-        GameUIFeedback.LoadScene(mainMenuSceneName);
+        FirstTimeAgreementController.Require(mainMenuSceneName);
         yield break;
       }
 
@@ -154,7 +154,7 @@ namespace EchoProtocol.UI.Auth
           if (meResult != null && meResult.IsSuccess && meResult.Data != null && meResult.Data.success)
           {
             _runtime.SetRestoreState(AuthDomain.SessionRestoreState.Succeeded);
-            GameUIFeedback.LoadScene(mainMenuSceneName);
+            FirstTimeAgreementController.Require(mainMenuSceneName);
             yield break;
           }
 
@@ -236,7 +236,7 @@ namespace EchoProtocol.UI.Auth
       if (meResult != null && meResult.IsSuccess && meResult.Data != null && meResult.Data.success)
       {
         _runtime.SetRestoreState(AuthDomain.SessionRestoreState.Succeeded);
-        GameUIFeedback.LoadScene(mainMenuSceneName);
+        FirstTimeAgreementController.Require(mainMenuSceneName);
         yield break;
       }
 

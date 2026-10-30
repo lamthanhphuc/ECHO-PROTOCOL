@@ -28,6 +28,25 @@ public sealed class MatchResultService : IMatchResultService
         Guid matchId,
         SubmitMatchResultRequest request,
         CancellationToken cancellationToken = default)
+        => await SubmitCoreAsync(hostUserId, matchId, request, cancellationToken);
+
+    public async Task<ServiceResult<MatchResultResponse>> RecoverAsync(Guid adminId, Guid matchId,
+        SubmitMatchResultRequest request, DateTime endedAtUtc, string reason, CancellationToken ct)
+    {
+        if (endedAtUtc.Kind != DateTimeKind.Utc || endedAtUtc > UtcNow()
+            || string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 10 || reason.Length > 1000
+            || !await _db.Users.AnyAsync(user => user.Id == adminId && user.Role == UserRole.ADMIN, ct))
+            return Failure("Admin approval, UTC end time and a review reason (10-1000 characters) are required", ErrorCodes.ValidationError);
+        var host = await _db.MatchAuthorityBindings.AsNoTracking().Where(match => match.MatchId == matchId)
+            .Select(match => (Guid?)match.HostUserId).SingleOrDefaultAsync(ct);
+        if (host == null) return Failure("Match not found", ErrorCodes.MatchNotFound);
+        return await SubmitCoreAsync(host.Value, matchId, request, ct, endedAtUtc,
+            $"Admin={adminId:D}; ReviewedAt={UtcNow():O}; Reason={reason.Trim()}");
+    }
+
+    private async Task<ServiceResult<MatchResultResponse>> SubmitCoreAsync(Guid hostUserId, Guid matchId,
+        SubmitMatchResultRequest request, CancellationToken cancellationToken,
+        DateTime? reviewedEndUtc = null, string? recoveryAudit = null)
     {
         var requestFailure = ValidateRequest(request);
         if (requestFailure is not null)
@@ -63,7 +82,8 @@ public sealed class MatchResultService : IMatchResultService
                 return ResolveReplay(match.Result, payloadHash);
             }
 
-            var now = UtcNow();
+            var wallNow = UtcNow();
+            var now = reviewedEndUtc ?? wallNow;
             if (match.Status != MatchAuthorityStatus.InMatch)
             {
                 return Failure(
@@ -71,7 +91,9 @@ public sealed class MatchResultService : IMatchResultService
                     ErrorCodes.MatchResultInvalidState);
             }
 
-            if (match.LeaseExpiresAtUtc <= now)
+            if (reviewedEndUtc.HasValue && match.LeaseExpiresAtUtc > wallNow)
+                return Failure("Active authority cannot be overridden by recovery", ErrorCodes.MatchAuthorityForbidden);
+            if (!reviewedEndUtc.HasValue && match.LeaseExpiresAtUtc <= now)
             {
                 return Failure("Match authority lease expired", ErrorCodes.MatchLeaseExpired);
             }
@@ -112,7 +134,8 @@ public sealed class MatchResultService : IMatchResultService
                     .OrderBy(userId => userId, StringComparer.Ordinal)),
                 PayloadHash = payloadHash,
                 RewardStatus = MatchRewardStatus.Pending,
-                SubmittedAtUtc = now,
+                SubmittedAtUtc = wallNow,
+                RecoveryAudit = recoveryAudit,
                 Players = request.Players.Select(player => new MatchResultPlayer
                 {
                     MatchId = match.MatchId,
@@ -260,7 +283,7 @@ public sealed class MatchResultService : IMatchResultService
         IReadOnlyCollection<SubmitMatchResultPlayerRequest> requestedPlayers,
         ICollection<MatchPlayerBinding> boundPlayers)
     {
-        var bindingsByUser = boundPlayers.ToDictionary(item => item.UserId);
+        var bindingsByUser = boundPlayers.Where(item => item.Participated).ToDictionary(item => item.UserId);
         if (bindingsByUser.Count != requestedPlayers.Count ||
             requestedPlayers.Any(item => !bindingsByUser.ContainsKey(item.UserId)))
         {

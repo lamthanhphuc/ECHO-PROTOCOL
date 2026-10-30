@@ -133,10 +133,10 @@ public static class MainMenuUtilityIconStyle
 
         PlaceTopRight(
             store,
-            28f,
             24f,
-            314f,
-            60f);
+            20f,
+            402f,
+            48f);
 
         // Credit remains the largest element.
         PlaceTopLeft(
@@ -144,24 +144,24 @@ public static class MainMenuUtilityIconStyle
             0f,
             0f,
             178f,
-            52f);
+            48f);
 
         // Small square utilities, closer to DEVOUR.
         StyleIconButton(
             shop,
             SettingsIcon.Shop,
-            190f,
+            354f,
             0f,
-            52f,
-            52f);
+            48f,
+            48f);
 
         StyleIconButton(
             web,
             SettingsIcon.Web,
-            252f,
+            298f,
             0f,
-            52f,
-            52f);
+            48f,
+            48f);
 
         // =================================================
         // CREDIT VISUAL REFINEMENT
@@ -212,6 +212,7 @@ public static class MainMenuUtilityIconStyle
             label.text = "CREDITS";
             label.fontSize = 9;
         }
+        UtilityBarStyle.MainMenu(store);
     }
 
     private static void StyleIconButton(

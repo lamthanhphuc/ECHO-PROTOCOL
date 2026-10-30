@@ -9,7 +9,7 @@ using UnityEngine.UI;
 
 namespace EchoProtocol.UI.HUD
 {
-    /// <summary>PURGE-only presentation. All gameplay values remain owned by their existing systems.</summary>
+    /// <summary>Shared gameplay presentation. All gameplay values remain owned by their existing systems.</summary>
     [DisallowMultipleComponent, DefaultExecutionOrder(600)]
     public sealed class HUDPurgePresentation : MonoBehaviour
     {
@@ -44,6 +44,9 @@ namespace EchoProtocol.UI.HUD
 
         public static bool IsPurgeScene => AlienHuntMission.Instance != null
             || SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
+        public bool CanOpenExpeditionMissions => _player != null && _down != null && _down.IsActive
+            && !(NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
+                && NetworkMatchState.Instance.Object.IsValid && NetworkMatchState.Instance.CurrentPhase == NetworkMatchPhase.MatchEnded);
         public static bool CanShowGameplay(bool bound, bool modal, bool ended, bool spectating)
             => bound && !modal && !ended && !spectating;
         public static bool MeterVisible(float ratio, bool active, float now, float until)
@@ -52,15 +55,17 @@ namespace EchoProtocol.UI.HUD
 
         private void Awake()
         {
-            if (!IsPurgeScene) { enabled = false; return; }
             _manager = GetComponent<GameplayHUDManager>();
             if (_manager == null) { enabled = false; return; }
             Build();
-            HideLegacy(_manager.ObjectiveTracker);
+            if (IsPurgeScene) HideLegacy(_manager.ObjectiveTracker);
+            else if (_manager.ObjectiveTracker != null)
+                foreach (var graphic in _manager.ObjectiveTracker.GetComponentsInChildren<Graphic>(true))
+                    graphic.enabled = false; // Keep the objective producer running behind the shared card.
             HideLegacy(_manager.PlayerVitals);
             HideLegacy(_manager.TeammateStatus);
             var oldMissions = GetComponent<HUDZoneMissions>();
-            if (oldMissions != null) oldMissions.enabled = false;
+            if (IsPurgeScene && oldMissions != null) oldMissions.enabled = false;
             if (_manager.Hotbar != null) _equipment = Group(_manager.Hotbar.gameObject);
             if (_manager.FieldScannerHUD != null) _scanner = Group(_manager.FieldScannerHUD.gameObject);
             if (_manager.ScannerTutorial != null) _tutorial = Group(_manager.ScannerTutorial.gameObject);
@@ -102,9 +107,11 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
-            if (_missions == null) return;
+            if (_missions == null || !IsPurgeScene) return;
             var mission = AlienHuntMission.Instance;
-            bool ended = mission != null && mission.Completed;
+            bool ended = IsPurgeScene ? mission != null && mission.Completed
+                : NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
+                    && NetworkMatchState.Instance.Object.IsValid && NetworkMatchState.Instance.CurrentPhase == NetworkMatchPhase.MatchEnded;
             if (_missionLock.IsLocked)
             {
                 if (_missionLock.ShouldAutoRelease() || ended || !_missionLock.IsTopmost) CloseMissions();
@@ -121,7 +128,9 @@ namespace EchoProtocol.UI.HUD
         {
             if (_root == null) return;
             var mission = AlienHuntMission.Instance;
-            bool ended = mission != null && mission.Completed;
+            bool ended = IsPurgeScene ? mission != null && mission.Completed
+                : NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
+                    && NetworkMatchState.Instance.Object.IsValid && NetworkMatchState.Instance.CurrentPhase == NetworkMatchPhase.MatchEnded;
             bool spectating = _down != null && (_down.IsSpectating || _down.IsEliminated);
             bool visible = CanShowGameplay(_player != null && _down != null, PlayerInteractionControlLock.HasModal,
                 ended, spectating);
@@ -138,7 +147,26 @@ namespace EchoProtocol.UI.HUD
             }
 
             float now = Time.unscaledTime;
-            if (mission != null && mission.Ready)
+            if (!IsPurgeScene)
+            {
+                _objective.Icon.Kind = PurgeIcon.Missions;
+                _objective.Label.text = (_manager.ObjectiveTracker != null ? _manager.ObjectiveTracker.PresentationText : "EXPEDITION")
+                    + "\n" + L("[J] Nhiệm vụ", "[J] Objectives");
+                Fade(_objective, active);
+                var carrier = _player != null ? _player.GetComponentInChildren<PlayerEnergyCoreCarrier>(true) : null;
+                var identity = _player != null ? _player.GetComponent<LobbyPlayerState>() : null;
+                bool networkBound = identity != null && identity.Object != null && identity.Object.IsValid;
+                bool core = networkBound ? identity.CarriedCoreId.IsValid : carrier != null && carrier.IsCarrying;
+                bool fuel = _player != null && EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(_player) != null;
+                _held.Icon.Kind = fuel ? PurgeIcon.Fuel : PurgeIcon.Core;
+                _held.Label.text = (fuel ? L("PIN NHIÊN LIỆU", "FUEL CELL") : L("LÕI NĂNG LƯỢNG", "ENERGY CORE"))
+                    + "\n" + L("[G] Thả", "[G] Drop");
+                Fade(_held, active && (core || fuel));
+                // The legacy tracker can create progress graphics after Awake.
+                // Hide its entire canvas while continuing to read its live instructions.
+                if (_manager.ObjectiveTracker != null) Group(_manager.ObjectiveTracker.gameObject).alpha = 0f;
+            }
+            else if (mission != null && mission.Ready)
             {
                 if (_lastBurned < 0) _objectiveUntil = now + 5f;
                 if (ProgressAdvanced(_lastBurned, mission.Burned)) _pendingProgress = true;
@@ -340,6 +368,11 @@ namespace EchoProtocol.UI.HUD
             var root = (RectTransform)_root.transform;
             root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
             _objective = MakeCard("PurgeProgress", new Vector2(0,1), new Vector2(12,-12), new Vector2(280,70), PurgeIcon.Purge);
+            if (!IsPurgeScene)
+            {
+                _objective.Group.GetComponent<RectTransform>().sizeDelta = new Vector2(390, 126);
+                _objective.Label.rectTransform.sizeDelta = new Vector2(330, 110);
+            }
             _objective.Icon.color = HUDPresentationStyle.Warning;
             _uvMeter = MakeCard("PurgeUV", new Vector2(1,1), new Vector2(-12,-12), new Vector2(216,66), PurgeIcon.UV, true);
             _health = MakeCard("PurgeHealth", Vector2.zero, new Vector2(32,96), new Vector2(280,62), PurgeIcon.Health, true);

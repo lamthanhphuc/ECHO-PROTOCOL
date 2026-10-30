@@ -203,20 +203,43 @@ namespace EchoProtocol.Networking
 
             _matchStartInProgress = true;
 
+            string loadingAttempt;
+            try
+            {
+                loadingAttempt = MatchLoadingCoordinator.EnsureExists(_bootstrap).BeginHost(
+                    runner, LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner)));
+            }
+            catch (Exception error)
+            {
+                _bootstrap.CancelMatchStartGate();
+                _matchStartInProgress = false;
+                ReportError($"Could not announce match loading: {error.Message}");
+                return false;
+            }
+
             RuntimeLog.Log(
                 RuntimeLogCategory.Lobby,
                 $"[LobbyManager] Host validated {state.CurrentPlayers} ready players. Confirming backend authority.");
 
-            _ = StartMatchAsync(runner);
+            _ = StartMatchAsync(runner, loadingAttempt);
             return true;
         }
 
-        private async Task StartMatchAsync(NetworkRunner runner)
+        private async Task StartMatchAsync(NetworkRunner runner, string loadingAttempt)
         {
             string selectedScene = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
+            var loading = MatchLoadingCoordinator.Instance;
+            MatchAuthorityRuntime authority = null;
+            bool backendAccepted = false, sceneRequested = false, backendAbortAttempted = false;
             try
             {
-                var authority =
+                // Every frozen peer must have displayed the overlay before backend/scene work starts.
+                if (loading == null || !await loading.WaitForAnnouncementsAsync(runner, loadingAttempt))
+                {
+                    ReportError("Match loading was not acknowledged by every player. Retry from the lobby.");
+                    return;
+                }
+                authority =
                     MatchAuthorityRuntime.EnsureExists(
                         _bootstrap);
 
@@ -232,12 +255,18 @@ namespace EchoProtocol.Networking
                     ReportError("Cannot prepare backend authority for this lobby.");
                     return;
                 }
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
 
                 float bindingDeadline = Time.realtimeSinceStartup + 8f;
                 string rosterError = "Active roster is not committed.";
                 while (!TryValidateCommittedRoster(runner, authority, out rosterError)
+                       && loading.IsCurrent(runner, loadingAttempt)
                        && Time.realtimeSinceStartup < bindingDeadline)
+                {
                     await Task.Delay(100);
+                }
+
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
                 if (!TryValidateCommittedRoster(runner, authority, out rosterError))
                 {
                     ReportError($"Backend player binding timed out: {rosterError}");
@@ -380,6 +409,7 @@ namespace EchoProtocol.Networking
                     await Task.Delay(100);
                 }
 
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
                 if (runner == null
                     || !ReferenceEquals(runner, _bootstrap?.Runner)
                     || !runner.IsRunning
@@ -406,6 +436,9 @@ namespace EchoProtocol.Networking
                     ReportError($"Backend rejected match start: {error}");
                     return;
                 }
+                backendAccepted = true;
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
+                loading.BackendAuthorized(runner, loadingAttempt);
 
                 if (runner == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || !runner.IsSceneAuthority
@@ -427,11 +460,13 @@ namespace EchoProtocol.Networking
                 {
                     await Task.Delay(100);
                 }
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
                 if (!_bootstrap.CloseRoomForMatchStart())
                 {
                     ReportError("Fusion room was not ready after backend start; aborting backend match without shutting down the Lobby.");
                     if (ReferenceEquals(runner, _bootstrap?.Runner))
                     {
+                        backendAbortAttempted = true;
                         bool backendAborted = await authority.EndAsync("FUSION_ROOM_NOT_READY");
                         if (!backendAborted)
                             Debug.LogWarning("[LobbyManager] Backend match abort was not confirmed; check backend state before retry.");
@@ -442,6 +477,8 @@ namespace EchoProtocol.Networking
                 RuntimeLog.Log(
                 RuntimeLogCategory.Lobby,
                 $"[LobbyManager] Backend confirmed match. Loading '{selectedScene}'.");
+                loading.BeginSceneTransition(runner, loadingAttempt);
+                sceneRequested = true;
                 await runner.LoadScene(
                     selectedScene,
                     UnityEngine.SceneManagement.LoadSceneMode.Single);
@@ -450,10 +487,21 @@ namespace EchoProtocol.Networking
             {
                 ReportError($"Match scene load failed: {exception.Message}");
                 Debug.LogException(exception);
-                if (_bootstrap != null) await _bootstrap.ShutdownRunnerAsync();
+                // A failed scene has no gameplay snapshot for a graceful Host handoff.
+                // The cinematic recovery action uses the guarded failed-loading abort path.
+                if (_bootstrap != null && (loading == null || !loading.Snapshot.IsVisible))
+                    await _bootstrap.ShutdownRunnerAsync();
             }
             finally
             {
+                // A timeout/disconnect while awaiting backend approval must not start a hidden match later.
+                if (backendAccepted && !sceneRequested && !backendAbortAttempted && authority != null
+                    && runner != null && runner == _bootstrap?.Runner && runner.IsRunning && runner.IsServer)
+                {
+                    try { await authority.EndAsync("MATCH_LOADING_CANCELLED"); }
+                    catch (Exception error) { Debug.LogWarning($"[LobbyManager] Loading cancellation cleanup: {error.Message}"); }
+                }
+
                 if (_bootstrap == null ||
                     _bootstrap.State != NetworkSessionState.InMatch)
                 {
@@ -720,6 +768,7 @@ namespace EchoProtocol.Networking
 
         private void ReportError(string message)
         {
+            if (_matchStartInProgress) MatchLoadingCoordinator.Instance?.AbortHost(_bootstrap?.Runner, message);
             Debug.LogWarning($"[LobbyManager] {message}");
             OnLobbyError?.Invoke(message);
         }

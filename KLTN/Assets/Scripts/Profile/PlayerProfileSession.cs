@@ -9,6 +9,9 @@
     public static long ExperiencePoints { get; private set; }
     public static int Level { get; private set; }
     public static int WalletBalance { get; private set; }
+    public static PlayerActivityDto RecentMatch { get; private set; }
+    public static PlayerActivityDto LatestWin { get; private set; }
+    public static PlayerActivityDto LatestNonSurvival { get; private set; }
 
     public static bool HasProfile =>
       !string.IsNullOrWhiteSpace(UserId);
@@ -28,6 +31,9 @@
       ExperiencePoints = profile.experiencePoints;
       Level = profile.level;
       WalletBalance = profile.walletBalance;
+      RecentMatch = profile.recentMatch;
+      LatestWin = profile.latestWin;
+      LatestNonSurvival = profile.latestNonSurvival;
     }
 
     public static void Clear()
@@ -39,6 +45,9 @@
       ExperiencePoints = 0;
       Level = 0;
       WalletBalance = 0;
+      RecentMatch = null;
+      LatestWin = null;
+      LatestNonSurvival = null;
     }
   }
 }

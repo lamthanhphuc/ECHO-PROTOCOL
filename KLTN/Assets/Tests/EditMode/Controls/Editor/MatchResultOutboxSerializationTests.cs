@@ -4,6 +4,17 @@ using EchoProtocol.Networking.Authority;
 
 public sealed class MatchResultOutboxSerializationTests
 {
+    [Test]
+    public void RecoveryCannotExportOrRetryAnotherAccountsResult()
+    {
+        var record = new PendingMatchResultRecord { ownerId = "a", rejected = true,
+            request = new SubmitMatchResultRequestDto() };
+        Assert.That(MatchAuthorityRuntime.CanRecoverResult(record, "a"), Is.True);
+        Assert.That(MatchAuthorityRuntime.CanRecoverResult(record, "b"), Is.False);
+        Assert.That(MatchAuthorityRuntime.CanRecoverResult(record, ""), Is.False);
+        record.saved = true;
+        Assert.That(MatchAuthorityRuntime.CanRecoverResult(record, "a"), Is.False);
+    }
     [TestCase(401, "TOKEN_EXPIRED", true, false)]
     [TestCase(429, "RATE_LIMITED", true, false)]
     [TestCase(503, "UNAVAILABLE", true, false)]

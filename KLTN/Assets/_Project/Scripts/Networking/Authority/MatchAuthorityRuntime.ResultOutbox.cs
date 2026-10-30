@@ -70,6 +70,37 @@ namespace EchoProtocol.Networking.Authority
         public bool IsResultPermanentlyRejected(string matchId) => _resultQueue.items.Exists(item =>
             item.matchId == matchId && item.ownerId == AuthSession.CurrentUserId && item.rejected);
 
+        public static bool CanRecoverResult(PendingMatchResultRecord entry, string userId) =>
+            entry != null && entry.rejected && !entry.saved && entry.request != null
+            && !string.IsNullOrEmpty(userId) && entry.ownerId == userId;
+
+        public void RetryRejectedResult(string matchId)
+        {
+            var entry = _resultQueue.items.Find(item => item.matchId == matchId);
+            if (_outboxSending || !AuthSession.IsAuthenticated || !CanRecoverResult(entry, AuthSession.CurrentUserId)) return;
+            // An explicit attempt still passes every backend lease/roster/replay check.
+            entry.rejected = false;
+            entry.nextAttemptUtc = 0;
+            SaveResultOutbox();
+            SetResultSaveStatus(GameLanguage.Choose("Đang thử gửi lại kết quả…", "Retrying result submission…"));
+        }
+
+        public void ExportRejectedResult(string matchId)
+        {
+            var entry = _resultQueue.items.Find(item => item.matchId == matchId);
+            if (!AuthSession.IsAuthenticated || !CanRecoverResult(entry, AuthSession.CurrentUserId)
+                || !Guid.TryParse(matchId, out var id)) return;
+            try
+            {
+                var folder = System.IO.Path.Combine(Application.persistentDataPath, "ResultRecovery");
+                System.IO.Directory.CreateDirectory(folder);
+                var path = System.IO.Path.Combine(folder, id.ToString("D") + ".json");
+                System.IO.File.WriteAllText(path, JsonUtility.ToJson(entry, true));
+                SetResultSaveStatus(GameLanguage.Choose("Đã lưu hồ sơ để đối soát: ", "Recovery record saved: ") + path);
+            }
+            catch (Exception error) { Debug.LogException(error); }
+        }
+
         public static bool IsPermanentResultFailure(long statusCode, string errorCode, bool durationCanRetry)
         {
             if (statusCode == 401 || statusCode == 408 || statusCode == 429 || statusCode >= 500) return false;

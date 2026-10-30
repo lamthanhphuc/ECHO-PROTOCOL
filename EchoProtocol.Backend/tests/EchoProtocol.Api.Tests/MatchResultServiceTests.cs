@@ -12,6 +12,57 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class MatchResultServiceTests
 {
+    [Fact]
+    public async Task LobbyHistoryIsExcludedFromStartedResultRoster()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var visitor = Guid.NewGuid();
+        harness.Db.Users.Add(new User { Id = visitor, Username = "visitor", Email = "visitor@example.test", PasswordHash = "unused" });
+        harness.Db.MatchPlayerBindings.Add(new MatchPlayerBinding
+        {
+            Id = Guid.NewGuid(), MatchId = harness.MatchId, UserId = visitor,
+            FusionActorNumber = 3, JoinProofId = Guid.NewGuid(), Participated = false,
+            BoundAtUtc = Now.AddMinutes(-5).UtcDateTime, LastSeenAtUtc = Now.AddMinutes(-4).UtcDateTime,
+            DisconnectedAtUtc = Now.AddMinutes(-4).UtcDateTime
+        });
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, harness.ValidRequest());
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.Data!.PlayerCount);
+    }
+    [Fact]
+    public async Task AdminRecoveryRequiresExpiredLeaseAndReplaysWithoutDuplicateResult()
+    {
+        await using var harness = await UnitHarness.CreateAsync(leaseExpired: true);
+        var user = await harness.Db.Users.SingleAsync(user => user.Id == harness.HostId);
+        var request = harness.ValidRequest();
+        var denied = await harness.Service.RecoverAsync(user.Id, harness.MatchId, request,
+            Now.AddSeconds(-10).UtcDateTime, "Reviewed exported match evidence", CancellationToken.None);
+        Assert.False(denied.IsSuccess);
+        user.Role = UserRole.ADMIN;
+        await harness.Db.SaveChangesAsync();
+        var accepted = await harness.Service.RecoverAsync(user.Id, harness.MatchId, request,
+            Now.AddSeconds(-10).UtcDateTime, "Reviewed exported match evidence", CancellationToken.None);
+        Assert.True(accepted.IsSuccess);
+        var replay = await harness.Service.RecoverAsync(user.Id, harness.MatchId, request,
+            Now.AddSeconds(-10).UtcDateTime, "Reviewed exported match evidence", CancellationToken.None);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Contains(user.Id.ToString("D"), (await harness.Db.MatchResults.SingleAsync()).RecoveryAudit);
+    }
+
+    [Fact]
+    public async Task RecoveryCannotOverrideActiveHostLease()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var user = await harness.Db.Users.SingleAsync(user => user.Id == harness.HostId);
+        user.Role = UserRole.ADMIN;
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.RecoverAsync(user.Id, harness.MatchId, harness.ValidRequest(),
+            Now.AddSeconds(-10).UtcDateTime, "Reviewed exported match evidence", CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Empty(harness.Db.MatchResults);
+    }
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
@@ -425,6 +476,7 @@ public sealed class MatchResultServiceTests
             int actor,
             bool disconnected) => new()
         {
+            Participated = true,
             Id = Guid.NewGuid(),
             MatchId = matchId,
             UserId = userId,

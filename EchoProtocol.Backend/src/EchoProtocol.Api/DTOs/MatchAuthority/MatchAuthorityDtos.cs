@@ -14,6 +14,7 @@ public sealed class CreateMatchAuthorityRequest
 
 public sealed class MatchAuthorityResponse
 {
+    public IReadOnlyList<MatchRosterPlayerResponse> Players { get; set; } = Array.Empty<MatchRosterPlayerResponse>();
     public Guid MatchId { get; set; }
     public string FusionSessionName { get; set; } = string.Empty;
     public Guid HostUserId { get; set; }
@@ -22,6 +23,12 @@ public sealed class MatchAuthorityResponse
     public DateTime LeaseExpiresAtUtc { get; set; }
     public string? MapId { get; set; }
     public string? Difficulty { get; set; }
+}
+
+public sealed class MatchRosterPlayerResponse
+{
+    public Guid UserId { get; set; }
+    public bool Disconnected { get; set; }
 }
 
 public sealed class StartMatchAuthorityRequest

@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,7 +7,7 @@ namespace EchoProtocol.UI
     public enum SettingsIcon
     {
         Gear, Microphone, Mouse, Audio, Keyboard, Monitor, Team, Interact, Run, Crouch,
-        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio
+        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio, Warning
     }
 
     /// <summary>Small vector icons, independent of installed fonts and texture resolution.</summary>
@@ -32,6 +33,9 @@ namespace EchoProtocol.UI
             _bounds = GetPixelAdjustedRect();
             switch (_icon)
             {
+                case SettingsIcon.Warning:
+                    Stroke(50, 92, 6, 12, 6); Stroke(6, 12, 94, 12, 6); Stroke(94, 12, 50, 92, 6);
+                    Stroke(50, 63, 50, 38, 7); Stroke(50, 26, 50, 22, 7); break;
                 case SettingsIcon.Gear:
                     Arc(50, 50, 28, 0, 360, 9);
                     for (int i = 0; i < 8; i++)
@@ -191,6 +195,248 @@ namespace EchoProtocol.UI
             foreach (var point in points)
                 _mesh.AddVert(new Vector2(_bounds.xMin + point.x * _bounds.width / 100, _bounds.yMin + point.y * _bounds.height / 100), color, Vector2.zero);
             for (int i = 1; i < points.Length - 1; i++) _mesh.AddTriangle(start, start + i, start + i + 1);
+        }
+    }
+}
+
+namespace EchoProtocol.UI
+{
+    // One visual and spacing rule for the Main Menu, Lobby and Store headers.
+    public static class UtilityBarStyle
+    {
+        public const float ButtonSize = 48f;
+        public const float Gap = 8f;
+        public const float CreditsWidth = 178f;
+        public const float ToolbarWidth = CreditsWidth + 4f * (ButtonSize + Gap);
+        public const float RightMargin = 24f;
+        public const float TopMargin = 20f;
+        public const string WebsiteUrl = "https://web.3.1.238.6.sslip.io/";
+
+        private static readonly Color Background = new(0.035f, 0.047f, 0.051f, 0.96f);
+        private static readonly Color Border = new(0.22f, 0.26f, 0.27f, 0.92f);
+        private static readonly Color IconColor = new(0.835f, 0.839f, 0.82f, 1f);
+        private static readonly Color CreditsColor = new(0.73f, 0.67f, 0.51f, 1f);
+        private static Font _creditsFont;
+
+        public static void MainMenu(RectTransform root)
+        {
+            if (root == null) return;
+            Place(root.Find("CoinContainer") as RectTransform, 0f, CreditsWidth);
+            Place(root.Find("ProfileButton") as RectTransform, 186f, ButtonSize);
+            Place(root.Find("WebButton") as RectTransform, 298f, ButtonSize);
+            Place(root.Find("ShopButton") as RectTransform, 354f, ButtonSize);
+            Button(root.Find("ProfileButton")?.GetComponent<Button>(), SettingsIcon.Profile);
+            Button(root.Find("ShopButton")?.GetComponent<Button>(), SettingsIcon.Shop);
+            Button(root.Find("WebButton")?.GetComponent<Button>(), SettingsIcon.Web);
+            Credits(root.Find("CoinContainer") as RectTransform);
+            PositionAtSafeTopRight(root, ToolbarWidth);
+        }
+
+        public static void Lobby(RectTransform root)
+        {
+            if (root == null) return;
+            Place(root.Find("CreditsButton") as RectTransform, 0f, CreditsWidth);
+            EnsureButton(root, "ProfileButton", SettingsIcon.Profile, 186f);
+            EnsureButton(root, "LeaderboardButton", SettingsIcon.Trophy, 242f);
+            Place(root.Find("WebButton") as RectTransform, 298f, ButtonSize);
+            EnsureButton(root, "SettingsButton", SettingsIcon.Gear, 354f);
+            Button(root.Find("WebButton")?.GetComponent<Button>(), SettingsIcon.Web);
+            Credits(root.Find("CreditsButton") as RectTransform);
+            PositionAtSafeTopRight(root, ToolbarWidth);
+        }
+
+        public static Button EnsureButton(Transform parent, string name, SettingsIcon icon,
+            float x)
+        {
+            var child = parent.Find(name) as RectTransform;
+            if (child == null)
+            {
+                child = new GameObject(name, typeof(RectTransform), typeof(Image),
+                    typeof(Button)).GetComponent<RectTransform>();
+                child.SetParent(parent, false);
+            }
+            Place(child, x, ButtonSize);
+            var button = child.GetComponent<Button>() ?? child.gameObject.AddComponent<Button>();
+            Button(button, icon);
+            return button;
+        }
+
+        public static void Place(RectTransform rect, float x, float width)
+        {
+            if (rect == null) return;
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(x, 0f);
+            rect.sizeDelta = new Vector2(width, ButtonSize);
+            rect.localScale = Vector3.one;
+        }
+
+        public static void PositionAtSafeTopRight(RectTransform rect, float width,
+            float extraRight = 0f)
+        {
+            PositionAtSafeTopRight(rect, width, Screen.safeArea,
+                new Vector2(Screen.width, Screen.height), extraRight);
+        }
+
+        public static void PositionAtSafeTopRight(RectTransform rect, float width,
+            Rect safe, Vector2 screen, float extraRight = 0f)
+        {
+            if (rect == null || screen.x <= 0 || screen.y <= 0) return;
+            var canvas = rect.GetComponentInParent<Canvas>();
+            var canvasRect = canvas != null ? canvas.rootCanvas.transform as RectTransform : null;
+            if (canvasRect == null) return;
+            float rightInset = (screen.x - safe.xMax) * canvasRect.rect.width / screen.x;
+            float topInset = (screen.y - safe.yMax) * canvasRect.rect.height / screen.y;
+            rect.anchorMin = rect.anchorMax = Vector2.one;
+            rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(-RightMargin - rightInset - extraRight,
+                -TopMargin - topInset);
+            rect.sizeDelta = new Vector2(width, ButtonSize);
+            rect.localScale = Vector3.one;
+        }
+
+        public static void Button(Button button, SettingsIcon icon)
+        {
+            if (button == null) return;
+            // Scene-authored buttons sometimes target a child background. Always use
+            // the button's own image so every header has the same 48 px silhouette.
+            var image = button.GetComponent<Image>() ?? button.gameObject.AddComponent<Image>();
+            image.sprite = null;
+            image.type = Image.Type.Simple;
+            image.color = Background;
+            image.raycastTarget = true;
+            button.targetGraphic = image;
+            foreach (var childImage in button.GetComponentsInChildren<Image>(true))
+                if (childImage != image && childImage.transform.parent == button.transform)
+                    childImage.enabled = false;
+            var legacyHover = button.GetComponent<EchoProtocol.UI.MainMenu.UIHoverEffect>();
+            if (legacyHover != null) legacyHover.enabled = false;
+            button.transition = Selectable.Transition.ColorTint;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.4f, 1.4f, 1.4f, 1f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.pressedColor = new Color(1f, 0.65f, 0.62f, 1f);
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+            var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
+            outline.enabled = true;
+            outline.effectColor = Border;
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            var iconRect = button.transform.Find("UtilityIcon") as RectTransform
+                ?? button.transform.Find("ProfileIcon") as RectTransform
+                ?? button.transform.Find("Icon") as RectTransform
+                ?? button.transform.Find("TrophyIcon") as RectTransform;
+            if (iconRect == null)
+            {
+                iconRect = new GameObject("UtilityIcon", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(SettingsIconGraphic)).GetComponent<RectTransform>();
+                iconRect.SetParent(button.transform, false);
+            }
+            iconRect.anchorMin = iconRect.anchorMax = new Vector2(0.5f, 0.5f);
+            iconRect.pivot = new Vector2(0.5f, 0.5f);
+            iconRect.anchoredPosition = Vector2.zero;
+            iconRect.sizeDelta = new Vector2(28f, 28f);
+            iconRect.localScale = Vector3.one;
+            var graphic = iconRect.GetComponent<SettingsIconGraphic>()
+                ?? iconRect.gameObject.AddComponent<SettingsIconGraphic>();
+            graphic.Configure(icon, IconColor);
+        }
+
+        public static void Credits(RectTransform rect)
+        {
+            if (rect == null) return;
+            var image = rect.GetComponent<Image>() ?? rect.gameObject.AddComponent<Image>();
+            image.sprite = null;
+            image.type = Image.Type.Simple;
+            image.color = Background;
+            foreach (var childImage in rect.GetComponentsInChildren<Image>(true))
+                if (childImage != image && childImage.transform.parent == rect
+                    && childImage.name != "CoinIcon" && childImage.name != "CurrencyMark")
+                    childImage.enabled = false;
+            var button = rect.GetComponent<Button>();
+            if (button != null)
+            {
+                button.targetGraphic = image;
+                var colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.4f, 1.4f, 1.4f, 1f);
+                colors.selectedColor = colors.highlightedColor;
+                colors.pressedColor = new Color(1f, 0.65f, 0.62f, 1f);
+                button.colors = colors;
+            }
+            var outline = rect.GetComponent<Outline>() ?? rect.gameObject.AddComponent<Outline>();
+            outline.enabled = true;
+            outline.effectColor = Border;
+            outline.effectDistance = new Vector2(1f, -1f);
+            var mark = rect.Find("CurrencyMark") as RectTransform
+                ?? rect.Find("CoinIcon") as RectTransform;
+            if (mark == null)
+            {
+                mark = new GameObject("CurrencyMark", typeof(RectTransform),
+                    typeof(Image)).GetComponent<RectTransform>();
+                mark.SetParent(rect, false);
+            }
+            mark.anchorMin = mark.anchorMax = new Vector2(0f, 0.5f);
+            mark.pivot = new Vector2(0f, 0.5f);
+            mark.anchoredPosition = new Vector2(12f, 0f);
+            mark.sizeDelta = new Vector2(28f, 28f);
+            var markImage = mark.GetComponent<Image>();
+            markImage.sprite = null;
+            markImage.color = CreditsColor;
+            markImage.raycastTarget = false;
+            mark.SetAsFirstSibling();
+            var sharedFont = Resources.Load<TMP_FontAsset>("UI/LobbyReference/LobbySerif");
+            // TMP's sourceFontFile is an import source, not a reliable UGUI runtime
+            // font in builds. Use one dynamic serif for both UGUI credit labels.
+            _creditsFont ??= Font.CreateDynamicFontFromOSFont(
+                new[] { "Georgia", "Times New Roman", "Liberation Serif", "DejaVu Serif" }, 18);
+            foreach (var text in rect.GetComponentsInChildren<Text>(true))
+            {
+                bool label = IsCreditLabel(text.name);
+                PositionCreditText(text.rectTransform, label);
+                if (_creditsFont != null) text.font = _creditsFont;
+                text.fontSize = label ? 11 : 18;
+                text.fontStyle = label ? FontStyle.Normal : FontStyle.Bold;
+                text.resizeTextForBestFit = false;
+                text.alignment = TextAnchor.MiddleLeft;
+                text.color = label ? IconColor : CreditsColor;
+            }
+            foreach (var text in rect.GetComponentsInChildren<TMP_Text>(true))
+            {
+                bool label = IsCreditLabel(text.name);
+                PositionCreditText(text.rectTransform, label);
+                if (sharedFont != null) text.font = sharedFont;
+                text.fontSize = label ? 11 : 18;
+                text.fontStyle = label ? FontStyles.Normal : FontStyles.Bold;
+                text.enableAutoSizing = false;
+                text.alignment = TextAlignmentOptions.MidlineLeft;
+                text.color = label ? IconColor : CreditsColor;
+            }
+            RefreshCreditsLabel(rect);
+        }
+
+        public static void RefreshCreditsLabel(RectTransform rect)
+        {
+            if (rect == null) return;
+            string value = EchoProtocol.Settings.GameLanguage.Choose("TÍN DỤNG", "CREDITS");
+            foreach (var text in rect.GetComponentsInChildren<Text>(true))
+                if (text.name.Contains("Label") || text.name == "Caption") text.text = value;
+            foreach (var text in rect.GetComponentsInChildren<TMP_Text>(true))
+                if (text.name.Contains("Label") || text.name == "Caption") text.text = value;
+        }
+
+        private static bool IsCreditLabel(string name) =>
+            name.Contains("Label") || name == "Caption";
+
+        private static void PositionCreditText(RectTransform rect, bool label)
+        {
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(50f, label ? -28f : -5f);
+            rect.sizeDelta = new Vector2(120f, label ? 16f : 24f);
+            rect.localScale = Vector3.one;
         }
     }
 }

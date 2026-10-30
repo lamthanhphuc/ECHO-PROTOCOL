@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using EchoProtocol.Auth;
 using EchoProtocol.Audio;
+using EchoProtocol.Api;
+using EchoProtocol.Settings;
 using EchoProtocol.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -37,8 +39,6 @@ namespace EchoProtocol.UI.MainMenu
         private LeaderboardArchiveVisuals _visuals;
         private Sprite _portraitSprite;
         private RectTransform _profileRect;
-        private RectTransform _iconRect;
-        private Vector2 _profileBasePosition;
         private Button _iconButton;
         private GameObject _tooltip;
         private RectTransform _overlay;
@@ -56,6 +56,8 @@ namespace EchoProtocol.UI.MainMenu
         private SettingsIconGraphic _radioSymbol;
         private Text _pageLabel;
         private Text _mapLabel;
+        private Text _gameModeLabel;
+        private bool _purgeMode;
         private Text _difficultyLabel;
         private Text _columnLabel;
         private Button _soloTab;
@@ -70,7 +72,7 @@ namespace EchoProtocol.UI.MainMenu
         private Coroutine _opening;
         private Coroutine _tabTransition;
         private LeaderboardApiService _service;
-        private string[] _maps = { "SciFi", "Scene_A", "Scene_B" };
+        private string[] _maps = { "SciFi", "Scene_A" };
         private string[] _difficulties = { "EASY", "NORMAL", "HARD" };
         private string _mapId = "SciFi";
         private string _difficulty = "NORMAL";
@@ -79,6 +81,7 @@ namespace EchoProtocol.UI.MainMenu
         private int _pageSize = MaximumPageSize;
         private int _totalCount;
         private ArchiveState _archiveState = ArchiveState.Loading;
+        private ArchiveError _archiveError;
         private int _requestVersion;
         private bool _loadRecords = true;
         private float _fitScale = 1f;
@@ -86,6 +89,7 @@ namespace EchoProtocol.UI.MainMenu
         private Rect _lastSafeArea;
         private GameObject _previousSelection;
         private readonly List<LockedGroup> _lockedGroups = new List<LockedGroup>();
+        private readonly HashSet<Button> _boundIcons = new HashSet<Button>();
 
         private struct LockedGroup
         {
@@ -106,6 +110,14 @@ namespace EchoProtocol.UI.MainMenu
         public string SelectedDifficulty => _difficulty;
 
         public enum ArchiveState { Loading, Empty, Error, Records }
+        private enum ArchiveError { Network, Session, Server, Request }
+
+        private static string L(string vi, string en) => GameLanguage.Choose(vi, en);
+
+        private void OnEnable()
+        {
+            GameLanguage.Changed += RefreshLanguage;
+        }
 
         public static MainMenuLeaderboardController Install(
             Canvas canvas,
@@ -128,6 +140,26 @@ namespace EchoProtocol.UI.MainMenu
             return component;
         }
 
+        public static MainMenuLeaderboardController Install(Canvas canvas, Button iconButton)
+        {
+            if (canvas == null || iconButton == null) return null;
+            var existing = canvas.GetComponent<MainMenuLeaderboardController>();
+            if (existing != null)
+            {
+                existing.BindIcon(iconButton);
+                return existing;
+            }
+            var component = canvas.gameObject.AddComponent<MainMenuLeaderboardController>();
+            component.Build(null, iconButton);
+            return component;
+        }
+
+        private void BindIcon(Button button)
+        {
+            if (button != null && _boundIcons.Add(button))
+                button.onClick.AddListener(Open);
+        }
+
         private void Awake()
         {
             _canvas = GetComponent<Canvas>();
@@ -135,6 +167,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private void OnDisable()
         {
+            GameLanguage.Changed -= RefreshLanguage;
             Close();
         }
 
@@ -158,12 +191,11 @@ namespace EchoProtocol.UI.MainMenu
             if (pressed && IsOpen) Close();
         }
 
-        private void Build(RectTransform profile)
+        private void Build(RectTransform profile, Button suppliedIcon = null)
         {
             _profileRect = profile;
-            _profileBasePosition = profile.anchoredPosition;
             _visuals = Resources.Load<LeaderboardArchiveVisuals>("LeaderboardArchive/Visuals");
-            _font = profile.GetComponentInParent<Canvas>()
+            _font = _canvas
                 .GetComponentsInChildren<Text>(true)
                 .FirstOrDefault(text => text.font != null)?.font
                 ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -176,7 +208,12 @@ namespace EchoProtocol.UI.MainMenu
             _rowPrefab = rowAsset != null
                 && rowAsset.GetComponent<LeaderboardRowView>() != null
                 ? rowAsset : null;
-            BuildIcon(profile);
+            if (suppliedIcon == null) BuildIcon(profile);
+            else
+            {
+                _iconButton = suppliedIcon;
+                BindIcon(suppliedIcon);
+            }
             BuildOverlay();
         }
 
@@ -193,11 +230,10 @@ namespace EchoProtocol.UI.MainMenu
             rect.anchorMin = profile.anchorMin;
             rect.anchorMax = profile.anchorMax;
             rect.pivot = profile.pivot;
-            rect.sizeDelta = new Vector2(44f, 44f);
+            rect.sizeDelta = new Vector2(UtilityBarStyle.ButtonSize, UtilityBarStyle.ButtonSize);
             rect.anchoredPosition = profile.anchoredPosition
-                + new Vector2(-55f, 0f);
-            _iconRect = rect;
-            rect.SetSiblingIndex(profile.GetSiblingIndex());
+                + new Vector2(UtilityBarStyle.ButtonSize + UtilityBarStyle.Gap, 0f);
+            rect.SetSiblingIndex(profile.GetSiblingIndex() + 1);
 
             var image = rect.gameObject.AddComponent<Image>();
             image.color = Hex("181817", 0.97f);
@@ -215,12 +251,14 @@ namespace EchoProtocol.UI.MainMenu
             colors.fadeDuration = 0.12f;
             _iconButton.colors = colors;
             _iconButton.onClick.AddListener(Open);
+            _boundIcons.Add(_iconButton);
             rect.gameObject.AddComponent<GameAudioButton>();
 
             var symbol = NewRect("TrophyIcon", rect);
             Stretch(symbol, 7f, 7f, 7f, 7f);
             var trophy = symbol.gameObject.AddComponent<SettingsIconGraphic>();
             trophy.Configure(SettingsIcon.Trophy, Bronze);
+            UtilityBarStyle.Button(_iconButton, SettingsIcon.Trophy);
 
             var tooltipRect = NewRect("LeaderboardTooltip", rect);
             tooltipRect.anchorMin = tooltipRect.anchorMax = new Vector2(0.5f, 0f);
@@ -240,7 +278,7 @@ namespace EchoProtocol.UI.MainMenu
             _tooltip.SetActive(false);
 
             var hover = rect.gameObject.AddComponent<LeaderboardIconHover>();
-            hover.Configure(trophy, outline, _tooltip);
+            hover.Configure(_tooltip);
         }
 
         private void BuildOverlay()
@@ -254,7 +292,7 @@ namespace EchoProtocol.UI.MainMenu
             var backdrop = NewRect("DimBackground", _overlay);
             Stretch(backdrop, 0f, 0f, 0f, 0f);
             var backdropImage = backdrop.gameObject.AddComponent<Image>();
-            backdropImage.color = Hex("030405", 0.83f);
+            backdropImage.color = Hex("030405", 1f);
             _backdropButton = backdrop.gameObject.AddComponent<Button>();
             _backdropButton.targetGraphic = backdropImage;
             _backdropButton.transition = Selectable.Transition.None;
@@ -307,12 +345,24 @@ namespace EchoProtocol.UI.MainMenu
             _soloTabAccent = CreateTabAccent(_soloTab);
             _teamTabAccent = CreateTabAccent(_teamTab);
 
+            var modeButton = NewButton("GameModeFilter", _panel, "", 13, 250f, 37f);
+            TopLeft((RectTransform)modeButton.transform, 28f, 194f, 250f, 37f);
+            _gameModeLabel = modeButton.GetComponentInChildren<Text>();
+            modeButton.onClick.AddListener(() =>
+            {
+                _purgeMode = !_purgeMode;
+                _maps = _purgeMode ? new[] { "Scene_B" } : new[] { "SciFi", "Scene_A" };
+                _mapId = _maps[0];
+                _page = 1;
+                RefreshFilters();
+                Fetch();
+            });
             var mapButton = NewButton("MapFilter", _panel, "", 13, 240f, 37f);
-            TopLeft((RectTransform)mapButton.transform, 28f, 194f, 240f, 37f);
+            TopLeft((RectTransform)mapButton.transform, 288f, 194f, 320f, 37f);
             _mapLabel = mapButton.GetComponentInChildren<Text>();
             mapButton.onClick.AddListener(CycleMap);
             var difficultyButton = NewButton("DifficultyFilter", _panel, "", 13, 205f, 37f);
-            TopLeft((RectTransform)difficultyButton.transform, 278f, 194f, 205f, 37f);
+            TopLeft((RectTransform)difficultyButton.transform, 618f, 194f, 205f, 37f);
             _difficultyLabel = difficultyButton.GetComponentInChildren<Text>();
             difficultyButton.onClick.AddListener(CycleDifficulty);
 
@@ -358,8 +408,8 @@ namespace EchoProtocol.UI.MainMenu
                 "", 20, Pale, TextAnchor.MiddleCenter, FontStyle.Bold);
             Center(_bodyMessage.rectTransform, 0f, 1f, 700f, 38f);
             _bodySubline = NewText("BodySubline", _recordsViewport,
-                "", 13, Muted, TextAnchor.MiddleCenter);
-            Center(_bodySubline.rectTransform, 0f, -31f, 700f, 26f);
+                "", 14, Muted, TextAnchor.MiddleCenter);
+            Center(_bodySubline.rectTransform, 0f, -36f, 900f, 52f);
             var bottomRule = NewRect("BottomRule", _panel);
             bottomRule.anchorMin = new Vector2(0f, 0f);
             bottomRule.anchorMax = new Vector2(1f, 0f);
@@ -406,6 +456,7 @@ namespace EchoProtocol.UI.MainMenu
 
             RefreshFilters();
             RefreshTabs();
+            RefreshLanguage();
             UpdatePanelSize();
             _overlay.gameObject.SetActive(false);
         }
@@ -524,7 +575,7 @@ namespace EchoProtocol.UI.MainMenu
             if (_opening != null) StopCoroutine(_opening);
             if (Application.isPlaying) _opening = StartCoroutine(AnimateOpen());
             if (_loadRecords) Fetch();
-            else SetStatus("ARCHIVE TEST MODE");
+            else SetStatus(L("CHẾ ĐỘ THỬ", "ARCHIVE TEST MODE"));
         }
 
         public void Close()
@@ -641,13 +692,19 @@ namespace EchoProtocol.UI.MainMenu
                 if (!result.IsSuccess || result.Data == null
                     || !result.Data.success || result.Data.data == null)
                 {
+                    _archiveError = result.StatusCode == 401 ? ArchiveError.Session
+                        : result.FailureKind == ApiFailureKind.Network
+                          || result.FailureKind == ApiFailureKind.Timeout
+                          || result.StatusCode == 0 ? ArchiveError.Network
+                        : result.StatusCode >= 500 ? ArchiveError.Server
+                        : ArchiveError.Request;
                     PresentState(ArchiveState.Error);
                     RefreshPagination();
                     return;
                 }
 
                 var data = result.Data.data;
-                if (data.maps != null && data.maps.Length > 0) _maps = data.maps;
+                // Map choices are scoped to the selected game mode, not the global API catalog.
                 if (data.difficulties != null && data.difficulties.Length > 0)
                     _difficulties = data.difficulties;
                 RefreshFilters();
@@ -669,26 +726,35 @@ namespace EchoProtocol.UI.MainMenu
             _bodyMessage.gameObject.SetActive(!hasRows);
             _bodySubline.gameObject.SetActive(!hasRows);
             _radioSymbol.gameObject.SetActive(state == ArchiveState.Error);
-            _retryButton.gameObject.SetActive(state == ArchiveState.Error);
+            _retryButton.gameObject.SetActive(state == ArchiveState.Empty || state == ArchiveState.Error
+                && _archiveError != ArchiveError.Session);
             switch (state)
             {
                 case ArchiveState.Loading:
-                    _bodyMessage.text = "DECRYPTING ARCHIVE";
-                    _bodySubline.text = "ESTABLISHING SECURE CHANNEL...";
-                    SetStatus("ARCHIVE: CONNECTING");
+                    _bodyMessage.text = L("ĐANG GIẢI MÃ HỒ SƠ", "DECRYPTING ARCHIVE");
+                    _bodySubline.text = L("ĐANG KẾT NỐI...", "ESTABLISHING SECURE CHANNEL...");
+                    SetStatus(L("HỒ SƠ: ĐANG KẾT NỐI", "ARCHIVE: CONNECTING"));
                     break;
                 case ArchiveState.Empty:
-                    _bodyMessage.text = "NO EXTRACTIONS ON FILE";
-                    _bodySubline.text = "NO RECORDED RUNS FOR THIS MAP AND THREAT";
-                    SetStatus("ARCHIVE: NO RECORDS");
+                    _bodyMessage.text = L("CHƯA CÓ THÀNH TÍCH", "NO EXTRACTIONS ON FILE");
+                    _bodySubline.text = L("Chỉ xếp hạng trận thắng hoàn thành 100%, có người sống sót không mất kết nối.\nCá nhân: 1 người · Đội: 2–4 người. Hãy thử bộ lọc khác hoặc tải lại.", "Ranks wins with 100% completion and a connected survivor.\nSolo: 1 player · Team: 2–4 players. Try another filter or refresh.");
+                    SetStatus(L("HỒ SƠ: CHƯA CÓ DỮ LIỆU", "ARCHIVE: NO RECORDS"));
                     break;
                 case ArchiveState.Error:
-                    _bodyMessage.text = "UNABLE TO REACH THE ARCHIVE";
-                    _bodySubline.text = "THE SIGNAL IS WEAKENED...";
-                    SetStatus("ARCHIVE: CONNECTION LOST");
+                    _bodyMessage.text = _archiveError == ArchiveError.Session
+                        ? L("PHIÊN ĐĂNG NHẬP ĐÃ HẾT HẠN", "SESSION EXPIRED")
+                        : _archiveError == ArchiveError.Server
+                            ? L("MÁY CHỦ TẠM THỜI KHÔNG KHẢ DỤNG", "SERVER TEMPORARILY UNAVAILABLE")
+                            : _archiveError == ArchiveError.Request
+                                ? L("KHÔNG TẢI ĐƯỢC BẢNG XẾP HẠNG", "COULD NOT LOAD LEADERBOARD")
+                                : L("KHÔNG CÓ KẾT NỐI", "CONNECTION UNAVAILABLE");
+                    _bodySubline.text = _archiveError == ArchiveError.Session
+                        ? L("HÃY ĐĂNG NHẬP LẠI", "PLEASE SIGN IN AGAIN")
+                        : L("HÃY THỬ LẠI SAU", "PLEASE TRY AGAIN");
+                    SetStatus(L("HỒ SƠ: TẢI THẤT BẠI", "ARCHIVE: LOAD FAILED"));
                     break;
                 default:
-                    SetStatus(recordCount + " RECORDS ON FILE");
+                    SetStatus(recordCount + L(" THÀNH TÍCH", " RECORDS ON FILE"));
                     break;
             }
             RefreshPagination();
@@ -735,18 +801,67 @@ namespace EchoProtocol.UI.MainMenu
             _entriesRoot.sizeDelta = Vector2.zero;
         }
 
+        private static string DisplayMap(string id) => id switch
+        {
+            "SciFi" => L("Cơ sở nghiên cứu", "Research Facility"),
+            "Scene_A" => L("Vùng ngập", "Flooded District"),
+            "Scene_B" => L("Khu thanh trừng", "Purge Grounds"),
+            _ => L("Bản đồ chưa xác định", "Unknown map")
+        };
+
         private void RefreshFilters()
         {
-            if (_mapLabel != null) _mapLabel.text = "MAP  < " + _mapId + " >";
+            if (_mapLabel != null) _mapLabel.text = L("BẢN ĐỒ", "MAP") + "  < " + DisplayMap(_mapId) + " >";
+            if (_gameModeLabel != null) _gameModeLabel.text = L("CHẾ ĐỘ", "MODE") + "  < "
+                + (_purgeMode ? L("Thanh trừng", "Purge") : L("Khám phá", "Expedition")) + " >";
             if (_difficultyLabel != null)
-                _difficultyLabel.text = "THREAT  < " + _difficulty + " >";
+                _difficultyLabel.text = L("ĐỘ KHÓ", "DIFFICULTY") + "  < "
+                    + (_difficulty == "EASY" ? L("Dễ", "Easy") : _difficulty == "HARD" ? L("Khó", "Hard") : L("Thường", "Normal")) + " >";
+        }
+
+        private void RefreshLanguage()
+        {
+            if (_panel == null) return;
+            SetLabel(_tooltip != null ? _tooltip.transform.Find("Label") : null,
+                L("BẢNG XẾP HẠNG", "LEADERBOARD"));
+            SetLabel(_panel.Find("ArchiveIndex"),
+                L("ECHO PROTOCOL  //  HỒ SƠ MẬT  /  LƯU TRỮ", "ECHO PROTOCOL  //  CLASSIFIED RECORDS  /  EXTRACTION ARCHIVE"));
+            if (_heading != null) _heading.text = L("BẢNG XẾP HẠNG", "LEADERBOARD");
+            SetLabel(_panel.Find("Subtitle"),
+                L("THÀNH TÍCH  //  THỜI GIAN HOÀN THÀNH NHANH NHẤT", "EXTRACTION RECORDS  //  FASTEST COMPLETION TIMES"));
+            SetButtonLabel(_soloTab, L("CÁ NHÂN", "SOLO RANKING"));
+            SetButtonLabel(_teamTab, L("ĐỘI", "TEAM RANKING"));
+            SetButtonLabel(_retryButton, L("TẢI LẠI", "REFRESH"));
+            SetLabel(_panel.Find("TimeHeading"), L("THỜI GIAN (PHÚT.GIÂY)", "TIME (MIN.SEC)"));
+            SetLabel(_panel.Find("EvidenceAnnotation"),
+                L("CHỈ NGƯỜI NHANH NHẤT\nĐỂ LẠI DẤU VẾT...", "ONLY THE FASTEST\nLEAVE A TRACE..."));
+            var note = _panel.Find("EvidenceNote");
+            SetLabel(note != null ? note.Find("EvidenceStamp") : null,
+                L("ĐỐI TƯỢNG\nKHÔNG RỜI ĐI", "SUBJECTS\nNEVER LEAVE"));
+            RefreshFilters();
+            RefreshTabs();
+            PresentState(_archiveState, _totalCount);
+        }
+
+        private static void SetLabel(Transform child, string value)
+        {
+            var label = child != null ? child.GetComponent<Text>() : null;
+            if (label != null) label.text = value;
+        }
+
+        private static void SetButtonLabel(Button button, string value)
+        {
+            if (button == null) return;
+            var label = button.GetComponentInChildren<Text>();
+            if (label != null) label.text = value;
         }
 
         private void RefreshTabs(bool animate = false)
         {
             if (_soloTab == null) return;
             _columnLabel.text = _mode == LeaderboardMode.Solo
-                ? "RANK       OPERATIVE" : "RANK       SQUAD / OPERATIVES";
+                ? L("HẠNG       NGƯỜI CHƠI", "RANK       OPERATIVE")
+                : L("HẠNG       ĐỘI / NGƯỜI CHƠI", "RANK       SQUAD / OPERATIVES");
             if (_tabTransition != null)
             {
                 StopCoroutine(_tabTransition);
@@ -837,7 +952,7 @@ namespace EchoProtocol.UI.MainMenu
         {
             return Mathf.Clamp(Mathf.Min(
                 (availableWidth - 40f) / PanelWidth,
-                (availableHeight - 40f) / PanelHeight), 0.05f, 1f);
+                (availableHeight - 40f) / PanelHeight), 0.05f, 1.25f);
         }
 
         public void ApplySafeArea(Rect safePixels, Vector2 screenPixels)
@@ -865,17 +980,10 @@ namespace EchoProtocol.UI.MainMenu
             _panel.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panel.localScale = Vector3.one * _fitScale;
             _pageSize = _mode == LeaderboardMode.Team ? 9 : MaximumPageSize;
-            if (_profileRect != null && _iconRect != null)
-            {
-                var parentScale = _profileRect.parent.lossyScale;
-                float scaleX = Mathf.Max(0.01f, Mathf.Abs(parentScale.x));
-                float scaleY = Mathf.Max(0.01f, Mathf.Abs(parentScale.y));
-                _profileRect.anchoredPosition = _profileBasePosition
-                    + new Vector2(-(screenWidth - safePixels.xMax) / scaleX,
-                        -(screenHeight - safePixels.yMax) / scaleY);
-                _iconRect.anchoredPosition = _profileRect.anchoredPosition
-                    + new Vector2(-55f, 0f);
-            }
+            if (_profileRect != null)
+                UtilityBarStyle.PositionAtSafeTopRight(
+                    _profileRect.parent as RectTransform, UtilityBarStyle.ToolbarWidth,
+                    safePixels, screenPixels);
             _lastScreenSize = screenPixels;
             _lastSafeArea = safePixels;
         }
@@ -1033,42 +1141,21 @@ namespace EchoProtocol.UI.MainMenu
     public sealed class LeaderboardIconHover : MonoBehaviour,
         IPointerEnterHandler, IPointerExitHandler
     {
-        private SettingsIconGraphic _graphic;
-        private Outline _outline;
         private GameObject _tooltip;
-        private bool _hovered;
 
-        public void Configure(SettingsIconGraphic graphic, Outline outline,
-            GameObject tooltip)
+        public void Configure(GameObject tooltip)
         {
-            _graphic = graphic;
-            _outline = outline;
             _tooltip = tooltip;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            _hovered = true;
             if (_tooltip != null) _tooltip.SetActive(true);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            _hovered = false;
             if (_tooltip != null) _tooltip.SetActive(false);
-        }
-
-        private void Update()
-        {
-            if (_graphic == null || _outline == null) return;
-            var bronze = new Color(0.65f, 0.51f, 0.33f, 1f);
-            var glow = new Color(0.94f, 0.70f, 0.43f, 1f);
-            _graphic.color = Color.Lerp(_graphic.color,
-                _hovered ? glow : bronze, Time.unscaledDeltaTime * 12f);
-            _outline.effectColor = _hovered
-                ? new Color(0.66f, 0.12f, 0.12f,
-                    0.6f + Mathf.Sin(Time.unscaledTime * 4f) * 0.16f)
-                : new Color(0.32f, 0.25f, 0.2f, 0.95f);
         }
     }
 }

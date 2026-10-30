@@ -1,5 +1,6 @@
 using EchoProtocol.UI.MainMenu;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -27,6 +28,7 @@ namespace EchoProtocol.UI.Tests
             rect.anchoredPosition = new Vector2(-54f, -4f);
             rect.sizeDelta = new Vector2(44f, 44f);
             _profile = profileObject.GetComponent<Button>();
+            UtilityBarStyle.MainMenu((RectTransform)store.transform);
 
             var menu = new GameObject("MainMenuPanel",
                 typeof(RectTransform), typeof(CanvasGroup));
@@ -43,7 +45,7 @@ namespace EchoProtocol.UI.Tests
         }
 
         [Test]
-        public void TrophyAlignsLeftOfProfileWithoutReplacingProfileButton()
+        public void TrophyAlignsRightOfProfileWithoutReplacingProfileButton()
         {
             Assert.That(_archive, Is.Not.Null);
             var trophy = (RectTransform)_archive.TrophyButton.transform;
@@ -51,10 +53,64 @@ namespace EchoProtocol.UI.Tests
             Assert.That(trophy.parent, Is.EqualTo(profile.parent));
             Assert.That(trophy.anchoredPosition.y,
                 Is.EqualTo(profile.anchoredPosition.y));
-            Assert.That(profile.anchoredPosition.x
-                - (trophy.anchoredPosition.x + trophy.rect.width),
-                Is.EqualTo(11f).Within(0.01f));
+            Assert.That(trophy.anchoredPosition.x
+                - (profile.anchoredPosition.x + profile.rect.width),
+                Is.EqualTo(UtilityBarStyle.Gap).Within(0.01f));
             Assert.That(profile.GetComponent<Button>(), Is.SameAs(_profile));
+        }
+
+        [Test]
+        public void HeaderButtonsUseTheSameRootBackgroundAndIconSize()
+        {
+            var profileImage = _profile.GetComponent<Image>();
+            var trophy = _archive.TrophyButton;
+            var trophyImage = trophy.GetComponent<Image>();
+            Assert.That(_profile.targetGraphic, Is.SameAs(profileImage));
+            Assert.That(trophy.targetGraphic, Is.SameAs(trophyImage));
+            Assert.That(trophyImage.color, Is.EqualTo(profileImage.color));
+            Assert.That(trophy.GetComponent<Outline>().effectColor,
+                Is.EqualTo(_profile.GetComponent<Outline>().effectColor));
+            Assert.That(((RectTransform)trophy.transform.Find("TrophyIcon")).sizeDelta,
+                Is.EqualTo(((RectTransform)_profile.transform.Find("UtilityIcon")).sizeDelta));
+
+            var legacyBackground = new GameObject("Background",
+                typeof(RectTransform), typeof(Image));
+            legacyBackground.transform.SetParent(_profile.transform, false);
+            _profile.targetGraphic = legacyBackground.GetComponent<Image>();
+            UtilityBarStyle.Button(_profile, SettingsIcon.Profile);
+            Assert.That(_profile.targetGraphic, Is.SameAs(profileImage));
+            Assert.That(legacyBackground.GetComponent<Image>().enabled, Is.False);
+        }
+
+        [Test]
+        public void CreditsUseOneFontSizeAndDisableLegacySizing()
+        {
+            var credits = new GameObject("CoinContainer", typeof(RectTransform),
+                typeof(Button)).GetComponent<RectTransform>();
+            credits.SetParent(_canvasObject.transform, false);
+            var amount = new GameObject("CoinAmountText", typeof(RectTransform),
+                typeof(Text)).GetComponent<Text>();
+            amount.transform.SetParent(credits, false);
+            amount.resizeTextForBestFit = true;
+            var label = new GameObject("CreditsLabel", typeof(RectTransform),
+                typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+            label.transform.SetParent(credits, false);
+            label.enableAutoSizing = true;
+            var oldBackground = new GameObject("Background", typeof(RectTransform),
+                typeof(Image)).GetComponent<Image>();
+            oldBackground.transform.SetParent(credits, false);
+
+            UtilityBarStyle.Credits(credits);
+
+            Assert.That(credits.GetComponent<Button>().targetGraphic,
+                Is.SameAs(credits.GetComponent<Image>()));
+            Assert.That(oldBackground.enabled, Is.False);
+            Assert.That(amount.fontSize, Is.EqualTo(18));
+            Assert.That(label.fontSize, Is.EqualTo(11));
+            Assert.That(amount.resizeTextForBestFit, Is.False);
+            Assert.That(label.enableAutoSizing, Is.False);
+            Assert.That(amount.font, Is.Not.Null);
+            Assert.That(label.font, Is.Not.Null);
         }
 
         [Test]
@@ -78,6 +134,32 @@ namespace EchoProtocol.UI.Tests
             Assert.That(_archive.IsOpen, Is.False);
             Assert.That(menu.interactable, Is.True);
             Assert.That(menu.blocksRaycasts, Is.True);
+        }
+
+        [Test]
+        public void LobbyButtonInstallsAndOpensArchiveWithoutMainMenuStorePanel()
+        {
+            var lobbyCanvas = new GameObject("LobbyCanvas",
+                typeof(RectTransform), typeof(Canvas));
+            try
+            {
+                var bar = new GameObject("LobbyUtilityBar", typeof(RectTransform));
+                bar.transform.SetParent(lobbyCanvas.transform, false);
+                var button = UtilityBarStyle.EnsureButton(bar.transform,
+                    "LeaderboardButton", SettingsIcon.Trophy, 242f);
+                var archive = MainMenuLeaderboardController.Install(
+                    lobbyCanvas.GetComponent<Canvas>(), button);
+
+                Assert.That(archive, Is.Not.Null);
+                button.onClick.Invoke();
+                Assert.That(archive.IsOpen, Is.True);
+                archive.Close();
+                Assert.That(archive.IsOpen, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(lobbyCanvas);
+            }
         }
 
         [Test]
@@ -245,24 +327,25 @@ namespace EchoProtocol.UI.Tests
         }
 
         [Test]
-        public void SafeAreaMovesBothUtilityIconsTogetherAndRestoresFullScreenPosition()
+        public void SafeAreaMovesWholeUtilityBarAndRestoresFullScreenPosition()
         {
             var profile = (RectTransform)_profile.transform;
             var trophy = (RectTransform)_archive.TrophyButton.transform;
-            var originalPosition = profile.anchoredPosition;
+            var bar = (RectTransform)profile.parent;
+            var originalPosition = bar.anchoredPosition;
             var safe = new Rect(90f, 40f, 1650f, 920f);
 
             _archive.ApplySafeArea(safe, new Vector2(1920f, 1080f));
 
-            Assert.That(profile.anchoredPosition.x,
+            Assert.That(bar.anchoredPosition.x,
                 Is.LessThan(originalPosition.x));
-            Assert.That(profile.anchoredPosition.y,
+            Assert.That(bar.anchoredPosition.y,
                 Is.LessThan(originalPosition.y));
             Assert.That(trophy.anchoredPosition.y,
                 Is.EqualTo(profile.anchoredPosition.y));
-            Assert.That(profile.anchoredPosition.x
-                - (trophy.anchoredPosition.x + trophy.rect.width),
-                Is.EqualTo(11f).Within(0.01f));
+            Assert.That(trophy.anchoredPosition.x
+                - (profile.anchoredPosition.x + profile.rect.width),
+                Is.EqualTo(UtilityBarStyle.Gap).Within(0.01f));
             var panel = (RectTransform)_archive.OverlayRoot.Find("ArchivePanel");
             Assert.That(panel.anchorMin.x,
                 Is.EqualTo(safe.center.x / 1920f).Within(0.001f));
@@ -271,7 +354,7 @@ namespace EchoProtocol.UI.Tests
 
             _archive.ApplySafeArea(new Rect(0f, 0f, 1920f, 1080f),
                 new Vector2(1920f, 1080f));
-            Assert.That(profile.anchoredPosition,
+            Assert.That(bar.anchoredPosition,
                 Is.EqualTo(originalPosition));
         }
 

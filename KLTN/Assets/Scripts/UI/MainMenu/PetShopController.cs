@@ -12,6 +12,14 @@ namespace EchoProtocol.UI.MainMenu
     [DisallowMultipleComponent]
     public sealed class PetShopController : MonoBehaviour
     {
+        private void OnEnable() => EchoProtocol.Networking.LobbyPlayerState.LocalSelectionRequestCompleted += SelectionCompleted;
+        private void OnDisable() => EchoProtocol.Networking.LobbyPlayerState.LocalSelectionRequestCompleted -= SelectionCompleted;
+        private void SelectionCompleted(EchoProtocol.Networking.LobbySelectionResult result)
+        {
+            if (!result.Accepted && (result.Kind == EchoProtocol.Networking.LobbySelectionKind.Pet
+                || result.Kind == EchoProtocol.Networking.LobbySelectionKind.PetSkin))
+                EchoProtocol.UI.GameUIFeedback.Instance?.Toast("Pet: " + result.Error);
+        }
         private enum PurchaseTarget
         {
             Pet,

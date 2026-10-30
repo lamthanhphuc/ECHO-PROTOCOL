@@ -213,7 +213,8 @@ builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IMatchAuthorityService, MatchAuthorityService>();
-builder.Services.AddScoped<IMatchResultService, MatchResultService>();
+builder.Services.AddScoped<MatchResultService>();
+builder.Services.AddScoped<IMatchResultService>(services => services.GetRequiredService<MatchResultService>());
 builder.Services.AddScoped<ILeaderboardService, LeaderboardService>();
 builder.Services.AddScoped<IRewardService, RewardService>();
 builder.Services.AddSingleton<IRewardPolicy, RewardPolicyV1>();
@@ -397,6 +398,7 @@ app.UseHttpsRedirection();
 app.UseCors("EchoProtocolDev");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<EchoProtocol.Api.Legal.AgreementGateMiddleware>();
 app.MapControllers();
 
 app.Run();

@@ -144,6 +144,15 @@ namespace EchoProtocol.UI.Result
             {
                 var saveStatus = MatchAuthorityRuntime.Instance.GetResultSaveStatus(_snapshot.MatchId);
                 if (!string.IsNullOrEmpty(saveStatus)) SetText("ActionStatus", saveStatus);
+                if (MatchAuthorityRuntime.Instance.IsResultPermanentlyRejected(_snapshot.MatchId))
+                {
+                    SetText("ActionStatus", saveStatus + EchoProtocol.Settings.GameLanguage.Choose(
+                        "\nF7: thử gửi lại • F8: lưu hồ sơ đối soát", "\nF7: retry submission • F8: export recovery record"));
+                    if (Keyboard.current != null && Keyboard.current.f7Key.wasPressedThisFrame)
+                        MatchAuthorityRuntime.Instance.RetryRejectedResult(_snapshot.MatchId);
+                    if (Keyboard.current != null && Keyboard.current.f8Key.wasPressedThisFrame)
+                        MatchAuthorityRuntime.Instance.ExportRejectedResult(_snapshot.MatchId);
+                }
             }
             if (_recordingDot != null)
                 _recordingDot.color = new Color(0.78f, 0.15f, 0.18f,
@@ -506,7 +515,7 @@ namespace EchoProtocol.UI.Result
                 if (host)
                 {
                     if (retry) ResultRetryCoordinator.Begin();
-                    await runner.LoadScene(NetworkBootstrap.LobbySceneName, LoadSceneMode.Single);
+                    await GameUIFeedback.LoadNetworkSceneAsync(runner, NetworkBootstrap.LobbySceneName);
                 }
                 else if (bootstrap != null && inRoom)
                     await bootstrap.ShutdownRunnerAsync();

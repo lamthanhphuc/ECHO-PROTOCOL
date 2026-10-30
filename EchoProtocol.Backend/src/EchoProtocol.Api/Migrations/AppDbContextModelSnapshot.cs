@@ -724,12 +724,12 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Difficulty")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("EndedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -772,7 +772,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasIndex("MapId", "Difficulty");
 
-                    b.ToTable("MatchAuthorityBindings", t =>
+                    b.ToTable("MatchAuthorityBindings", null, t =>
                         {
                             t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
                         });
@@ -804,6 +804,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<Guid>("MatchId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("Participated")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -886,6 +889,9 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("PlayerCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RecoveryAudit")
+                        .HasColumnType("text");
+
                     b.Property<string>("RewardStatus")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -906,11 +912,11 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("MatchId");
 
+                    b.HasIndex("RosterKey");
+
                     b.HasIndex("SubmittedAtUtc");
 
                     b.HasIndex("SubmittedByUserId");
-
-                    b.HasIndex("RosterKey");
 
                     b.HasIndex("Outcome", "PlayerCount", "DurationSeconds", "EndedAtUtc");
 
@@ -2538,6 +2544,56 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.UserAgreementAcceptance", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BundleVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("AdultConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CommunityAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ContentSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DocumentVersions")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Locale")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<bool>("PrivacyNoticeAcknowledged")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("TermsAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("TransactionsAccepted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("WarningAcknowledged")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("UserId", "BundleVersion");
+
+                    b.ToTable("UserAgreementAcceptances", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.Wallet", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3049,6 +3105,15 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("MatchResult");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.UserAgreementAcceptance", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.Wallet", b =>

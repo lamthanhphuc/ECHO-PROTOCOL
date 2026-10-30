@@ -159,10 +159,19 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkBool Disconnected { get; private set; }
 
+        [Networked] public NetworkBool HasObjectiveContribution { get; set; }
+        [Networked] public long DisconnectExpiresAtUtc { get; private set; }
+
         public void SetDisconnectedAuthoritative(bool disconnected)
         {
             if (Object != null && Object.IsValid && Object.HasStateAuthority)
+            {
                 Disconnected = disconnected;
+                if (!disconnected) DisconnectExpiresAtUtc = 0;
+                else if (DisconnectExpiresAtUtc == 0)
+                    DisconnectExpiresAtUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                        + (long)(Runner.GetComponent<FusionPlayerLifecycle>()?.ReconnectGraceSeconds ?? 300f);
+            }
         }
 
         public void ResetForLobbyAuthoritative()
@@ -176,6 +185,8 @@ namespace EchoProtocol.Networking
 
             IsReady = false;
             IsGameplayPlayer = false;
+            HasObjectiveContribution = false;
+            DisconnectExpiresAtUtc = 0;
             GameplaySpawnReady = false;
             IsCoreStabilized = false;
             CarriedCoreId = default;
@@ -454,6 +465,10 @@ namespace EchoProtocol.Networking
             {
                 return;
             }
+
+            // Migration assigns input authority after Spawned has run.
+            if (!IsGameplayPlayer && GetComponent<EchoProtocol.UI.LobbySelectionMemory>() == null)
+                gameObject.AddComponent<EchoProtocol.UI.LobbySelectionMemory>();
 
             var authority =
                 MatchAuthorityRuntime
@@ -1073,6 +1088,13 @@ namespace EchoProtocol.Networking
         }
         private bool CanSendSelectionRequest(LobbySelectionKind kind, int requestedId)
         {
+            if (!HasVerifiedBackendIdentity || NetworkBootstrap.IsHostMigrationReconciliationPending
+                || NetworkBootstrap.Instance?.ReconnectIdentityPending == true)
+            {
+                LocalSelectionRequestCompleted?.Invoke(new LobbySelectionResult(kind, requestedId,
+                    false, LobbySelectionError.OwnershipNotVerified));
+                return false;
+            }
             if (NetworkBootstrap.Instance?.IsMatchStartPending == true)
             {
                 Debug.LogWarning(

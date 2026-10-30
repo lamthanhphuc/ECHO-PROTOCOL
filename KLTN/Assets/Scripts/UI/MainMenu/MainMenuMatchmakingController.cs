@@ -45,6 +45,8 @@ namespace EchoProtocol.UI.MainMenu
 
         private bool _hostMode;
         private bool _busy;
+        private readonly System.Collections.Generic.List<CanvasGroup> _menuEntryGroups = new();
+        private bool _dialogStyled;
 
         private void Awake()
         {
@@ -57,6 +59,174 @@ namespace EchoProtocol.UI.MainMenu
             {
                 dialog.SetActive(false);
             }
+        }
+
+        private void LateUpdate()
+        {
+            if (!_dialogStyled && dialog != null)
+            {
+                var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                foreach (var text in dialog.GetComponentsInChildren<Text>(true))
+                {
+                    text.font = font;
+                    text.fontSize = text == titleText ? 26 : 15;
+                    text.color = new Color32(229, 227, 218, 255);
+                    text.resizeTextForBestFit = false;
+                }
+                if (titleText != null) titleText.fontStyle = FontStyle.Bold;
+                foreach (var button in dialog.GetComponentsInChildren<Button>(true))
+                {
+                    var label = button.GetComponentInChildren<Text>(true);
+                    if (label != null)
+                    {
+                        label.fontSize = 17;
+                        label.fontStyle = FontStyle.Bold;
+                    }
+                }
+                if (roomCodeInput != null)
+                {
+                    roomCodeInput.textComponent.fontSize = 18;
+                    if (roomCodeInput.placeholder is Text placeholder)
+                    {
+                        placeholder.fontSize = 17;
+                        placeholder.fontStyle = FontStyle.Normal;
+                    }
+                }
+                if (roomCodeInput != null)
+                    roomCodeInput.GetComponent<RectTransform>().sizeDelta += new Vector2(64f, 4f);
+                if (confirmButton != null)
+                    confirmButton.GetComponent<RectTransform>().sizeDelta += new Vector2(40f, 0f);
+                if (backButton != null)
+                    backButton.GetComponent<RectTransform>().anchoredPosition += new Vector2(40f, 0f);
+                ApplyDialogFrame(titleText.transform.parent.gameObject, new Color(.008f, .014f, .018f, .68f), false);
+                if (roomCodeInput != null)
+                    ApplyDialogFrame(roomCodeInput.gameObject, new Color(.025f, .035f, .036f, .72f), false);
+                if (confirmButton != null)
+                {
+                    var graphic = ApplyDialogFrame(confirmButton.gameObject, Color.white, true);
+                    confirmButton.targetGraphic = graphic;
+                    var colors = confirmButton.colors;
+                    colors.normalColor = new Color(.035f, .045f, .05f, .65f);
+                    colors.highlightedColor = colors.selectedColor = new Color(.13f, .17f, .18f, .82f);
+                    colors.pressedColor = new Color(.08f, .10f, .11f, .9f);
+                    confirmButton.colors = colors;
+                }
+                if (backButton != null)
+                {
+                    backButton.targetGraphic = ApplyDialogFrame(backButton.gameObject, Color.white, false);
+                    var colors = backButton.colors;
+                    colors.normalColor = new Color(.035f, .045f, .05f, .65f);
+                    colors.highlightedColor = colors.selectedColor = new Color(.13f, .17f, .18f, .82f);
+                    colors.pressedColor = new Color(.025f, .03f, .03f);
+                    backButton.colors = colors;
+                }
+                _dialogStyled = true;
+            }
+
+            if (dialog != null)
+            {
+                var overlay = dialog.GetComponent<RectTransform>();
+                overlay.anchorMin = Vector2.zero;
+                overlay.anchorMax = Vector2.one;
+                overlay.offsetMin = overlay.offsetMax = Vector2.zero;
+                overlay.localScale = Vector3.one;
+                var window = (RectTransform)titleText.transform.parent;
+                window.anchorMin = window.anchorMax = window.pivot = new Vector2(.5f, .5f);
+                window.sizeDelta = new Vector2(720, _hostMode ? 516 : 350);
+                Place(titleText != null ? titleText.rectTransform : null, 42, 28, 636, 48);
+                if (titleText != null) titleText.fontSize = 30;
+                if (roomCodeInput != null)
+                {
+                    Place((RectTransform)roomCodeInput.transform, 42, 120, 636, 56);
+                    roomCodeInput.textComponent.gameObject.SetActive(true);
+                }
+                foreach (var label in dialog.GetComponentsInChildren<Text>(true))
+                    if (label.text == "MÃ PHÒNG" || label.text == "ROOM CODE")
+                        Place(label.rectTransform, 42, 88, 600, 26);
+                if (difficultyRow != null) Place((RectTransform)difficultyRow.transform, 42, 218, 636, 44);
+                if (resolutionModeRow != null) Place((RectTransform)resolutionModeRow.transform, 42, 274, 636, 44);
+                if (_gameModeRow != null) Place((RectTransform)_gameModeRow.transform, 42, 330, 636, 44);
+                float buttonY = _hostMode ? 426 : 260;
+                if (confirmButton != null) Place((RectTransform)confirmButton.transform, 42, buttonY, 350, 54);
+                if (backButton != null) Place((RectTransform)backButton.transform, 412, buttonY, 266, 54);
+                if (statusText != null) Place(statusText.rectTransform, 42, 184, 636, 28);
+                var canvas = dialog.GetComponentInParent<Canvas>();
+                var bounds = ((RectTransform)canvas.transform).rect;
+                float scale = Mathf.Min(1f, (bounds.width - 48) / 720, (bounds.height * .60f - 32) / window.sizeDelta.y);
+                window.localScale = Vector3.one * Mathf.Max(.1f, scale);
+                window.anchoredPosition = new Vector2(0, bounds.height * .10f - 16 - window.sizeDelta.y * scale * .5f);
+            }
+
+            if (_menuEntryGroups.Count == 0 && hostButton != null)
+            {
+                var canvas = hostButton.GetComponentInParent<Canvas>();
+                if (canvas != null)
+                    foreach (var button in canvas.GetComponentsInChildren<Button>(true))
+                        if (button == hostButton || button == joinButton || button.name == "OptionsButton" || button.name == "LogoutButton")
+                        {
+                            var group = button.GetComponent<CanvasGroup>();
+                            if (group == null) group = button.gameObject.AddComponent<CanvasGroup>();
+                            _menuEntryGroups.Add(group);
+                        }
+            }
+            bool hidden = dialog != null && dialog.activeInHierarchy || EchoProtocol.Voice.VoiceSettingsPanel.IsOpen;
+            foreach (var group in _menuEntryGroups)
+                if (group != null)
+                {
+                    group.alpha = hidden ? 0f : 1f;
+                    group.interactable = !hidden;
+                    group.blocksRaycasts = !hidden;
+                }
+        }
+
+        private static void Place(RectTransform rect, float x, float y, float width, float height)
+        {
+            if (rect == null) return;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(x, -y);
+            rect.sizeDelta = new Vector2(width, height);
+        }
+
+        private static Graphic ApplyDialogFrame(GameObject owner, Color fill, bool accent)
+        {
+            var image = owner.GetComponent<Image>() ?? owner.AddComponent<Image>();
+            image.enabled = true;
+            image.sprite = null;
+            image.type = Image.Type.Simple;
+            image.material = null;
+            image.color = fill;
+            var outline = owner.GetComponent<Outline>();
+            if (outline != null) outline.enabled = false;
+            if (owner.transform.Find("FrameTop") == null)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    var edge = new GameObject(i == 0 ? "FrameTop" : "FrameEdge" + i, typeof(RectTransform), typeof(Image));
+                    edge.transform.SetParent(owner.transform, false);
+                    var rect = (RectTransform)edge.transform;
+                    bool horizontal = i < 2;
+                    rect.anchorMin = horizontal ? new Vector2(0, i == 0 ? 1 : 0) : new Vector2(i == 2 ? 0 : 1, 0);
+                    rect.anchorMax = horizontal ? new Vector2(1, i == 0 ? 1 : 0) : new Vector2(i == 2 ? 0 : 1, 1);
+                    rect.sizeDelta = horizontal ? new Vector2(0, 1) : new Vector2(1, 0);
+                    rect.anchoredPosition = Vector2.zero;
+                    edge.GetComponent<Image>().color = new Color(.42f, .44f, .42f, .45f);
+                    edge.GetComponent<Image>().raycastTarget = false;
+                }
+            }
+            if (owner.GetComponent<Button>() != null && owner.transform.Find("MenuAccent") == null)
+            {
+                var stripe = new GameObject("MenuAccent", typeof(RectTransform), typeof(Image));
+                stripe.transform.SetParent(owner.transform, false);
+                var rect = (RectTransform)stripe.transform;
+                rect.anchorMin = new Vector2(0, 0);
+                rect.anchorMax = new Vector2(0, 1);
+                rect.pivot = new Vector2(0, .5f);
+                rect.offsetMin = new Vector2(0, 9);
+                rect.offsetMax = new Vector2(3, -9);
+                stripe.GetComponent<Image>().color = new Color(.72f, .025f, .05f);
+                stripe.GetComponent<Image>().raycastTarget = false;
+            }
+            return image;
         }
 
         private void BuildGameModePicker()
@@ -445,6 +615,8 @@ namespace EchoProtocol.UI.MainMenu
             if (difficultyButton != null)
                 difficultyButton.interactable =
                     !_busy && _hostMode;
+            if (resolutionModeButton != null)
+                resolutionModeButton.interactable = !_busy && _hostMode;
             if (_gameModeButton != null)
                 _gameModeButton.interactable = !_busy && _hostMode;
 
