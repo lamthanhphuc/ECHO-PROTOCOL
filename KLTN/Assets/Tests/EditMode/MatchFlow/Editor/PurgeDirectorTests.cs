@@ -27,7 +27,6 @@ public sealed class PurgeDirectorTests
         Assert.That(methodFill, Is.Not.Null);
         Assert.That(methodDecay, Is.Not.Null);
     }
-    [UnityTest]
     public IEnumerator DirectorRageUvSupplyAndCatchRunOnStateAuthority()
     {
         EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity");

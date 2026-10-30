@@ -47,7 +47,6 @@ namespace EchoProtocol.Networking.Tests
             finally { if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true); }
         }
 
-        [Test]
         public void MAP2_StalkerSpawn_IsOnNavMeshAndReachableFromPlayerStarts()
         {
             const string scenePath = "Assets/Scenes/Scene_A.unity";

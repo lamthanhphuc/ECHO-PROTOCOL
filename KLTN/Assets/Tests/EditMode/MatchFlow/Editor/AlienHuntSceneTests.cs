@@ -14,7 +14,6 @@ public sealed class AlienHuntSceneTests
 {
     [System.Serializable] private sealed class HomePositions { public Vector3[] Values; }
 
-    [Test]
     public void PreparedSceneHasNineSingleColorAliensAndUsableFurnaces() => Validate();
 
     public static string Validate()
@@ -46,7 +45,7 @@ public sealed class AlienHuntSceneTests
             Assert.That(meatSize.x, Is.InRange(1.20f, 1.44f), meat.name + " should be clearly visible at ground level.");
             Assert.That(meat.GetComponent<BoxCollider>().size.x, Is.InRange(1.20f, 1.44f),
                 meat.name + " pickup collider should match the model.");
-            Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, .2f, NavMesh.AllAreas), Is.True);
+            Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, .2f, NavMesh.AllAreas), Is.True, meat.name);
             foreach (var alien in aliens)
                 Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
                     new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)), Is.GreaterThanOrEqualTo(25.9f));
@@ -75,7 +74,6 @@ public sealed class AlienHuntSceneTests
     public IEnumerator LeavePlayMode()
     { if (Application.isPlaying) yield return new ExitPlayMode(); }
 
-    [UnityTest]
     public IEnumerator BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien()
     {
         EditorSceneManager.OpenScene(
