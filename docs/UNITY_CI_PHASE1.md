@@ -34,7 +34,9 @@ A local Windows64 player build compiled scripts but remained in shader variant c
 
 The first hosted manual run, [40999716204](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/40999716204), passed the XML gate and Git LFS check but never started Unity: GameCI CLI v0.1.72 rejected the action's `--no-coverageEnabled` flag. Both Unity jobs correctly failed for missing XML; no artifacts were produced. The action input was removed for the next run. The Ubuntu runner had only 2.9 GiB free after LFS checkout, so image pull and import may need more disk.
 
-The second hosted run, [41000165967](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/41000165967), got past that flag but Docker could not pull the Unity image: `no space left on device`. Again, zero Unity tests executed and no NUnit artifacts existed. The workflow now frees unused tools on the ephemeral runner before checkout; this needs a new hosted run to verify.
+The second hosted run, [41000165967](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/41000165967), got past that flag but Docker could not pull the Unity image: `no space left on device`. Again, zero Unity tests executed and no NUnit artifacts existed. The workflow now frees unused tools on the ephemeral runner before checkout.
+
+The third hosted run, [41000598607](https://github.com/lamthanhphuc/ECHO-PROTOCOL/actions/runs/41000598607), confirmed the disk fix: after LFS checkout, EditMode had 25 GiB free and downloaded the exact Unity image. Unity Licensing then rejected the configured `UNITY_LICENSE` with `Cannot load ULF license: Data at the root level is invalid`. Both Unity jobs failed before test execution; zero tests ran, and no XML or Editor log artifact was produced. Replace the secret with the complete activated `.ulf` contents without sharing them in chat, then rerun the manual workflow. Do not treat the green PR XML gate or the skipped Unity PR check as a successful Unity run.
 
 ## GitHub Actions and operator steps
 
