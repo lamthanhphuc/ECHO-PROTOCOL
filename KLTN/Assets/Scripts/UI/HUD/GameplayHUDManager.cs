@@ -40,13 +40,10 @@ namespace EchoProtocol.UI.HUD
         {
             EnsureSubModuleReferences();
             HUDPresentationStyle.Apply(transform);
-            if (HUDPurgePresentation.IsPurgeScene)
-            {
-                if (GetComponent<HUDPurgePresentation>() == null)
-                    gameObject.AddComponent<HUDPurgePresentation>();
-            }
-            else if (GetComponent<HUDZoneMissions>() == null)
+            if (!HUDPurgePresentation.IsPurgeScene && GetComponent<HUDZoneMissions>() == null)
                 gameObject.AddComponent<HUDZoneMissions>();
+            if (GetComponent<HUDPurgePresentation>() == null)
+                gameObject.AddComponent<HUDPurgePresentation>();
         }
 
         private void Start()

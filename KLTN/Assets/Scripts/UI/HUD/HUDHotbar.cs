@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
@@ -99,11 +99,12 @@ namespace EchoProtocol.UI.HUD
 
             UpdateCooldown();
             UpdateCarryState();
-            if (HUDPurgePresentation.IsPurgeScene) UpdatePurgeSlots();
+            UpdatePurgeSlots();
         }
 
         private void UpdatePurgeSlots()
         {
+            bool carryingMissionItem = IsCarryingMissionItem();
             int displayed = 0;
             var slots = new[] { slot1Container, slot2Container, toolContainer };
             for (int i = 0; i < slots.Length; i++)
@@ -112,6 +113,7 @@ namespace EchoProtocol.UI.HUD
                 bool occupied = inventory != null && (i < 2 ? inventory.GetNormalSlot(i) != null : inventory.TeamToolSlot != null);
                 if (i == 2 && _boundNetworkPlayerState != null && _boundNetworkPlayerState.Object != null
                     && _boundNetworkPlayerState.Object.IsValid) occupied |= _boundNetworkPlayerState.ToolId > 0;
+                if (i == 2 && carryingMissionItem) occupied = false;
                 slots[i].SetActive(occupied);
                 if (!occupied) continue;
                 var rect = slots[i].GetComponent<RectTransform>();
@@ -126,8 +128,16 @@ namespace EchoProtocol.UI.HUD
                 toolId = _boundNetworkPlayerState.ToolId;
             if (_purgeToolIcon == null)
                 _purgeToolIcon = HUDPurgePresentation.AddIcon(toolContainer.transform, PurgeIcon.Item, new Vector2(32,-24), HUDPresentationStyle.Ink);
-            _purgeToolIcon.Kind = toolId == LobbyPlayerState.FirstAidKitToolId ? PurgeIcon.Medkit : PurgeIcon.Item;
-            bool useVector = toolId == LobbyPlayerState.FirstAidKitToolId || toolIcon == null || toolIcon.sprite == null;
+            _purgeToolIcon.Kind = toolId switch
+            {
+                LobbyPlayerState.FieldScannerToolId => PurgeIcon.Scanner,
+                LobbyPlayerState.NoiseMakerToolId => PurgeIcon.NoiseMaker,
+                LobbyPlayerState.FirstAidKitToolId => PurgeIcon.Medkit,
+                LobbyPlayerState.DoorJammerToolId => PurgeIcon.DoorJammer,
+                LobbyPlayerState.CoreStabilizerToolId => PurgeIcon.Stabilizer,
+                _ => PurgeIcon.Item
+            };
+            bool useVector = toolId > 0;
             _purgeToolIcon.gameObject.SetActive(useVector);
             if (toolIcon != null && useVector) toolIcon.gameObject.SetActive(false);
         }
@@ -243,11 +253,21 @@ namespace EchoProtocol.UI.HUD
             }
         }
 
+        private bool IsCarryingMissionItem()
+        {
+            bool networkBound = _boundNetworkPlayerState != null && _boundNetworkPlayerState.Object != null
+                && _boundNetworkPlayerState.Object.IsValid;
+            bool core = networkBound ? _boundNetworkPlayerState.CarriedCoreId.IsValid : carrier != null && carrier.IsCarrying;
+            var player = networkBound ? _boundNetworkPlayerState.gameObject
+                : inventory != null ? inventory.gameObject : carrier != null ? carrier.gameObject : null;
+            return core || player != null && (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(player) != null
+                || AlienHuntMission.IsCarrying(player));
+        }
+
         private void UpdateCarryState()
         {
             var fuelCell = inventory != null ? EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(inventory.gameObject) : null;
-            bool isCarrying = carrier != null && carrier.IsCarrying || fuelCell != null
-                || HUDPurgePresentation.IsPurgeScene && inventory != null && AlienHuntMission.IsCarrying(inventory.gameObject);
+            bool isCarrying = IsCarryingMissionItem();
 
             if (slot1LockOverlay != null) slot1LockOverlay.SetActive(isCarrying);
             if (slot2LockOverlay != null) slot2LockOverlay.SetActive(isCarrying);
@@ -392,6 +412,27 @@ namespace EchoProtocol.UI.HUD
         {
             try
             {
+                if (icon != null)
+                {
+                    var vector = icon.GetComponent<HUDPurgeIcon>();
+                    if (vector == null) vector = icon.gameObject.AddComponent<HUDPurgeIcon>();
+                    bool fallback = item != null && item.Icon == null;
+                    vector.enabled = fallback;
+                    vector.raycastTarget = false;
+                    vector.color = HUDPresentationStyle.Ink;
+                    if (fallback)
+                    {
+                        string id = item.ItemId.ToLowerInvariant();
+                        vector.Kind = item.ItemType == InventoryItemType.EnergyCore ? PurgeIcon.Core
+                            : id.Contains("fuel") ? PurgeIcon.Fuel
+                            : id.Contains("aid") || id.Contains("med") ? PurgeIcon.Medkit
+                            : id.Contains("scanner") ? PurgeIcon.Scanner
+                            : id.Contains("noise") ? PurgeIcon.NoiseMaker
+                            : id.Contains("jammer") ? PurgeIcon.DoorJammer
+                            : id.Contains("stabiliz") ? PurgeIcon.Stabilizer : PurgeIcon.Item;
+                    }
+                    icon.enabled = !fallback;
+                }
                 if (item != null)
                 {
                     if (icon != null)

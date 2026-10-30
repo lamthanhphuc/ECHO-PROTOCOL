@@ -30,7 +30,7 @@ namespace EchoProtocol.UI.HUD
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(620f, 560f);
+            rect.sizeDelta = new Vector2(610f, 590f);
             _panel.GetComponent<Image>().color = new Color(0.045f, 0.055f, 0.055f, 0.96f);
 
             var label = new GameObject("MissionsText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
@@ -42,7 +42,7 @@ namespace EchoProtocol.UI.HUD
             labelRect.offsetMax = new Vector2(-32f, -76f);
             _body = label.GetComponent<Text>();
             _body.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            _body.fontSize = 17;
+            _body.fontSize = 18;
             _body.color = HUDPresentationStyle.Ink;
             _body.alignment = TextAnchor.UpperLeft;
             _body.supportRichText = true;
@@ -101,7 +101,10 @@ namespace EchoProtocol.UI.HUD
         {
             if (_panel == null) return;
             RefreshText();
-            if (PlayerInteractionControlLock.HasModal || PlayerInteractionControlLock.IsGameplayInputBlocked())
+            var match = NetworkMatchState.Instance;
+            var presentation = GetComponent<HUDPurgePresentation>();
+            bool unavailable = presentation != null && !presentation.CanOpenExpeditionMissions;
+            if (unavailable || PlayerInteractionControlLock.HasModal || PlayerInteractionControlLock.IsGameplayInputBlocked())
             {
                 _panel.SetActive(false);
                 _compactPanel.SetActive(false);

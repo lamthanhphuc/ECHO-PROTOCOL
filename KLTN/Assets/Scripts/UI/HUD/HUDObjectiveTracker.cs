@@ -41,6 +41,10 @@ namespace EchoProtocol.UI.HUD
         private CanvasGroup _visibilityGroup;
         private bool _hideZone1Objective;
 
+        public string PresentationText => (phaseBadgeTmp != null ? phaseBadgeTmp.text : phaseBadgeText != null ? phaseBadgeText.text : "")
+            + " · " + (objectiveTitleTmp != null ? objectiveTitleTmp.text : objectiveTitleText != null ? objectiveTitleText.text : "")
+            + "\n" + (objectiveDetailTmp != null ? objectiveDetailTmp.text : objectiveDetailText != null ? objectiveDetailText.text : "");
+
         public void HideZone1Objective()
         {
             _hideZone1Objective = true;
