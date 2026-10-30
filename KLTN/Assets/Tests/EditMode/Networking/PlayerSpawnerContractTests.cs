@@ -47,38 +47,6 @@ namespace EchoProtocol.Networking.Tests
             finally { if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true); }
         }
 
-        public void MAP2_StalkerSpawn_IsOnNavMeshAndReachableFromPlayerStarts()
-        {
-            const string scenePath = "Assets/Scenes/Scene_A.unity";
-            var scene = SceneManager.GetSceneByPath(scenePath);
-            var alreadyLoaded = scene.IsValid() && scene.isLoaded;
-            if (!alreadyLoaded) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
-            try
-            {
-                var transforms = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true)).ToArray();
-                var marker = transforms.Single(item => item.name == "MonsterSpawn_Stalker_EMPTY");
-                Assert.That(marker.gameObject.activeInHierarchy, Is.True);
-                Assert.That(NavMesh.SamplePosition(marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
-                var starts = transforms.Where(item => item.name.StartsWith("PlayerStart", System.StringComparison.Ordinal)).ToArray();
-                Assert.That(starts.Length, Is.EqualTo(4));
-                foreach (var start in starts)
-                {
-                    // PlayerSpawner grounds elevated player markers before placing players.
-                    Assert.That(Physics.Raycast(start.position + Vector3.up * 2f, Vector3.down,
-                        out var ground, 8f, ~0, QueryTriggerInteraction.Ignore), Is.True, start.name);
-                    Assert.That(NavMesh.SamplePosition(ground.point, out var player, 1f, NavMesh.AllAreas), Is.True, start.name);
-                    var path = new NavMeshPath();
-                    Assert.That(NavMesh.CalculatePath(spawn.position, player.position, NavMesh.AllAreas, path), Is.True, start.name);
-                    Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete), start.name);
-                    Assert.That(Vector3.Distance(spawn.position, player.position), Is.GreaterThan(18f), start.name);
-                }
-            }
-            finally
-            {
-                if (!alreadyLoaded) EditorSceneManager.CloseScene(scene, true);
-            }
-        }
-
         [Test]
         public void FND_NET_PLAYER_SPAWNER_DoesNotOwnPlayerNetworkObjectLifecycle()
         {
