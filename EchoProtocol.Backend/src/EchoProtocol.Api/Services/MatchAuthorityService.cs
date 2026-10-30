@@ -100,7 +100,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         {
             var existingMember = await _db.MatchPlayerBindings.AsNoTracking()
                 .AnyAsync(item => item.MatchId == matchId
-                    && item.UserId == userId, cancellationToken);
+                    && item.UserId == userId && item.Participated, cancellationToken);
 
             if (!existingMember)
             {
@@ -121,7 +121,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }, "Join proof issued");
     }
 
-    public async Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(
+    public Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsync(Guid hostUserId, Guid matchId, BindMatchPlayerRequest request, CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => BindPlayerAsyncCore(hostUserId, matchId, request, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchPlayerBindingResponse>> BindPlayerAsyncCore(
         Guid hostUserId,
         Guid matchId,
         BindMatchPlayerRequest request,
@@ -157,6 +160,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 && item.DisconnectedAtUtc == null);
         var userBinding = match.Players.SingleOrDefault(
             item => item.UserId == proof.UserId);
+        if (match.Status == MatchAuthorityStatus.InMatch && userBinding?.Participated != true)
+            return Failure<MatchPlayerBindingResponse>("Player is not in the started roster", ErrorCodes.MatchPlayerBindingConflict);
 
         var isRosterActorRemap =
             userBinding is not null
@@ -179,7 +184,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var connectedCount = match.Players.Count(item => item.DisconnectedAtUtc is null);
-        if (userBinding is null && connectedCount >= match.MaxPlayers)
+        if ((userBinding is null || userBinding.DisconnectedAtUtc.HasValue) && connectedCount >= match.MaxPlayers)
         {
             return Failure<MatchPlayerBindingResponse>("Match capacity reached", ErrorCodes.MatchCapacityReached);
         }
@@ -205,7 +210,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(binding), "Player identity bound");
     }
 
-    public async Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(
+    public Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsync(Guid newHostUserId, Guid matchId, TakeoverMatchAuthorityRequest request, CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => TakeoverAsyncCore(newHostUserId, matchId, request, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchAuthorityResponse>> TakeoverAsyncCore(
         Guid newHostUserId,
         Guid matchId,
         TakeoverMatchAuthorityRequest request,
@@ -325,7 +333,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             if (previousHost is not null
                 && previousHost.FusionActorNumber
                     == request.FusionActorNumber
-                && _db.Database.IsRelational())
+                && _db.Database.IsRelational() && _db.Database.CurrentTransaction == null)
             {
                 actorReuseTransaction =
                     await _db.Database.BeginTransactionAsync(
@@ -377,7 +385,13 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             "Host authority transferred");
     }
 
-    public async Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+    public Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsync(
+        Guid hostUserId,
+        Guid matchId,
+        CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => RelinquishAsyncCore(hostUserId, matchId, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchAuthorityResponse>> RelinquishAsyncCore(
         Guid hostUserId,
         Guid matchId,
         CancellationToken cancellationToken)
@@ -463,7 +477,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         });
     }
 
-    public async Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(
+    public Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => RenewLeaseAsyncCore(hostUserId, matchId, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsyncCore(
         Guid hostUserId,
         Guid matchId,
         CancellationToken cancellationToken)
@@ -489,11 +506,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         CancellationToken cancellationToken) =>
         StartAsync(hostUserId, matchId, cancellationToken, null);
 
-    public async Task<ServiceResult<MatchAuthorityResponse>> StartAsync(
-        Guid hostUserId,
-        Guid matchId,
-        CancellationToken cancellationToken,
-        StartMatchAuthorityRequest? request)
+    public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(Guid hostUserId, Guid matchId,
+        CancellationToken cancellationToken, StartMatchAuthorityRequest? request) =>
+        WithMatchLockAsync(matchId, () => StartCoreAsync(hostUserId, matchId, cancellationToken, request), cancellationToken);
+
+    private async Task<ServiceResult<MatchAuthorityResponse>> StartCoreAsync(Guid hostUserId, Guid matchId,
+        CancellationToken cancellationToken, StartMatchAuthorityRequest? request)
     {
         var mapId = request?.MapId?.Trim();
         var difficulty = request?.Difficulty?.Trim().ToUpperInvariant();
@@ -536,6 +554,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         var now = UtcNow();
         match.MapId = mapId;
+        foreach (var player in match.Players)
+            player.Participated = player.DisconnectedAtUtc == null;
         match.Difficulty = difficulty;
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
@@ -544,7 +564,15 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");
     }
 
-    public async Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
+    public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
+        Guid hostUserId,
+        Guid matchId,
+        int fusionActorNumber,
+        Guid expectedUserId,
+        CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => MarkPlayerDisconnectedAsyncCore(hostUserId, matchId, fusionActorNumber, expectedUserId, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsyncCore(
         Guid hostUserId,
         Guid matchId,
         int fusionActorNumber,
@@ -626,7 +654,14 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");
     }
 
-    public async Task<ServiceResult<MatchAuthorityResponse>> EndAsync(
+    public Task<ServiceResult<MatchAuthorityResponse>> EndAsync(
+        Guid hostUserId,
+        Guid matchId,
+        EndMatchAuthorityRequest request,
+        CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId, () => EndAsyncCore(hostUserId, matchId, request, cancellationToken), cancellationToken);
+
+    private async Task<ServiceResult<MatchAuthorityResponse>> EndAsyncCore(
         Guid hostUserId,
         Guid matchId,
         EndMatchAuthorityRequest request,
@@ -773,6 +808,19 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 cancellationToken);
     }
 
+    private async Task<ServiceResult<T>> WithMatchLockAsync<T>(Guid matchId,
+        Func<Task<ServiceResult<T>>> action, CancellationToken cancellationToken)
+    {
+        if (_db.Database.ProviderName != "Npgsql.EntityFrameworkCore.PostgreSQL") return await action();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await _db.MatchAuthorityBindings.FromSqlInterpolated(
+            $"SELECT * FROM \"MatchAuthorityBindings\" WHERE \"MatchId\" = {matchId} FOR UPDATE")
+            .LoadAsync(cancellationToken);
+        var result = await action();
+        if (result.IsSuccess) await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
     private DateTime UtcNow() => _timeProvider.GetUtcNow().UtcDateTime;
 
     private static MatchAuthorityResponse Map(MatchAuthorityBinding match) => new()
@@ -784,7 +832,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         Status = match.Status,
         LeaseExpiresAtUtc = match.LeaseExpiresAtUtc,
         MapId = match.MapId,
-        Difficulty = match.Difficulty
+        Difficulty = match.Difficulty,
+        Players = match.Players.Where(player => match.Status != MatchAuthorityStatus.InMatch || player.Participated).Select(player => new MatchRosterPlayerResponse
+        {
+            UserId = player.UserId,
+            Disconnected = player.DisconnectedAtUtc.HasValue
+        }).ToArray()
     };
 
     private static MatchPlayerBindingResponse Map(MatchPlayerBinding player) => new()

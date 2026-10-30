@@ -1879,6 +1879,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
     private static MatchPlayerBinding CreateScenarioBinding(Guid matchId, Guid userId, int actor) => new()
     {
+            Participated = true,
         Id = Guid.NewGuid(), MatchId = matchId, UserId = userId, FusionActorNumber = actor,
         JoinProofId = Guid.NewGuid(), BoundAtUtc = Now.UtcDateTime, LastSeenAtUtc = Now.UtcDateTime
     };
@@ -2169,6 +2170,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
         private static MatchPlayerBinding CreateBinding(Guid matchId, Guid userId, int actor) => new()
         {
+            Participated = true,
             Id = Guid.NewGuid(),
             MatchId = matchId,
             UserId = userId,

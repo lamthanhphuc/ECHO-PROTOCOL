@@ -13,6 +13,29 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class MatchAuthorityServiceTests
 {
+    [Fact]
+    public async Task LobbyReturnCannotExceedCapacityAndStartFreezesConnectedRoster()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid(); var departed = Guid.NewGuid(); var replacement = Guid.NewGuid();
+        var created = await service.CreateAsync(host, new CreateMatchAuthorityRequest
+            { FusionSessionName = "capacity-return", MaxPlayers = 2 }, CancellationToken.None);
+        var id = created.Data!.MatchId;
+        await BindAsync(service, host, host, id, "capacity-return", 1);
+        await BindAsync(service, host, departed, id, "capacity-return", 2);
+        await service.MarkPlayerDisconnectedAsync(host, id, 2, departed, CancellationToken.None);
+        await BindAsync(service, host, replacement, id, "capacity-return", 3);
+        var proof = await service.IssueJoinProofAsync(departed, id, new IssueJoinProofRequest
+            { FusionSessionName = "capacity-return", FusionActorNumber = 4 }, CancellationToken.None);
+        var returned = await service.BindPlayerAsync(host, id, new BindMatchPlayerRequest
+            { FusionActorNumber = 4, JoinProof = proof.Data!.Proof }, CancellationToken.None);
+        Assert.False(returned.IsSuccess);
+        Assert.Equal("MATCH_CAPACITY_REACHED", returned.ErrorCode);
+        Assert.True((await service.StartAsync(host, id, CancellationToken.None)).IsSuccess);
+        Assert.False((await db.MatchPlayerBindings.SingleAsync(p => p.UserId == departed)).Participated);
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(p => p.Participated));
+    }
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -547,6 +570,8 @@ public sealed class MatchAuthorityServiceTests
 
         Assert.True(takeover.IsSuccess);
         Assert.Equal(nextHostId, takeover.Data!.HostUserId);
+        Assert.Contains(takeover.Data.Players, player => player.UserId == hostId && player.Disconnected);
+        Assert.Contains(takeover.Data.Players, player => player.UserId == nextHostId && !player.Disconnected);
         Assert.Equal(
             Now.UtcDateTime.AddSeconds(45),
             takeover.Data.LeaseExpiresAtUtc);

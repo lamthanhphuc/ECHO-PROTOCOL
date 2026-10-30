@@ -16,6 +16,7 @@ public sealed class MatchResult
     public string PayloadHash { get; set; } = string.Empty;
     public MatchRewardStatus RewardStatus { get; set; }
     public DateTime SubmittedAtUtc { get; set; }
+    public string? RecoveryAudit { get; set; }
 
     public MatchAuthorityBinding Match { get; set; } = null!;
     public User SubmittedByUser { get; set; } = null!;
