@@ -77,7 +77,6 @@ jobs:
           unityVersion: 6000.5.8f1
           testMode: ${{ matrix.runner }}
           cliVersion: v0.1.72
-          coverageEnabled: false
           artifactsPath: artifacts/${{ matrix.mode }}
 
       - name: Validate NUnit results
