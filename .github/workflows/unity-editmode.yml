@@ -54,6 +54,11 @@ jobs:
             exit 1
           fi
 
+      - name: Free disk for Unity image and project import
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache
+          df -h .
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           lfs: true
