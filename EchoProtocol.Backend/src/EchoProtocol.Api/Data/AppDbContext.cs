@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     {
     }
 
+    public DbSet<UserAgreementAcceptance> UserAgreementAcceptances => Set<UserAgreementAcceptance>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
@@ -41,6 +42,16 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<UserAgreementAcceptance>(entity =>
+        {
+            entity.ToTable("UserAgreementAcceptances");
+            entity.HasKey(a => new { a.UserId, a.BundleVersion });
+            entity.Property(a => a.BundleVersion).HasMaxLength(40);
+            entity.Property(a => a.ContentSha256).HasMaxLength(64).IsRequired();
+            entity.Property(a => a.DocumentVersions).HasMaxLength(500).IsRequired();
+            entity.Property(a => a.Locale).HasMaxLength(2).IsRequired();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");

@@ -89,6 +89,22 @@ namespace EchoProtocol.Voice
                 if (label.transform.parent == audioRect && label.name != "Title" && label.name != "Icon")
                     label.fontSize = Mathf.Min(label.fontSize, 18);
             Bind();
+            var legal = new GameObject("Policies", typeof(RectTransform), typeof(Image), typeof(Button));
+            legal.transform.SetParent(_canvas.transform.Find("Overlay/Window"), false);
+            var legalRect = (RectTransform)legal.transform;
+            legalRect.anchorMin = legalRect.anchorMax = new Vector2(0,1);
+            legalRect.pivot = new Vector2(0,1);
+            legalRect.anchoredPosition = new Vector2(24,-20);
+            legalRect.sizeDelta = new Vector2(230,36);
+            legal.GetComponent<Image>().color = new Color(.08f,.09f,.1f,.9f);
+            legal.GetComponent<Button>().onClick.AddListener(FirstTimeAgreementController.OpenPolicies);
+            var policyLabel = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            policyLabel.transform.SetParent(legal.transform, false);
+            var labelRect = (RectTransform)policyLabel.transform;
+            labelRect.anchorMin = Vector2.zero; labelRect.anchorMax = Vector2.one; labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var copy = policyLabel.GetComponent<Text>(); copy.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            copy.fontSize = 16; copy.color = Color.white; copy.alignment = TextAnchor.MiddleCenter;
+            copy.text = "Chính sách / Policies"; copy.raycastTarget = false;
             _overlay.SetActive(false);
         }
 

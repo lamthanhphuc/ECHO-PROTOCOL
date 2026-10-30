@@ -379,6 +379,7 @@ app.UseHttpsRedirection();
 app.UseCors("EchoProtocolDev");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<EchoProtocol.Api.Legal.AgreementGateMiddleware>();
 app.MapControllers();
 
 app.Run();

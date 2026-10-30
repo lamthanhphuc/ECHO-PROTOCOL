@@ -113,6 +113,7 @@ namespace EchoProtocol.UI
             _cancel.Select();
         }
 
+        public void EndStartupForAgreement() { _startup = false; _sceneTransition = false; _sceneChangeFrame = -1; }
         public void ShowStartup() => _startup = true;
         public void BeginSceneTransition() => _sceneTransition = true;
         public void CancelSceneTransition() => _sceneTransition = false;
