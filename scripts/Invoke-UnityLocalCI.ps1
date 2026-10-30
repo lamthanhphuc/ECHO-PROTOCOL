@@ -2,6 +2,8 @@ param(
     [string]$RepositoryRoot = (Split-Path $PSScriptRoot -Parent),
     [string]$EvidenceRoot,
     [string]$Commit = 'HEAD',
+    [ValidateSet('All', 'EditMode', 'PlayMode')][string]$Mode = 'All',
+    [string]$TestFilter,
     [string]$UnityEditor = 'C:\Program Files\Unity\Hub\Editor\6000.5.8f1\Editor\Unity.exe'
 )
 
@@ -55,19 +57,31 @@ Write-Host "Commit: $actualCommit"
 Write-Host "Evidence: $evidence"
 
 $failed = $false
-foreach ($mode in @('EditMode', 'PlayMode')) {
+$modes = if ($Mode -eq 'All') { @('EditMode', 'PlayMode') } else { @($Mode) }
+foreach ($mode in $modes) {
     $modeDir = Join-Path $evidence $mode
     New-Item -ItemType Directory -Path $modeDir -Force | Out-Null
+    $runRecord = Join-Path $modeDir 'run.txt'
+    @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", 'Status=RUNNING') | Set-Content -LiteralPath $runRecord
     $arguments = @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $mode,
         '-testResults', (Join-Path $modeDir 'results.xml'), '-logFile', (Join-Path $modeDir 'Editor.log'))
     if ($mode -eq 'EditMode') { $arguments += '-nographics' }
+    if ($TestFilter) { $arguments += @('-testFilter', $TestFilter) }
     Write-Host "Running $mode tests..."
-    & $UnityEditor @arguments
-    $unityExit = $LASTEXITCODE
+    $commandLine = ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+    $unityProcess = Start-Process -FilePath $UnityEditor -ArgumentList $commandLine -PassThru -Wait -WindowStyle Hidden
+    $unityExit = $unityProcess.ExitCode
+    $deadline = [DateTime]::UtcNow.AddMinutes(2)
+    while (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'") {
+        if ([DateTime]::UtcNow -gt $deadline) { throw "$mode Unity Editor did not exit after its launcher" }
+        Start-Sleep -Seconds 1
+    }
     $outcome = if ($unityExit -eq 0) { 'success' } else { 'failure' }
     Write-Host "$mode Unity exit code: $unityExit"
     & python $validator $modeDir $outcome $mode
     $gateExit = $LASTEXITCODE
+    @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", "UnityExitCode=$unityExit", "GateExitCode=$gateExit") |
+        Set-Content -LiteralPath $runRecord
     if ($unityExit -ne 0 -or $gateExit -ne 0) { $failed = $true }
 }
 

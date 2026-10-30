@@ -10,7 +10,7 @@ namespace EchoProtocol.Networking.Authority
         {
             public string matchId, ownerId;
             public long notBeforeUtc, nextLeaseUtc;
-            public SubmitMatchResultRequestDto request;
+            [SerializeReference] public SubmitMatchResultRequestDto request;
             public bool rejected;
             public bool saved;
             public int attempts;
