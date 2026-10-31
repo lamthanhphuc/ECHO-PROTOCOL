@@ -8,6 +8,11 @@ on:
         required: true
         default: backend
         options: [backend, web, both]
+      publish_to_ecr:
+        description: Publish selected images to private ECR (LTP only)
+        type: boolean
+        required: true
+        default: false
 permissions:
   contents: read
   actions: read
@@ -16,12 +21,24 @@ concurrency:
   cancel-in-progress: false
 jobs:
   images:
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Reject untrusted branch
+        env:
+          PUBLISH_ECR: ${{ inputs.publish_to_ecr }}
         run: |
           [[ "$GITHUB_REF" == refs/heads/LTP || "$GITHUB_REF" == refs/heads/main ]] || exit 1
+          if [[ "$PUBLISH_ECR" == true ]]; then
+            [[ "$GITHUB_REF" == refs/heads/LTP ]] || {
+              echo "ECR publishing is restricted to LTP" >&2
+              exit 1
+            }
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Require successful CI on this exact branch commit
         env:
@@ -38,6 +55,42 @@ jobs:
               raise SystemExit(f'No successful push CI for {branch}@{sha}')
           print(f'Verified successful push CI for {branch}@{sha}')
           PY
+      - name: Authenticate to AWS for ECR publishing
+        if: ${{ inputs.publish_to_ecr }}
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::430013477435:role/EchoProtocolGitHubOIDCDeployLTP
+          allowed-account-ids: '430013477435'
+
+      - name: Require unused immutable ECR tags
+        if: ${{ inputs.publish_to_ecr }}
+        env:
+          SERVICES: ${{ inputs.services }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/LTP ]]
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+
+          for service in backend web; do
+            if [[ "$SERVICES" != both && "$SERVICES" != "$service" ]]; then
+              continue
+            fi
+
+            if aws ecr describe-images \
+              --repository-name "echo-protocol/$service" \
+              --image-ids "imageTag=$GITHUB_SHA" \
+              >/dev/null 2>"$error_file"; then
+              echo "Immutable ECR tag already exists: $service@$GITHUB_SHA" >&2
+              exit 1
+            elif grep -Fq ImageNotFoundException "$error_file"; then
+              echo "ECR tag available: $service@$GITHUB_SHA"
+            else
+              cat "$error_file" >&2
+              exit 1
+            fi
+          done
       - name: Build immutable linux/amd64 images
         env:
           SERVICES: ${{ inputs.services }}
@@ -66,10 +119,68 @@ jobs:
             gzip -dc release/web-image.tar.gz | docker load
             test "$(docker image inspect "aws-lightsail-web:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/web-image-id.txt)"
           fi
-          (cd release && sha256sum *-image.tar.gz > SHA256SUMS)
+          (cd release && sha256sum -- *-image.tar.gz > SHA256SUMS)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ec2-images-${{ github.sha }}
           path: release/
           retention-days: 7
           compression-level: 0
+      - name: Publish immutable images to ECR
+        if: ${{ inputs.publish_to_ecr }}
+        env:
+          SERVICES: ${{ inputs.services }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/LTP ]]
+
+          registry="430013477435.dkr.ecr.ap-southeast-1.amazonaws.com"
+          trap 'docker logout "$registry" >/dev/null 2>&1 || true' EXIT
+
+          aws ecr get-login-password --region ap-southeast-1 |
+            docker login --username AWS --password-stdin "$registry" >/dev/null
+
+          for service in backend web; do
+            if [[ "$SERVICES" != both && "$SERVICES" != "$service" ]]; then
+              continue
+            fi
+
+            source_image="aws-lightsail-$service:$GITHUB_SHA"
+            image_repo="$registry/echo-protocol/$service"
+            image_ref="$image_repo:$GITHUB_SHA"
+
+            revision="$(docker image inspect "$source_image" \
+              --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+            [[ "$revision" == "$GITHUB_SHA" ]] || {
+              echo "Image revision mismatch" >&2
+              exit 1
+            }
+
+            docker tag "$source_image" "$image_ref"
+            docker push "$image_ref"
+
+            remote_digest="$(aws ecr describe-images \
+              --repository-name "echo-protocol/$service" \
+              --image-ids "imageTag=$GITHUB_SHA" \
+              --query 'imageDetails[0].imageDigest' \
+              --output text)"
+
+            [[ "$remote_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "Invalid ECR digest" >&2
+              exit 1
+            }
+
+            local_digest="$(docker image inspect "$image_ref" \
+              --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+              grep -F -m 1 "$image_repo@" | cut -d@ -f2)"
+
+            [[ "$local_digest" == "$remote_digest" ]] || {
+              echo "Pushed image digest mismatch" >&2
+              exit 1
+            }
+
+            echo "ECR_PUBLISH_VERIFIED: $service@$remote_digest"
+            echo "- $service at $remote_digest" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "ECR_PUBLISH_PASS"
