@@ -1,0 +1,30 @@
+name: Verify AWS OIDC
+
+on:
+  push:
+    branches: [LTP]
+    paths:
+      - .github/workflows/verify-aws-oidc.yml
+
+permissions:
+  id-token: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Authenticate with AWS OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::430013477435:role/EchoProtocolGitHubOIDCDeployLTP
+          allowed-account-ids: '430013477435'
+
+      - name: Verify assumed role
+        shell: bash
+        run: |
+          arn="$(aws sts get-caller-identity --query Arn --output text)"
+          [[ "$arn" == arn:aws:sts::430013477435:assumed-role/EchoProtocolGitHubOIDCDeployLTP/* ]]
+          echo "OIDC AUTHENTICATION PASS"
