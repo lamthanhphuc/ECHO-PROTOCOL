@@ -125,6 +125,20 @@ jobs:
           pwsh -NoProfile -File deploy/aws-lightsail/Test-WebReleaseTransport.ps1
           python3 deploy/aws-lightsail/Test-WebDeployMock.py
           python3 deploy/aws-lightsail/Test-WebComposeConfig.py
+      - name: Validate EC2 operator release
+        run: |
+          bash -n deploy/aws-lightsail/echo-ec2-operator-release.sh
+          shellcheck deploy/aws-lightsail/echo-ec2-operator-release.sh
+      - name: Exercise EC2 operator fault-injection in a network-isolated container
+        run: |
+          docker run --rm --network none --read-only \
+            --tmpfs /home:rw,nosuid,nodev \
+            --tmpfs /tmp:rw,exec,nosuid,nodev,mode=1777 \
+            --mount "type=bind,source=$PWD/deploy/aws-lightsail/echo-ec2-operator-release.sh,target=/opt/echo-ec2-operator-release.sh,readonly" \
+            --mount "type=bind,source=$PWD/deploy/aws-lightsail/tests/echo-cd-operator-apply-sandbox-test.py,target=/opt/echo-cd-operator-apply-sandbox-test.py,readonly" \
+            -e ECHO_CD_ISOLATED_TEST=1 \
+            python:3.12-slim-bookworm \
+            python3 /opt/echo-cd-operator-apply-sandbox-test.py
       - name: Build linux/amd64 application images
         run: |
           docker build --platform linux/amd64 -t "echo-ci-backend:$GITHUB_SHA" -f EchoProtocol.Backend/Dockerfile EchoProtocol.Backend
