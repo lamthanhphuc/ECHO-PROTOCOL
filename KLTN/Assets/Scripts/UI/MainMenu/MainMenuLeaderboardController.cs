@@ -135,6 +135,7 @@ namespace EchoProtocol.UI.MainMenu
             }
 
             var component = canvas.gameObject.AddComponent<MainMenuLeaderboardController>();
+            component._canvas = canvas;
             component._loadRecords = loadRecords;
             component.Build(profile);
             return component;

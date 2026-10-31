@@ -1,0 +1,27 @@
+name: Unity CI Phase 1
+
+on:
+  pull_request:
+    branches: [LTP]
+    paths:
+      - ".github/workflows/unity-editmode.yml"
+      - "scripts/check_unity_editmode_results.py"
+      - "tests/test_check_unity_editmode_results.py"
+      - "KLTN/**"
+
+permissions:
+  contents: read
+
+jobs:
+  result-gate-tests:
+    name: Unity XML gate unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Test result validator
+        run: |
+          python3 -m unittest discover \
+            -s tests \
+            -p "test_check_unity_editmode_results.py" \
+            -v
