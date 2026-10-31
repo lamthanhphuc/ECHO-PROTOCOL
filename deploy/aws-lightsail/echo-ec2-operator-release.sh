@@ -22,7 +22,7 @@ EOF
 if [[ "$1" == -h || "$1" == --help ]]; then usage; exit 0; fi
 action=$1; shift
 [[ "$action" == plan || "$action" == apply ]] || { usage; exit 2; }
-service= image= revision= backup_dir= restore_evidence= approval=
+service='' image='' revision='' backup_dir='' restore_evidence='' approval=''
 while (( $# )); do
   case "$1" in
     --service|--image|--revision|--backup-dir|--restore-evidence|--approval)
@@ -266,8 +266,8 @@ verify_target() {
 }
 check_unchanged() { [[ "$(snapshot)" == "$before" ]]; }
 wait_for_smoke() {
-  local n
-  for n in {1..15}; do
+  local attempt
+  for ((attempt = 1; attempt <= 15; attempt++)); do
     if smoke; then return 0; fi
     sleep 3
   done
