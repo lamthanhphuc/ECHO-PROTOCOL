@@ -1,0 +1,47 @@
+flowchart TB
+    subgraph AUTH["01 - Account authentication (Player / Unity / Backend)"]
+        A(["Start: Open game"]) --> B{"Existing account?"}
+        B -->|No| C["Player: Register account"]
+        C --> D["Player: Submit login"]
+        B -->|Yes| D
+        D --> E{"Backend: Login accepted?"}
+        E -->|No| F["Unity: Display validation error"]
+        F --> D
+        E -->|Yes| G["Unity: Save tokens; verify GET /auth/me"]
+        G --> H{"Session verified?"}
+        H -->|No| F
+    end
+
+    subgraph LEGAL["02 - First-use policy gate (Unity / Backend)"]
+        H -->|Yes| I["Unity: GET /api/agreements/status"]
+        I --> J{"Current bundle accepted?"}
+        J -->|No or stale| K["Unity: Show Content Warning and Legal Agreements"]
+        K --> L{"Player accepts all required declarations?"}
+        L -->|No| M["Unity: Logout; return to Login"]
+        M --> Z1(["Exit: Access denied"])
+        L -->|Yes| N["Backend: Validate version/hash and persist acceptance"]
+        N --> O{"Acceptance confirmed by Backend?"}
+        O -->|No| K
+    end
+
+    subgraph LOBBY["03 - Private session (Player / Host / Fusion)"]
+        J -->|Yes| P["Unity: Open Main Menu"]
+        O -->|Yes| P
+        P --> Q{"Create or join room?"}
+        Q -->|Create| R["Host: Create private Fusion session"]
+        Q -->|Join| S["Player: Join selected Fusion session"]
+        R --> T{"Session request accepted?"}
+        S --> T
+        T -->|No| U["Unity: Show room error; remain in menu"]
+        U --> P
+        T -->|Yes| V["Unity: Show lobby roster / ready status"]
+        V --> W["Non-host players: Set Ready (solo Host: no peer Ready needed)"]
+        W --> X(["End: Valid lobby, 1-4 players; start gate in WF-02"])
+    end
+
+    classDef startEnd fill:#e9f5f1,stroke:#245e4b,color:#123a2c,stroke-width:1px;
+    classDef decision fill:#fff4dd,stroke:#936521,color:#543900,stroke-width:1px;
+    classDef action fill:#f5f7fa,stroke:#42536d,color:#182334,stroke-width:1px;
+    class A,X,Z1 startEnd;
+    class B,E,H,J,L,O,Q,T decision;
+    class C,D,F,G,I,K,M,N,P,R,S,U,V,W action;

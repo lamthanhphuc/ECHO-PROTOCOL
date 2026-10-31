@@ -1,0 +1,78 @@
+flowchart TB
+    subgraph PLAYER["01 - Player activity (Expedition / 1-4 players)"]
+        A(["Start: Expedition match is active"])
+        B["Player: Move, interact, hide or generate noise"]
+        A --> B
+    end
+
+    subgraph AUTH["02 - Host-authoritative Stalker simulation (Fusion)"]
+        C["Host: PATROL; observe eligible vision and hearing cues"]
+        D{"Visible eligible player?"}
+        E{"Valid sound cue?"}
+        F["DETECT: Accumulate visual detection evidence"]
+        G{"Detection threshold reached?"}
+        H["CHASE: Pursue observed player"]
+        I{"Valid target in attack range?"}
+        J{"Target lost?"}
+        K["ATTACK: Validate target, range and hit moment"]
+        L{"Attack hit accepted?"}
+        M["RECOVER: Complete attack cooldown"]
+        N{"Target still visible?"}
+        O["SEARCH: Investigate noise or last known position"]
+        P{"Visible player reacquired?"}
+        Q["PATROL: Resume navigation"]
+        R["Continue CHASE on subsequent Host ticks"]
+
+        B --> C --> D
+        D -->|Yes| F --> G
+        D -->|No| E
+        E -->|Yes| O
+        E -->|No| Q
+        G -->|No / lost evidence| Q
+        G -->|Yes| H --> I
+        I -->|No| J
+        J -->|Yes| O
+        J -->|No| R
+        I -->|Yes| K --> L
+        L -->|No / miss| M
+        L -->|Yes| S
+        M --> N
+        N -->|Yes| R
+        N -->|No| O
+        O --> P
+        P -->|Yes| F
+        P -->|No / search expired| Q
+    end
+
+    subgraph RESULT["03 - Authoritative player state and network feedback"]
+        S["Host: Commit valid attack consequence once"]
+        T["Host: Resolve Caught / damage / Downed per rules"]
+        U{"Player Downed?"}
+        V["Host: Validate teammate revive and medical resource"]
+        W{"Valid revive completed?"}
+        X["Life state: Alive after revive"]
+        Y["Downed continues; bleedout may eliminate player"]
+        Z["Host: Replicate Stalker and player state to clients"]
+        END(["End: Encounter state synchronized; Expedition continues under WF-02"])
+
+        S --> T --> U
+        U -->|Yes| V --> W
+        W -->|Yes| X --> Z
+        W -->|No| Y --> Z
+        U -->|No| Z
+        Q --> Z
+        R --> Z
+        Z --> END
+    end
+
+    UV["Note: UV does not stun, repel or interrupt the Expedition Stalker"]
+    B -. Equipment rule .-> UV
+
+    classDef startEnd fill:#e9f5f1,stroke:#245e4b,color:#123a2c,stroke-width:1px;
+    classDef decision fill:#fff4dd,stroke:#936521,color:#543900,stroke-width:1px;
+    classDef action fill:#f5f7fa,stroke:#42536d,color:#182334,stroke-width:1px;
+    classDef note fill:#fff7ec,stroke:#c08d54,color:#604219,stroke-dasharray:4 3;
+    class A,END startEnd;
+    class D,E,G,I,J,L,N,P,U,W decision;
+    class B,C,F,H,K,M,O,Q,R,S,T,V,X,Y,Z action;
+    class UV note;

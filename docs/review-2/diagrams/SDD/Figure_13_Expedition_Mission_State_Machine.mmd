@@ -1,0 +1,33 @@
+stateDiagram-v2
+    [*] --> Running
+
+    state "Active Expedition (Host authority)" as Running {
+        [*] --> CoreObjective
+        CoreObjective --> Zone2Objective : TryCompleteCoreObjective accepted
+        Zone2Objective --> Zone3FindFrigate : Zone 2 completion accepted
+        Zone3FindFrigate --> Zone3PushFrigate : authorized frigate push begins
+        Zone3PushFrigate --> FinalHunt : zone 3 charge completed
+        FinalHunt --> Escape : valid exit interaction / phase advance
+    }
+
+    Running --> MatchEnded : TryEndMatch(result, reason, actor)
+    MatchEnded --> [*]
+
+    note right of Zone2Objective
+        Security terminal, relays and authorization
+        are internal Zone 2 stages in the main online route.
+        Puzzle and SecurityHold also exist in the enum,
+        but are not forced into this chosen main path.
+    end note
+
+    note right of Escape
+        SciFi Doorexit may advance FinalHunt to Escape
+        and then resolve the match in the same interaction.
+        Escape need not be a long-running screen.
+    end note
+
+    note right of MatchEnded
+        Phase = MatchEnded; Status = Ended.
+        Result = Win or Lose is a separate enum.
+        Timeouts may resolve Win if someone already escaped.
+    end note

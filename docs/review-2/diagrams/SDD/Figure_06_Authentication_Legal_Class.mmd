@@ -1,0 +1,86 @@
+classDiagram
+    direction TB
+
+    namespace Unity_Client {
+        class AuthScreenController {
+            -AuthRuntime _runtime
+            -OnLoginClicked()
+            -LoginFlow(username, password)
+            -OnRegisterClicked()
+        }
+        class AuthRuntime {
+            +AuthApiService AuthService
+            +ApiClient Client
+            +EnsureExists()
+        }
+        class AuthApiService {
+            -ApiClient _apiClient
+            +Login(username, password, callback)
+            +GetCurrentUser(callback)
+            +Register(email, username, password, confirmPassword, callback)
+        }
+        class ApiClient {
+            +GetJson(endpoint, bearer, callback)
+            +PostJson(endpoint, body, bearer, callback)
+        }
+        class FirstTimeAgreementController {
+            +Require(destination)
+            -Check()
+            -Accept()
+            -Finish()
+        }
+    }
+
+    namespace ASPNET_Backend {
+        class AuthController {
+            +Login(request, ct)
+            +Register(request, ct)
+            +Me(ct)
+        }
+        class IAuthService {
+            <<interface>>
+            +LoginAsync(request, ct)
+            +RegisterAsync(request, ct)
+            +GetCurrentUserAsync(userId, ct)
+        }
+        class AuthService {
+            +LoginAsync(request, ct)
+            +RegisterAsync(request, ct)
+            +GetCurrentUserAsync(userId, ct)
+        }
+        class AgreementsController {
+            +Documents()
+            +Status(ct)
+            +Accept(request, ct)
+        }
+        class AgreementGateMiddleware {
+            +RequiresAcceptance(path, method)
+            +InvokeAsync(context, db)
+        }
+        class AppDbContext {
+            +Users
+            +RefreshSessions
+            +UserAgreementAcceptances
+        }
+        class UserAgreementAcceptance {
+            +Guid UserId
+            +string BundleVersion
+            +string ContentSha256
+            +DateTime AcceptedAtUtc
+        }
+    }
+
+    AuthScreenController ..> AuthRuntime : resolves
+    AuthScreenController ..> FirstTimeAgreementController : require after Me
+    AuthRuntime --> AuthApiService : provides
+    AuthRuntime --> ApiClient : provides
+    AuthApiService --> ApiClient : HTTP transport
+    FirstTimeAgreementController ..> ApiClient : GET status / POST accept
+    ApiClient ..> AuthController : HTTPS auth API
+    ApiClient ..> AgreementsController : HTTPS agreements API
+    AuthController ..> IAuthService : injected
+    AuthService ..|> IAuthService : implements
+    AuthService --> AppDbContext : EF Core
+    AgreementsController --> AppDbContext : records acceptance
+    AgreementGateMiddleware --> AppDbContext : checks acceptance
+    AppDbContext --> UserAgreementAcceptance : DbSet

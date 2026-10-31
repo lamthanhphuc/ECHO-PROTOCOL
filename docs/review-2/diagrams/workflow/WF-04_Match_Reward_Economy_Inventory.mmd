@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph RESULT["01 - Result and reward (Host / Backend / Player)"]
+        A(["Start: Host commits final Win / Lose"]) --> B["Host: PUT /api/matches/{matchId}/result"]
+        B --> C{"Backend: Host, roster and result valid?"}
+        C -->|No| D["Reject invalid result; no reward grant"]
+        C -->|Yes| E["Backend: Save match result idempotently"]
+        E --> F["Backend: Process configured reward and progression"]
+        F --> G{"Reward completed?"}
+        G -->|No| H(["Pending: Show no unconfirmed Credits; retry later"])
+        G -->|Yes| I["Player: GET /reward/me and view confirmed Credits / XP"]
+    end
+
+    subgraph SHOP["02 - Purchase and ownership (Player / Backend / PostgreSQL)"]
+        I --> I2{"Player chooses to purchase an item?"}
+        I2 -->|No| I3(["End: Confirmed match reward visible; no purchase"])
+        I2 -->|Yes| J["Player: Select item and submit purchase request"]
+        J --> K["Backend: Check idempotency key"]
+        K --> L{"Key previously used?"}
+        L -->|Yes| M{"Same item as prior purchase?"}
+        M -->|Yes| N(["Replay: Return previous result; no new deduction"])
+        M -->|No| O["Reject idempotency conflict"]
+        L -->|No| P{"Active item, not owned, sufficient Credits?"}
+        P -->|No| Q["Reject; wallet and inventory unchanged"]
+        P -->|Yes| R["Backend: Lock wallet; recheck key inside transaction"]
+        R --> S{"Concurrent duplicate detected?"}
+        S -->|Yes| M
+        S -->|No| T["Atomic debit + wallet ledger + purchase + inventory"]
+        T --> U["Player: View ownership; equip compatible item"]
+        U --> V(["End: Inventory updated without duplicate charge"])
+    end
+
+    classDef startEnd fill:#e9f5f1,stroke:#245e4b,color:#123a2c,stroke-width:1px;
+    classDef decision fill:#fff4dd,stroke:#936521,color:#543900,stroke-width:1px;
+    classDef action fill:#f5f7fa,stroke:#42536d,color:#182334,stroke-width:1px;
+    class A,H,N,V,I3 startEnd;
+    class C,G,L,M,P,S,I2 decision;
+    class B,D,E,F,I,J,K,O,Q,R,T,U action;

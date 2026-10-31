@@ -1,0 +1,72 @@
+sequenceDiagram
+    actor Host
+    participant L as LobbyManager
+    participant N as NetworkBootstrap
+    participant A as MatchAuthorityRuntime
+    participant B as ASP.NET Core Backend
+    participant F as Photon Fusion Runner
+
+    Host->>L: TryStartMatch()
+    L->>L: Validate InLobby, IsServer, IsSceneAuthority, ready roster (1-4)
+    alt Session / host / roster invalid
+        L-->>Host: Start rejected
+    else Eligible start request
+        L->>N: TryBeginMatchStartGate()
+        alt Start gate rejected
+            N-->>L: false
+            L-->>Host: Start rejected
+        else Gate acquired
+            N-->>L: true
+            L->>A: EnsureExists(bootstrap)
+            L->>A: PrepareNextMatchAsync(sessionName, maxPlayers)
+            A->>B: Create match authority binding
+            B-->>A: Binding result
+            alt Binding unavailable
+                A-->>L: false
+                L-->>Host: Cannot prepare authority
+            else Host binding ready
+                A-->>L: true
+                L->>L: Publish binding; TryValidateCommittedRoster() with bounded retries
+                alt Player binding / roster validation fails
+                    L-->>Host: Match not started
+                else Active roster committed
+                    L->>L: Revalidate runner and session availability
+                    alt Runner or SessionInfo unavailable
+                        L-->>Host: Match not started
+                    else Session ready
+                        L->>A: StartMatchAsync()
+                        A->>B: Start authorized backend match
+                        B-->>A: Accepted / rejected
+                        alt Backend rejects start
+                            A-->>L: Not accepted with error
+                            L-->>Host: Keep lobby; show error
+                        else Backend accepts start
+                            A-->>L: Accepted
+                            L->>L: Recheck authoritative runner
+                            L->>N: CloseRoomForMatchStart()
+                            alt Fusion room is not ready
+                                N-->>L: false
+                                L->>A: EndAsync(FUSION_ROOM_NOT_READY)
+                                A->>B: End / abort backend match
+                                B-->>A: End result
+                                L-->>Host: Report failure; remain in lobby when possible
+                            else Fusion transition gate applied
+                                N-->>L: true
+                                Note over N,F: Room stays open for reconnect and becomes invisible to new players
+                                L->>F: LoadScene(selectedScene, Single)
+                                alt Scene load throws / runner fails
+                                    F-->>L: Exception or failure
+                                    L->>N: ShutdownRunnerAsync()
+                                    L-->>Host: Report scene load failure
+                                else Host LoadScene task completes
+                                    F-->>L: Scene loading task complete
+                                    L-->>Host: Start flow completed on host
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            Note over L,N: StartMatchAsync finally releases match-start gate
+        end
+    end

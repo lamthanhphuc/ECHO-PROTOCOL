@@ -1,0 +1,76 @@
+classDiagram
+    direction TB
+
+    class PlayerInteraction {
+        -IInteractable _currentInteractable
+        +IInteractable CurrentInteractable
+        +string CurrentPrompt
+        +SetInteractionPromptSuppressed(suppressed) void
+        -OnInteractPerformed(context) void
+        -OnInteractStarted(context) void
+    }
+
+    class IInteractable {
+        <<interface>>
+        +string InteractionPrompt
+        +CanInteract(interactor) bool
+        +Interact(interactor) void
+    }
+
+    class NetworkPlayerInteractor {
+        +RequestInteraction(target) bool
+        +RequestRevive(target) bool
+        +RequestCancelRevive(target) bool
+        -RpcRequestInteraction(targetId, sequence) void
+        -RpcRequestRevive(targetId, sequence) void
+    }
+
+    class NetworkInteractable {
+        <<abstract>>
+        +ValidateInteraction(context) InteractionValidationResult
+        +ExecuteAuthoritative(context) void
+        #ValidateCurrentState(context) InteractionValidationResult
+        #ExecuteInteraction(context) void
+    }
+
+    class NetworkSectorBox {
+        +int PlacedCoreCount
+        +int RequiredCoreCount
+        +bool IsCoreObjectiveComplete
+        -PlaceCarriedCore(context, matchState) void
+    }
+
+    class LobbyPlayerState {
+        +bool IsGameplayPlayer
+        +int ToolId
+        +NetworkId CarriedCoreId
+    }
+
+    class NetworkPlayerLifeState {
+        +NetworkPlayerLifeStatus Status
+        +float Health
+        +TryStartRevive(reviver) bool
+        +TryCancelRevive(reviver) bool
+        +TryEscape() bool
+    }
+
+    class NetworkMatchState {
+        +NetworkMatchPhase CurrentPhase
+        +NetworkMatchStatus Status
+        +NetworkMatchResult Result
+        +TryCompleteCoreObjective(source) bool
+    }
+
+    class MatchFlowController {
+        +MatchPhase Phase
+        +SetNetworkAuthorityPresentationOnly(enabled) void
+        +ApplyAuthoritativeSnapshot(networkPhase, networkStatus, networkResult) void
+    }
+
+    PlayerInteraction ..> IInteractable : local gameplay interaction
+    NetworkPlayerInteractor ..> NetworkInteractable : host-validated RPC interaction
+    NetworkPlayerInteractor ..> NetworkPlayerLifeState : revive request
+    NetworkPlayerInteractor ..> LobbyPlayerState : requester and tool checks
+    NetworkSectorBox --|> NetworkInteractable : inherits
+    NetworkSectorBox ..> NetworkMatchState : requests core completion
+    NetworkMatchState ..> MatchFlowController : publishes presentation snapshot

@@ -1,0 +1,57 @@
+classDiagram
+    direction TB
+
+    class ShopPurchaseController {
+        -IPurchaseService _service
+        +Purchase(request, cancellationToken)
+    }
+    class IPurchaseService {
+        <<interface>>
+        +PurchaseAsync(userId, request, ct)
+    }
+    class PurchaseService {
+        -AppDbContext _db
+        +PurchaseAsync(userId, request, ct)
+    }
+    class MatchResultsController {
+        -IMatchResultService _service
+        -IRewardService _rewardService
+        +Submit(matchId, request, ct)
+        +GetMyReward(matchId, ct)
+    }
+    class IMatchResultService {
+        <<interface>>
+        +SubmitAsync(hostUserId, matchId, request, ct)
+    }
+    class MatchResultService {
+        -AppDbContext _db
+        +SubmitAsync(hostUserId, matchId, request, ct)
+    }
+    class IRewardService {
+        <<interface>>
+        +ProcessAsync(matchId, ct)
+        +GetForUserAsync(matchId, userId, ct)
+    }
+    class RewardService {
+        -AppDbContext _db
+        +ProcessAsync(matchId, ct)
+        +GetForUserAsync(matchId, userId, ct)
+    }
+    class AppDbContext {
+        +Wallets
+        +WalletTransactions
+        +PurchaseTransactions
+        +InventoryItems
+        +MatchResults
+        +MatchRewardGrants
+    }
+
+    ShopPurchaseController --> IPurchaseService : constructor injection
+    PurchaseService ..|> IPurchaseService : implements
+    PurchaseService --> AppDbContext : transaction and entities
+    MatchResultsController --> IMatchResultService : constructor injection
+    MatchResultsController --> IRewardService : constructor injection
+    MatchResultService ..|> IMatchResultService : implements
+    RewardService ..|> IRewardService : implements
+    MatchResultService --> AppDbContext : persists result
+    RewardService --> AppDbContext : commits rewards

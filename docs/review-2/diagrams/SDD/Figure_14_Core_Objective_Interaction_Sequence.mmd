@@ -1,0 +1,39 @@
+sequenceDiagram
+    actor Player
+    participant ClientI as NetworkPlayerInteractor (Input Authority)
+    participant HostI as NetworkPlayerInteractor (State Authority)
+    participant Box as NetworkSectorBox (State Authority)
+    participant Match as NetworkMatchState (State Authority)
+    participant HUD as HUDZoneMissions / Clients
+
+    Player->>ClientI: Interact with Sector Box while carrying core
+    ClientI->>ClientI: RequestInteraction(box) / NextSequence()
+    ClientI->>HostI: RpcRequestInteraction(boxId, sequence)
+    HostI->>HostI: TryResolveRequester(); ValidateRequester()
+    alt Requester invalid / duplicate / match ended
+        HostI-->>ClientI: RpcInteractionResult(rejected)
+    else Requester valid
+        HostI->>Box: ValidateInteraction(context)
+        Box->>Box: Check range, phase, carried core and capacity
+        alt Target or prerequisites invalid
+            Box-->>HostI: InteractionValidationResult (rejected)
+            HostI-->>ClientI: RpcInteractionResult(rejected)
+        else Placement accepted
+            Box-->>HostI: Accepted
+            HostI->>Box: ExecuteAuthoritative(context)
+            Box->>Box: PlaceCarriedCore(context, matchState)
+            alt Carried Core.TryPlace fails after validation
+                Note over Box: No PlacedCoreCount increment or phase transition
+            else Core.TryPlace succeeds
+                Box->>Box: Increase PlacedCoreCount; publish objective update
+                opt All Sector Boxes complete
+                    Box->>Match: TryCompleteCoreObjective(this)
+                    Match->>Match: Validate all boxes; TryAdvancePhase(CoreObjective, Zone2Objective)
+                end
+                Note over Box,HUD: Networked objective count and match phase replicate to peers
+                HUD->>Match: TryGetObjectiveProgress(out current, out required)
+                HUD->>HUD: RefreshText() using current replicated state
+            end
+            HostI-->>ClientI: RpcInteractionResult(accepted validation)
+        end
+    end

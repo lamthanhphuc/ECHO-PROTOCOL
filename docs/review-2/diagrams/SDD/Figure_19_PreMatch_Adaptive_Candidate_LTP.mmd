@@ -1,0 +1,61 @@
+sequenceDiagram
+    actor Host as Authorized Host
+    participant API as ScenariosController
+    participant S as ScenarioService (LTP)
+    participant B as AdaptiveInputSnapshotBuilder
+    participant P as AEDPreMatchPolicyV1
+    participant R as ScenarioConfigRegistry
+    participant DB as PostgreSQL
+
+    Host->>API: POST /api/matches/{id}/scenario/resolve
+    API->>S: ResolvePreMatchAsync(host, match, request)
+    S->>DB: Validate JWT host binding, lease and decision identity
+    alt Unauthorized, stale or conflicting request
+        S-->>API: Rejection / conflict
+        API-->>Host: 4xx (reason-specific)
+    else Existing identical valid decision
+        S-->>API: Existing decision (replay)
+        API-->>Host: 200 OK
+    else New decision in pre-match window
+        S->>B: BuildPreMatchAsync(matchId)
+        B->>DB: Read roster and player AI profiles
+        B-->>S: Snapshot, coverage, fingerprint
+        S->>R: GetProductionFixedFallbackAsync(compatibility)
+        R-->>S: Approved fixed baseline or failure
+        alt No valid fixed baseline
+            S-->>API: Validation failure
+            API-->>Host: 4xx
+        else Baseline available
+            alt Request FIXED
+                S->>S: FIXED_CONFIG_ISSUED
+            else Request ADAPTIVE, policy disabled
+                S->>S: FIXED_FALLBACK / POLICY_CONFIG_INVALID
+            else Request ADAPTIVE, policy enabled
+                S->>S: Validate policy contract / whitelist / parameter registry
+                alt Invalid policy or parameters
+                    S->>S: FIXED_FALLBACK / POLICY_CONFIG_INVALID
+                else Policy valid
+                    S->>P: SelectRule(snapshot, thresholds)
+                    alt Incomplete / invalid player evidence
+                        S->>S: FIXED_FALLBACK / INPUT_INVALID
+                    else Mixed HOLD rule
+                        S->>S: FIXED_FALLBACK / HOLD_RULE
+                    else Relief or Increase rule
+                        S->>R: GetProductionAdaptiveCandidatesAsync(compatibility)
+                        R-->>S: Approved compatible candidates or failure
+                        S->>S: AEDPreMatchCandidateV1.TrySelect(rule, baseline, candidates)
+                        alt Exactly one approved next-value candidate
+                            S->>S: ADAPTIVE_CONFIG_ISSUED; fallback=false
+                        else No unique valid candidate
+                            S->>S: FIXED_FALLBACK / selection reason
+                        end
+                    end
+                end
+            end
+            S->>DB: Commit snapshot and ScenarioDecision atomically
+            S-->>API: Decision and selected configuration
+            API-->>Host: 201 Created
+        end
+    end
+    Note over S,DB: Policy Enabled=false in LTP appsettings.json; true in Development override.
+    Note over Host,API: Config application is acknowledged separately by ConfirmAppliedAsync.

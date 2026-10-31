@@ -1,0 +1,31 @@
+flowchart LR
+    PLAYER["Players / Host<br/>Windows client"]
+    ADMIN["Authorized<br/>Administrator"]
+    FUSION["Photon Fusion<br/>session service (external)"]
+
+    subgraph SYS["ECHO PROTOCOL - Registered System Boundary"]
+        direction LR
+        UNITY["Unity Windows Game<br/>UI / Expedition / Stalker"]
+        HOST["Host-authoritative<br/>gameplay & replication"]
+        WEB["Limited Admin<br/>Web UI"]
+        API["ASP.NET Core Web API<br/>accounts / results / rewards / shop"]
+        PG[("PostgreSQL<br/>persistent records")]
+        MG[("MongoDB<br/>telemetry events")]
+
+        UNITY -->|"Host game authority"| HOST
+        UNITY <-->|"Authenticated HTTPS"| API
+        WEB <-->|"Authorized HTTPS"| API
+        API -->|"Persist / retrieve"| PG
+        API -->|"Record telemetry"| MG
+    end
+
+    PLAYER -->|"Controls / HUD"| UNITY
+    ADMIN -->|"Admin operations"| WEB
+    HOST <-->|"Session / state replication"| FUSION
+
+    classDef actor fill:#fff5f1,stroke:#bd6652,color:#223344,stroke-width:1px
+    classDef service fill:#e9f1fb,stroke:#607f9c,color:#20354a,stroke-width:1px
+    classDef storage fill:#eef7f4,stroke:#5b9180,color:#203b35,stroke-width:1px
+    class PLAYER,ADMIN actor
+    class UNITY,HOST,WEB,API,FUSION service
+    class PG,MG storage

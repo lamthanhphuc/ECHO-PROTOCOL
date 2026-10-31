@@ -1,0 +1,27 @@
+flowchart LR
+    REQ["Incoming HTTPS Request"]
+
+    subgraph HTTP["ASP.NET Core API / HTTP Pipeline"]
+        AUTH["Authentication / Authorization Middleware"]
+        CTR["Controllers and DTOs"]
+    end
+
+    subgraph APP["Application Services"]
+        SVC["Service Interfaces and Implementations"]
+    end
+
+    subgraph DATA["Data Access and Persistence"]
+        EF["EF Core / AppDbContext / Entities / Migrations"]
+        TEL["ITelemetryEventRepository / MongoTelemetryEventRepository"]
+    end
+
+    PG[("PostgreSQL")]
+    MG[("MongoDB")]
+
+    REQ --> AUTH
+    AUTH -->|"HTTP pipeline; auth enforced on protected actions"| CTR
+    CTR -.->|"uses injected services"| SVC
+    SVC -.->|"relational persistence"| EF
+    SVC -.->|"telemetry event storage"| TEL
+    EF --> PG
+    TEL --> MG

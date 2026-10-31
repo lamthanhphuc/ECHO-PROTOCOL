@@ -1,0 +1,163 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" modified="2026-10-31T07:30:00.000Z" agent="ChatGPT" version="24.7.17" type="device">
+  <diagram id="part_a" name="Figure 02a - Account, Economy, Admin">
+    <mxGraphModel dx="1500" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1540" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="sys_a" value="" style="rounded=0;html=1;whiteSpace=wrap;strokeColor=#334155;strokeWidth=2;fillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="270" y="65" width="1020" height="790" as="geometry"/>
+        </mxCell>
+        <mxCell id="title_a" value="ECHO PROTOCOL — Use Cases (Account, Economy &amp;amp; Legal)" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=23;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="310" y="84" width="935" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="group_a" value="ACCOUNT &amp;amp; LEGAL" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=17;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="336" y="148" width="445" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="group_b" value="ECONOMY &amp;amp; RESULTS" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=17;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="336" y="535" width="445" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="group_c" value="ADMINISTRATION" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=17;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="915" y="632" width="310" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC01" value="UC-01&lt;br&gt;Register account" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="196" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC02" value="UC-02&lt;br&gt;Authenticate / load profile" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="300" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC15" value="UC-15&lt;br&gt;Accept Legal Agreements" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="412" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC11" value="UC-11&lt;br&gt;Review result and reward" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="585" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC12" value="UC-12&lt;br&gt;Shop / purchase / equip" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="360" y="695" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC13" value="UC-13&lt;br&gt;Review / adjust managed records" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="886" y="695" width="378" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="Guest" value="Guest" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#fff;strokeColor=#0f172a;strokeWidth=1.8;fontSize=17;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="95" y="205" width="90" height="133" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player" value="Player" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#fff;strokeColor=#0f172a;strokeWidth=1.8;fontSize=17;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="95" y="590" width="90" height="133" as="geometry"/>
+        </mxCell>
+        <mxCell id="Admin" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#fff;strokeColor=#0f172a;strokeWidth=1.8;fontSize=17;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="689" width="90" height="133" as="geometry"/>
+        </mxCell>
+        <mxCell id="Guest_UC01" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Guest" target="UC01">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Guest_UC02" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Guest" target="UC02">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC02" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC02">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC15" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC15">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC11" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC12" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Admin_UC13" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Admin" target="UC13">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note_a" value="UC-15 is required only when the current policy bundle has not been accepted." style="shape=note;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=14;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="810" y="404" width="390" height="95" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="part_b" name="Figure 02b - Gameplay, Lobby, Adaptive">
+    <mxGraphModel dx="1500" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1540" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="sys_b" value="" style="rounded=0;html=1;whiteSpace=wrap;strokeColor=#334155;strokeWidth=2;fillColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="280" y="70" width="1010" height="870" as="geometry"/>
+        </mxCell>
+        <mxCell id="title_b" value="ECHO PROTOCOL — Use Cases (Gameplay &amp;amp; Multiplayer)" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=23;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="320" y="87" width="940" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="group_player" value="PLAYER GAMEPLAY" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=17;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="341" y="150" width="415" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="group_host" value="HOST / SCENARIO" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;fontSize=17;fontStyle=1;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="864" y="150" width="390" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC04" value="UC-04&lt;br&gt;Join / ready session" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="209" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC06" value="UC-06&lt;br&gt;Explore / interact" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="332" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC07" value="UC-07&lt;br&gt;Objectives / evacuation" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="455" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC08" value="UC-08&lt;br&gt;Revive teammate" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="578" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC09" value="UC-09&lt;br&gt;Use UV equipment" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="701" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC14" value="UC-14&lt;br&gt;Handle interrupted session" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="353" y="824" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC03" value="UC-03&lt;br&gt;Create private session" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="873" y="219" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC05" value="UC-05&lt;br&gt;Start Expedition" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="873" y="421" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC10" value="UC-10&lt;br&gt;Adaptive decision / evaluation" style="ellipse;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#475569;strokeWidth=1.8;fontSize=16;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="873" y="633" width="336" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player" value="Player" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#fff;strokeColor=#0f172a;strokeWidth=1.8;fontSize=17;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="77" y="510" width="92" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="Host" value="Host Player" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#fff;strokeColor=#0f172a;strokeWidth=1.8;fontSize=17;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="355" width="92" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC04" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC04">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC06" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC06">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC07" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC07">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC08" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC08">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC09" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC09">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Player_UC14" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Player" target="UC14">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Host_UC03" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Host" target="UC03">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="Host_UC05" value="" style="endArrow=none;startArrow=none;html=1;strokeWidth=1.7;strokeColor=#526177;rounded=0;exitPerimeter=1;entryPerimeter=1;" edge="1" parent="1" source="Host" target="UC05">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="UC10_to_UC05" value="«extend» [Adaptive requested]" style="dashed=1;endArrow=open;endFill=0;html=1;strokeWidth=1.6;strokeColor=#355473;rounded=0;" edge="1" parent="1" source="UC10" target="UC05">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="note_b" value="UC-10 runs within the system when a host-initiated match requires a scenario decision. The LTP branch may select a validated candidate or fixed fallback." style="shape=note;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fillColor=#eff6ff;strokeColor=#93c5fd;fontSize=14;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="872" y="758" width="340" height="119" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_b" value="Host Player has the rights of Player plus host-only UC-03 and UC-05. Photon Fusion is an external supporting service shown in the System Context (Figure 1)." style="shape=note;html=1;whiteSpace=wrap;fillColor=#f8fafc;strokeColor=#cbd5e1;fontSize=15;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="300" y="956" width="1160" height="70" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph UNITY["Unity Host - AED Runtime"]
+        direction TB
+        NM["NetworkMatchState"]
+        AR["ScenarioConfigAuthorityRuntime"]
+        ENG["ScenarioResolutionEngine"]
+        FD["FixedDirector"]
+        CR["ScenarioConfigRuntimeRegistry"]
+        ST["StalkerFusionRuntime"]
+        NM -->|resolve / apply scenario| AR
+        AR -->|Resolve| ENG
+        ENG -->|fixed baseline or fallback| FD
+        AR -->|Apply config| CR
+        ST -->|read applied config| CR
+    end
+
+    subgraph BACKEND["ASP.NET Core - Scenario API and Persistence"]
+        direction TB
+        SC["ScenariosController"]
+        IF["IScenarioService"]
+        SV["ScenarioService"]
+        SB["AdaptiveInputSnapshotBuilder"]
+        RG["ScenarioConfigRegistry"]
+        DB[("PostgreSQL / AppDbContext")]
+        SC -->|uses| IF
+        SV -.->|implements| IF
+        SV -->|BuildPreMatchAsync| SB
+        SV -->|GetProductionFixedFallbackAsync| RG
+        SV -->|persist decision| DB
+        SB --> DB
+        RG --> DB
+    end

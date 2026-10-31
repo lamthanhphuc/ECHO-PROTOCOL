@@ -1,0 +1,46 @@
+sequenceDiagram
+    actor Host as Unity Host Result Outbox
+    participant C as MatchResultsController
+    participant M as MatchResultService
+    participant Q as MatchProfilePostProcessingService
+    participant R as RewardService
+    participant DB as PostgreSQL
+    actor Player as Result UI / ResultRewardBridge
+
+    Host->>C: PUT /api/matches/{matchId}/result (JWT)
+    C->>M: SubmitAsync(hostId, matchId, request)
+    M->>DB: Validate host lease, roster, match state, payload
+    alt Invalid or conflicting result
+        M-->>C: Rejected (reason-specific)
+        C-->>Host: 4xx response
+    else New or identical replay
+        M->>DB: Commit match result if new; replay is idempotent
+        DB-->>M: Accepted result
+        M-->>C: IsReplay flag and result status
+        C->>Q: EnqueueAsync(matchId) (LTP)
+        Note over Q: Failure to queue is logged; accepted result retained.
+        C->>R: ProcessAsync(matchId)
+        R->>DB: Validate reward policy; grant wallet/XP atomically
+        alt Reward committed or already complete
+            DB-->>R: Completed / replay
+            R-->>C: RewardStatus Completed
+        else Reward processing failed
+            R-->>C: Failure; reward remains Pending
+        end
+        C-->>Host: 201 new / 200 replay; reward may be Pending
+    end
+
+    Player->>C: GET /api/matches/{matchId}/reward/me (JWT)
+    C->>R: GetForUserAsync(matchId, userId)
+    R->>DB: Read completed reward grant and profile
+    alt Reward confirmed
+        R-->>C: RewardMeResponse
+        C-->>Player: 200 OK; display confirmed amounts
+    else Reward still pending
+        R-->>C: RewardPending
+        C-->>Player: 409 Conflict; show Pending
+    else Missing or inconsistent records
+        R-->>C: Reason-specific error
+        C-->>Player: 4xx; do not claim reward
+    end
+    Note over Host,Player: HTTP calls use Unity API clients; controllers never call Unity components directly.

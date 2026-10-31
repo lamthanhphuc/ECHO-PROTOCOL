@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> Alive
+
+    Alive --> Downed : valid damage or monster down / budget available
+    Alive --> Eliminated : revive budget exceeded or forced elimination
+    Alive --> Escaped : TryEscape accepted by State Authority
+    Alive --> Caught : TryCatchAuthoritative accepted (mode-dependent)
+
+    Downed --> Downed : ReviveStarted / ReviveCancelled (same status)
+    Downed --> Alive : CompleteReviveAuthoritative / kit consumed
+    Downed --> Eliminated : bleedout or revive limit
+
+    Caught --> Downed : catch timer expired / nonfatal
+    Caught --> Eliminated : catch timer expired / fatal
+
+    Eliminated --> [*]
+    Escaped --> [*]
+
+    note right of Downed
+        Revive is a timed process while status remains Downed.
+        Not a separate NetworkPlayerLifeStatus enum value.
+    end note
+    note right of Caught
+        Shared life-state enum; capture behavior is mode-dependent.
+        Do not imply every Expedition path uses Caught.
+    end note

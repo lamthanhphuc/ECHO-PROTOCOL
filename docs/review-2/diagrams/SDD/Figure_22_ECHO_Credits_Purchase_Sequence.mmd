@@ -1,0 +1,44 @@
+sequenceDiagram
+    autonumber
+    actor Player
+    participant UI as Unity Shop UI / HTTP Client
+    participant C as ShopPurchaseController
+    participant S as PurchaseService
+    participant DB as PostgreSQL
+
+    Player->>UI: Confirm item purchase
+    UI->>C: POST /api/shop/purchase (JWT, itemId, key)
+    alt Invalid token
+        C-->>UI: 401 Unauthorized
+    else Authenticated player
+        C->>S: PurchaseAsync(userId, request)
+        S->>DB: Lookup purchase by userId + idempotencyKey
+        alt Existing same item and key
+            DB-->>S: Existing purchase
+            S-->>C: IsReplay = true
+            C-->>UI: 200 OK (no extra charge)
+        else Existing key for different item
+            DB-->>S: Conflicting purchase
+            S-->>C: PurchaseIdempotencyConflict
+            C-->>UI: 409 Conflict
+        else New purchase
+            S->>DB: Begin transaction; load item and locked wallet
+            S->>S: Check active item, category, ownership and balance
+            alt Invalid item or wallet
+                S-->>C: Not found or inactive
+                C-->>UI: 404 / 409
+            else Already owned / insufficient credits
+                S-->>C: Business conflict
+                C-->>UI: 409 Conflict
+            else Eligible
+                S->>DB: Add WalletTransaction (negative amount)
+                S->>DB: Add PurchaseTransaction and InventoryItem
+                S->>DB: Update Wallet.Balance
+                S->>DB: SaveChanges and Commit
+                DB-->>S: Committed
+                S-->>C: IsReplay = false
+                C-->>UI: 201 Created
+            end
+        end
+    end
+    UI-->>Player: Refresh wallet and inventory on confirmed success

@@ -1,0 +1,46 @@
+classDiagram
+    direction TB
+
+    class StalkerFusionRuntime {
+        +FixedUpdateNetwork()
+        -RunAuthoritativePipeline(step) bool
+        -BindProductionConsequenceSink()
+    }
+    class StalkerController {
+        +Simulate(input) bool
+        -TickCurrentState()
+        -ResolveAttackHitMomentTyped()
+        +AttackConsequenceSink
+    }
+    class StalkerVisionSensor {
+        +RefreshVisibility() bool
+        +TryEvaluateCandidate(...)
+    }
+    class StalkerAttackController {
+        +BeginAttack(...) 
+        +ResolveHitMoment(...) 
+    }
+    class IPlayerAttackConsequenceSink {
+        <<interface>>
+        +TryApplyStalkerHit(...) bool
+    }
+    class StalkerNetworkLifeStateConsequenceSink {
+        +TryApplyStalkerHit(...) bool
+    }
+    class NetworkPlayerLifeState {
+        +Status
+        +TryApplyMonsterDown(...) bool
+    }
+    class NetworkMatchState {
+        +CurrentPhase
+        +Status
+    }
+
+    StalkerFusionRuntime --> StalkerController : drives simulation
+    StalkerFusionRuntime --> StalkerVisionSensor : builds vision frame
+    StalkerFusionRuntime --> StalkerNetworkLifeStateConsequenceSink : binds on Host
+    StalkerFusionRuntime ..> NetworkMatchState : reads match context
+    StalkerController --> StalkerAttackController : owns attack episodes
+    StalkerAttackController ..> IPlayerAttackConsequenceSink : calls contract
+    StalkerNetworkLifeStateConsequenceSink ..|> IPlayerAttackConsequenceSink : implements
+    StalkerNetworkLifeStateConsequenceSink --> NetworkPlayerLifeState : applies valid hit

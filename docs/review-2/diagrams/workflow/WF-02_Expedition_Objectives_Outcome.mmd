@@ -1,0 +1,41 @@
+flowchart TB
+    subgraph START["01 - Match admission (Host / Fusion / Backend)"]
+        A(["Start: Host requests Start Expedition"]) --> B{"Host authority and 1-4 roster valid?<br/>All non-host players Ready?"}
+        B -->|No| C["Reject start; stay in lobby"]
+        B -->|Yes| D["Backend: Validate match / roster and accept start"]
+        D --> E{"Backend accepted?"}
+        E -->|No| C
+        E -->|Yes| F["Fusion Host: Close room; transition peers to Expedition scene"]
+        F --> G{"Scene transition successful?"}
+        G -->|No| H["Abort / report load failure; do not claim match started"]
+    end
+
+    subgraph GAME["02 - Host-authoritative Expedition (Players / Stalker / Host)"]
+        G -->|Yes| I["Players: Explore and interact with mission objects"]
+        I --> J["Host: Validate core, power/security and co-op objectives"]
+        J --> K["Host: Replicate progress, player life and AI state"]
+        K --> L{"Required objectives completed?"}
+        L -->|No| M["Stalker: Perceive / pursue / attack as conditions permit"]
+        M --> N{"Configured Lose condition reached?"}
+        N -->|No| I
+        L -->|Yes| O["Host: Enable authorized evacuation interaction"]
+        O --> P{"Valid evacuation completed?"}
+        P -->|No| N
+    end
+
+    subgraph ENDING["03 - Authoritative result (Host / Backend)"]
+        P -->|Yes| Q["Host: Commit Win"]
+        N -->|Yes| R["Host: Commit Lose"]
+        Q --> S["Host: Submit final result to Backend"]
+        R --> S
+        S --> T{"Result accepted and persisted?"}
+        T -->|No| U["Show submission error / retry safely; no confirmed reward"]
+        T -->|Yes| V(["End: Committed result; continue WF-04"])
+    end
+
+    classDef startEnd fill:#e9f5f1,stroke:#245e4b,color:#123a2c,stroke-width:1px;
+    classDef decision fill:#fff4dd,stroke:#936521,color:#543900,stroke-width:1px;
+    classDef action fill:#f5f7fa,stroke:#42536d,color:#182334,stroke-width:1px;
+    class A,V startEnd;
+    class B,E,G,L,N,P,T decision;
+    class C,D,F,H,I,J,K,M,O,Q,R,S,U action;

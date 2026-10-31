@@ -1,0 +1,52 @@
+sequenceDiagram
+    actor Reviver
+    participant ClientI as NetworkPlayerInteractor (Input Authority)
+    participant HostI as NetworkPlayerInteractor (State Authority)
+    participant Life as NetworkPlayerLifeState (target)
+    participant Tool as LobbyPlayerState (reviver)
+    participant Peers as Fusion Clients / UI
+
+    Reviver->>ClientI: RequestRevive(target)
+    ClientI->>HostI: RpcRequestRevive(targetId, sequence)
+    HostI->>HostI: TryResolveRequester(); ValidateRequester()
+    HostI->>Tool: Check equipped First Aid eligibility
+
+    alt Request invalid / no First Aid / duplicate
+        HostI-->>ClientI: RpcInteractionResult(rejected)
+    else Request eligible
+        HostI->>Life: TryStartRevive(reviver)
+        Life->>Life: Check Downed, alive reviver, range, revive budget
+        alt Start rejected
+            Life-->>HostI: false
+            HostI-->>ClientI: RpcInteractionResult(rejected)
+        else Revive started
+            Life->>Life: Pause bleedout; start ReviveTimer
+            Life-->>HostI: true
+            HostI-->>ClientI: RpcInteractionResult(accepted)
+            loop Host FixedUpdateNetwork while reviving
+                Life->>Life: CanContinueRevive()
+            end
+            alt Reviver cancels / state or kit invalid
+                opt Explicit cancel input
+                    Reviver->>ClientI: RequestCancelRevive(target)
+                    ClientI->>HostI: RpcRequestCancelRevive(targetId, sequence)
+                    HostI->>Life: TryCancelRevive(reviver)
+                end
+                Life->>Life: CancelReviveAuthoritative(reason)
+                Note over Life,Peers: Target remains Downed; paused bleedout resumes if available
+            else ReviveTimer expired and still valid
+                Life->>Life: CompleteReviveAuthoritative()
+                Life->>HostI: ConsumeFirstAidReviveAuthoritative(reviverState)
+                HostI->>Tool: Consume one First Aid use (authority)
+                alt Consumption fails
+                    HostI-->>Life: false
+                    Life->>Life: CancelReviveAuthoritative(reason)
+                else Consumption succeeds
+                    HostI-->>Life: true
+                    Life->>Life: Restore health; increment ReviveCount
+                    Life->>Life: CommitStatus(Alive, ReviveCompleted)
+                    Note over Life,Peers: Networked life state replicates; clients update presentation
+                end
+            end
+        end
+    end

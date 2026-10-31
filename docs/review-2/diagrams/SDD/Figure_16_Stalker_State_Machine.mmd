@@ -1,0 +1,19 @@
+stateDiagram-v2
+    direction TB
+    [*] --> PATROL
+
+    PATROL --> DETECT: target acquired; detection needed
+    PATROL --> CHASE: immediate promotion (mode-specific)
+    DETECT --> CHASE: detection confirmed
+    DETECT --> PATROL: target lost / meter decayed
+
+    CHASE --> ATTACK: target visible and in range
+    CHASE --> SEARCH: visual-loss grace expired
+    CHASE --> PATROL: target invalid; no replacement
+    ATTACK --> RECOVER: attack episode finishes
+
+    RECOVER --> CHASE: eligible target visible
+    RECOVER --> SEARCH: remembered target position
+    RECOVER --> PATROL: no valid target
+    SEARCH --> CHASE: visible target reacquired
+    SEARCH --> PATROL: search ended / timed out

@@ -1,0 +1,14 @@
+flowchart LR
+  UI["«package» Presentation UI / HUD / Results"]
+  I["«package» Player and Interaction"]
+  M["«package» Mission / MatchFlow"]
+  AI["«package» Stalker AI"]
+  N["«package» Fusion Networking / Authority"]
+  A["«package» Authenticated Backend Integration"]
+  UI -.->|"uses"| I
+  UI -.->|"observes"| M
+  I -.->|"network commands"| N
+  M -.->|"replicated match state"| N
+  AI -.->|"authority and replicated state"| N
+  UI -.->|"accounts and shop"| A
+  N -.->|"match identity and results"| A

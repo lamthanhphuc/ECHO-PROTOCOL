@@ -1,0 +1,68 @@
+sequenceDiagram
+    actor Player
+    participant UI as AuthScreenController
+    participant Auth as AuthApiService
+    participant HTTP as Unity ApiClient
+    participant API as AuthController
+    participant Gate as FirstTimeAgreementController
+    participant Legal as AgreementsController
+    participant DB as PostgreSQL
+
+    Player->>UI: Enter username/password; Login
+    UI->>Auth: Login(username, password, callback)
+    Auth->>HTTP: PostJson(AuthLogin, request)
+    HTTP->>API: POST /api/auth/login
+    API->>DB: AuthService validates user and saves refresh session
+    alt Login rejected
+        API-->>HTTP: 4xx error
+        HTTP-->>Auth: Failure
+        Auth-->>UI: Show error; stay on Login
+    else Login accepted
+        API-->>HTTP: 200 AuthResponse
+        HTTP-->>Auth: AuthResponse
+        Auth->>Auth: TokenStorage.TrySave(access, refresh)
+        alt Token save failed
+            Auth-->>UI: Local login failure
+        else Tokens saved
+            UI->>Auth: GetCurrentUser(callback)
+            Auth->>HTTP: GetJson(AuthMe, Bearer)
+            HTTP->>API: GET /api/auth/me
+            API-->>HTTP: 200 MeResponse or failure
+            alt Me request failed
+                HTTP-->>UI: Show error; no navigation
+            else Identity confirmed
+                Auth-->>UI: AuthSession updated
+                UI->>Gate: Require(MainMenu)
+                Gate->>HTTP: GET /api/agreements/status (Bearer)
+                HTTP->>Legal: Status()
+                Legal->>DB: Check current bundle/version/hash
+                DB-->>Legal: Accepted or not accepted
+                Legal-->>Gate: Status response
+                alt Current bundle already accepted
+                    Gate-->>Player: Continue to Main Menu
+                else Acceptance required
+                    opt Bundle changed from cached documents
+                        Gate->>Legal: GET /api/agreements/documents
+                        Legal-->>Gate: Current bundle + SHA256
+                    end
+                    Gate-->>Player: Display Content Warning and Legal Agreements
+                    alt Player declines
+                        Gate->>Gate: LogoutLocal(); return to Login
+                    else Player confirms required declarations
+                        Gate->>HTTP: POST /api/agreements/accept (Bearer)
+                        HTTP->>Legal: Accept(version, hash, confirmations)
+                        alt Invalid version or unchecked declarations
+                            Legal-->>Gate: 409 changed / 400 required
+                            Gate-->>Player: Keep agreement screen; retry
+                        else Valid acceptance
+                            Legal->>DB: Insert UserAgreementAcceptances if absent
+                            DB-->>Legal: Persisted acceptance
+                            Legal-->>Gate: 200 accepted=true
+                            Gate-->>Player: Continue to Main Menu
+                        end
+                    end
+                end
+            end
+        end
+    end
+    Note over Gate,Legal: AgreementGateMiddleware returns 403 AGREEMENT_REQUIRED for gated gameplay/purchase APIs until accepted.

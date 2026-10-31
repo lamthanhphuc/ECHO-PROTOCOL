@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    participant H as StalkerFusionRuntime (Host)
+    participant C as StalkerController
+    participant A as StalkerAttackController
+    participant S as StalkerNetworkLifeStateConsequenceSink
+    participant L as NetworkPlayerLifeState
+    participant P as Fusion Clients
+
+    Note over H,C: Host builds perception frame and advances AI
+    H->>C: Simulate(authoritativeInput)
+    C->>A: ResolveHitMoment(..., consequenceSink, step)
+    Note over A,S: Sink implements IPlayerAttackConsequenceSink
+    A->>A: Validate authority, episode, snapshot and range
+
+    alt No authority / duplicate episode / invalid target
+        A-->>C: No hit committed
+    else Eligible episode at hit moment
+        A->>A: Mark hit moment resolved (exactly once)
+        A->>S: TryApplyStalkerHit(episodeId, playerId, position, time)
+        S->>S: Validate Host, player identity and eligibility
+        alt Target rejected / protected / hidden
+            S-->>A: false
+            A-->>C: ResolvedMiss
+        else Eligible alive player
+            S->>L: TryApplyMonsterDown(STALKER, position)
+            alt Life-state change accepted
+                L-->>S: true
+                S-->>A: true
+                A-->>C: ResolvedHit
+                L-->>P: Replicated life state (Downed or Eliminated)
+            else No life-state change
+                L-->>S: false
+                S-->>A: false
+                A-->>C: ResolvedMiss
+            end
+        end
+    end

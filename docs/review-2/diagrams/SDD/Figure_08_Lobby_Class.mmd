@@ -1,0 +1,50 @@
+classDiagram
+    direction TB
+
+    class LobbyManager {
+        +RoomInfoViewModel CurrentState
+        +CreateRoom(roomName, maxPlayers)
+        +JoinRoom(roomName)
+        +SetReady(isReady)
+        +TryStartMatch()
+        -StartMatchAsync(runner)
+        -TryValidateCommittedRoster(runner, authority, error)
+    }
+
+    class NetworkBootstrap {
+        +NetworkRunner Runner
+        +NetworkSessionState State
+        +CreateRoomAsync(sessionName, maxPlayers)
+        +JoinRoomAsync(sessionName)
+        +TryBeginMatchStartGate()
+        +CloseRoomForMatchStart()
+        +CancelMatchStartGate()
+        +ShutdownRunnerAsync()
+    }
+
+    class LobbyPlayerState {
+        +NetworkBool IsReady
+        +OperatorName
+        +RequestReady(isReady)
+    }
+
+    class MatchAuthorityRuntime {
+        +Guid MatchId
+        +bool IsHostBinding
+        +PrepareNextMatchAsync(sessionName, maxPlayers)
+        +StartMatchAsync()
+        +EndAsync(reason)
+    }
+
+    class NetworkMatchState {
+        +NetworkMatchPhase CurrentPhase
+        +NetworkMatchStatus Status
+        +NetworkMatchResult Result
+        +NetworkMatchEndReason EndReason
+    }
+
+    LobbyManager --> NetworkBootstrap : uses runner and session gate
+    LobbyManager ..> LobbyPlayerState : ready and roster state
+    LobbyManager ..> MatchAuthorityRuntime : binds match and starts backend match
+    NetworkBootstrap ..> NetworkMatchState : reads runtime state / scene lifecycle
+    MatchAuthorityRuntime ..> NetworkMatchState : checks match lifecycle
