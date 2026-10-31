@@ -226,6 +226,27 @@ PY
 }
 smoke || { echo 'BLOCKED: baseline HTTPS smoke failed' >&2; exit 3; }
 
+# Preserve enough evidence to reconcile a SIGKILL, host restart, or an interrupted
+# Compose transaction. An interrupted run must NEVER auto-restart the databases.
+# The original override (if any) and image IDs are saved before the first write
+# to the live override. Restore only after inspecting live state per the runbook.
+recovery_state="$backup_dir/operator-$service-predeploy.state"
+previous_override="$backup_dir/operator-$service-override.before.yml"
+[[ ! -e "$recovery_state" && ! -L "$recovery_state" && ! -e "$previous_override" && ! -L "$previous_override" ]] || {
+  echo 'BLOCKED: recovery evidence already exists in backup directory' >&2; exit 3;
+}
+if [[ -e "$override" ]]; then
+  cp -p -- "$override" "$previous_override"
+  chmod 600 "$previous_override"
+  original_override=present
+else
+  original_override=absent
+fi
+printf 'SERVICE=%s\nREVISION=%s\nOLD_IMAGE_ID=%s\nNEW_IMAGE_ID=%s\nNEW_IMAGE_REF=%s\nROLLBACK_TAG=%s\nORIGINAL_OVERRIDE=%s\n' \
+  "$service" "$revision" "$old_id" "$new_id" "$image" "$rollback_tag" "$original_override" >"$recovery_state"
+chmod 600 "$recovery_state"
+echo 'INTERRUPTED_RELEASE_RECOVERY_EVIDENCE_SAVED'
+
 # Atomic one-service image override; compose may retain build: but --no-build
 # prevents any build. Up must never start dependent databases.
 write_override() {

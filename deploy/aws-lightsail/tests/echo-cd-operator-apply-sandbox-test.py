@@ -47,6 +47,10 @@ JSON
         exit 0 ;;
       up)
         [[ ${@: -1} == "$service" ]] || exit 44
+        if [[ "${ECHO_TEST_SCENARIO:-}" == interrupted ]]; then
+          kill -KILL "$PPID"
+          exit 137
+        fi
         for opt in --no-deps --no-build --pull never --force-recreate; do [[ " $* " == *" $opt "* ]] || exit 44; done
         ov="/home/ubuntu/echo-protocol/deploy/docker-compose.operator-$service-release.yml"
         if grep -Fq "$image" "$ov"; then next=$newid
@@ -156,6 +160,11 @@ def test_case(label, service, scenario, expected_exit, evidence_migrations=31, s
     if p.returncode!=expected_exit:
         raise AssertionError(f'{label}: expected exit {expected_exit} but got {p.returncode}\nSTDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}')
     if expected_exit==0:
+        assert (BACKUP/f'operator-{service}-predeploy.state').is_file()
+        state=(BACKUP/f'operator-{service}-predeploy.state').read_text()
+        assert f'OLD_IMAGE_ID={OLD_ID}\n' in state
+        assert f'NEW_IMAGE_ID={NEW_ID}\n' in state
+        assert 'INTERRUPTED_RELEASE_RECOVERY_EVIDENCE_SAVED' in p.stdout
         assert 'APPLICATION_RELEASE_VERIFIED_PASS' in p.stdout
         assert len(ups)==1 and active==NEW_ID
     elif expected_exit==4:
@@ -201,9 +210,41 @@ def test_preexisting_override(label, content, expected_exit, tag_old=False):
         assert len(ups) == 1
         assert (STATE / 'active').read_text().strip() == NEW_ID
         assert existing_path.read_text().startswith('# ECHO_OPERATOR_MANAGED_OVERRIDE\n')
+        preserved=(BACKUP/f'operator-{service}-override.before.yml')
+        assert preserved.read_text() == content
+        assert 'ORIGINAL_OVERRIDE=present' in (BACKUP/f'operator-{service}-predeploy.state').read_text()
     else:
         assert 'BLOCKED' in p.stderr and len(ups) == 0
     print('MOCK_' + label + '_PASS')
+
+
+def test_interrupted_before_compose():
+    """SIGKILL the operator at the first docker compose up invocation."""
+    service='backend'
+    setup_fixture(service, 'interrupted')
+    args=['bash', str(SCRIPT), 'apply', '--service', service,
+          '--image', NEW_IMAGE[service], '--revision', REV,
+          '--backup-dir', str(BACKUP),
+          '--restore-evidence', str(BACKUP/'reviewed-restore-evidence.txt'),
+          '--approval', 'APPROVE_ECHO_APPLICATION_RELEASE']
+    env=dict(os.environ)
+    env['PATH']=f'{MOCK}:{env["PATH"]}'
+    env.update({'ECHO_TEST_DIR':str(STATE), 'ECHO_TEST_SERVICE':service,
+                'ECHO_TEST_IMAGE':NEW_IMAGE[service], 'ECHO_TEST_REV':REV,
+                'ECHO_TEST_SCENARIO':'interrupted'})
+    p=subprocess.run(args, cwd='/tmp', env=env,
+                     capture_output=True, text=True, timeout=25)
+    assert p.returncode in (-9, 137), f'Unexpected interruption exit: {p.returncode}\n{p.stdout}\n{p.stderr}'
+    assert (STATE/'ups').read_text()==''
+    assert (STATE/'active').read_text().strip()==OLD_ID
+    state=(BACKUP/f'operator-{service}-predeploy.state').read_text()
+    assert f'OLD_IMAGE_ID={OLD_ID}\n' in state
+    assert f'NEW_IMAGE_ID={NEW_ID}\n' in state
+    assert 'ORIGINAL_OVERRIDE=absent\n' in state
+    assert not (BACKUP/f'operator-{service}-override.before.yml').exists()
+    override=DEPLOY/f'docker-compose.operator-{service}-release.yml'
+    assert NEW_IMAGE[service] in override.read_text()
+    print('MOCK_INTERRUPTED_OVERRIDE_RECOVERY_EVIDENCE_PASS')
 
 
 def main():
@@ -239,6 +280,7 @@ def main():
     test_preexisting_override('MANAGED_SECOND_RELEASE', marker + tag + '\n', 0, tag_old=True)
     test_preexisting_override('UNKNOWN_OVERRIDE_BLOCK', 'services:\n  backend:\n    image: evil:latest\n', 3)
     test_preexisting_override('DRIFTED_OVERRIDE_BLOCK', marker + NEW_IMAGE['backend'] + '\n', 3)
+    test_interrupted_before_compose()
     print('MOCK_OPERATOR_APPLY_TESTS_V2_PASS')
     print('MOCKED_DEPENDENCIES_ONLY_NO_REAL_DOCKER_OR_EC2')
 
