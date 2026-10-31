@@ -1,3 +1,4 @@
+using EchoProtocol.Settings;
 using EchoProtocol.UI.MainMenu;
 using NUnit.Framework;
 using TMPro;
@@ -286,14 +287,16 @@ namespace EchoProtocol.UI.Tests
 
             _archive.PresentState(
                 MainMenuLeaderboardController.ArchiveState.Empty);
-            Assert.That(message.text, Does.Contain("NO EXTRACTIONS"));
-            Assert.That(retry.activeSelf, Is.False);
+            Assert.That(message.text, Is.EqualTo(
+                GameLanguage.Choose("CHƯA CÓ THÀNH TÍCH", "NO EXTRACTIONS ON FILE")));
+            Assert.That(retry.activeSelf, Is.True);
             Assert.That(radio.activeSelf, Is.False);
             Assert.That(entries.activeSelf, Is.False);
 
             _archive.PresentState(
                 MainMenuLeaderboardController.ArchiveState.Error);
-            Assert.That(message.text, Does.Contain("UNABLE TO REACH"));
+            Assert.That(message.text, Is.EqualTo(
+                GameLanguage.Choose("KHÔNG CÓ KẾT NỐI", "CONNECTION UNAVAILABLE")));
             Assert.That(retry.activeSelf, Is.True);
             Assert.That(radio.activeSelf, Is.True);
             Assert.That(entries.activeSelf, Is.False);

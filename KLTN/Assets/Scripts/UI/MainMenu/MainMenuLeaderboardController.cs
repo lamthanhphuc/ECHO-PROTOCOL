@@ -151,6 +151,7 @@ namespace EchoProtocol.UI.MainMenu
                 return existing;
             }
             var component = canvas.gameObject.AddComponent<MainMenuLeaderboardController>();
+            component._canvas = canvas;
             component.Build(null, iconButton);
             return component;
         }
