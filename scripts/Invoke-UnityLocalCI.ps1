@@ -57,31 +57,85 @@ Write-Host "Commit: $actualCommit"
 Write-Host "Evidence: $evidence"
 
 $failed = $false
+
+$cleanupPaths = @(
+    'KLTN/Assets/Resources/UI/Loading/Typography/CourierPrimeLoadingTMP.asset'
+    'KLTN/Assets/Resources/UI/Loading/Typography/SpectralLoadingTMP.asset'
+    'KLTN/Assets/Settings/UniversalRenderPipelineGlobalSettings.asset'
+    'KLTN/ProjectSettings/ProjectSettings.asset'
+)
+
 $modes = if ($Mode -eq 'All') { @('EditMode', 'PlayMode') } else { @($Mode) }
-foreach ($mode in $modes) {
-    $modeDir = Join-Path $evidence $mode
-    New-Item -ItemType Directory -Path $modeDir -Force | Out-Null
-    $runRecord = Join-Path $modeDir 'run.txt'
-    @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", 'Status=RUNNING') | Set-Content -LiteralPath $runRecord
-    $arguments = @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $mode,
-        '-testResults', (Join-Path $modeDir 'results.xml'), '-logFile', (Join-Path $modeDir 'Editor.log'))
-    if ($TestFilter) { $arguments += @('-testFilter', $TestFilter) }
-    Write-Host "Running $mode tests..."
-    $commandLine = ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-    $unityProcess = Start-Process -FilePath $UnityEditor -ArgumentList $commandLine -PassThru -Wait -WindowStyle Hidden
-    $unityExit = $unityProcess.ExitCode
-    $deadline = [DateTime]::UtcNow.AddMinutes(2)
-    while (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'") {
-        if ([DateTime]::UtcNow -gt $deadline) { throw "$mode Unity Editor did not exit after its launcher" }
-        Start-Sleep -Seconds 1
+
+try {
+    foreach ($mode in $modes) {
+        $modeDir = Join-Path $evidence $mode
+        New-Item -ItemType Directory -Path $modeDir -Force | Out-Null
+        $runRecord = Join-Path $modeDir 'run.txt'
+        @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", 'Status=RUNNING') | Set-Content -LiteralPath $runRecord
+        $arguments = @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $mode,
+            '-testResults', (Join-Path $modeDir 'results.xml'), '-logFile', (Join-Path $modeDir 'Editor.log'))
+        if ($TestFilter) { $arguments += @('-testFilter', $TestFilter) }
+        Write-Host "Running $mode tests..."
+        $commandLine = ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+        $unityProcess = Start-Process -FilePath $UnityEditor -ArgumentList $commandLine -PassThru -Wait -WindowStyle Hidden
+        $unityExit = $unityProcess.ExitCode
+        $deadline = [DateTime]::UtcNow.AddMinutes(2)
+        while (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'") {
+            if ([DateTime]::UtcNow -gt $deadline) { throw "$mode Unity Editor did not exit after its launcher" }
+            Start-Sleep -Seconds 1
+        }
+        $outcome = if ($unityExit -eq 0) { 'success' } else { 'failure' }
+        Write-Host "$mode Unity exit code: $unityExit"
+        & python $validator $modeDir $outcome $mode
+        $gateExit = $LASTEXITCODE
+        @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", "UnityExitCode=$unityExit", "GateExitCode=$gateExit") |
+            Set-Content -LiteralPath $runRecord
+        if ($unityExit -ne 0 -or $gateExit -ne 0) { $failed = $true }
     }
-    $outcome = if ($unityExit -eq 0) { 'success' } else { 'failure' }
-    Write-Host "$mode Unity exit code: $unityExit"
-    & python $validator $modeDir $outcome $mode
-    $gateExit = $LASTEXITCODE
-    @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", "UnityExitCode=$unityExit", "GateExitCode=$gateExit") |
-        Set-Content -LiteralPath $runRecord
-    if ($unityExit -ne 0 -or $gateExit -ne 0) { $failed = $true }
+}
+finally {
+    Write-Host "`n=== UNITY POST-TEST CLEANUP ==="
+
+    if (Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'") {
+        Write-Warning "Unity is still running; cleanup skipped."
+        $failed = $true
+    }
+    else {
+        $changed = @(
+            & git -C $repository diff --name-only -- $cleanupPaths
+        )
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not inspect Unity-generated changes."
+            $failed = $true
+        }
+        elseif ($changed.Count -gt 0) {
+            & git -C $repository restore -- $changed
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Unity asset cleanup failed."
+                $failed = $true
+            }
+            else {
+                Write-Host "Restored Unity-generated assets:"
+                $changed | ForEach-Object { Write-Host "  $_" }
+            }
+        }
+    }
+
+    $remaining = @(
+        & git -C $repository status --porcelain --untracked-files=normal
+    )
+
+    if ($LASTEXITCODE -ne 0 -or $remaining.Count -gt 0) {
+        Write-Warning "Worktree still contains changes:"
+        $remaining | ForEach-Object { Write-Host $_ }
+        $failed = $true
+    }
+    else {
+        Write-Host "CLEANUP PASSED - worktree clean."
+    }
 }
 
 if ($failed) { exit 1 }
