@@ -65,7 +65,6 @@ foreach ($mode in $modes) {
     @("Commit=$actualCommit", "Unity=$installedVersion", "Mode=$mode", "Filter=$TestFilter", 'Status=RUNNING') | Set-Content -LiteralPath $runRecord
     $arguments = @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $mode,
         '-testResults', (Join-Path $modeDir 'results.xml'), '-logFile', (Join-Path $modeDir 'Editor.log'))
-    if ($mode -eq 'EditMode') { $arguments += '-nographics' }
     if ($TestFilter) { $arguments += @('-testFilter', $TestFilter) }
     Write-Host "Running $mode tests..."
     $commandLine = ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
