@@ -64,12 +64,11 @@ namespace EchoProtocol.UI
         public static void Require(string destination)
         {
             var screen = Ensure();
-            GameUIFeedback.Instance.EndStartupForAgreement();
             screen._required = true;
             screen._destination = destination;
             screen._owner = AuthSession.CurrentUserId;
             screen._agreement.isOn = false;
-            screen._overlay.SetActive(true);
+            screen._overlay.SetActive(false);
             screen._reader.SetActive(false);
             screen._lock.Acquire(screen.gameObject, allowWhileDowned: true);
             screen.Check();
@@ -140,7 +139,7 @@ namespace EchoProtocol.UI
                 var state = result.Data.data;
                 if (state.accepted) { _busy = false; Finish(); return; }
                 if (state.bundleVersion == _bundle.bundleVersion && state.contentSha256 == _hash)
-                { _busy = false; _serverKnown = true; Render(); return; }
+                { _busy = false; _serverKnown = true; ShowRequired(); Render(); return; }
                 AuthRuntime.EnsureExists().Client.GetJson<PolicyDocumentsResponse>("/api/agreements/documents", false, documents =>
                 {
                     if (!Current(generation)) return;
@@ -150,13 +149,18 @@ namespace EchoProtocol.UI
                     _bundle = data.bundle; _hash = data.contentSha256;
                     _agreement.isOn = false;
                     _reader.SetActive(false); _reading = -1;
-                    _busy = false; _serverKnown = true; Render();
+                    _busy = false; _serverKnown = true; ShowRequired(); Render();
                 });
             });
         }
         private bool Current(int generation) => this != null && generation == _generation
-            && AuthSession.CurrentUserId == _owner && _overlay.activeSelf && _required;
-        private void Failure() { _busy = false; _failed = true; _serverKnown = false; Render(); }
+            && AuthSession.IsAuthenticated && AuthSession.CurrentUserId == _owner && _required;
+        private void ShowRequired()
+        {
+            GameUIFeedback.Instance.EndStartupForAgreement();
+            _overlay.SetActive(true);
+        }
+        private void Failure() { _busy = false; _failed = true; _serverKnown = false; ShowRequired(); Render(); }
         private void Accept()
         {
             if (_busy || !_accept.interactable) return;
