@@ -563,8 +563,7 @@ public static class MainMenuMatchmakingStyle
             14f,
             10f);
 
-        placeholder.text =
-            "Enter room code";
+        placeholder.text = string.Empty;
 
         placeholder.fontSize = 15;
         placeholder.fontStyle =

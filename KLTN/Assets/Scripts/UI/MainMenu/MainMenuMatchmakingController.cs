@@ -90,7 +90,6 @@ namespace EchoProtocol.UI.MainMenu
 
             ResolveServices();
 
-            BuildGameModePicker();
 
             RefreshDifficultyText();
 
@@ -177,27 +176,41 @@ namespace EchoProtocol.UI.MainMenu
                 overlay.localScale = Vector3.one;
                 var window = (RectTransform)titleText.transform.parent;
                 window.anchorMin = window.anchorMax = window.pivot = new Vector2(.5f,.5f);
-                window.sizeDelta = new Vector2(720, _hostMode ? 460 : 350);
-                Place(titleText != null ? titleText.rectTransform : null, 42, 28, 636, 48);
-                if (titleText != null) titleText.fontSize = 30;
+                window.sizeDelta = new Vector2(720, 330);
+                Place(titleText != null ? titleText.rectTransform : null, 0, 28, 636, 48);
+                if (titleText != null)
+                {
+                    titleText.fontSize = 30;
+                    titleText.alignment = TextAnchor.MiddleCenter;
+                }
                 if (roomCodeInput != null)
                 {
-                    Place((RectTransform)roomCodeInput.transform, 42, 120, 636, 56);
+                    Place((RectTransform)roomCodeInput.transform, 0, 120, 636, 56);
                     roomCodeInput.textComponent.gameObject.SetActive(true);
+                    roomCodeInput.textComponent.alignment = TextAnchor.MiddleCenter;
+                    ClearRoomCodePlaceholder(roomCodeInput);
                 }
                 foreach (var label in dialog.GetComponentsInChildren<Text>(true))
-                    if (label.text == "MÃ PHÒNG" || label.text == "ROOM CODE") Place(label.rectTransform,42,88,600,26);
-                if (difficultyRow != null) Place((RectTransform)difficultyRow.transform,42,218,636,44);
-                if (_gameModeRow != null) Place((RectTransform)_gameModeRow.transform,42,274,636,44);
-                float buttonY = _hostMode ? 370 : 260;
-                if (confirmButton != null) Place((RectTransform)confirmButton.transform,42,buttonY,350,54);
-                if (backButton != null) Place((RectTransform)backButton.transform,412,buttonY,266,54);
-                if (statusText != null) Place(statusText.rectTransform,42,184,636,28);
+                    if (label.text == "MÃ PHÒNG" || label.text == "ROOM CODE")
+                    {
+                        Place(label.rectTransform, 0, 88, 600, 26);
+                        label.alignment = TextAnchor.MiddleCenter;
+                    }
+                if (difficultyRow != null) Place((RectTransform)difficultyRow.transform,0,218,636,44);
+                if (_gameModeRow != null) Place((RectTransform)_gameModeRow.transform,0,274,636,44);
+                float buttonY = 240;
+                if (confirmButton != null) Place((RectTransform)confirmButton.transform,-162,buttonY,306,54);
+                if (backButton != null) Place((RectTransform)backButton.transform,162,buttonY,306,54);
+                if (statusText != null)
+                {
+                    Place(statusText.rectTransform,0,184,636,28);
+                    statusText.alignment = TextAnchor.MiddleCenter;
+                }
                 var canvas = dialog.GetComponentInParent<Canvas>();
                 var bounds = ((RectTransform)canvas.transform).rect;
                 float scale = Mathf.Min(1f,(bounds.width-48)/720,(bounds.height*.60f-32)/window.sizeDelta.y);
                 window.localScale = Vector3.one * Mathf.Max(.1f,scale);
-                window.anchoredPosition = new Vector2(0,bounds.height*.10f-16-window.sizeDelta.y*scale*.5f);
+                window.anchoredPosition = new Vector2(0,-bounds.height*.12f);
             }
 
             if (_menuEntryGroups.Count == 0 && hostButton != null)
@@ -220,9 +233,16 @@ namespace EchoProtocol.UI.MainMenu
         private static void Place(RectTransform rect, float x, float y, float width, float height)
         {
             if (rect == null) return;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0,1);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f,1);
             rect.anchoredPosition = new Vector2(x,-y);
             rect.sizeDelta = new Vector2(width,height);
+        }
+
+        private static void ClearRoomCodePlaceholder(InputField input)
+        {
+            if (input.placeholder is not Text placeholder) return;
+            placeholder.text = string.Empty;
+            placeholder.alignment = TextAnchor.MiddleCenter;
         }
 
         private static Graphic ApplyDialogFrame(GameObject owner, Color fill, bool accent)
@@ -442,7 +462,7 @@ namespace EchoProtocol.UI.MainMenu
 
             _hostMode = true;
 
-            if (_gameModeRow) _gameModeRow.SetActive(true);
+            if (_gameModeRow) _gameModeRow.SetActive(false);
 
             RefreshGameMode();
 
@@ -456,7 +476,7 @@ namespace EchoProtocol.UI.MainMenu
 
             if (difficultyRow != null)
 
-                difficultyRow.SetActive(true);
+                difficultyRow.SetActive(false);
 
 
 
@@ -724,7 +744,7 @@ namespace EchoProtocol.UI.MainMenu
 
                             maxPlayers,
 
-                            _difficulty, _gameMode)
+                            MatchDifficulty.Normal, 0)
 
                         : await bootstrap.JoinRoomAsync(
 
