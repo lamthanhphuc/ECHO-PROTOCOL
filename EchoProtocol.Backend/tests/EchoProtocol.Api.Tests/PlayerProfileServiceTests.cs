@@ -109,6 +109,18 @@ public sealed class PlayerProfileServiceTests
         Assert.Null(other.Data.LatestNonSurvival);
     }
 
+    [Fact, Trait("Category", "M4ProfileUnit")]
+    public async Task TeamWinIsLatestWinEvenWhenPlayerDidNotSurvive()
+    {
+        await using var harness = await ProfileHarness.CreateAsync();
+        await harness.AddResultAsync(Now, MatchOutcome.WIN, survived: false);
+
+        var profile = await harness.Service.GetCurrentAsync(harness.FirstUserId);
+
+        Assert.NotNull(profile.Data!.LatestWin);
+        Assert.Equal("WIN", profile.Data.LatestWin.Outcome);
+    }
+
     private static PlayerController CreateController(
         PlayerProfileService service,
         ClaimsPrincipal user) => new(service, NullLogger<PlayerController>.Instance)
