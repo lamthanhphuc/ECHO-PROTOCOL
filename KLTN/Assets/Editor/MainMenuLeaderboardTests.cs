@@ -1,4 +1,5 @@
 using EchoProtocol.UI.MainMenu;
+using EchoProtocol.Settings;
 using NUnit.Framework;
 using TMPro;
 using UnityEngine;
@@ -175,6 +176,23 @@ namespace EchoProtocol.UI.Tests
         }
 
         [Test]
+        public void HeaderShowsCenteredLocalizedLeaderboardTitle()
+        {
+            var panel = _archive.OverlayRoot.Find("ArchivePanel");
+            var heading = panel.Find("Heading").GetComponent<Text>();
+            var subtitle = panel.Find("Subtitle").GetComponent<Text>();
+            var accent = panel.Find("HeadingAccent").GetComponent<Image>();
+
+            Assert.That(heading.text, Is.EqualTo("BẢNG XẾP HẠNG"));
+            Assert.That(heading.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
+            Assert.That(heading.rectTransform.anchorMin.x, Is.EqualTo(0.5f));
+            Assert.That(heading.rectTransform.anchorMax.x, Is.EqualTo(0.5f));
+            Assert.That(heading.font, Is.SameAs(subtitle.font),
+                "The leaderboard title must use the complete lobby/body glyph set.");
+            Assert.That(accent.color.a, Is.GreaterThan(0f));
+        }
+
+        [Test]
         public void TabsAndFiltersRemainIndependent()
         {
             _archive.Open();
@@ -286,14 +304,16 @@ namespace EchoProtocol.UI.Tests
 
             _archive.PresentState(
                 MainMenuLeaderboardController.ArchiveState.Empty);
-            Assert.That(message.text, Does.Contain("NO EXTRACTIONS"));
-            Assert.That(retry.activeSelf, Is.False);
+            Assert.That(message.text, Does.Contain(GameLanguage.Choose(
+                "CHƯA CÓ THÀNH TÍCH", "NO EXTRACTIONS")));
+            Assert.That(retry.activeSelf, Is.True);
             Assert.That(radio.activeSelf, Is.False);
             Assert.That(entries.activeSelf, Is.False);
 
             _archive.PresentState(
                 MainMenuLeaderboardController.ArchiveState.Error);
-            Assert.That(message.text, Does.Contain("UNABLE TO REACH"));
+            Assert.That(message.text, Does.Contain(GameLanguage.Choose(
+                "KHÔNG CÓ KẾT NỐI", "CONNECTION UNAVAILABLE")));
             Assert.That(retry.activeSelf, Is.True);
             Assert.That(radio.activeSelf, Is.True);
             Assert.That(entries.activeSelf, Is.False);

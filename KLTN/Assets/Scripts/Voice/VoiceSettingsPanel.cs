@@ -61,18 +61,23 @@ namespace EchoProtocol.Voice
             _overlay = _canvas.transform.Find("Overlay").gameObject;
             _confirm = _canvas.transform.Find("Overlay/Confirm").gameObject;
             VoiceSettingsCanvasFactory.EnsureWindowBackground(_canvas.transform.Find("Overlay/Window"));
-            var general = _canvas.transform.Find(Body + "Mouse");
-            SettingsMenuWidgets.Label("LanguageTitle", general, 34, 174, 350, 30, "Ngôn ngữ", 19);
-            SettingsMenuWidgets.Button("Language", general, 405, 172, 347, 32, "Tiếng Việt / English", false, 17);
-            general.GetComponent<RectTransform>().sizeDelta = new Vector2(780, 216);
-            var cameraMotion = SettingsMenuWidgets.Frame("CameraMotion", _canvas.transform.Find("Overlay/Window/Body"), 800, 520, 780, 150);
-            SettingsMenuWidgets.Label("Title", cameraMotion, 34, 12, 700, 30, GameLanguage.Choose("CHUYỂN ĐỘNG CAMERA", "CAMERA MOTION"), 21);
+            var window = _canvas.transform.Find("Overlay/Window");
+            var subtitle = window.Find("Subtitle");
+            if (subtitle != null) subtitle.gameObject.SetActive(false);
+            var language = SettingsMenuWidgets.Button("LanguageShortcut", window, 20, 15, 170, 42,
+                GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH", false, 16);
+            SettingsMenuWidgets.Icon("Icon", language.transform, 12, 9, 24, 24, SettingsIcon.Web);
+            var languageLabel = language.GetComponentInChildren<TMP_Text>();
+            languageLabel.rectTransform.anchoredPosition = new Vector2(22, 0);
+            languageLabel.rectTransform.sizeDelta = new Vector2(132, 42);
+            var cameraMotion = SettingsMenuWidgets.Frame("CameraMotion", _canvas.transform.Find("Overlay/Window/Body"), 800, 520, 680, 150);
+            SettingsMenuWidgets.Label("Title", cameraMotion, 34, 12, 612, 30, GameLanguage.Choose("CHUYỂN ĐỘNG CAMERA", "CAMERA MOTION"), 21);
             SettingsMenuWidgets.Label("MotionTitle", cameraMotion, 34, 52, 320, 30, GameLanguage.Choose("Cường độ chuyển động", "Motion intensity"), 19);
-            var motionSlider = SettingsMenuWidgets.Slider("Intensity", cameraMotion, 405, 52, 280);
+            var motionSlider = SettingsMenuWidgets.Slider("Intensity", cameraMotion, 405, 52, 220);
             motionSlider.SetValueWithoutNotify(PlayerCameraSettings.Intensity);
             motionSlider.onValueChanged.AddListener(value => PlayerCameraSettings.Intensity = value);
             SettingsMenuWidgets.Label("ReduceTitle", cameraMotion, 34, 96, 340, 30, GameLanguage.Choose("Giảm chuyển động", "Reduce motion"), 19);
-            var reduceToggle = SettingsMenuWidgets.Toggle("Reduce", cameraMotion, 605, 94);
+            var reduceToggle = SettingsMenuWidgets.Toggle("Reduce", cameraMotion, 520, 94);
             reduceToggle.SetIsOnWithoutNotify(PlayerCameraSettings.ReduceMotion);
             reduceToggle.onValueChanged.AddListener(value => PlayerCameraSettings.ReduceMotion = value);
             var audioRect = _canvas.transform.Find(Body + "Audio").GetComponent<RectTransform>();
@@ -89,22 +94,6 @@ namespace EchoProtocol.Voice
                 if (label.transform.parent == audioRect && label.name != "Title" && label.name != "Icon")
                     label.fontSize = Mathf.Min(label.fontSize, 18);
             Bind();
-            var legal = new GameObject("Policies", typeof(RectTransform), typeof(Image), typeof(Button));
-            legal.transform.SetParent(_canvas.transform.Find("Overlay/Window"), false);
-            var legalRect = (RectTransform)legal.transform;
-            legalRect.anchorMin = legalRect.anchorMax = new Vector2(0,1);
-            legalRect.pivot = new Vector2(0,1);
-            legalRect.anchoredPosition = new Vector2(24,-20);
-            legalRect.sizeDelta = new Vector2(230,36);
-            legal.GetComponent<Image>().color = new Color(.08f,.09f,.1f,.9f);
-            legal.GetComponent<Button>().onClick.AddListener(FirstTimeAgreementController.OpenPolicies);
-            var policyLabel = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            policyLabel.transform.SetParent(legal.transform, false);
-            var labelRect = (RectTransform)policyLabel.transform;
-            labelRect.anchorMin = Vector2.zero; labelRect.anchorMax = Vector2.one; labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
-            var copy = policyLabel.GetComponent<Text>(); copy.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            copy.fontSize = 16; copy.color = Color.white; copy.alignment = TextAnchor.MiddleCenter;
-            copy.text = "Chính sách / Policies"; copy.raycastTarget = false;
             _overlay.SetActive(false);
         }
 
@@ -124,7 +113,7 @@ namespace EchoProtocol.Voice
 
         private void Bind()
         {
-            Click(Body + "Mouse/Language", () =>
+            Click("Overlay/Window/LanguageShortcut", () =>
             {
                 CancelRebind();
                 GameLanguage.Set(GameLanguage.Current == GameLocale.Vietnamese ? GameLocale.English : GameLocale.Vietnamese);
@@ -482,10 +471,10 @@ namespace EchoProtocol.Voice
 
         private void RefreshVisuals()
         {
-            TextAt(Body + "Mouse/Language/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "Tiếng Việt" : "English";
+            TextAt("Overlay/Window/LanguageShortcut/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH";
             if (!_open) return;
             bool mainMenu = SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu;
-            TextAt(Footer + "Resume/Label").text = _parentMenuLock != null ? GameLanguage.Choose("QUAY LẠI", "BACK") : mainMenu ? GameLanguage.Choose("Đóng", "Close") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
+            TextAt(Footer + "Resume/Label").text = _parentMenuLock != null ? GameLanguage.Choose("QUAY LẠI", "BACK") : mainMenu ? GameLanguage.Choose("ĐÓNG", "CLOSE") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
             Find<Button>(Footer + "Inventory").interactable = CanOpenInventory;
             SetToggle("Voice/MicToggle", _voice.MicrophoneEnabled && !_voice.SelfMuted);
             SetToggle("Voice/PushToTalkToggle", _voice.PushToTalk);

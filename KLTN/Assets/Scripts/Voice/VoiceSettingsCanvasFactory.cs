@@ -28,7 +28,6 @@ namespace EchoProtocol.Voice
             EnsureWindowBackground(window);
             Label("Title", window, 380, 0, 720, 76, "CÀI ĐẶT", 52, Foreground, TextAlignmentOptions.Center, true).characterSpacing = 7;
             Icon("SettingsIcon", window, 510, 17, 48, 48, SettingsIcon.Gear, Foreground);
-            Label("Subtitle", window, 400, 76, 680, 22, "E C H O   P R O T O C O L", 12, Muted, TextAlignmentOptions.Center);
             Button("CloseButton", window, 1438, 15, 42, 42, "×", false, 28);
             Line("TopRule", window, 0, 110, 1480);
             Line("BottomRule", window, 0, 161, 1480);

@@ -17,6 +17,7 @@ namespace EchoProtocol.UI.MainMenu
         public Sprite fingerprint;
         public Sprite operatorPortrait;
         public Font spectralFont;
+        public Font buttonFont;
         public AudioClip hoverClip;
     }
 }

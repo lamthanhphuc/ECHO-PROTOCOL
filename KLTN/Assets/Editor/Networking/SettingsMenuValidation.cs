@@ -27,6 +27,8 @@ namespace EchoProtocol.Editor.Networking
             try
             {
                 if (request == "tests") RunTests();
+                else if (request == "main-menu-typography")
+                    global::MainMenuTypographyAuthoring.Apply();
                 else { VoiceSettingsCanvasBuilder.Rebuild(); RenderPreview(); }
             }
             catch (System.Exception error)
@@ -48,7 +50,10 @@ namespace EchoProtocol.Editor.Networking
                 {
                     "EchoProtocol.Tests.EditMode.Controls.GameplayInputSettingsTests",
                     "EchoProtocol.Tests.EditMode.Controls.PlayerMenuControlLockTests",
-                    "EchoProtocol.Player.Tests.VoiceChatRulesTests"
+                    "EchoProtocol.Player.Tests.VoiceChatRulesTests",
+                    "EchoProtocol.UI.Tests.UiTypographyThemeTests",
+                    "EchoProtocol.UI.Tests.MainMenuCenteredLayoutTests",
+                    "EchoProtocol.UI.Tests.MainMenuLeaderboardTests"
                 }
             }) { runSynchronously = true });
         }

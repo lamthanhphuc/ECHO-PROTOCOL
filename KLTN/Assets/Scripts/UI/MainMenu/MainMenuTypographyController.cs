@@ -86,9 +86,9 @@ namespace EchoProtocol.UI.MainMenu
             Material buttonMaterial = ResolveMaterial("ButtonIndustrial", oswald, ref _runtimeButtonMaterial, false);
 
             Configure(titleObject, display, titleMaterial, TitleColor, 124f, 0f,
-                TextAlignmentOptions.TopLeft, -15f, true);
+                TextAlignmentOptions.Center, -15f, true);
             _subtitle = Configure(subtitleObject, mono, subtitleMaterial, SubtitleColor, 24f, 8f,
-                TextAlignmentOptions.TopLeft, 0f, false);
+                TextAlignmentOptions.Center, 0f, false);
             if (_subtitle != null)
             {
                 _subtitleBaseColor = _subtitle.color;
@@ -206,7 +206,7 @@ namespace EchoProtocol.UI.MainMenu
         private static void ConfigureButton(Transform labelObject, TMP_FontAsset font, Material material)
         {
             TMP_Text label = Configure(labelObject, font, material, ButtonColor, 44f, 1.6f,
-                TextAlignmentOptions.MidlineLeft, 0f, false);
+                TextAlignmentOptions.Center, 0f, false);
             if (label == null) return;
             Button button = labelObject.GetComponentInParent<Button>();
             if (button == null) return;

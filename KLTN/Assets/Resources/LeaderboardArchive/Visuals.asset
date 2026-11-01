@@ -19,4 +19,5 @@ MonoBehaviour:
   fingerprint: {fileID: 21300000, guid: 31b15128c74d4a9dab82396a8c0723ab, type: 3}
   operatorPortrait: {fileID: 21300000, guid: 724284a2ec784e48af0432d8bc4bb342, type: 3}
   spectralFont: {fileID: 12800000, guid: 256d28ab65e77be4eb14f87b7911b196, type: 3}
+  buttonFont: {fileID: 12800000, guid: 77bbf34441e44e86b2d57aa79b011af5, type: 3}
   hoverClip: {fileID: 8300000, guid: d87fd03404344694f93a736d620d1943, type: 3}

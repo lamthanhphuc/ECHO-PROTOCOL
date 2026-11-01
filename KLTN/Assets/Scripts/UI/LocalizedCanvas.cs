@@ -50,6 +50,13 @@ namespace EchoProtocol.UI
         {
             if (_labels.ContainsKey(label)) return;
             if (IsPlayerData(label)) return;
+            bool isMainMenuTypography = label.name == "CinematicTMP";
+            bool isButton = label.GetComponentInParent<Button>() != null;
+            if (!isMainMenuTypography)
+            {
+                if (label is TMP_Text tmp) UiTypographyTheme.Apply(tmp, isButton);
+                else if (label is Text legacy) UiTypographyTheme.Apply(legacy, isButton);
+            }
             // Input values and identity labels are player data, not interface copy.
             if ((label.GetComponentInParent<TMP_InputField>() != null || label.GetComponentInParent<InputField>() != null)
                 && !label.name.ToLowerInvariant().Contains("placeholder")) return;
