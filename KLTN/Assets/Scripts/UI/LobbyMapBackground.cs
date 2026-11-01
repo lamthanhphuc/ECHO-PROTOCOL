@@ -57,25 +57,11 @@ namespace EchoProtocol.UI
                 AmbientIntensity = RenderSettings.ambientIntensity, ReflectionIntensity = RenderSettings.reflectionIntensity,
                 ReflectionMode = RenderSettings.defaultReflectionMode,
                 CustomReflection = RenderSettings.customReflectionTexture,
-                AmbientProbe = CaptureAmbientProbe()
+                // Do not cache the scene ambient probe here. OnEnable can run before
+                // Unity has finished resolving the scene's lighting data, and restoring
+                // that transient probe corrupts the lobby after repeated map switches.
+                AmbientProbe = null
             };
-
-            private static float[] CaptureAmbientProbe()
-            {
-                var probe = RenderSettings.ambientProbe;
-                var values = new float[27];
-                // The getter returns intensity-scaled SH; the setter expects unscaled SH.
-                float intensity = RenderSettings.ambientMode == AmbientMode.Skybox
-                    ? (QualitySettings.activeColorSpace == ColorSpace.Linear
-                        ? Mathf.GammaToLinearSpace(RenderSettings.ambientIntensity)
-                        : RenderSettings.ambientIntensity)
-                    : 1f;
-                float inverseIntensity = intensity > 0.000001f ? 1f / intensity : 0f;
-                for (int channel = 0; channel < 3; channel++)
-                    for (int coefficient = 0; coefficient < 9; coefficient++)
-                        values[channel * 9 + coefficient] = probe[channel, coefficient] * inverseIntensity;
-                return values;
-            }
 
             public void Apply()
             {
@@ -96,7 +82,12 @@ namespace EchoProtocol.UI
                             probe[channel, coefficient] = AmbientProbe[channel * 9 + coefficient];
                     RenderSettings.ambientProbe = probe;
                 }
-                else DynamicGI.UpdateEnvironment();
+                else
+                {
+                    // Rebuild the probe from the restored skybox/ambient settings instead
+                    // of replaying a possibly stale scene-load snapshot.
+                    DynamicGI.UpdateEnvironment();
+                }
             }
         }
 
@@ -140,6 +131,7 @@ namespace EchoProtocol.UI
             if (runner != _confirmedRunner || runner != null && runner.SessionInfo.IsValid
                 && _confirmedRoom != runner.SessionInfo.Name)
             {
+                RestorePresentation();
                 _confirmedRunner = runner;
                 _confirmedRoom = runner != null && runner.SessionInfo.IsValid ? runner.SessionInfo.Name : null;
                 _confirmedPurgeMode = false;
@@ -169,6 +161,11 @@ namespace EchoProtocol.UI
         }
 
         private void OnDisable()
+        {
+            RestorePresentation();
+        }
+
+        private void RestorePresentation()
         {
             if (_appliedMap == 1 && SceneManager.GetActiveScene() == gameObject.scene)
                 _originalLighting.Apply();
