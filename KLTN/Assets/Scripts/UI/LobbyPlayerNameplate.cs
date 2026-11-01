@@ -30,6 +30,7 @@ namespace EchoProtocol.UI
 
         private string _displayedName;
         private bool _displayedReady;
+        private bool _displayedHost;
         private GameLocale _displayedLocale;
 
         private void Awake()
@@ -74,21 +75,24 @@ namespace EchoProtocol.UI
             }
 
             bool ready = _playerState.IsReady;
+            bool host = _playerState.IsLobbyHost;
 
             if (_displayedReady != ready
+                || _displayedHost != host
                 || _displayedLocale != GameLanguage.Current
                 || _stateText.text.Length == 0)
             {
                 _displayedReady = ready;
+                _displayedHost = host;
                 _displayedLocale = GameLanguage.Current;
 
                 _stateText.text =
-                    ready
+                    host ? GameLanguage.Choose("Chủ Phòng", "HOST") : ready
                         ? GameLanguage.Choose("SẴN SÀNG", "READY")
                         : GameLanguage.Choose("CHƯA SẴN SÀNG", "NOT READY");
 
                 _stateText.color =
-                    ready
+                    host ? new Color32(213, 29, 39, 255) : ready
                         ? ReadyColor
                         : NotReadyColor;
             }
