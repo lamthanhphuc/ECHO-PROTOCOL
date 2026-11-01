@@ -1,8 +1,12 @@
+using System.Linq;
+using System.Reflection;
 using EchoProtocol.UI.MainMenu;
 using EchoProtocol.Settings;
 using NUnit.Framework;
 using TMPro;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace EchoProtocol.UI.Tests
@@ -190,6 +194,120 @@ namespace EchoProtocol.UI.Tests
             Assert.That(heading.font, Is.SameAs(subtitle.font),
                 "The leaderboard title must use the complete lobby/body glyph set.");
             Assert.That(accent.color.a, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void OpeningArchiveRestoresRenderableLeaderboardHeading()
+        {
+            var heading = _archive.OverlayRoot.Find("ArchivePanel/Heading")
+                .GetComponent<Text>();
+            heading.enabled = false;
+            heading.canvasRenderer.SetAlpha(0f);
+
+            _archive.Open();
+            Canvas.ForceUpdateCanvases();
+
+            Assert.That(heading.enabled, Is.True);
+            Assert.That(heading.canvasRenderer.GetAlpha(), Is.EqualTo(1f).Within(0.001f));
+            Assert.That(heading.cachedTextGenerator.characterCount, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void HostAndJoinDialogContentShareTheWindowCenterAxis()
+        {
+            const string scenePath = "Assets/Scenes/MainMenu.unity";
+            Scene previous = SceneManager.GetActiveScene();
+            string previousPath = previous.path;
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+
+            try
+            {
+                var controller = Object.FindAnyObjectByType<MainMenuMatchmakingController>(
+                    FindObjectsInactive.Include);
+                Assert.That(controller, Is.Not.Null);
+                typeof(MainMenuMatchmakingController)
+                    .GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null);
+
+                Transform canvas = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<Canvas>(true))
+                    .Single(item => item.name == "MainMenuCanvas").transform;
+                RectTransform window = canvas.Find(
+                    "MatchmakingDialog/Window") as RectTransform;
+                Assert.That(window, Is.Not.Null);
+                AssertMatchmakingContentCentered(window);
+
+                typeof(MainMenuMatchmakingController)
+                    .GetField("_hostMode", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(controller, true);
+                typeof(MainMenuMatchmakingController)
+                    .GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(controller, null);
+                AssertMatchmakingContentCentered(window);
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(previousPath) && previousPath != scene.path)
+                    EditorSceneManager.OpenScene(previousPath, OpenSceneMode.Single);
+            }
+        }
+
+        private static void AssertChildCentered(RectTransform parent, string name)
+        {
+            RectTransform rect = parent.Find(name) as RectTransform;
+            Assert.That(rect, Is.Not.Null, name + " is missing.");
+            Assert.That(rect.anchoredPosition.x, Is.EqualTo(0f).Within(0.001f),
+                name + " center");
+
+            Text label = rect.GetComponent<Text>();
+            if (label != null)
+                Assert.That(label.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
+        }
+
+        private static void AssertMatchmakingContentCentered(RectTransform window)
+        {
+            AssertChildCentered(window, "TitleText");
+            AssertChildCentered(window, "RoomLabel");
+            AssertChildCentered(window, "RoomCodeInput");
+            AssertChildCentered(window, "DifficultyRow");
+
+            RectTransform confirm = window.Find("ConfirmButton") as RectTransform;
+            RectTransform back = window.Find("BackButton") as RectTransform;
+            Assert.That(confirm.rect.width, Is.EqualTo(back.rect.width).Within(0.001f));
+            float confirmCenter = confirm.anchoredPosition.x
+                + confirm.rect.width * (0.5f - confirm.pivot.x);
+            float backCenter = back.anchoredPosition.x
+                + back.rect.width * (0.5f - back.pivot.x);
+            Assert.That((confirmCenter + backCenter) * 0.5f,
+                Is.EqualTo(0f).Within(0.001f));
+        }
+
+        [Test]
+        public void MatchmakingRoomCodePlaceholderIsEmpty()
+        {
+            var inputObject = new GameObject("RoomCodeInput", typeof(RectTransform),
+                typeof(Image), typeof(InputField));
+            var placeholderObject = new GameObject("Placeholder", typeof(RectTransform),
+                typeof(Text));
+            placeholderObject.transform.SetParent(inputObject.transform, false);
+            var input = inputObject.GetComponent<InputField>();
+            var placeholder = placeholderObject.GetComponent<Text>();
+            placeholder.text = "Nhập mã phòng";
+            input.placeholder = placeholder;
+
+            try
+            {
+                typeof(MainMenuMatchmakingController)
+                    .GetMethod("ClearRoomCodePlaceholder",
+                        BindingFlags.Static | BindingFlags.NonPublic)
+                    .Invoke(null, new object[] { input });
+
+                Assert.That(placeholder.text, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(inputObject);
+            }
         }
 
         [Test]

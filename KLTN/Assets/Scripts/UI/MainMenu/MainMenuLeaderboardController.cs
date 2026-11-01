@@ -588,6 +588,7 @@ namespace EchoProtocol.UI.MainMenu
         {
             if (_overlay == null || IsOpen) return;
             if (_tooltip != null) _tooltip.SetActive(false);
+            EnsureHeadingVisible();
             _overlay.SetAsLastSibling();
             _overlay.gameObject.SetActive(true);
             _overlayGroup.alpha = 1f;
@@ -603,6 +604,18 @@ namespace EchoProtocol.UI.MainMenu
             if (Application.isPlaying) _opening = StartCoroutine(AnimateOpen());
             if (_loadRecords) Fetch();
             else SetStatus(L("CHẾ ĐỘ THỬ", "ARCHIVE TEST MODE"));
+        }
+
+        private void EnsureHeadingVisible()
+        {
+            if (_heading == null) return;
+            _heading.enabled = true;
+            _heading.font = _font != null
+                ? _font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _heading.color = Pale;
+            _heading.canvasRenderer.SetAlpha(1f);
+            _heading.transform.SetAsLastSibling();
+            _heading.SetAllDirty();
         }
 
         public void Close()
