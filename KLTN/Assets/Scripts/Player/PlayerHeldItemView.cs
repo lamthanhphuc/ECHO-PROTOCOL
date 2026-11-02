@@ -96,6 +96,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
             _wasCarryingFuel = carryingFuel;
             RefreshVisual();
         }
+        if (_currentVisual == null) RefreshVisual();
         if (_currentVisual == null) return;
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         var visual = _currentVisual.transform;
@@ -130,7 +131,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     private void RefreshVisual()
     {
         InventoryItemDefinition desiredItem = ResolveDesiredHeldItem();
-        if (desiredItem == _currentItem)
+        if (desiredItem == _currentItem && (desiredItem == null || _currentVisual != null))
         {
             return;
         }

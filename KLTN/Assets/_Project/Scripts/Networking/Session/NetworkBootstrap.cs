@@ -2921,6 +2921,11 @@ namespace EchoProtocol.Networking
                 SetState(
                     NetworkSessionState.InLobby,
                     "Match finished; room retained.");
+                _matchStartPending = false;
+                foreach (var player in runner.ActivePlayers)
+                    if (runner.IsServer && runner.TryGetPlayerObject(player, out var playerObject)
+                        && playerObject != null && playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyPlayer))
+                        lobbyPlayer.ResetForLobbyAuthoritative();
             }
             if (Runner == runner
                 && sceneName == EchoProtocol.Core.GameConstants.SceneResult

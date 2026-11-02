@@ -190,6 +190,9 @@ namespace EchoProtocol.Networking
             _bootstrap.NetworkSceneLoadDone += HandleNetworkSceneLoadDone;
             _bootstrap.SessionStateChanged += HandleSessionStateChanged;
             TryAttachLifecycle(_bootstrap.Runner);
+            if (_bootstrap.Runner != null && _bootstrap.Runner.IsRunning
+                && SceneManager.GetActiveScene().name == NetworkBootstrap.LobbySceneName)
+                HandleNetworkSceneLoadDone(_bootstrap.Runner);
         }
 
         private void OnDisable()

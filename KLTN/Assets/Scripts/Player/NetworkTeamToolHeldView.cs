@@ -107,6 +107,9 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             if (_visual != null) Clear();
             return;
         }
+        if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid
+            && (_shownToolId != lobbyState.ToolId || lobbyState.ToolId > 0 && _visual == null))
+            Refresh();
         if (_visual != null) _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(_shownToolId) ?? 1f);
         bool pushing = IsPushing();
         if (pushing == _wasPushing)
@@ -144,7 +147,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
         {
             toolId = 0;
         }
-        if (toolId == _shownToolId)
+        if (toolId == _shownToolId && (toolId == 0 || _visual != null))
         {
             return;
         }

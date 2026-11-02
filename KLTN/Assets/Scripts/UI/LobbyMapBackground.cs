@@ -31,6 +31,21 @@ namespace EchoProtocol.UI
         private NetworkRunner _confirmedRunner;
         private string _confirmedRoom;
         private float _nextRefresh;
+        private bool _lightingReady;
+
+        private System.Collections.IEnumerator Start()
+        {
+            // Fusion may enable this scene before making its lighting settings active.
+            while (SceneManager.GetActiveScene() != gameObject.scene) yield return null;
+            yield return null;
+            _originalLighting = EnvironmentState.Capture();
+            var probe = RenderSettings.ambientProbe;
+            _originalLighting.AmbientProbe = new float[27];
+            for (int channel = 0; channel < 3; channel++)
+                for (int coefficient = 0; coefficient < 9; coefficient++)
+                    _originalLighting.AmbientProbe[channel * 9 + coefficient] = probe[channel, coefficient];
+            _lightingReady = true;
+        }
 
         [System.Serializable]
         private struct EnvironmentState
@@ -124,6 +139,7 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
+            if (!_lightingReady) return;
             if (Time.unscaledTime < _nextRefresh) return;
             _nextRefresh = Time.unscaledTime + .15f;
             if (!_bootstrap) _bootstrap = FindAnyObjectByType<NetworkBootstrap>();
