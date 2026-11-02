@@ -630,9 +630,9 @@ namespace EchoProtocol.UI.Loading
         private TMP_FontAsset HeadingFont => _theme != null && _theme.HeadingFont != null ? _theme.HeadingFont
             : Resources.Load<TMP_FontAsset>("UI/LobbyReference/LobbySerif") ?? TMP_Settings.defaultFontAsset;
         private TMP_FontAsset TelemetryFont => _theme != null && _theme.TelemetryFont != null ? _theme.TelemetryFont : Font("JetBrainsMonoTMP");
-        private Color Foreground => _theme != null ? _theme.Text : new Color(0.89f, 0.88f, 0.84f, 1);
-        private Color Muted => _theme != null ? _theme.Muted : new Color(0.52f, 0.58f, 0.59f, 1);
-        private Color Accent => _theme != null ? _theme.BloodRed : new Color(0.67f, 0.075f, 0.10f, 1);
+        private Color Foreground => IndustrialUiStyle.Text;
+        private Color Muted => IndustrialUiStyle.Muted;
+        private Color Accent => IndustrialUiStyle.Accent;
         private float FadeInSeconds => _theme != null ? _theme.FadeInSeconds : 0.25f;
         private float HoldSeconds => _theme != null ? _theme.CompleteHoldSeconds : 0.45f;
         private float FadeOutSeconds => _theme != null ? _theme.FadeOutSeconds : 0.65f;

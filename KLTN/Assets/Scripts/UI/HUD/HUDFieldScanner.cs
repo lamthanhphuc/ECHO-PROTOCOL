@@ -69,7 +69,7 @@ namespace EchoProtocol.UI.HUD
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = false;
             _targetAlpha = 0f;
-            if (radarBoxBackground != null) ConfigureLayout();
+            ConfigureLayout();
 
             if (scannerAudio == null)
             {
@@ -307,16 +307,19 @@ namespace EchoProtocol.UI.HUD
                 : Time.unscaledTime < _modeHintUntil ? "[Chuột trái] Quét · [Chuột phải] Đổi chế độ"
                 : "[Chuột trái] Quét";
             SetText(statusText, status);
-            if (titleText != null) titleText.color = accent;
+            if (titleText != null) titleText.color = IndustrialUiStyle.Accent;
             if (detectedText != null) detectedText.color = accent;
             if (signalBarsText != null) signalBarsText.color = accent;
-            if (signalDetailText != null) signalDetailText.color = accent;
-            if (panelOutline != null) panelOutline.effectColor = new Color(accent.r * 0.15f, accent.g * 0.15f, accent.b * 0.15f, 0.65f);
+            if (signalDetailText != null) signalDetailText.color = IndustrialUiStyle.Accent;
+            if (panelOutline != null) panelOutline.effectColor = IndustrialUiStyle.Border;
 
             if (_viewCamera == null) _viewCamera = Camera.main;
             float heading = _viewCamera != null ? _viewCamera.transform.eulerAngles.y : connected ? _boundScanner.transform.eulerAngles.y : 0f;
             if (radarGraphic != null)
+            {
+                radarGraphic.TargetLabel = motion ? "STALKER" : coreTargetLabel;
                 radarGraphic.Present(offsets, connected ? (motion ? _boundScanner.Tuning.MotionRange : _boundScanner.Tuning.CoreRange) : 1f, heading, motion, active);
+            }
             if (scannerAudio != null)
             {
                 if (count == 0) scannerAudio.StopFeedback();
@@ -430,8 +433,8 @@ namespace EchoProtocol.UI.HUD
             radarGraphic.rectTransform.anchorMin = Vector2.zero;
             radarGraphic.rectTransform.anchorMax = Vector2.one;
             radarGraphic.rectTransform.offsetMin = radarGraphic.rectTransform.offsetMax = Vector2.zero;
-            scanTimerText = Label(scanTimerText, "ScanTimer", radar, 11, TextAnchor.MiddleLeft);
-            Place(scanTimerText.rectTransform, 0f, 0.45f, 8f, 22f, 10f, 0f);
+            scanTimerText = Label(scanTimerText, "ScanTimer", radar, 20, TextAnchor.UpperCenter);
+            Place(scanTimerText.rectTransform, 0f, 1f, 0f, 30f, 8f, 8f);
             statusText = Label(statusText, "Status", transform, 11, TextAnchor.MiddleCenter);
             Place(statusText.rectTransform, 0, 1, 326, 20, 8, 8);
             detectedText = Label(detectedText, "DetectedCount", transform, 11, TextAnchor.MiddleCenter);
@@ -440,6 +443,9 @@ namespace EchoProtocol.UI.HUD
             Place(detectedText.rectTransform, 0, 1f / 3, 348, 42, 4, 4);
             Place(signalDetailText.rectTransform, 1f / 3, 2f / 3, 348, 42, 4, 4);
             Place(signalBarsText.rectTransform, 2f / 3, 1, 348, 42, 4, 4);
+            detectedText.gameObject.SetActive(false);
+            signalBarsText.gameObject.SetActive(false);
+            Place(signalDetailText.rectTransform, 0, 1, 348, 42, 4, 4);
             Divider("Divider1", 0, 1, 35, 1);
             Divider("Divider2", 0, 1, 346, 1);
             Divider("FooterSeparator1", 1f / 3, 1f / 3, 354, 30);
@@ -455,14 +461,14 @@ namespace EchoProtocol.UI.HUD
                 go.transform.SetParent(parent, false);
                 existing = go.GetComponent<Text>();
             }
-            if (existing.font == null) existing.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            existing.font = UiTypographyTheme.BodyLegacy;
             existing.fontSize = size;
             existing.fontStyle = FontStyle.Normal;
             existing.alignment = alignment;
             existing.supportRichText = true;
             existing.horizontalOverflow = HorizontalWrapMode.Overflow;
             existing.verticalOverflow = VerticalWrapMode.Truncate;
-            existing.color = new Color(0.76f, 0.82f, 0.82f);
+            existing.color = IndustrialUiStyle.Text;
             existing.raycastTarget = false;
             return existing;
         }

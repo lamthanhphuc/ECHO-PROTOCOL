@@ -247,6 +247,19 @@ namespace EchoProtocol.UI.MainMenu
 
         private static Graphic ApplyDialogFrame(GameObject owner, Color fill, bool accent)
         {
+            if (owner.GetComponent<Button>() != null && owner.transform.Find("MenuAccentRight") == null)
+            {
+                var stripe = new GameObject("MenuAccentRight", typeof(RectTransform), typeof(Image));
+                stripe.transform.SetParent(owner.transform, false);
+                var rect = (RectTransform)stripe.transform;
+                rect.anchorMin = new Vector2(1,0);
+                rect.anchorMax = new Vector2(1,1);
+                rect.pivot = new Vector2(1,.5f);
+                rect.offsetMin = new Vector2(-3,9);
+                rect.offsetMax = new Vector2(0,-9);
+                stripe.GetComponent<Image>().color = new Color(.72f,.025f,.05f);
+                stripe.GetComponent<Image>().raycastTarget = false;
+            }
             // Keep the authored Image: replacing a Selectable's Graphic breaks its canvas geometry.
             var image = owner.GetComponent<Image>() ?? owner.AddComponent<Image>();
             image.enabled = true;

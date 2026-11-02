@@ -42,6 +42,7 @@ namespace EchoProtocol.UI.Auth
 
     private void Awake()
     {
+      EchoProtocol.UI.IndustrialUiStyle.Controls(transform);
       ConfigureInputField(loginUsernameInput);
       ConfigureInputField(loginPasswordInput);
       ConfigureInputField(registerEmailInput);

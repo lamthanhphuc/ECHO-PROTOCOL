@@ -18,8 +18,27 @@ namespace EchoProtocol.UI
             public GameLocale Locale;
         }
         private readonly Dictionary<Graphic, Entry> _labels = new();
+        private readonly List<TMP_Text> _tmpLabels = new();
+        private readonly List<Text> _legacyLabels = new();
+        private bool _preparing;
         private float _nextDiscovery;
         private void OnTransformChildrenChanged() => _nextDiscovery = 0;
+        private void OnEnable() => Canvas.willRenderCanvases += PrepareBeforeRender;
+        private void OnDisable() => Canvas.willRenderCanvases -= PrepareBeforeRender;
+        public void PrepareBeforeRender()
+        {
+            if (_preparing) return;
+            _preparing = true;
+            try
+            {
+                GetComponentsInChildren(false, _tmpLabels);
+                GetComponentsInChildren(false, _legacyLabels);
+                foreach (var label in _tmpLabels) Register(label);
+                foreach (var label in _legacyLabels) Register(label);
+                LateUpdate();
+            }
+            finally { _preparing = false; }
+        }
 
         private void LateUpdate()
         {
@@ -52,10 +71,22 @@ namespace EchoProtocol.UI
             if (IsPlayerData(label)) return;
             bool isMainMenuTypography = label.name == "CinematicTMP";
             bool isButton = label.GetComponentInParent<Button>() != null;
-            if (!isMainMenuTypography)
+            bool cinematic = label.GetComponentInParent<EchoProtocol.UI.Loading.CinematicMatchLoadingScreen>() != null
+                || label.GetComponentInParent<CinematicResultSceneController>() != null;
+            if (!isMainMenuTypography && !cinematic)
             {
                 if (label is TMP_Text tmp) UiTypographyTheme.Apply(tmp, isButton);
                 else if (label is Text legacy) UiTypographyTheme.Apply(legacy, isButton);
+                label.color = IndustrialUiStyle.CopyColor(label.name, label.color, isButton);
+                // Lobby's reference design uses the same bronze ink for captions,
+                // values, character descriptions and actions, not white button text.
+                if (label.GetComponentInParent<LobbyRuntimeBindingsController>() != null
+                    || label.GetComponentInParent<LobbyReferencePresentation>() != null)
+                {
+                    Color ink = IndustrialUiStyle.Accent;
+                    ink.a = label.color.a;
+                    label.color = ink;
+                }
             }
             // Input values and identity labels are player data, not interface copy.
             if ((label.GetComponentInParent<TMP_InputField>() != null || label.GetComponentInParent<InputField>() != null)
@@ -102,9 +133,23 @@ namespace EchoProtocol.UI
         {
             DontDestroyOnLoad(gameObject);
             SceneManager.sceneLoaded += SceneLoaded;
+            Canvas.preWillRenderCanvases += DiscoverBeforeRender;
         }
         private void SceneLoaded(Scene scene, LoadSceneMode mode) => _nextScan = 0;
-        private void OnDestroy() => SceneManager.sceneLoaded -= SceneLoaded;
+        private void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= SceneLoaded;
+            Canvas.preWillRenderCanvases -= DiscoverBeforeRender;
+        }
+        private void DiscoverBeforeRender()
+        {
+            foreach (var canvas in FindObjectsByType<Canvas>(FindObjectsInactive.Exclude))
+            {
+                if (!canvas.isRootCanvas) continue;
+                var localized = canvas.GetComponent<LocalizedCanvas>() ?? canvas.gameObject.AddComponent<LocalizedCanvas>();
+                localized.PrepareBeforeRender();
+            }
+        }
         private void Update()
         {
             if (Time.unscaledTime < _nextScan) return;

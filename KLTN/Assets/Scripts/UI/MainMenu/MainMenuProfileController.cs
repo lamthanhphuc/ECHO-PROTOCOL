@@ -1028,7 +1028,8 @@ namespace EchoProtocol.UI.MainMenu
       var text = rect.gameObject.AddComponent<Text>();
       text.font = font;
       text.fontSize = size;
-      text.color = new Color(0.86f, 0.84f, 0.75f, 1f);
+      text.color = name.Contains("Heading") || name.Contains("Caption")
+        ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
       text.alignment = TextAnchor.MiddleLeft;
       text.raycastTarget = false;
       text.horizontalOverflow = HorizontalWrapMode.Wrap;

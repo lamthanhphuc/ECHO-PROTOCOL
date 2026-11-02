@@ -223,7 +223,7 @@ namespace EchoProtocol.UI
         private static readonly Color Background = new(0.035f, 0.047f, 0.051f, 0.96f);
         private static readonly Color Border = new(0.22f, 0.26f, 0.27f, 0.92f);
         private static readonly Color IconColor = new(0.835f, 0.839f, 0.82f, 1f);
-        private static readonly Color CreditsColor = new(0.73f, 0.67f, 0.51f, 1f);
+        private static readonly Color CreditsColor = IndustrialUiStyle.Text;
         private static Font _creditsFont;
 
         public static void MainMenu(RectTransform root)
@@ -350,7 +350,7 @@ namespace EchoProtocol.UI
             var graphic = iconRect.GetComponent<SettingsIconGraphic>()
                 ?? iconRect.gameObject.AddComponent<SettingsIconGraphic>();
             graphic.Configure(icon, IconColor);
-            if (icon != SettingsIcon.Trophy) EnsureTooltip(button, icon);
+            EnsureTooltip(button, icon);
         }
 
         private static void EnsureTooltip(Button button, SettingsIcon icon)
@@ -528,6 +528,7 @@ namespace EchoProtocol.UI
             _label.text = _icon switch
             {
                 SettingsIcon.Profile => GameLanguage.Choose("HỒ SƠ", "PROFILE"),
+                SettingsIcon.Trophy => GameLanguage.Choose("BẢNG XẾP HẠNG", "LEADERBOARD"),
                 SettingsIcon.Web => GameLanguage.Choose("TRANG WEB", "WEBSITE"),
                 SettingsIcon.Shop => GameLanguage.Choose("CỬA HÀNG", "SHOP"),
                 SettingsIcon.Gear => GameLanguage.Choose("CÀI ĐẶT", "SETTINGS"),

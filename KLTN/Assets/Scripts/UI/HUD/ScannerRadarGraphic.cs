@@ -9,6 +9,8 @@ namespace EchoProtocol.UI.HUD
     public sealed class ScannerRadarGraphic : MaskableGraphic
     {
         private readonly List<Vector2> _points = new List<Vector2>();
+        private readonly List<HUDPurgeIcon> _icons = new List<HUDPurgeIcon>();
+        public string TargetLabel { get; set; }
         private Color _accent = new Color(0.35f, 0.78f, 0.76f);
         private bool _motion, _scanning;
         private float _pulse;
@@ -28,6 +30,33 @@ namespace EchoProtocol.UI.HUD
             }
             _motion = motion;
             _scanning = scanning;
+            while (_icons.Count < _points.Count)
+            {
+                var go = new GameObject("TargetIcon", typeof(RectTransform), typeof(HUDPurgeIcon));
+                go.transform.SetParent(transform, false);
+                var icon = go.GetComponent<HUDPurgeIcon>();
+                icon.raycastTarget = false;
+                _icons.Add(icon);
+            }
+            string label = (TargetLabel ?? "").ToUpperInvariant();
+            PurgeIcon kind = motion ? PurgeIcon.Alien
+                : label.Contains("MEAT") ? PurgeIcon.Meat
+                : label.Contains("FUEL") || label.Contains("JERRYCAN") || label.Contains("NHIÊN") ? PurgeIcon.Fuel
+                : label.Contains("SECURITY") ? PurgeIcon.Terminal
+                : label.Contains("RELAY") ? PurgeIcon.Relay
+                : label.Contains("TÀU") || label.Contains("CART") ? PurgeIcon.Cart : PurgeIcon.Core;
+            float radius = Mathf.Min(rectTransform.rect.width, rectTransform.rect.height) * .44f - 9;
+            for (int i = 0; i < _icons.Count; i++)
+            {
+                _icons[i].gameObject.SetActive(i < _points.Count);
+                if (i >= _points.Count) continue;
+                _icons[i].Kind = kind;
+                _icons[i].color = motion ? new Color(.94f,.43f,.29f) : new Color(.35f,.78f,.76f);
+                var rect = _icons[i].rectTransform;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f,.5f);
+                rect.sizeDelta = new Vector2(22,22);
+                rect.anchoredPosition = _points[i] * radius;
+            }
             _accent = motion ? new Color(0.94f, 0.43f, 0.29f) : new Color(0.35f, 0.78f, 0.76f);
             SetVerticesDirty();
         }
@@ -56,25 +85,6 @@ namespace EchoProtocol.UI.HUD
                 Ring(vh, center, r * i / 4f, 1f, new Color(_accent.r, _accent.g, _accent.b, i == 4 ? 0.65f : 0.25f));
             if (_scanning)
                 Ring(vh, center, r * _pulse, 1f, new Color(_accent.r, _accent.g, _accent.b, (1f - _pulse) * 0.4f));
-            for (int i = 0; i < _points.Count; i++)
-            {
-                Vector2 p = center + _points[i] * (r - 9f);
-                Color ink = _accent;
-                ink.a = Mathf.Lerp(1f, 0.45f, _points[i].magnitude);
-                if (_motion)
-                {
-                    Line(vh, p + new Vector2(0, 8), p + new Vector2(-7, -6), 1.5f, ink);
-                    Line(vh, p + new Vector2(-7, -6), p + new Vector2(7, -6), 1.5f, ink);
-                    Line(vh, p + new Vector2(7, -6), p + new Vector2(0, 8), 1.5f, ink);
-                    Line(vh, p + Vector2.up * 3, p - Vector2.up, 1.5f, ink);
-                    Line(vh, p - Vector2.up * 3, p - Vector2.up * 4, 1.5f, ink);
-                }
-                else
-                {
-                    for (int j = 0; j < 4; j++) Line(vh, p + Corners[j] * 7, p + Corners[(j + 1) % 4] * 7, 1.5f, ink);
-                    Ring(vh, p, 2.1f, 1.6f, ink);
-                }
-            }
             Vector2 forward = Vector2.up;
             Vector2 side = Vector2.right;
             Vector2 tip = center + forward * 10f;

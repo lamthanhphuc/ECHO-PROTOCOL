@@ -13,9 +13,9 @@ namespace EchoProtocol.UI.HUD
             control.transition=Selectable.Transition.ColorTint;
             var colors=control.colors;
             colors.normalColor=Color.white;
-            colors.highlightedColor=new Color(1.25f,1.35f,1.4f,1f);
+            colors.highlightedColor=new Color(1.2f,1.08f,1.08f,1f);
             colors.selectedColor=colors.highlightedColor;
-            colors.pressedColor=new Color(0.65f,0.8f,0.85f,1f);
+            colors.pressedColor=new Color(0.65f,0.58f,0.58f,1f);
             colors.disabledColor=new Color(0.35f,0.38f,0.4f,1f);
             colors.colorMultiplier=1f;colors.fadeDuration=0.08f;control.colors=colors;
         }
@@ -23,7 +23,7 @@ namespace EchoProtocol.UI.HUD
         {
             if(button==null)return;
             var frame=button.GetComponent<Image>();
-            if(frame!=null)frame.color=primary ? new Color(0.2f,0.43f,0.45f) : danger ? new Color(0.44f,0.2f,0.18f) : new Color(0.24f,0.3f,0.32f);
+            if(frame!=null)frame.color=primary || danger ? IndustrialUiStyle.Accent : IndustrialUiStyle.Border;
             var bodyTransform=button.transform.Find("RelayButtonBody") ?? button.transform.Find("Fill");
             Image body;
             if(bodyTransform==null) {
@@ -33,11 +33,12 @@ namespace EchoProtocol.UI.HUD
                 rect.offsetMin=new Vector2(2,2);rect.offsetMax=new Vector2(-2,-2);
                 body=go.GetComponent<Image>();body.raycastTarget=false;
             } else body=bodyTransform.GetComponent<Image>();
-            body.color=danger ? new Color(0.24f,0.075f,0.07f) : primary ? new Color(0.07f,0.23f,0.25f) : new Color(0.085f,0.13f,0.15f);
+            body.color=danger || primary ? IndustrialUiStyle.Blood : IndustrialUiStyle.Panel;
             button.targetGraphic=body;StyleRelayControl(button);
             var label=button.GetComponentInChildren<TMP_Text>(true);
             if(label!=null) {
-                label.color=new Color(0.92f,0.94f,0.94f);label.raycastTarget=false;
+                label.color=IndustrialUiStyle.Accent;label.raycastTarget=false;
+                UiTypographyTheme.Apply(label, true);
                 label.fontSize=Mathf.Min(label.fontSize,16f);label.fontSizeMax=16f;label.fontSizeMin=12f;label.enableAutoSizing=true;
             }
         }
@@ -70,7 +71,8 @@ namespace EchoProtocol.UI.HUD
                 text.fontSizeMin = 12f;
                 text.fontSizeMax = text.fontSize;
                 text.enableAutoSizing = true;
-                text.color = title ? new Color(0.9f,0.94f,0.93f) : new Color(0.68f,0.75f,0.74f);
+                text.color = title || button ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
+                UiTypographyTheme.Apply(text, button);
                 text.text=EchoProtocol.Settings.GameLanguage.Translate(text.text);
                 text.fontStyle = title ? FontStyles.Bold : FontStyles.Normal;
             }
@@ -84,12 +86,13 @@ namespace EchoProtocol.UI.HUD
                 outline.effectColor = new Color(0.22f, 0.26f, 0.25f, 0.35f);
             foreach (var button in root.GetComponentsInChildren<Button>(true))
             {
+                IndustrialUiStyle.Button(button);
                 var colors = button.colors;
-                colors.normalColor = new Color(0.16f, 0.19f, 0.19f);
-                colors.highlightedColor = new Color(0.26f, 0.31f, 0.3f);
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.18f, 1.08f, 1.08f);
                 colors.selectedColor = colors.highlightedColor;
-                colors.pressedColor = new Color(0.1f, 0.13f, 0.13f);
-                colors.disabledColor = new Color(0.1f, 0.11f, 0.11f, 0.6f);
+                colors.pressedColor = new Color(.65f, .58f, .58f);
+                colors.disabledColor = new Color(.38f, .38f, .38f, .7f);
                 button.colors = colors;
             }
         }

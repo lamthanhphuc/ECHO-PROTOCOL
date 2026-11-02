@@ -22,6 +22,8 @@ namespace EchoProtocol.UI
         private GameObject _modal, _progress, _toast;
         private TMP_Text _title, _body, _acceptText, _cancelText, _progressText, _toastText;
         private Button _accept, _cancel, _progressCancel;
+        private RectTransform _confirmationCard, _bodyViewport;
+        private ScrollRect _bodyScroll;
         private Action _accepted, _cancelled;
         private Func<string> _bodyProvider;
         private bool _resolutionDialog, _returning, _startup, _sceneTransition;
@@ -66,10 +68,28 @@ namespace EchoProtocol.UI
             modalCanvas.sortingOrder = 2000;
             _modal.AddComponent<GraphicRaycaster>();
             var card = Card(_modal.transform, 560, 260);
+            _confirmationCard = (RectTransform)card;
             _title = Label(card, 24, 22, 512, 36, 22);
             _body = Label(card, 24, 70, 512, 105, 17);
-            _cancel = Button(card, "Cancel", 24, 194, 242, 42, out _cancelText);
-            _accept = Button(card, "Accept", 282, 194, 254, 42, out _acceptText);
+            _bodyViewport = SettingsMenuWidgets.Rect("BodyViewport", card, 24, 70, 512, 105);
+            _bodyViewport.gameObject.AddComponent<RectMask2D>();
+            var scrollHit = _bodyViewport.gameObject.AddComponent<Image>();
+            scrollHit.color = Color.clear;
+            _body.rectTransform.SetParent(_bodyViewport, false);
+            _body.rectTransform.anchorMin = new Vector2(0,1);
+            _body.rectTransform.anchorMax = Vector2.one;
+            _body.rectTransform.pivot = new Vector2(0,1);
+            _body.rectTransform.anchoredPosition = Vector2.zero;
+            _body.rectTransform.sizeDelta = new Vector2(0,105);
+            _bodyScroll = _bodyViewport.gameObject.AddComponent<ScrollRect>();
+            _bodyScroll.viewport = _bodyViewport;
+            _bodyScroll.content = _body.rectTransform;
+            _bodyScroll.horizontal = false;
+            _bodyScroll.movementType = ScrollRect.MovementType.Clamped;
+            _bodyScroll.scrollSensitivity = 24;
+            _cancel = Button(card, "Cancel", 24, 194, 248, 48, out _cancelText);
+            _accept = Button(card, "Accept", 288, 194, 248, 48, out _acceptText);
+            IndustrialUiStyle.Button(_accept, true);
             _cancel.onClick.AddListener(() => Complete(false));
             _accept.onClick.AddListener(() => Complete(true));
             _cancel.navigation = new Navigation { mode = Navigation.Mode.Explicit, selectOnRight = _accept, selectOnUp = _accept, selectOnDown = _accept };
@@ -106,11 +126,25 @@ namespace EchoProtocol.UI
             _accepted = accepted; _cancelled = cancelled; _bodyProvider = body;
             _title.text = title;
             _body.text = body();
+            LayoutConfirmation();
             _acceptText.text = acceptLabel ?? GameLanguage.Choose("Xác nhận", "Confirm");
             _cancelText.text = GameLanguage.Choose("Hủy", "Cancel");
             _lock.Acquire(LocalPlayer(), () => Complete(false), allowWhileDowned: true);
             _modal.SetActive(true);
             _cancel.Select();
+        }
+
+        private void LayoutConfirmation()
+        {
+            float contentHeight = Mathf.Max(72, _body.GetPreferredValues(_body.text, 512, Mathf.Infinity).y);
+            float visibleHeight = Mathf.Min(220, contentHeight);
+            _bodyViewport.sizeDelta = new Vector2(512, visibleHeight);
+            _body.rectTransform.sizeDelta = new Vector2(0, contentHeight);
+            float buttonY = 70 + visibleHeight + 24;
+            ((RectTransform)_cancel.transform).anchoredPosition = new Vector2(24, -buttonY);
+            ((RectTransform)_accept.transform).anchoredPosition = new Vector2(288, -buttonY);
+            _confirmationCard.sizeDelta = new Vector2(560, buttonY + 72);
+            _bodyScroll.verticalNormalizedPosition = 1;
         }
 
         public void EndStartupForAgreement() { _startup = false; _sceneTransition = false; _sceneChangeFrame = -1; }
@@ -171,7 +205,11 @@ namespace EchoProtocol.UI
             {
                 if (_resolutionDialog && !GameGraphicsSettings.HasResolutionPreview) Complete(false);
                 else if (_lock.ConsumeEscape()) Complete(false);
-                else if (_bodyProvider != null) _body.text = _bodyProvider();
+                else if (_bodyProvider != null)
+                {
+                    string body = _bodyProvider();
+                    if (_body.text != body) { _body.text = body; LayoutConfirmation(); }
+                }
             }
             var network = NetworkBootstrap.Instance;
             if (network != _previousBootstrap) { _previousBootstrap = network; _previousState = network != null ? network.State : NetworkSessionState.Disconnected; }
@@ -331,6 +369,7 @@ namespace EchoProtocol.UI
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(width, height);
             owner.GetComponent<Image>().color = new Color32(24, 29, 30, 255);
+            IndustrialUiStyle.Frame(owner);
             return owner.transform;
         }
         private static TMP_Text Label(Transform parent, float x, float y, float w, float h, float size)

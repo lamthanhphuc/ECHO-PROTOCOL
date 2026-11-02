@@ -94,6 +94,7 @@ namespace EchoProtocol.Voice
                 if (label.transform.parent == audioRect && label.name != "Title" && label.name != "Icon")
                     label.fontSize = Mathf.Min(label.fontSize, 18);
             Bind();
+            IndustrialUiStyle.Controls(_canvas.transform);
             _overlay.SetActive(false);
         }
 
@@ -110,6 +111,64 @@ namespace EchoProtocol.Voice
 
         private TMP_Text TextAt(string path) => Find<TMP_Text>(path);
         private void Click(string path, UnityEngine.Events.UnityAction action) => Find<Button>(path).onClick.AddListener(action);
+        private GameObject _graphicsChoices;
+        private void OpenGraphicsChoices(string setting, string[] choices, Action<int> select)
+        {
+            if (_graphicsChoices != null) { Destroy(_graphicsChoices); _graphicsChoices = null; }
+            var source = Find<Button>(Body + "Graphics/" + setting);
+            var template = Instantiate(source);
+            template.gameObject.SetActive(false);
+            var root = new GameObject("GraphicsChoices", typeof(RectTransform), typeof(Image));
+            _graphicsChoices = root;
+            var rect = (RectTransform)root.transform;
+            rect.SetParent(source.transform, false);
+            rect.anchorMin = rect.anchorMax = new Vector2(0, 0);
+            rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(((RectTransform)source.transform).rect.width, Mathf.Min(choices.Length, 6) * 44);
+            float bottom = RectTransformUtility.WorldToScreenPoint(null, source.transform.position).y;
+            if (bottom < rect.sizeDelta.y * source.transform.lossyScale.y + 24)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(0,1);
+                rect.pivot = Vector2.zero;
+            }
+            root.GetComponent<Image>().color = new Color(.025f,.035f,.04f,1);
+            IndustrialUiStyle.Frame(root);
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+            viewport.transform.SetParent(rect, false);
+            var viewRect = (RectTransform)viewport.transform;
+            viewRect.anchorMin = Vector2.zero; viewRect.anchorMax = Vector2.one;
+            viewRect.offsetMin = viewRect.offsetMax = Vector2.zero;
+            var content = new GameObject("Content", typeof(RectTransform));
+            var contentRect = (RectTransform)content.transform;
+            contentRect.SetParent(viewRect, false);
+            contentRect.anchorMin = new Vector2(0,1); contentRect.anchorMax = Vector2.one;
+            contentRect.pivot = new Vector2(.5f,1);
+            contentRect.sizeDelta = new Vector2(0, choices.Length * 44);
+            var scroll = root.AddComponent<ScrollRect>();
+            scroll.viewport = viewRect; scroll.content = contentRect; scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            for (int i = 0; i < choices.Length; i++)
+            {
+                int selected = i;
+                var row = Instantiate(template, contentRect, false);
+                row.gameObject.SetActive(true);
+                var nested = row.transform.Find("GraphicsChoices");
+                if (nested != null) DestroyImmediate(nested.gameObject);
+                var rowRect = (RectTransform)row.transform;
+                rowRect.anchorMin = new Vector2(0,1); rowRect.anchorMax = Vector2.one;
+                rowRect.pivot = new Vector2(.5f,1);
+                rowRect.anchoredPosition = new Vector2(0,-i*44); rowRect.sizeDelta = new Vector2(0,44);
+                var rowLabel = row.GetComponentInChildren<TMP_Text>(true);
+                bool current = choices[i] == (setting == "Quality" ? GameGraphicsSettings.QualityLabel : GameGraphicsSettings.ResolutionLabel);
+                rowLabel.text = (current ? "• " : "") + choices[i];
+                rowLabel.color = current ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
+                row.onClick = new Button.ButtonClickedEvent();
+                row.onClick.AddListener(() => { select(selected); Destroy(root); _graphicsChoices = null; RefreshVisuals(); });
+            }
+            source.transform.SetAsLastSibling();
+            Destroy(template.gameObject);
+        }
 
         private void Bind()
         {
@@ -181,8 +240,8 @@ namespace EchoProtocol.Voice
             Click(Body + "Team/Retry", _voice.Retry);
             _deviceList = _canvas.transform.Find(Body + "Devices/List/Viewport/Content");
             _teamList = _canvas.transform.Find(Body + "Team/List/Viewport/Content");
-            Click(Body + "Graphics/Quality", () => { GameGraphicsSettings.CycleQuality(); RefreshVisuals(); });
-            Click(Body + "Graphics/Resolution", () => { GameGraphicsSettings.CycleResolution(); RefreshVisuals(); });
+            Click(Body + "Graphics/Quality", () => OpenGraphicsChoices("Quality", GameGraphicsSettings.QualityChoices, GameGraphicsSettings.SelectQuality));
+            Click(Body + "Graphics/Resolution", () => OpenGraphicsChoices("Resolution", GameGraphicsSettings.ResolutionChoices, GameGraphicsSettings.SelectResolution));
             Find<Toggle>(Body + "Graphics/Fullscreen").onValueChanged.AddListener(GameGraphicsSettings.SetFullscreen);
             Find<Toggle>(Body + "Graphics/VSync").onValueChanged.AddListener(GameGraphicsSettings.SetVSync);
         }
@@ -200,6 +259,15 @@ namespace EchoProtocol.Voice
                 return;
             }
             if (_controlLock.ShouldAutoRelease()) { Close(); return; }
+            if (_graphicsChoices != null)
+            {
+                if (_controlLock.ConsumeEscape())
+                { Destroy(_graphicsChoices); _graphicsChoices = null; return; }
+                if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame
+                    && !RectTransformUtility.RectangleContainsScreenPoint((RectTransform)_graphicsChoices.transform,
+                        Mouse.current.position.ReadValue(), null))
+                { Destroy(_graphicsChoices); _graphicsChoices = null; }
+            }
             if (keyboard != null && _controlLock.IsTopmost)
             {
                 if (_confirm.activeSelf)
@@ -337,6 +405,7 @@ namespace EchoProtocol.Voice
 
         private void Close()
         {
+            if (_graphicsChoices != null) { Destroy(_graphicsChoices); _graphicsChoices = null; }
             GameGraphicsSettings.RevertResolution();
             bool wasOpen = _open;
             var callback = _onClosed;

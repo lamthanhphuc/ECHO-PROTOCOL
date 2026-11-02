@@ -34,14 +34,16 @@ namespace EchoProtocol.UI.MainMenu
         }
         private static Sprite _background, _card, _selected, _buy, _navigation;
         private static Font _serif;
-        private static readonly Color Gold = new Color(0.76f, 0.72f, 0.53f);
+        private static readonly Color Gold = IndustrialUiStyle.Accent;
         public static void Apply(Transform root)
         {
             EnsureAssets();
+            IndustrialUiStyle.Controls(root);
             if(root.GetComponent<StoreReferencePresentation>()==null)root.gameObject.AddComponent<StoreReferencePresentation>();
             foreach(var text in root.GetComponentsInChildren<Text>(true))
             {
-                text.font=_serif; text.fontStyle=FontStyle.Normal; text.raycastTarget=false;
+                UiTypographyTheme.Apply(text, text.GetComponentInParent<Button>() != null);
+                text.fontStyle=FontStyle.Normal; text.raycastTarget=false;
                 if(text.name=="SectionTitle"){text.gameObject.SetActive(true);text.fontSize=56;text.resizeTextForBestFit=false;}
                 if(text.name=="SelectedName" || text.name=="SelectedCharacterName"){text.fontSize=48;text.resizeTextForBestFit=false;}
                 if(text.name=="Caption" && text.transform.parent.name.Contains("BuyButton")){text.fontSize=30;text.resizeTextForBestFit=false;}

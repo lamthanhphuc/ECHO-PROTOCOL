@@ -246,6 +246,7 @@ namespace EchoProtocol.UI
             _overlay.AddComponent<Image>().color = new Color(.006f,.012f,.016f,.95f);
             _window = Rect("Window",_overlay.transform); _window.anchorMin = _window.anchorMax = _window.pivot = new Vector2(.5f,.5f); _window.sizeDelta = new Vector2(1040,720);
             _window.gameObject.AddComponent<Image>().color = new Color(.025f,.035f,.04f,.98f);
+            IndustrialUiStyle.Frame(_window.gameObject);
             _heading = Label(_window,"Heading",36,24,800,44,28);
             var warningIcon = Rect("WarningIcon", _window);
             Position(warningIcon, 36, 82, 42, 42);
@@ -277,15 +278,7 @@ namespace EchoProtocol.UI
         }
         private static void ActionColors(Button button, bool primary)
         {
-            button.targetGraphic.color = Color.white;
-            var colors = button.colors;
-            colors.normalColor = primary ? new Color(.43f,.085f,.12f) : new Color(.055f,.065f,.075f);
-            colors.highlightedColor = primary ? new Color(.53f,.12f,.16f) : new Color(.105f,.12f,.13f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.pressedColor = primary ? new Color(.32f,.05f,.08f) : new Color(.035f,.04f,.05f);
-            colors.disabledColor = new Color(.19f,.21f,.22f);
-            colors.fadeDuration = .12f;
-            button.colors = colors;
+            IndustrialUiStyle.Button(button, primary);
         }
         private Toggle Checkbox(string name,float y,float height,out Text label)
         {
@@ -294,20 +287,21 @@ namespace EchoProtocol.UI
             var toggle=rect.gameObject.AddComponent<Toggle>();
             var box=Rect("Box",rect); Position(box,0,6,28,28); var background=box.gameObject.AddComponent<Image>(); background.color=new Color(.25f,.27f,.27f);
             var check=Rect("Check",box); Stretch(check); check.offsetMin=new Vector2(5,5);check.offsetMax=new Vector2(-5,-5);
-            var mark=check.gameObject.AddComponent<Image>();mark.color=new Color(.20f,.72f,.42f); toggle.targetGraphic=background;toggle.graphic=mark;toggle.isOn=false;
+            var mark=check.gameObject.AddComponent<Image>();mark.color=IndustrialUiStyle.Accent; toggle.targetGraphic=background;toggle.graphic=mark;toggle.isOn=false;
             label=Label(rect,"Caption",42,0,926,height,18); label.alignment=TextAnchor.UpperLeft;
             return toggle;
         }
         private static RectTransform Rect(string name,Transform parent) { var r=new GameObject(name,typeof(RectTransform)).GetComponent<RectTransform>();r.SetParent(parent,false);return r; }
         private static void Stretch(RectTransform r) { r.anchorMin=Vector2.zero;r.anchorMax=Vector2.one;r.offsetMin=r.offsetMax=Vector2.zero; }
         private static void Position(RectTransform r,float x,float y,float w,float h) { r.anchorMin=r.anchorMax=r.pivot=new Vector2(0,1);r.anchoredPosition=new Vector2(x,-y);r.sizeDelta=new Vector2(w,h); }
-        private static void Style(Text t,int size) { t.font=UiTypographyTheme.BodyLegacy;t.fontSize=size;t.color=new Color(.9f,.89f,.85f);t.raycastTarget=false;t.supportRichText=false; }
+        private static void Style(Text t,int size) { t.font=UiTypographyTheme.BodyLegacy;t.fontSize=size;t.color=IndustrialUiStyle.Text;t.raycastTarget=false;t.supportRichText=false; }
         private static Text Label(Transform parent,string name,float x,float y,float w,float h,int size) { var r=Rect(name,parent);Position(r,x,y,w,h);var t=r.gameObject.AddComponent<Text>();Style(t,size);t.alignment=TextAnchor.MiddleLeft;return t; }
         private static Button Button(Transform parent,string name,float x,float y,float w,float h,UnityEngine.Events.UnityAction action,out Text label)
         {
             var r=Rect(name,parent);Position(r,x,y,w,h);var image=r.gameObject.AddComponent<Image>();image.color=new Color(.11f,.075f,.075f);
             var button=r.gameObject.AddComponent<Button>();button.targetGraphic=image;button.onClick.AddListener(action);
-            label=Label(r,"Label",12,0,w-24,h,18);label.font=UiTypographyTheme.ButtonLegacy;label.alignment=TextAnchor.MiddleCenter;return button;
+            label=Label(r,"Label",12,0,w-24,h,18);label.font=UiTypographyTheme.ButtonLegacy;label.alignment=TextAnchor.MiddleCenter;
+            IndustrialUiStyle.Button(button);return button;
         }
     }
 }

@@ -7,9 +7,9 @@ namespace EchoProtocol.UI.HUD
     // Shared by existing HUD instances and the Editor builder.
     public static class HUDPresentationStyle
     {
-        public static readonly Color Ink = new Color32(229, 227, 218, 255);
+        public static readonly Color Ink = IndustrialUiStyle.Text;
         public static readonly Color Muted = new Color32(154, 165, 163, 255);
-        public static readonly Color Accent = new Color32(126, 166, 164, 255);
+        public static readonly Color Accent = IndustrialUiStyle.Accent;
         public static readonly Color Track = new Color32(57, 65, 64, 255);
         public static readonly Color Warning = new Color32(216, 168, 94, 255);
         public static readonly Color Danger = new Color32(208, 104, 95, 255);

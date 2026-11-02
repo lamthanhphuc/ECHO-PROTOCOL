@@ -36,7 +36,7 @@ namespace EchoProtocol.UI
             shade.color = new Color(0, 0, 0, .75f); shade.raycastTarget = false;
             _title = Rect("MapName", frame, 52, 121, 496, 39).gameObject.AddComponent<TextMeshProUGUI>();
             _title.font = Font; _title.fontSize = 25; _title.alignment = TextAlignmentOptions.Center;
-            _title.color = new Color(.8f, .76f, .5f); _title.raycastTarget = false;
+            _title.color = IndustrialUiStyle.Accent; _title.raycastTarget = false;
             _previous = Button(frame, "Previous", 12, true); _next = Button(frame, "Next", 548, false);
             _previous.onClick.AddListener(() => Step(-1)); _next.onClick.AddListener(() => Step(1));
             var modeLabel = Instantiate(Panel.Find("ReferenceDifficultyLabel").gameObject, Panel);
@@ -90,7 +90,7 @@ namespace EchoProtocol.UI
             var icon = Rect("Arrow", rect, 9, 10, 22, 26);
             var image = icon.gameObject.AddComponent<Image>(); image.sprite = Arrow;
             image.raycastTarget = false;
-            image.color = new Color(.8f, .76f, .5f); image.preserveAspect = true;
+            image.color = IndustrialUiStyle.Accent; image.preserveAspect = true;
             icon.pivot = new Vector2(.5f, .5f); icon.anchoredPosition = new Vector2(20, -23);
             if (left) icon.localScale = new Vector3(-1, 1, 1);
             var button = rect.gameObject.AddComponent<Button>(); button.targetGraphic = image;

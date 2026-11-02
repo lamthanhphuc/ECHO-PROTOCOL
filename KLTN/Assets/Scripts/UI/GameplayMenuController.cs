@@ -75,9 +75,10 @@ namespace EchoProtocol.UI
             if (networkObject != null && networkObject.IsValid && !networkObject.HasInputAuthority) return;
             _lock.Acquire(player, Close, allowWhileDowned: true);
             if (!_lock.IsLocked) return;
-            BuildMenu();
-            _overlay.SetActive(true);
+            if (_overlay == null) BuildMenu();
             UpdateMenuLayout();
+            Canvas.ForceUpdateCanvases();
+            _overlay.SetActive(true);
             EventSystem.current?.SetSelectedGameObject(null);
         }
 
@@ -153,6 +154,7 @@ namespace EchoProtocol.UI
         {
             if (_overlay != null) Destroy(_overlay);
             _overlay = new GameObject("PauseMenu", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(Image));
+            _overlay.SetActive(false);
             _overlay.transform.SetParent(transform, false);
             var canvas = _overlay.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 400;
             var scaler = _overlay.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -161,18 +163,20 @@ namespace EchoProtocol.UI
             var panel = new GameObject("Menu", typeof(RectTransform), typeof(Image)); panel.transform.SetParent(_overlay.transform,false);
             var rect = panel.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f,.5f);
             _panel = rect;
-            rect.sizeDelta = new Vector2(480,438);
-            panel.GetComponent<Image>().color = new Color(.035f,.04f,.04f,.98f);
+            rect.sizeDelta = new Vector2(480,400);
+            panel.GetComponent<Image>().color = new Color(.02f,.035f,.038f,.98f);
+            IndustrialUiStyle.Frame(panel);
             var outline = panel.AddComponent<Outline>();
             outline.effectColor = new Color(.34f,.13f,.13f,.8f);
             outline.effectDistance = new Vector2(1,-1);
-            Label(panel.transform, GameLanguage.Choose("MENU", "MENU"), 26, 28, 36);
-            Label(panel.transform, GameLanguage.Choose("Trận đấu vẫn tiếp diễn", "The match continues"), 14, 70, 24);
-            MenuButton(panel.transform, GameLanguage.Choose("Tiếp tục", "Resume"), 116, Close);
-            MenuButton(panel.transform, GameLanguage.Choose("Cài đặt", "Options"), 178, OpenSettings);
-            _lobby = MenuButton(panel.transform, GameLanguage.Choose("Đưa cả đội về phòng chờ", "Return team to lobby"), 264, () => ConfirmExit(true));
-            _mainMenu = MenuButton(panel.transform, GameLanguage.Choose("Về màn hình chính", "Exit to main menu"), IsHost ? 326 : 264, () => ConfirmExit(false));
-            _footer = Label(panel.transform, "ESC · " + GameLanguage.Choose("Tiếp tục", "Resume"), 12, 402, 22).rectTransform;
+            Label(panel.transform, "MENU", 28, 22, 36).gameObject.name = "MenuHeading";
+            Label(panel.transform, GameLanguage.Choose("Trận đấu vẫn tiếp diễn", "The match continues"), 14, 62, 24).gameObject.name = "MenuSubtitle";
+            MenuButton(panel.transform, GameLanguage.Choose("Tiếp tục", "Resume"), 108, Close);
+            MenuButton(panel.transform, GameLanguage.Choose("Cài đặt", "Options"), 170, OpenSettings);
+            _lobby = MenuButton(panel.transform, GameLanguage.Choose("Đưa cả đội về phòng chờ", "Return team to lobby"), 244, () => ConfirmExit(true));
+            _mainMenu = MenuButton(panel.transform, GameLanguage.Choose("Về màn hình chính", "Exit to main menu"), IsHost ? 306 : 244, () => ConfirmExit(false));
+            _footer = Label(panel.transform, "ESC · " + GameLanguage.Choose("Tiếp tục", "Resume"), 12, 376, 22).rectTransform;
+            _footer.gameObject.name = "MenuFooter";
             UpdateMenuLayout();
         }
 
@@ -181,9 +185,9 @@ namespace EchoProtocol.UI
             if (_panel == null || _lobby == null || _mainMenu == null || _footer == null) return;
             bool host = IsHost;
             _lobby.gameObject.SetActive(host);
-            ((RectTransform)_mainMenu.transform).anchoredPosition = new Vector2(0, host ? -326 : -264);
-            _footer.anchoredPosition = new Vector2(0, host ? -400 : -338);
-            _panel.sizeDelta = new Vector2(480, host ? 446 : 384);
+            ((RectTransform)_mainMenu.transform).anchoredPosition = new Vector2(0, host ? -306 : -244);
+            _footer.anchoredPosition = new Vector2(0, host ? -376 : -314);
+            _panel.sizeDelta = new Vector2(480, host ? 414 : 352);
             var bounds = ((RectTransform)_overlay.transform).rect;
             _panel.localScale = Vector3.one * Mathf.Min(1f,
                 Mathf.Max(.1f, (bounds.width - 32) / 480),
@@ -195,9 +199,10 @@ namespace EchoProtocol.UI
             var go = new GameObject("Label", typeof(RectTransform), typeof(Text)); go.transform.SetParent(parent,false);
             var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f,1);
             rect.anchoredPosition = new Vector2(0,-y); rect.sizeDelta = new Vector2(408,height);
-            var text = go.GetComponent<Text>(); text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var text = go.GetComponent<Text>();
+            UiTypographyTheme.Apply(text, parent.GetComponent<Button>() != null);
             text.fontSize = size; text.text = value; text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color32(229,227,218,255); text.raycastTarget = false; return text;
+            text.color = IndustrialUiStyle.Text; text.raycastTarget = false; return text;
         }
 
         private static Button MenuButton(Transform parent, string title, float y, UnityEngine.Events.UnityAction action)
@@ -207,10 +212,12 @@ namespace EchoProtocol.UI
             rect.anchoredPosition = new Vector2(0,-y); rect.sizeDelta = new Vector2(408,50);
             go.GetComponent<Image>().color = Color.white;
             var button = go.GetComponent<Button>(); var colors = button.colors;
-            colors.normalColor = new Color(.08f,.065f,.065f); colors.highlightedColor = colors.selectedColor = new Color(.30f,.08f,.08f);
+            colors.normalColor = new Color(.035f,.055f,.058f); colors.highlightedColor = colors.selectedColor = new Color(.23f,.065f,.065f);
             colors.pressedColor = new Color(.45f,.10f,.10f); button.colors = colors;
             go.GetComponent<Outline>().effectColor = new Color(.36f,.12f,.12f);
-            Label(go.transform,title,18,0,50); button.onClick.AddListener(action); return button;
+            Label(go.transform,title,20,0,50);
+            IndustrialUiStyle.Button(button);
+            button.onClick.AddListener(action); return button;
         }
 
         private static void EnsureEventSystem()

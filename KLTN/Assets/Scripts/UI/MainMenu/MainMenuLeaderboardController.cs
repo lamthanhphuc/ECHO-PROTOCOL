@@ -28,9 +28,9 @@ namespace EchoProtocol.UI.MainMenu
         private const float PanelHeight = 860f;
         private static readonly Color Charcoal = Hex("111415", 0.98f);
         private static readonly Color Metal = Hex("272A29", 1f);
-        private static readonly Color Bronze = Hex("A58255", 1f);
-        private static readonly Color Blood = Hex("873B39", 1f);
-        private static readonly Color Pale = Hex("DEE0D9", 1f);
+        private static readonly Color Bronze = IndustrialUiStyle.Accent;
+        private static readonly Color Blood = IndustrialUiStyle.Blood;
+        private static readonly Color Pale = IndustrialUiStyle.Text;
         private static readonly Color Muted = Hex("929792", 1f);
 
         private Canvas _canvas;
@@ -286,8 +286,7 @@ namespace EchoProtocol.UI.MainMenu
             _tooltip = tooltipRect.gameObject;
             _tooltip.SetActive(false);
 
-            var hover = rect.gameObject.AddComponent<LeaderboardIconHover>();
-            hover.Configure(_tooltip);
+            // The utility bar owns the shared TMP tooltip and typography.
         }
 
         private void BuildOverlay()

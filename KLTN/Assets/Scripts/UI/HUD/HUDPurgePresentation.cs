@@ -127,6 +127,8 @@ namespace EchoProtocol.UI.HUD
         private void LateUpdate()
         {
             if (_root == null) return;
+            if (_tutorial != null && _manager.ScannerTutorial != null
+                && _manager.ScannerTutorial.IsFullGuideOpen) _tutorial.alpha = 1f;
             var mission = AlienHuntMission.Instance;
             bool ended = IsPurgeScene ? mission != null && mission.Completed
                 : NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
@@ -142,7 +144,8 @@ namespace EchoProtocol.UI.HUD
             if (!active)
             {
                 if (_scanner != null) _scanner.alpha = 0f;
-                if (_tutorial != null) _tutorial.alpha = 0f;
+                if (_tutorial != null && !(_manager.ScannerTutorial != null
+                    && _manager.ScannerTutorial.IsFullGuideOpen)) _tutorial.alpha = 0f;
                 if (_placement != null) _placement.alpha = 0f;
             }
 
@@ -361,8 +364,7 @@ namespace EchoProtocol.UI.HUD
 
         private void Build()
         {
-            _font = GetComponentInChildren<Text>(true)?.font;
-            if (_font == null) _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UiTypographyTheme.BodyLegacy;
             _root = new GameObject("PurgeHUD", typeof(RectTransform));
             _root.transform.SetParent(transform, false);
             var root = (RectTransform)_root.transform;
@@ -370,8 +372,9 @@ namespace EchoProtocol.UI.HUD
             _objective = MakeCard("PurgeProgress", new Vector2(0,1), new Vector2(12,-12), new Vector2(280,70), PurgeIcon.Purge);
             if (!IsPurgeScene)
             {
-                _objective.Group.GetComponent<RectTransform>().sizeDelta = new Vector2(390, 126);
-                _objective.Label.rectTransform.sizeDelta = new Vector2(330, 110);
+                _objective.Group.GetComponent<RectTransform>().sizeDelta = new Vector2(390, 100);
+                _objective.Label.rectTransform.sizeDelta = new Vector2(330, 76);
+                _objective.Label.alignment = TextAnchor.UpperLeft;
             }
             _objective.Icon.color = HUDPresentationStyle.Warning;
             _uvMeter = MakeCard("PurgeUV", new Vector2(1,1), new Vector2(-12,-12), new Vector2(216,66), PurgeIcon.UV, true);
@@ -400,7 +403,7 @@ namespace EchoProtocol.UI.HUD
             var rect = (RectTransform)go.transform;
             rect.anchorMin = rect.anchorMax = anchor; rect.pivot = anchor;
             rect.anchoredPosition = position; rect.sizeDelta = size;
-            var background = go.GetComponent<Image>(); background.color = new Color(.025f,.04f,.038f,.86f); background.raycastTarget = false;
+            var background = go.GetComponent<Image>(); background.color = new Color(.035f,.035f,.035f,.86f); background.raycastTarget = false;
             var card = new Card { Group = Group(go) };
             card.Group.alpha = 0f;
             card.Icon = AddIcon(rect, icon, new Vector2(14,-14), HUDPresentationStyle.Ink);

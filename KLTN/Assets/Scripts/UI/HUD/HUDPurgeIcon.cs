@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 namespace EchoProtocol.UI.HUD
 {
-    public enum PurgeIcon { Purge, UV, Item, Meat, Fuel, Alien, Medkit, Health, Stamina, Team, Interact, Downed, Spectate, Missions, Danger, Core, Scanner, NoiseMaker, DoorJammer, Stabilizer }
+    public enum PurgeIcon { Purge, UV, Item, Meat, Fuel, Alien, Medkit, Health, Stamina, Team, Interact, Downed, Spectate, Missions, Danger, Core, Scanner, NoiseMaker, DoorJammer, Stabilizer, Terminal, Relay, Cart }
 
     // Small line meshes stay sharp at every Canvas scale and require no texture atlas.
     public sealed class HUDPurgeIcon : MaskableGraphic
@@ -16,6 +16,9 @@ namespace EchoProtocol.UI.HUD
             mesh.Clear();
             switch (kind)
             {
+                case PurgeIcon.Terminal: Path(mesh,2,21,22,21,22,7,2,7,2,21); Path(mesh,12,7,12,3,19,3,5,3); Path(mesh,6,16,10,13,6,10); Path(mesh,13,10,18,10); break;
+                case PurgeIcon.Relay: Path(mesh,3,3,21,3,21,21,3,21,3,3); Path(mesh,14,19,8,11,15,11,10,5); break;
+                case PurgeIcon.Cart: Path(mesh,2,21,5,21,8,7,20,7,22,17,7,17); Circle(mesh,10,3,2); Circle(mesh,19,3,2); break;
                 case PurgeIcon.Core: Circle(mesh,12,12,10); Circle(mesh,12,12,5); Path(mesh,12,22,12,17); Path(mesh,12,7,12,2); break;
                 case PurgeIcon.Scanner: Circle(mesh,12,12,9); Circle(mesh,12,12,4); Path(mesh,12,12,18,19); break;
                 case PurgeIcon.NoiseMaker: Path(mesh,3,8,7,8,13,3,13,21,7,16,3,16,3,8); Path(mesh,17,7,20,10,20,14,17,17); break;

@@ -29,6 +29,7 @@ namespace EchoProtocol.UI.HUD
         private bool _releaseWhenInputClears;
         private float _dismissAllowedAt;
         private bool _fullGuide;
+        public bool IsFullGuideOpen => _isOpen && _fullGuide;
         private float _hintExpiresAt;
 
         private void Awake()
@@ -211,10 +212,18 @@ namespace EchoProtocol.UI.HUD
             canvasGroup.alpha = visible ? 1f : 0f;
             canvasGroup.interactable = false;
             canvasGroup.blocksRaycasts = visible && _fullGuide;
+            if (visible && _fullGuide)
+            {
+                var overlayCanvas = GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
+                overlayCanvas.overrideSorting = true;
+                overlayCanvas.sortingOrder = 1000;
+                canvasGroup.ignoreParentGroups = true;
+            }
         }
 
         private void ConfigureLayout(int toolId)
         {
+            transform.SetAsLastSibling();
             for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
 
             var root = (RectTransform)transform;
@@ -226,6 +235,7 @@ namespace EchoProtocol.UI.HUD
             Stretch(background.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             var panel = Image("Panel", transform, new Color(0.025f, 0.035f, 0.038f, 0.96f));
+            IndustrialUiStyle.Frame(panel.gameObject);
             var panelRect = panel.rectTransform;
             panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
             panelRect.anchoredPosition = Vector2.zero;
@@ -290,7 +300,7 @@ namespace EchoProtocol.UI.HUD
             }
             panel.sizeDelta = new Vector2(620f, 300f);
             TextLabel("Title", panel, title, 23, TextAnchor.MiddleLeft,
-                FontStyle.Bold, HUDPresentationStyle.Ink, 20f, 36f);
+                FontStyle.Bold, IndustrialUiStyle.Accent, 20f, 36f);
             TextLabel("Controls", panel, controls, 16, TextAnchor.UpperLeft,
                 FontStyle.Normal, HUDPresentationStyle.Ink, 82f, 62f);
             TextLabel("Description", panel, description, 14, TextAnchor.UpperLeft,

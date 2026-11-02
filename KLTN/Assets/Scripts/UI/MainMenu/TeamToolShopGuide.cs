@@ -17,7 +17,7 @@ namespace EchoProtocol.UI.MainMenu
         private Font _font;
         private int _toolId;
         private GameLocale _locale;
-        private static readonly Color Gold = new Color(.79f,.75f,.55f);
+        private static readonly Color Gold = IndustrialUiStyle.Accent;
         public void Configure(Text selectedName, int toolId)
         {
             _toolId = toolId;
@@ -36,7 +36,10 @@ namespace EchoProtocol.UI.MainMenu
         private Text Label(string name, Transform parent, string value, Vector2 size, Vector2 position, int fontSize)
         {
             var rect=Rect(name,parent,size,position);var text=rect.gameObject.AddComponent<Text>();
-            text.font=_font;text.fontSize=fontSize;text.color=Gold;text.text=value;text.raycastTarget=false;
+            text.font=UiTypographyTheme.BodyLegacy;text.fontSize=fontSize;
+            text.color=name.ToLowerInvariant().Contains("title") || name.ToLowerInvariant().Contains("heading")
+                ? Gold : IndustrialUiStyle.Text;
+            text.text=value;text.raycastTarget=false;
             text.alignment=TextAnchor.UpperLeft;return text;
         }
         private Button Button(string name, Transform parent, string value, Vector2 size, Vector2 position)
@@ -61,7 +64,7 @@ namespace EchoProtocol.UI.MainMenu
             overlay.anchorMin=Vector2.zero;overlay.anchorMax=Vector2.one;overlay.offsetMin=overlay.offsetMax=Vector2.zero;
             overlay.gameObject.AddComponent<Image>().color=new Color(0,0,0,.72f);_overlay=overlay.gameObject;
             var panel=Rect("ToolGuideCard",overlay,new Vector2(760,620),Vector2.zero);
-            var bg=panel.gameObject.AddComponent<Image>();bg.sprite=Resources.Load<Sprite>("UI/LobbyReference/Frame");bg.type=Image.Type.Sliced;bg.color=new Color(.09f,.075f,.065f,1);
+            var bg=panel.gameObject.AddComponent<Image>();bg.sprite=Resources.Load<Sprite>("UI/LobbyReference/Frame");bg.type=Image.Type.Sliced;bg.color=IndustrialUiStyle.Panel;
             _title=Label("GuideTitle",panel,"",new Vector2(610,52),new Vector2(-30,254),32);
             _body=Label("GuideBody",panel,"",new Vector2(672,444),new Vector2(0,-6),21);
             var close=Button("CloseGuide",panel,"×",new Vector2(44,44),new Vector2(331,262));close.onClick.AddListener(Hide);

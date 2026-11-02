@@ -6,11 +6,11 @@ namespace EchoProtocol.UI
 {
     public static class SettingsMenuWidgets
     {
-        public static readonly Color Ink = new Color(0.025f, 0.025f, 0.027f, 0.95f);
-        public static readonly Color Accent = new Color(0.76f, 0.20f, 0.20f);
-        public static readonly Color Foreground = new Color(0.91f, 0.89f, 0.85f);
-        public static readonly Color Muted = new Color(0.59f, 0.58f, 0.56f);
-        public static readonly Color Rule = new Color(0.32f, 0.29f, 0.27f, 0.5f);
+        public static readonly Color Ink = IndustrialUiStyle.Panel;
+        public static readonly Color Accent = IndustrialUiStyle.Accent;
+        public static readonly Color Foreground = IndustrialUiStyle.Text;
+        public static readonly Color Muted = IndustrialUiStyle.Muted;
+        public static readonly Color Rule = IndustrialUiStyle.Border;
 
         public static RectTransform Rect(string name, Transform parent, float x, float y, float w, float h)
         {
@@ -84,6 +84,8 @@ namespace EchoProtocol.UI
             var label = Label("Label", rect, 8, 0, w - 16, h, title, fontSize,
                 accent ? new Color(1, 0.54f, 0.51f) : Foreground, TextAlignmentOptions.Center, true);
             label.font = UiTypographyTheme.ButtonTmp;
+            label.color = Foreground;
+            IndustrialUiStyle.Button(button, accent);
             return button;
         }
 
@@ -147,7 +149,7 @@ namespace EchoProtocol.UI
                 : symbol == "♪" ? SettingsIcon.Audio : symbol == "▣" ? SettingsIcon.Monitor
                 : symbol == "◌" ? SettingsIcon.Team : SettingsIcon.Keyboard;
             Icon("Icon", card, 24, 12, 34, 34, kind, Foreground);
-            Label("Heading", card, 76, 10, w - 106, 38, title, 27);
+            Label("Heading", card, 76, 10, w - 106, 38, title, 27, Accent);
             Line("Rule", card, 23, 53, w - 46);
             Line("Accent", card, 23, 53, 86, Accent);
             return card;

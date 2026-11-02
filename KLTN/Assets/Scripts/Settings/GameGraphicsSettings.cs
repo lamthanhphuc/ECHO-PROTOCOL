@@ -122,6 +122,36 @@ namespace EchoProtocol.Settings
                 QualitySettings.vSyncCount = PlayerPrefs.GetInt(VSyncKey) != 0 ? 1 : 0;
         }
 
+        public static string[] QualityChoices => GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset
+            ? new[] { GameLanguage.Choose("Chất lượng cao", "High quality"), GameLanguage.Choose("Tiết kiệm GPU", "GPU saving") }
+            : QualitySettings.names;
+
+        public static void SelectQuality(int index)
+        {
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+            {
+                SetPerformanceMode(index == 1);
+                PlayerPrefs.SetInt(PerformanceKey, index == 1 ? 1 : 0);
+            }
+            else if (index >= 0 && index < QualitySettings.names.Length)
+            {
+                QualitySettings.SetQualityLevel(index, true);
+                PlayerPrefs.SetString(QualityKey, QualitySettings.names[index]);
+            }
+        }
+
+        public static string[] ResolutionChoices => AvailableResolutions()
+            .ConvertAll(size => size.x + " × " + size.y).ToArray();
+
+        public static void SelectResolution(int index)
+        {
+            var choices = AvailableResolutions();
+            if (!CanChangeResolution || HasResolutionPreview || index < 0 || index >= choices.Count) return;
+            if (choices[index] == CurrentResolution) return;
+            BeginResolutionPreview();
+            RequestResolution(choices[index], Fullscreen);
+        }
+
         private static bool IsIntegratedGraphics()
         {
             string gpu = SystemInfo.graphicsDeviceName;

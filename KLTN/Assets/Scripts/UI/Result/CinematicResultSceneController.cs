@@ -25,10 +25,10 @@ namespace EchoProtocol.UI.Result
         private static readonly Color Muted = new(0.62f, 0.65f, 0.62f, 1f);
         private static readonly Color PrimaryButtonFill = new(0.20f, 0.035f, 0.045f, 0.96f);
         private static readonly Color PrimaryButtonBorder = new(0.77f, 0.13f, 0.16f, 1f);
-        private static readonly Color PrimaryButtonText = new(0.94f, 0.82f, 0.78f, 1f);
+        private static readonly Color PrimaryButtonText = IndustrialUiStyle.Accent;
         private static readonly Color SecondaryButtonFill = new(0.07f, 0.085f, 0.09f, 0.94f);
         private static readonly Color SecondaryButtonBorder = new(0.48f, 0.49f, 0.47f, 0.9f);
-        private static readonly Color SecondaryButtonText = new(0.84f, 0.82f, 0.77f, 1f);
+        private static readonly Color SecondaryButtonText = IndustrialUiStyle.Accent;
 
         [SerializeField] private bool previewDefeatWithoutMatch;
 
@@ -100,6 +100,7 @@ namespace EchoProtocol.UI.Result
             if (_retryButton != null) _retryButton.onClick.AddListener(RetryMission);
             if (_motionButton != null) _motionButton.onClick.AddListener(ToggleReducedMotion);
             if (_skipButton != null) _skipButton.onClick.AddListener(FinishIntro);
+            IndustrialUiStyle.Controls(transform);
         }
 
         private void Start()
@@ -260,7 +261,7 @@ namespace EchoProtocol.UI.Result
             bool host = inRoom && runner.IsSceneAuthority && runner.IsServer;
             SetText("RetryLabel", host ? "RETRY MISSION" : inRoom ? "HOST ONLY" : "PLAY AGAIN");
             SetText("ReturnLabel", "RETURN TO LOBBY");
-            SetText("RetryHint", host ? "RESTARTS WHEN THE TEAM IS READY"
+            SetText("RetryHint", host ? ""
                 : inRoom ? "ONLY THE HOST MAY RESTART" : "OPEN LOBBY TO START A NEW MISSION");
         }
 
@@ -347,19 +348,7 @@ namespace EchoProtocol.UI.Result
 
             var button = Find<Button>(buttonName);
             if (button == null) return;
-            var colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = primary
-                ? new Color(1.35f, 1.18f, 1.18f, 1f)
-                : new Color(1.25f, 1.28f, 1.28f, 1f);
-            colors.pressedColor = primary
-                ? new Color(0.72f, 0.56f, 0.56f, 1f)
-                : new Color(0.70f, 0.74f, 0.74f, 1f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.disabledColor = new Color(0.42f, 0.42f, 0.42f, 0.75f);
-            colors.colorMultiplier = 1f;
-            colors.fadeDuration = 0.12f;
-            button.colors = colors;
+            IndustrialUiStyle.Button(button, primary);
         }
 
         private IEnumerator Reveal()
