@@ -71,8 +71,8 @@ public class HidingSpot : MonoBehaviour, IInteractable
         IsTemporarilyLockedOut() && !IsOccupied
             ? string.Empty
             : IsOccupied
-                ? exitPrompt
-                : enterPrompt;
+                ? EchoProtocol.Settings.GameLanguage.Choose("Rời chỗ trốn", exitPrompt)
+                : EchoProtocol.Settings.GameLanguage.Choose("Ẩn nấp", enterPrompt);
 
     public bool CanInteract(GameObject interactor)
     {

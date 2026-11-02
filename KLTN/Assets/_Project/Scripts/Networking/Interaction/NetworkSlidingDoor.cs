@@ -156,9 +156,9 @@ namespace EchoProtocol.Networking
 
                 return CurrentState switch
                 {
-                    NetworkDoorState.Locked => "Door locked",
-                    NetworkDoorState.Open => "Close door",
-                    _ => "Open door",
+                    NetworkDoorState.Locked => EchoProtocol.Settings.GameLanguage.Choose("Cửa bị khóa", "Door locked"),
+                    NetworkDoorState.Open => EchoProtocol.Settings.GameLanguage.Choose("Đóng cửa", "Close door"),
+                    _ => EchoProtocol.Settings.GameLanguage.Choose("Mở cửa", "Open door"),
                 };
             }
         }

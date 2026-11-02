@@ -30,7 +30,9 @@ public class DoorInteractable : MonoBehaviour, IInteractable
 
     public bool IsOpen => _isOpen;
     public bool IsLocked => isLocked;
-    public string InteractionPrompt => isLocked ? lockedPrompt : _isOpen ? closePrompt : openPrompt;
+    public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose(
+        isLocked ? "Cửa bị khóa" : _isOpen ? "Đóng cửa" : "Mở cửa",
+        isLocked ? lockedPrompt : _isOpen ? closePrompt : openPrompt);
 
     private void Awake()
     {
