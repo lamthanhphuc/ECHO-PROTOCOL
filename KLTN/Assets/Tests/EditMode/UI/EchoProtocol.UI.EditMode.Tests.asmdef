@@ -3,6 +3,7 @@
     "rootNamespace": "EchoProtocol.UI.Tests",
     "references": [
         "Assembly-CSharp",
+        "Unity.TextMeshPro",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

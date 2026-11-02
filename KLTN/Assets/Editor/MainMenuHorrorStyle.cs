@@ -114,14 +114,14 @@ public static class MainMenuHorrorStyle
                 "LegacyRuntime.ttf");
 
         // =================================================
-        // LEFT-SIDE MAIN MENU
+        // CENTERED MAIN MENU
         // =================================================
 
-        PlaceTopLeft(
+        PlaceCenter(
             root,
-            64f,
-            72f,
-            440f,
+            0f,
+            0f,
+            640f,
             820f);
 
         // Remove old dashboard/card appearance.
@@ -158,11 +158,11 @@ public static class MainMenuHorrorStyle
                 "HeaderText",
                 font);
 
-        PlaceTopLeft(
+        PlaceTopCenter(
             header.rectTransform,
             0f,
             0f,
-            430f,
+            640f,
             62f);
 
         header.text =
@@ -176,7 +176,7 @@ public static class MainMenuHorrorStyle
             TextPrimary;
 
         header.alignment =
-            TextAnchor.MiddleLeft;
+            TextAnchor.MiddleCenter;
 
         var system =
             EnsureText(
@@ -184,11 +184,11 @@ public static class MainMenuHorrorStyle
                 "SystemLabel",
                 font);
 
-        PlaceTopLeft(
+        PlaceTopCenter(
             system.rectTransform,
-            2f,
+            0f,
             58f,
-            420f,
+            620f,
             24f);
 
         system.text =
@@ -202,16 +202,16 @@ public static class MainMenuHorrorStyle
             TextSecondary;
 
         system.alignment =
-            TextAnchor.MiddleLeft;
+            TextAnchor.MiddleCenter;
 
         var divider =
             EnsureImage(
                 root,
                 "Divider");
 
-        PlaceTopLeft(
+        PlaceTopCenter(
             divider.rectTransform,
-            2f,
+            0f,
             98f,
             64f,
             2f);
@@ -247,7 +247,7 @@ public static class MainMenuHorrorStyle
         StyleMenuButton(
             play,
             "PLAY",
-            2f,
+            0f,
             220f,
             310f,
             58f);
@@ -255,7 +255,7 @@ public static class MainMenuHorrorStyle
         StyleMenuButton(
             options,
             "OPTIONS",
-            2f,
+            0f,
             292f,
             310f,
             52f);
@@ -263,7 +263,7 @@ public static class MainMenuHorrorStyle
         StyleMenuButton(
             logout,
             "LOGOUT",
-            2f,
+            0f,
             364f,
             310f,
             48f);
@@ -573,7 +573,7 @@ public static class MainMenuHorrorStyle
 
         button.gameObject.SetActive(true);
 
-        PlaceTopLeft(
+        PlaceTopCenter(
             button.transform as RectTransform,
             x,
             y,
@@ -647,16 +647,16 @@ public static class MainMenuHorrorStyle
                 TextPrimary;
 
             text.alignment =
-                TextAnchor.MiddleLeft;
+                TextAnchor.MiddleCenter;
 
             text.raycastTarget =
                 false;
 
-            PlaceTopLeft(
+            PlaceTopCenter(
                 text.rectTransform,
-                8f,
                 0f,
-                width - 16f,
+                0f,
+                width,
                 height);
         }
     }
@@ -1090,6 +1090,44 @@ public static class MainMenuHorrorStyle
 
         rect.sizeDelta =
             new Vector2(width, height);
+    }
+
+    private static void PlaceTopCenter(
+        RectTransform rect,
+        float x,
+        float y,
+        float width,
+        float height)
+    {
+        if (rect == null)
+        {
+            return;
+        }
+
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(x, -y);
+        rect.sizeDelta = new Vector2(width, height);
+    }
+
+    private static void PlaceCenter(
+        RectTransform rect,
+        float x,
+        float y,
+        float width,
+        float height)
+    {
+        if (rect == null)
+        {
+            return;
+        }
+
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(x, y);
+        rect.sizeDelta = new Vector2(width, height);
     }
 
     private static void PlaceTopRight(

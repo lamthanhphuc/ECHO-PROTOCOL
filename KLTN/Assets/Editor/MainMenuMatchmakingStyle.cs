@@ -1,4 +1,5 @@
 using EchoProtocol.UI.MainMenu;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -104,6 +105,13 @@ public static class MainMenuMatchmakingStyle
             ?? Resources.GetBuiltinResource<Font>(
                 "LegacyRuntime.ttf");
 
+        PlaceCenter(
+            root,
+            0f,
+            0f,
+            640f,
+            820f);
+
         // -------------------------------------------------
         // Stronger DEVOUR-like title composition
         // -------------------------------------------------
@@ -114,18 +122,18 @@ public static class MainMenuMatchmakingStyle
 
         if (header != null)
         {
-            PlaceTopLeft(
+            PlaceTopCenter(
                 header.rectTransform,
                 0f,
                 0f,
-                430f,
+                640f,
                 78f);
 
             header.fontSize = 54;
             header.fontStyle = FontStyle.Bold;
             header.color = TextPrimary;
             header.alignment =
-                TextAnchor.MiddleLeft;
+                TextAnchor.MiddleCenter;
         }
 
         var subtitle =
@@ -134,15 +142,16 @@ public static class MainMenuMatchmakingStyle
 
         if (subtitle != null)
         {
-            PlaceTopLeft(
+            PlaceTopCenter(
                 subtitle.rectTransform,
-                3f,
+                0f,
                 78f,
-                420f,
+                620f,
                 24f);
 
             subtitle.fontSize = 12;
             subtitle.color = TextSecondary;
+            subtitle.alignment = TextAnchor.MiddleCenter;
         }
 
         var divider =
@@ -151,9 +160,9 @@ public static class MainMenuMatchmakingStyle
 
         if (divider != null)
         {
-            PlaceTopLeft(
+            PlaceTopCenter(
                 divider.rectTransform,
-                3f,
+                0f,
                 118f,
                 76f,
                 2f);
@@ -195,7 +204,7 @@ public static class MainMenuMatchmakingStyle
         StyleMenuButton(
             host,
             "HOST GAME",
-            2f,
+            0f,
             465f,
             320f,
             52f);
@@ -203,7 +212,7 @@ public static class MainMenuMatchmakingStyle
         StyleMenuButton(
             join,
             "JOIN GAME",
-            2f,
+            0f,
             527f,
             320f,
             52f);
@@ -211,7 +220,7 @@ public static class MainMenuMatchmakingStyle
         StyleMenuButton(
             options,
             "OPTIONS",
-            2f,
+            0f,
             589f,
             320f,
             52f);
@@ -219,7 +228,7 @@ public static class MainMenuMatchmakingStyle
         StyleMenuButton(
             logout,
             "LOGOUT",
-            2f,
+            0f,
             651f,
             320f,
             52f);
@@ -574,8 +583,7 @@ public static class MainMenuMatchmakingStyle
             14f,
             10f);
 
-        placeholder.text =
-            "Enter room code";
+        placeholder.text = string.Empty;
 
         placeholder.fontSize = 15;
         placeholder.fontStyle =
@@ -619,6 +627,18 @@ public static class MainMenuMatchmakingStyle
         image.raycastTarget = true;
         button.targetGraphic = image;
 
+        var existingLabel = go.transform.Find("Text");
+        var existingTmp = existingLabel != null
+            ? existingLabel.GetComponent<TMP_Text>()
+            : null;
+
+        if (existingTmp != null)
+        {
+            existingTmp.text = label;
+            existingTmp.raycastTarget = false;
+            return button;
+        }
+
         var text =
             EnsureText(
                 go.transform,
@@ -646,7 +666,7 @@ public static class MainMenuMatchmakingStyle
 
         button.gameObject.SetActive(true);
 
-        PlaceTopLeft(
+        PlaceTopCenter(
             button.transform as RectTransform,
             x,
             y,
@@ -689,13 +709,13 @@ public static class MainMenuMatchmakingStyle
             text.fontStyle = FontStyle.Normal;
             text.color = TextPrimary;
             text.alignment =
-                TextAnchor.MiddleLeft;
+                TextAnchor.MiddleCenter;
 
             text.raycastTarget = false;
 
             PlaceStretch(
                 text.rectTransform,
-                8f,
+                0f,
                 0f,
                 0f,
                 0f);
@@ -891,6 +911,20 @@ public static class MainMenuMatchmakingStyle
 
         rect.sizeDelta =
             new Vector2(width, height);
+    }
+
+    private static void PlaceTopCenter(
+        RectTransform rect,
+        float x,
+        float y,
+        float width,
+        float height)
+    {
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(x, -y);
+        rect.sizeDelta = new Vector2(width, height);
     }
 
     private static void PlaceCenter(

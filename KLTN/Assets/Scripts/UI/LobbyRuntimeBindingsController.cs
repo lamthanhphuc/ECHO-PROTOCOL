@@ -328,6 +328,17 @@ namespace EchoProtocol.UI
 
             if (readyButton != null)
             {
+                readyButton.gameObject.SetActive(inRoom && !_room.IsHost);
+                if (startButton != null)
+                {
+                    var readyRect = (RectTransform)readyButton.transform;
+                    var startRect = (RectTransform)startButton.transform;
+                    readyRect.anchorMin = startRect.anchorMin;
+                    readyRect.anchorMax = startRect.anchorMax;
+                    readyRect.pivot = startRect.pivot;
+                    readyRect.anchoredPosition = new Vector2(startRect.anchoredPosition.x, -880f);
+                    readyRect.sizeDelta = startRect.sizeDelta;
+                }
                 readyButton.interactable =
                     inRoom;
 
@@ -338,15 +349,17 @@ namespace EchoProtocol.UI
 
                 if (readyText != null)
                 {
-                    readyText.text =
-                        _room.IsReady
-                            ? "NOT READY"
-                            : "READY";
+                    readyText.text = EchoProtocol.Settings.GameLanguage.Choose(
+                        _room.IsReady ? "HỦY SẴN SÀNG" : "SẴN SÀNG",
+                        _room.IsReady ? "NOT READY" : "READY");
                 }
             }
 
             if (startButton != null)
             {
+                startButton.gameObject.SetActive(inRoom && _room.IsHost);
+                var startRect = (RectTransform)startButton.transform;
+                startRect.anchoredPosition = new Vector2(startRect.anchoredPosition.x, -880f);
                 startButton.interactable =
                     inRoom
                     && _room.IsHost

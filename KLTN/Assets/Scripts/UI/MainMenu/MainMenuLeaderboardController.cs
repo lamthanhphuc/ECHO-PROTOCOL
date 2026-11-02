@@ -195,6 +195,13 @@ namespace EchoProtocol.UI.MainMenu
 
         private void Build(RectTransform profile, Button suppliedIcon = null)
         {
+            _canvas ??= GetComponent<Canvas>();
+            if (_canvas == null)
+            {
+                Debug.LogError("[Leaderboard] A Canvas is required before building the archive UI.");
+                return;
+            }
+
             _profileRect = profile;
             _visuals = Resources.Load<LeaderboardArchiveVisuals>("LeaderboardArchive/Visuals");
             _font = _canvas
@@ -319,17 +326,35 @@ namespace EchoProtocol.UI.MainMenu
                 "ECHO PROTOCOL  //  CLASSIFIED RECORDS  /  EXTRACTION ARCHIVE",
                 12, Bronze, TextAnchor.MiddleLeft);
             TopLeft(fileCode.rectTransform, 28f, 16f, 770f, 24f);
-            _heading = NewText("Heading", _panel, "LEADERBOARD", 45, Pale,
-                TextAnchor.MiddleLeft, FontStyle.Bold);
-            _heading.font = _titleFont;
+            _heading = NewText("Heading", _panel, "LEADERBOARD", 36, Pale,
+                TextAnchor.MiddleCenter, FontStyle.Bold);
+            _heading.font = _font;
             var titleShadow = _heading.gameObject.AddComponent<Shadow>();
             titleShadow.effectColor = Hex("77211F", 0.65f);
-            titleShadow.effectDistance = new Vector2(3f, -2f);
-            TopLeft(_heading.rectTransform, 28f, 41f, 710f, 56f);
+            titleShadow.effectDistance = new Vector2(2f, -2f);
+            var headingRect = _heading.rectTransform;
+            headingRect.anchorMin = headingRect.anchorMax = new Vector2(0.5f, 1f);
+            headingRect.pivot = new Vector2(0.5f, 1f);
+            headingRect.anchoredPosition = new Vector2(0f, -37f);
+            headingRect.sizeDelta = new Vector2(720f, 52f);
+
+            var headingAccent = NewRect("HeadingAccent", _panel);
+            headingAccent.anchorMin = headingAccent.anchorMax = new Vector2(0.5f, 1f);
+            headingAccent.pivot = new Vector2(0.5f, 1f);
+            headingAccent.anchoredPosition = new Vector2(0f, -91f);
+            headingAccent.sizeDelta = new Vector2(96f, 3f);
+            var headingAccentImage = headingAccent.gameObject.AddComponent<Image>();
+            headingAccentImage.color = Blood;
+            headingAccentImage.raycastTarget = false;
+
             var subtitle = NewText("Subtitle", _panel,
                 "EXTRACTION RECORDS  //  FASTEST COMPLETION TIMES",
-                13, Muted, TextAnchor.MiddleLeft);
-            TopLeft(subtitle.rectTransform, 28f, 100f, 730f, 23f);
+                13, Muted, TextAnchor.MiddleCenter);
+            var subtitleRect = subtitle.rectTransform;
+            subtitleRect.anchorMin = subtitleRect.anchorMax = new Vector2(0.5f, 1f);
+            subtitleRect.pivot = new Vector2(0.5f, 1f);
+            subtitleRect.anchoredPosition = new Vector2(0f, -99f);
+            subtitleRect.sizeDelta = new Vector2(760f, 23f);
             BuildEvidenceDetails();
             _closeButton = NewButton("CloseButton", _panel, "X", 15, 42f, 42f);
             var closeRect = (RectTransform)_closeButton.transform;
@@ -563,6 +588,7 @@ namespace EchoProtocol.UI.MainMenu
         {
             if (_overlay == null || IsOpen) return;
             if (_tooltip != null) _tooltip.SetActive(false);
+            EnsureHeadingVisible();
             _overlay.SetAsLastSibling();
             _overlay.gameObject.SetActive(true);
             _overlayGroup.alpha = 1f;
@@ -578,6 +604,18 @@ namespace EchoProtocol.UI.MainMenu
             if (Application.isPlaying) _opening = StartCoroutine(AnimateOpen());
             if (_loadRecords) Fetch();
             else SetStatus(L("CHẾ ĐỘ THỬ", "ARCHIVE TEST MODE"));
+        }
+
+        private void EnsureHeadingVisible()
+        {
+            if (_heading == null) return;
+            _heading.enabled = true;
+            _heading.font = _font != null
+                ? _font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _heading.color = Pale;
+            _heading.canvasRenderer.SetAlpha(1f);
+            _heading.transform.SetAsLastSibling();
+            _heading.SetAllDirty();
         }
 
         public void Close()

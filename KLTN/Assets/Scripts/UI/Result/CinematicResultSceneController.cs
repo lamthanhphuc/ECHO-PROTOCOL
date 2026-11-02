@@ -206,8 +206,8 @@ namespace EchoProtocol.UI.Result
                 ? id.ToString("N")[..8].ToUpperInvariant() : "UNAVAILABLE";
             SetText("CaseFile", "CASE FILE // " + caseId);
             SetText("TitleMain", victory
-                ? "YOU <color=#A53A3E>SURVIVED...</color>"
-                : "THE PROTOCOL\nHAS <color=#B93E43>FAILED.</color>");
+                ? "YOU <color=#6FBF9B>SURVIVED...</color>"
+                : "THE PROTOCOL\nHAS <color=#C44149>FAILED.</color>");
             SetText("TitleSub", victory
                 ? "BUT IT'S NOT OVER."
                 : "YOUR SCREAMS ARE NOW PART OF THE EXPERIMENT.");

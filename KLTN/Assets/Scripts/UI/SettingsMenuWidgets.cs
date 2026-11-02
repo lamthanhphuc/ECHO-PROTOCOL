@@ -54,7 +54,7 @@ namespace EchoProtocol.UI
         {
             var rect = Rect(name, parent, x, y, w, h);
             var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
-            label.font = TMP_Settings.defaultFontAsset;
+            label.font = UiTypographyTheme.BodyTmp;
             label.text = EchoProtocol.Settings.GameLanguage.Translate(text);
             label.fontSize = size;
             label.color = tint ?? Foreground;
@@ -81,8 +81,9 @@ namespace EchoProtocol.UI
             colors.fadeDuration = 0.1f;
             button.colors = colors;
             button.navigation = new Navigation { mode = Navigation.Mode.None };
-            Label("Label", rect, 8, 0, w - 16, h, title, fontSize, accent ? new Color(1, 0.54f, 0.51f) : Foreground,
-                TextAlignmentOptions.Center, true);
+            var label = Label("Label", rect, 8, 0, w - 16, h, title, fontSize,
+                accent ? new Color(1, 0.54f, 0.51f) : Foreground, TextAlignmentOptions.Center, true);
+            label.font = UiTypographyTheme.ButtonTmp;
             return button;
         }
 

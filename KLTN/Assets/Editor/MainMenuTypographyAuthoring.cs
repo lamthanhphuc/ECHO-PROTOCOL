@@ -208,6 +208,11 @@ public static class MainMenuTypographyAuthoring
         int undoGroup = Undo.GetCurrentGroup();
         Undo.SetCurrentGroupName("Apply Main Menu Cinematic Typography");
 
+        // Restyling used to leave the original UI.Text title beside the
+        // authored TMP title. Keep the preferred label and remove stale
+        // direct duplicates so the wordmark is rendered exactly once.
+        RemoveDuplicateDirectNamedLabels(panel, title, "HeaderText");
+
         TextMeshProUGUI titleTmp = ConvertLabel(title, display, titleMaterial,
             Color.white, 124f, false, 0f, -15f);
         Color wornEdge = new Color32(226, 225, 220, 255);
@@ -226,8 +231,8 @@ public static class MainMenuTypographyAuthoring
             Undo.DestroyObjectImmediate(shadow);
         TextMeshProUGUI subtitleTmp = ConvertLabel(subtitle, mono, subtitleMaterial,
             SubtitleColor, 24f, false, 12.5f, 0f);
-        PlaceTopLeft(subtitleTmp.rectTransform, 10f, 278f, 600f, 38f);
-        subtitleTmp.alignment = TextAlignmentOptions.TopLeft;
+        PlaceTopCenter(subtitleTmp.rectTransform, 0f, 278f, 600f, 38f);
+        subtitleTmp.alignment = TextAlignmentOptions.Center;
         AuthorTitleAccents(panel);
 
         var buttonLabels = new TextMeshProUGUI[ButtonNames.Length];
@@ -235,13 +240,15 @@ public static class MainMenuTypographyAuthoring
         foreach (string buttonName in ButtonNames)
         {
             Transform buttonTransform = panel.Find(buttonName);
-            PlaceTopLeft((RectTransform)buttonTransform, -36f,
+            PlaceTopCenter((RectTransform)buttonTransform, 0f,
                 390f + buttonIndex * 100f, 420f, 76f);
-            TextMeshProUGUI label = ConvertLabel(RequireLabel(buttonTransform, "Text"), oswald,
+            Transform labelTransform = RequireLabel(buttonTransform, "Text");
+            RemoveDuplicateDirectTextLabels(buttonTransform, labelTransform);
+            TextMeshProUGUI label = ConvertLabel(labelTransform, oswald,
                 buttonMaterial, ButtonColor, 44f, true, 1.6f, 0f);
             label.text = VietnameseButtonLabels[buttonIndex];
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-            PlaceTopLeft(label.rectTransform, 68f, 0f, 294f, 76f);
+            label.alignment = TextAlignmentOptions.Center;
+            PlaceTopCenter(label.rectTransform, 0f, 0f, 294f, 76f);
             label.horizontalMapping = TextureMappingOptions.Paragraph;
             label.verticalMapping = TextureMappingOptions.Paragraph;
             buttonLabels[buttonIndex++] = label;
@@ -279,9 +286,9 @@ public static class MainMenuTypographyAuthoring
     private static void FitReferenceTitle(TextMeshProUGUI title)
     {
         RectTransform rect = title.rectTransform;
-        PlaceTopLeft(rect, 0f, 26f, 660f, 270f);
+        PlaceTopCenter(rect, 0f, 26f, 660f, 270f);
         rect.localScale = Vector3.one;
-        title.alignment = TextAlignmentOptions.TopLeft;
+        title.alignment = TextAlignmentOptions.Center;
         title.ForceMeshUpdate(true, true);
         Bounds firstLine = GlyphBounds(title, 0);
         if (firstLine.size.y <= 0f)
@@ -297,10 +304,8 @@ public static class MainMenuTypographyAuthoring
         Bounds all = GlyphBounds(title, -1);
         float horizontalScale = 570f / all.size.x;
         rect.localScale = new Vector3(horizontalScale, 1f, 1f);
-        // Panel origin is (140,132) at the 1920x1080 reference resolution.
-        // Align the visible glyph bounds to (144,178), not the padded font box.
-        rect.anchoredPosition = new Vector2(4f - all.min.x * horizontalScale,
-            -46f - all.max.y);
+        // Keep the visible two-line wordmark centered on the shared menu axis.
+        rect.anchoredPosition = new Vector2(0f, -46f - all.max.y);
         Debug.Log("[MainMenuTypography] Reference title glyph bounds " +
             (all.size.x * horizontalScale).ToString("F1") + " x " +
             all.size.y.ToString("F1") + "; font " + title.fontSize.ToString("F1"));
@@ -339,6 +344,18 @@ public static class MainMenuTypographyAuthoring
         EditorUtility.SetDirty(rect);
     }
 
+    private static void PlaceTopCenter(RectTransform rect, float x, float y,
+        float width, float height)
+    {
+        Undo.RecordObject(rect, "Fit centered Main Menu reference");
+        rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.localScale = Vector3.one;
+        rect.anchoredPosition = new Vector2(x, -y);
+        rect.sizeDelta = new Vector2(width, height);
+        EditorUtility.SetDirty(rect);
+    }
+
     private static void AuthorTitleAccents(Transform panel)
     {
         Transform accents = panel.Find("TitleSignalAccents");
@@ -351,7 +368,7 @@ public static class MainMenuTypographyAuthoring
             Undo.RegisterCreatedObjectUndo(go, "Create title signal artwork");
             accents = go.transform;
         }
-        PlaceTopLeft((RectTransform)accents, -28f, 42f, 642f, 216f);
+        PlaceTopCenter((RectTransform)accents, 0f, 42f, 642f, 216f);
         accents.GetComponent<MainMenuTitleAccentGraphic>().Configure(
             new Color(0.83f, 0.035f, 0.045f, 1f), 1.25f);
         accents.SetSiblingIndex(panel.Find("HeaderText").GetSiblingIndex() + 1);
@@ -391,6 +408,12 @@ public static class MainMenuTypographyAuthoring
         RowImage(button, "HoverSignalIndicator", 38f, 17f, 3f, 42f,
             new Color(0.83f, 0.025f, 0.045f, 0.88f));
         RowImage(button, "IndicatorCore", 39f, 20f, 1f, 36f,
+            new Color(1f, 0.29f, 0.24f, 0.82f));
+        RowImage(button, "RightIndicatorBloom", 375f, 15f, 12f, 46f,
+            new Color(0.55f, 0.015f, 0.025f, 0.15f));
+        RowImage(button, "RightHoverSignalIndicator", 379f, 17f, 3f, 42f,
+            new Color(0.83f, 0.025f, 0.045f, 0.88f));
+        RowImage(button, "RightIndicatorCore", 380f, 20f, 1f, 36f,
             new Color(1f, 0.29f, 0.24f, 0.82f));
         Transform number = button.Find("RowNumber");
         if (number != null)
@@ -515,6 +538,39 @@ public static class MainMenuTypographyAuthoring
             throw new InvalidOperationException("Main Menu label missing: " +
                 parent.name + "/" + name);
         return child;
+    }
+
+    private static void RemoveDuplicateDirectTextLabels(
+        Transform button,
+        Transform preferred)
+    {
+        for (int i = button.childCount - 1; i >= 0; i--)
+        {
+            Transform child = button.GetChild(i);
+            if (child == preferred || child.name != "Text")
+                continue;
+
+            if (child.GetComponent<Text>() != null ||
+                child.GetComponent<TMP_Text>() != null)
+                Undo.DestroyObjectImmediate(child.gameObject);
+        }
+    }
+
+    private static void RemoveDuplicateDirectNamedLabels(
+        Transform parent,
+        Transform preferred,
+        string name)
+    {
+        for (int i = parent.childCount - 1; i >= 0; i--)
+        {
+            Transform child = parent.GetChild(i);
+            if (child == preferred || child.name != name)
+                continue;
+
+            if (child.GetComponent<Text>() != null ||
+                child.GetComponent<TMP_Text>() != null)
+                Undo.DestroyObjectImmediate(child.gameObject);
+        }
     }
 
     private static void EnsureAssetFolder()

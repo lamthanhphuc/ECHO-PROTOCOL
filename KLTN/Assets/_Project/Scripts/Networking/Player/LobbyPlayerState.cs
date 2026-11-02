@@ -886,8 +886,12 @@ namespace EchoProtocol.Networking
             if (PetMotion != motion) PetAnimationStartTime = (float)Runner.SimulationTime;
             PetPosition = position; PetRotation = rotation; PetMotion = motion;
         }
+        [Networked] public NetworkBool IsLobbyHost { get; private set; }
+
         public override void FixedUpdateNetwork()
         {
+            if (Object.HasStateAuthority)
+                IsLobbyHost = Runner.IsServer && Object.InputAuthority == Runner.LocalPlayer;
             // PlayerRef may remain stable after reconnect while the
             // Photon transport ActorNumber changes. State Authority
             // resolves the real current actor and replicates it.

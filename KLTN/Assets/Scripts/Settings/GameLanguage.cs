@@ -575,6 +575,9 @@ CHUẨN BỊ NHIỆM VỤ|MISSION SETUP
 KHU VỰC NHIỆM VỤ|MISSION SITE
 CƠ SỞ KHOA HỌC|SCI-FI FACILITY
 BẮT ĐẦU NHIỆM VỤ|START MISSION
+Bắt đầu nhiệm vụ|Start mission
+Cường độ chuyển động|Motion intensity
+Giảm chuyển động|Reduce motion
 CÔNG CỤ ĐỘI|TEAM TOOL
 RỜI PHÒNG|LEAVE ROOM
 KHÔNG CÓ|NONE

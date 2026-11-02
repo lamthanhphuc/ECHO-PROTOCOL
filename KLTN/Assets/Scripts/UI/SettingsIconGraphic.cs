@@ -1,5 +1,7 @@
+using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace EchoProtocol.UI
@@ -7,7 +9,7 @@ namespace EchoProtocol.UI
     public enum SettingsIcon
     {
         Gear, Microphone, Mouse, Audio, Keyboard, Monitor, Team, Interact, Run, Crouch,
-        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio, Warning
+        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio, Warning, Age18
     }
 
     /// <summary>Small vector icons, independent of installed fonts and texture resolution.</summary>
@@ -33,6 +35,12 @@ namespace EchoProtocol.UI
             _bounds = GetPixelAdjustedRect();
             switch (_icon)
             {
+                case SettingsIcon.Age18:
+                    Arc(50, 50, 44, 0, 360, 6);
+                    Stroke(19, 65, 29, 75, 6); Stroke(29, 75, 29, 29, 6); Stroke(19, 29, 39, 29, 5);
+                    Arc(55, 63, 11, 0, 360, 5); Arc(55, 39, 12, 0, 360, 5);
+                    Stroke(72, 54, 90, 54, 5); Stroke(81, 45, 81, 63, 5);
+                    break;
                 case SettingsIcon.Warning:
                     Stroke(50, 92, 6, 12, 6); Stroke(6, 12, 94, 12, 6); Stroke(94, 12, 50, 92, 6);
                     Stroke(50, 63, 50, 38, 7); Stroke(50, 26, 50, 22, 7); break;
@@ -342,6 +350,50 @@ namespace EchoProtocol.UI
             var graphic = iconRect.GetComponent<SettingsIconGraphic>()
                 ?? iconRect.gameObject.AddComponent<SettingsIconGraphic>();
             graphic.Configure(icon, IconColor);
+            if (icon != SettingsIcon.Trophy) EnsureTooltip(button, icon);
+        }
+
+        private static void EnsureTooltip(Button button, SettingsIcon icon)
+        {
+            var tooltip = button.transform.Find("UtilityTooltip") as RectTransform;
+            if (tooltip == null)
+            {
+                tooltip = new GameObject("UtilityTooltip", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(Image), typeof(Outline)).GetComponent<RectTransform>();
+                tooltip.SetParent(button.transform, false);
+                tooltip.anchorMin = tooltip.anchorMax = new Vector2(0.5f, 0f);
+                tooltip.pivot = new Vector2(0.5f, 1f);
+                tooltip.anchoredPosition = new Vector2(0f, -9f);
+                tooltip.sizeDelta = new Vector2(132f, 31f);
+                var image = tooltip.GetComponent<Image>();
+                image.color = new Color(0.035f, 0.047f, 0.051f, 0.97f);
+                image.raycastTarget = false;
+                var outline = tooltip.GetComponent<Outline>();
+                outline.effectColor = new Color(0.45f, 0.08f, 0.07f, 1f);
+                outline.effectDistance = new Vector2(1f, -1f);
+
+                var labelRect = new GameObject("Label", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(TextMeshProUGUI)).GetComponent<RectTransform>();
+                labelRect.SetParent(tooltip, false);
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = new Vector2(3f, 2f);
+                labelRect.offsetMax = new Vector2(-3f, -2f);
+                var label = labelRect.GetComponent<TextMeshProUGUI>();
+                label.alignment = TextAlignmentOptions.Center;
+                label.fontSize = 12f;
+                label.fontStyle = FontStyles.Bold;
+                label.color = CreditsColor;
+                label.raycastTarget = false;
+                UiTypographyTheme.Apply(label, true);
+            }
+
+            tooltip.GetComponent<Image>().enabled = true;
+            tooltip.GetComponent<Outline>().enabled = true;
+
+            var hover = button.GetComponent<UtilityBarTooltip>()
+                ?? button.gameObject.AddComponent<UtilityBarTooltip>();
+            hover.Configure(tooltip.gameObject, tooltip.Find("Label").GetComponent<TMP_Text>(), icon);
         }
 
         public static void Credits(RectTransform rect)
@@ -437,6 +489,50 @@ namespace EchoProtocol.UI
             rect.anchoredPosition = new Vector2(50f, label ? -28f : -5f);
             rect.sizeDelta = new Vector2(120f, label ? 16f : 24f);
             rect.localScale = Vector3.one;
+        }
+    }
+
+    public sealed class UtilityBarTooltip : MonoBehaviour,
+        IPointerEnterHandler, IPointerExitHandler
+    {
+        private GameObject _tooltip;
+        private TMP_Text _label;
+        private SettingsIcon _icon;
+
+        public void Configure(GameObject tooltip, TMP_Text label, SettingsIcon icon)
+        {
+            GameLanguage.Changed -= RefreshLanguage;
+            _tooltip = tooltip;
+            _label = label;
+            _icon = icon;
+            _tooltip.SetActive(false);
+            GameLanguage.Changed += RefreshLanguage;
+            RefreshLanguage();
+        }
+
+        private void OnDestroy() => GameLanguage.Changed -= RefreshLanguage;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (_tooltip != null) _tooltip.SetActive(true);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (_tooltip != null) _tooltip.SetActive(false);
+        }
+
+        private void RefreshLanguage()
+        {
+            if (_label == null) return;
+            _label.text = _icon switch
+            {
+                SettingsIcon.Profile => GameLanguage.Choose("HỒ SƠ", "PROFILE"),
+                SettingsIcon.Web => GameLanguage.Choose("TRANG WEB", "WEBSITE"),
+                SettingsIcon.Shop => GameLanguage.Choose("CỬA HÀNG", "SHOP"),
+                SettingsIcon.Gear => GameLanguage.Choose("CÀI ĐẶT", "SETTINGS"),
+                _ => string.Empty
+            };
         }
     }
 }

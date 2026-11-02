@@ -937,7 +937,9 @@ namespace EchoProtocol.UI.MainMenu
         var icons = new[] { SettingsIcon.Inventory, SettingsIcon.Trophy, SettingsIcon.Team, SettingsIcon.Shop };
         iconRect.gameObject.AddComponent<SettingsIconGraphic>().Configure(icons[i],
           i == 1 ? new Color(.75f,.19f,.22f) : new Color(.72f,.65f,.45f));
-        _statValues[i] = Label("StatValue" + i, x + 12, 354, 184, 38, 27, headingFont);
+        // The decorative heading font does not contain a complete numeric glyph set.
+        // Statistics are data, so keep them on the same digit-safe font as XP/progress.
+        _statValues[i] = Label("StatValue" + i, x + 12, 354, 184, 38, 27, bodyFont);
         _statValues[i].alignment = TextAnchor.MiddleCenter;
         _statLabels[i] = Label("StatCaption" + i, x + 8, 392, 192, 35, 14, bodyFont);
         _statLabels[i].alignment = TextAnchor.MiddleCenter;

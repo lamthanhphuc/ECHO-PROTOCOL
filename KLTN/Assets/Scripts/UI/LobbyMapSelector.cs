@@ -17,6 +17,8 @@ namespace EchoProtocol.UI
         private RawImage _photo;
         private TMP_Text _title;
         private Button _previous, _next;
+        private TMP_Text _modeValue;
+        private Button[] _modeButtons;
         private NetworkBootstrap _bootstrap;
         private LobbyManager _manager;
         private float _refreshAt;
@@ -37,9 +39,36 @@ namespace EchoProtocol.UI
             _title.color = new Color(.8f, .76f, .5f); _title.raycastTarget = false;
             _previous = Button(frame, "Previous", 12, true); _next = Button(frame, "Next", 548, false);
             _previous.onClick.AddListener(() => Step(-1)); _next.onClick.AddListener(() => Step(1));
-            Move("ReferenceDifficultyLabel", 508); Move("ReferenceDifficultyPicker", 508);
-            Move("ReferenceToolLabel", 568); Move("ReferenceToolPicker", 568);
-            for (int i = 0; i < 3; i++) { Move("ReferenceSettingLabel" + i, 628 + 60 * i); Move("ReferenceSettingPicker" + i, 628 + 60 * i); }
+            var modeLabel = Instantiate(Panel.Find("ReferenceDifficultyLabel").gameObject, Panel);
+            modeLabel.name = "ReferenceGameModeLabel";
+            modeLabel.GetComponent<TMP_Text>().text = GameLanguage.Choose("Chế độ chơi:", "Game mode:");
+            var modePicker = Instantiate(Panel.Find("ReferenceDifficultyPicker").gameObject, Panel);
+            modePicker.name = "ReferenceGameModePicker";
+            _modeValue = modePicker.transform.Find("Value").GetComponent<TMP_Text>();
+            _modeButtons = modePicker.GetComponentsInChildren<Button>(true);
+            foreach (var button in _modeButtons)
+            {
+                button.onClick = new Button.ButtonClickedEvent();
+                button.onClick.AddListener(ChangeMode);
+            }
+            Move("ReferenceGameModeLabel", 508); Move("ReferenceGameModePicker", 508);
+            Move("ReferenceDifficultyLabel", 568); Move("ReferenceDifficultyPicker", 568);
+            Move("ReferenceToolLabel", 628); Move("ReferenceToolPicker", 628);
+            for (int i = 0; i < 3; i++) { Move("ReferenceSettingLabel" + i, 688 + 60 * i); Move("ReferenceSettingPicker" + i, 688 + 60 * i); }
+        }
+        private void ChangeMode()
+        {
+            var runner = _bootstrap ? _bootstrap.Runner : null;
+            if (runner == null || !runner.IsServer || _bootstrap.State != NetworkSessionState.InLobby
+                || _manager == null || _manager.IsStartingMatch) return;
+            int mode = 1 - LobbyMapCatalog.RoomGameMode(runner);
+            int map = mode == 1 ? 2 : Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, 1);
+            if (_bootstrap.UpdateRoomProperties(new Dictionary<string, SessionProperty> {
+                [LobbyMapCatalog.GameModeKey] = mode, [LobbyMapCatalog.PropertyKey] = map }))
+            {
+                if (mode == 0) LobbyMapCatalog.TrySelect(runner, map);
+                _refreshAt = 0;
+            }
         }
         private void Move(string name, float y)
         {
@@ -90,6 +119,13 @@ namespace EchoProtocol.UI
             if (_bootstrap == null) _bootstrap = FindAnyObjectByType<NetworkBootstrap>();
             if (_manager == null) _manager = FindAnyObjectByType<LobbyManager>();
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
+            if (_modeValue != null)
+            {
+                _modeValue.text = LobbyMapCatalog.RoomGameMode(runner) == 1
+                    ? GameLanguage.Choose("Thanh trừng", "Purge") : GameLanguage.Choose("Khám phá", "Expedition");
+                foreach (var button in _modeButtons) button.interactable = runner != null && runner.IsServer
+                    && _bootstrap.State == NetworkSessionState.InLobby && _manager != null && !_manager.IsStartingMatch;
+            }
             if (runner != _confirmedRunner || runner != null && runner.SessionInfo.IsValid
                 && _confirmedRoom != runner.SessionInfo.Name)
             {

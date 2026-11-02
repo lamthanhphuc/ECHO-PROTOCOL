@@ -1053,9 +1053,18 @@ int petId = 0;
             }
             if (readyButton != null)
             {
+                readyButton.gameObject.SetActive(Connected && !_room.IsHost);
+                if (startButton != null)
+                {
+                    var rect = (RectTransform)readyButton.transform;
+                    var startRect = (RectTransform)startButton.transform;
+                    rect.anchoredPosition = startRect.anchoredPosition;
+                    rect.sizeDelta = startRect.sizeDelta;
+                }
                 readyButton.interactable = inLobby;
                 var label = readyButton.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.text = _room.IsReady ? "NOT READY" : "READY";
+                if (label != null) label.text = EchoProtocol.Settings.GameLanguage.Choose(
+                    _room.IsReady ? "HỦY SẴN SÀNG" : "SẴN SÀNG", _room.IsReady ? "NOT READY" : "READY");
             }
             if (startButton != null) startButton.interactable = inLobby && _room.IsHost && _room.CanStartMatch;
             if (leaveButton != null) leaveButton.interactable = Connected && !Busy;

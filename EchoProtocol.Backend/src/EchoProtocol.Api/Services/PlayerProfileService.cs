@@ -65,8 +65,8 @@ public sealed class PlayerProfileService : IPlayerProfileService
             Level = profile.Level,
             WalletBalance = profile.WalletBalance,
             RecentMatch = await LatestAsync(activity),
-            LatestWin = await LatestAsync(activity.Where(player => player.Survived
-                && player.MatchResult.Outcome == MatchOutcome.WIN)),
+            LatestWin = await LatestAsync(activity.Where(player =>
+                player.MatchResult.Outcome == MatchOutcome.WIN)),
             LatestNonSurvival = await LatestAsync(activity.Where(player => !player.Survived))
         }, "Player profile retrieved");
     }
