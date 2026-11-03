@@ -1,22 +1,55 @@
+
 flowchart TB
- subgraph CLIENT["Unity Windows Game - 1 to 4 active players"]
+
+    subgraph CLIENT["Unity Windows Game - 1 to 4 Players"]
         UI["Menus / HUD / Results"]
         GAME["Expedition / Player Interaction"]
-        REST["Authenticated HTTP client"]
-        NET["Photon Fusion integration"]
-  end
- subgraph HOST["Host-owned authoritative gameplay inside a Unity session"]
-        MATCH["NetworkMatchState and player life"]
-        STALKER["Stalker authoritative simulation"]
-  end
-    UI --> GAME & REST
-    GAME --> NET
-    NET <-- Fusion session and replication --> FUSION["Photon Fusion services"]
-    NET <-- Authoritative gameplay state --> MATCH
-    MATCH --> STALKER
-    REST <-- HTTPS JSON with JWT --> API["ASP.NET Core Web API"]
-    WEB["Limited admin web"] <-- Authorized HTTPS --> API
-    API --> PG[("PostgreSQL - accounts / match / shop / AED records")] & MG[("MongoDB - telemetry events")]
-    NOTE["Host validates real-time gameplay; Backend validates and persists durable records"] -.-> MATCH & API
+        REST["Authenticated HTTP Client"]
+        NET["Photon Fusion Integration"]
+    end
 
-    style NOTE fill:#FFF9C4
+    subgraph HOST["Host-Authoritative Gameplay"]
+        MATCH["NetworkMatchState / Player Life"]
+        STALKER["Stalker AI Simulation"]
+    end
+
+    FUSION["Photon Fusion Services"]
+
+    subgraph BACKEND["Backend and Persistence"]
+        API["ASP.NET Core Web API"]
+        PG[("PostgreSQL - Accounts / Matches / Economy / AI")]
+        MG[("MongoDB - Gameplay Telemetry")]
+    end
+
+    ADMIN["Limited Administration Web"]
+
+    subgraph EXT["Implemented Extensions - Outside Mandatory Review 2 Acceptance"]
+        PORTAL["Player Web Portal - Next.js"]
+        PAYOS["payOS - Sandbox Payment Provider"]
+    end
+
+    UI --> GAME
+    UI --> REST
+    GAME --> NET
+
+    NET <-->|Session and Replication| FUSION
+    NET <-->|Authoritative Gameplay State| MATCH
+    MATCH --> STALKER
+
+    REST <-->|JWT / HTTPS JSON| API
+    ADMIN <-->|Authorized HTTPS| API
+
+    API --> PG
+    API --> MG
+
+    PORTAL <-->|Authenticated HTTPS REST| API
+    API -.->|Checkout Creation| PAYOS
+    PAYOS -.->|Verified Webhook Callback| API
+
+    NOTE["Host validates gameplay state. Backend validates persistent transactions and records."]
+
+    NOTE -.-> MATCH
+    NOTE -.-> API
+
+    style NOTE fill:#FFF9C4,stroke:#B59B35,color:#333333
+    style EXT fill:#FFF7E8,stroke:#C58B31,color:#333333

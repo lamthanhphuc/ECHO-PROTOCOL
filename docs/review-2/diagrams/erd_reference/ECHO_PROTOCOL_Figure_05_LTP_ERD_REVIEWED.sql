@@ -138,6 +138,8 @@ CREATE TABLE "PlayerAIProfiles" (
     "UpdatedAtUtc" timestamptz NOT NULL,
     -- In LTP ObjectiveScore and ToolUsageScore are supported, optional dimensions.
     -- TeamworkScore and other deferred dimensions must remain NULL.
+    CONSTRAINT "AK_PlayerAIProfiles_ProfileLineageId"
+    UNIQUE ("ProfileLineageId"),
     CONSTRAINT "CK_PlayerAIProfiles_SelectedDeferred" CHECK ("TeamworkScore" IS NULL),
     CONSTRAINT "CK_PlayerAIProfiles_ExpandedScoreRange" CHECK (
         ("ObjectiveScore" IS NULL OR "ObjectiveScore" BETWEEN 0 AND 100)
@@ -167,6 +169,31 @@ CREATE TABLE "AdaptiveInputSnapshots" (
     CONSTRAINT "CK_AdaptiveSnapshots_TeamSize" CHECK ("TeamSize" BETWEEN 1 AND 4)
 );
 
+
+-- Selected match score records supporting player AI profiles.
+CREATE TABLE "MatchScores" (
+    "Id" uuid PRIMARY KEY,
+    "MatchId" uuid NOT NULL,
+    "UserId" uuid NOT NULL,
+    "ProfileLineageId" uuid NOT NULL,
+    "Dimension" varchar(20) NOT NULL,
+    "Score" numeric(9,6) NOT NULL,
+    "MatchEndTs" timestamptz NOT NULL,
+    "MatchScoreFormulaVersion" varchar(80) NOT NULL,
+    "ContributionStatus" varchar(20) NOT NULL,
+    "CreatedAtUtc" timestamptz NOT NULL,
+
+    FOREIGN KEY ("MatchId", "UserId")
+        REFERENCES "MatchResultPlayers" ("MatchId", "UserId"),
+
+    FOREIGN KEY ("ProfileLineageId")
+        REFERENCES "PlayerAIProfiles" ("ProfileLineageId"),
+
+    CONSTRAINT "CK_MatchScores_Score_Range"
+        CHECK ("Score" >= 0 AND "Score" <= 100)
+);
+
+
 CREATE TABLE "AdaptiveInputSnapshotPlayers" (
     "SnapshotId" uuid NOT NULL REFERENCES "AdaptiveInputSnapshots" ("SnapshotId"),
     "UserId" uuid NOT NULL REFERENCES "Users" ("Id"),
@@ -184,7 +211,8 @@ CREATE TABLE "AdaptiveInputSnapshotPlayers" (
     PRIMARY KEY ("SnapshotId", "UserId")
 );
 
-CREATE TABLE "ScenarioConfigDefinitions" (
+
+CREATE TABLE "ScenarioConfigs" (
     "ScenarioConfigId" varchar(128) NOT NULL,
     "ScenarioConfigVersion" varchar(80) NOT NULL,
     "SchemaVersion" varchar(20) NOT NULL,
@@ -194,8 +222,11 @@ CREATE TABLE "ScenarioConfigDefinitions" (
     "MonsterType" varchar(128) NOT NULL,
     "ObjectiveSpawnSetId" varchar(128) NOT NULL,
     "SupportItemBudget" integer NOT NULL,
+    "DetectionFillRate" double precision NOT NULL,
+    "DetectionDecayRate" double precision NOT NULL,
     "ChaseSpeed" double precision NOT NULL,
     "SearchDuration" double precision NOT NULL,
+    "RouteModifier" varchar(128) NOT NULL,
     "EscapeDoorTimerSeconds" double precision NOT NULL,
     "FallbackConfigId" varchar(128) NOT NULL,
     "FallbackConfigVersion" varchar(80) NOT NULL,
@@ -204,10 +235,50 @@ CREATE TABLE "ScenarioConfigDefinitions" (
     "IsActive" boolean NOT NULL,
     "IsProductionApproved" boolean NOT NULL,
     "IsFixedFallback" boolean NOT NULL,
+    "Provenance" varchar(500) NOT NULL,
     "CreatedAtUtc" timestamptz NOT NULL,
     "UpdatedAtUtc" timestamptz NOT NULL,
-    PRIMARY KEY ("ScenarioConfigId", "ScenarioConfigVersion")
+
+    PRIMARY KEY ("ScenarioConfigId", "ScenarioConfigVersion"),
+
+    CONSTRAINT "CK_ScenarioConfigs_EscapeTimer_Range"
+        CHECK ("EscapeDoorTimerSeconds" >= 45
+            AND "EscapeDoorTimerSeconds" <= 60),
+
+    CONSTRAINT "CK_ScenarioConfigs_Numerics_NonNegative"
+        CHECK ("DetectionFillRate" >= 0
+            AND "DetectionDecayRate" >= 0
+            AND "ChaseSpeed" >= 0
+            AND "SearchDuration" >= 0)
 );
+
+
+-- Approved scenario content identities and compatibility registry.
+CREATE TABLE "ScenarioContentDefinitions" (
+    "Id" uuid PRIMARY KEY,
+    "ContentType" varchar(30) NOT NULL,
+    "ContentId" varchar(128) NOT NULL,
+    "ContentWhitelistVersion" varchar(80) NOT NULL,
+    "UnityCompatibilityVersion" varchar(80) NOT NULL,
+    "IsActive" boolean NOT NULL,
+    "IsProductionApproved" boolean NOT NULL,
+    "Provenance" varchar(500) NOT NULL,
+    "CreatedAtUtc" timestamptz NOT NULL,
+    "UpdatedAtUtc" timestamptz NOT NULL,
+
+    CONSTRAINT "CK_ScenarioContentDefinitions_Type_Allowed"
+        CHECK ("ContentType" IN (
+            'Map', 'Monster', 'ObjectiveSpawnSet', 'RouteModifier'
+        )),
+
+    UNIQUE (
+        "ContentType",
+        "ContentId",
+        "ContentWhitelistVersion",
+        "UnityCompatibilityVersion"
+    )
+);
+
 
 CREATE TABLE "ScenarioDecisions" (
     "DecisionId" uuid PRIMARY KEY,
@@ -230,7 +301,7 @@ CREATE TABLE "ScenarioDecisions" (
     "IsCurrent" boolean NOT NULL,
     "CommittedAtUtc" timestamptz NOT NULL,
     FOREIGN KEY ("ScenarioConfigId", "ScenarioConfigVersion")
-        REFERENCES "ScenarioConfigDefinitions" ("ScenarioConfigId", "ScenarioConfigVersion")
+        REFERENCES "ScenarioConfigs" ("ScenarioConfigId", "ScenarioConfigVersion")
 );
 
 -- One current scenario decision per match; index in source is filtered on IsCurrent.

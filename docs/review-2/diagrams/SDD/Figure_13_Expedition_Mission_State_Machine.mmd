@@ -1,33 +1,38 @@
+
 stateDiagram-v2
+    direction TB
+
     [*] --> Running
 
-    state "Active Expedition (Host authority)" as Running {
+    state "Active Expedition - Host Authority" as Running {
         [*] --> CoreObjective
-        CoreObjective --> Zone2Objective : TryCompleteCoreObjective accepted
-        Zone2Objective --> Zone3FindFrigate : Zone 2 completion accepted
-        Zone3FindFrigate --> Zone3PushFrigate : authorized frigate push begins
-        Zone3PushFrigate --> FinalHunt : zone 3 charge completed
-        FinalHunt --> Escape : valid exit interaction / phase advance
+
+        CoreObjective --> Zone2Objective : Core objectives completed
+
+        state "Zone 2 Objectives" as Zone2Objective {
+            [*] --> FindSecurityTerminal
+
+            FindSecurityTerminal --> RepairRelays : Terminal discovered
+            RepairRelays --> SecurityHoldReady : All four relays online
+            SecurityHoldReady --> SecurityHold : Authorized hold started
+            SecurityHold --> SecurityHoldReady : No active operators
+            SecurityHoldReady --> RepairRelays : Relay retry window expired
+            SecurityHold --> RepairRelays : Relay retry window expired
+            SecurityHold --> AuthorizationCodeGranted : Hold timer completed
+            AuthorizationCodeGranted --> Zone2Completed : Valid access code accepted
+            Zone2Completed --> [*]
+        }
+
+        Zone2Objective --> Zone3FindFrigate : Zone 2 access accepted
+        Zone3FindFrigate --> Zone3PushFrigate : Authorized frigate push
+        Zone3PushFrigate --> FinalHunt : Zone 3 charge completed
+        FinalHunt --> Escape : Valid exit interaction
     }
 
-    Running --> MatchEnded : TryEndMatch(result, reason, actor)
+    Running --> MatchEnded : Authoritative match result committed
     MatchEnded --> [*]
 
-    note right of Zone2Objective
-        Security terminal, relays and authorization
-        are internal Zone 2 stages in the main online route.
-        Puzzle and SecurityHold also exist in the enum,
-        but are not forced into this chosen main path.
-    end note
-
-    note right of Escape
-        SciFi Doorexit may advance FinalHunt to Escape
-        and then resolve the match in the same interaction.
-        Escape need not be a long-running screen.
-    end note
-
-    note right of MatchEnded
-        Phase = MatchEnded; Status = Ended.
-        Result = Win or Lose is a separate enum.
-        Timeouts may resolve Win if someone already escaped.
-    end note
+    %% Puzzle and SecurityHold in NetworkMatchPhase are retained legacy values.
+    %% The active Security Hold is Zone2MissionStage.SecurityHold within Zone2Objective.
+    %% Zone 2 completion and transition to Zone 3 occur in one authoritative operation.
+    %% MatchEnded stores the terminal phase; Win/Lose is a separate result value.
