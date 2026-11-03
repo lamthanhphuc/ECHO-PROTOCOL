@@ -621,6 +621,8 @@ namespace EchoProtocol.Networking
 
         private void HandleSessionStateChanged(NetworkSessionState state, string message)
         {
+            if (state == NetworkSessionState.InLobby && UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == NetworkBootstrap.LobbySceneName)
+                _matchStartInProgress = false;
             if (state == NetworkSessionState.Disconnected || state == NetworkSessionState.Failed)
             {
                 // A disconnected session always rebuilds to an empty, not-ready state.

@@ -232,8 +232,10 @@ namespace EchoProtocol.Networking.Authority
             return true;
         }
 
+        private bool _needsFreshLobbyBinding;
+        public void RequireFreshLobbyBinding() => _needsFreshLobbyBinding = true;
         public bool RequiresFreshHostBinding =>
-            !HasBinding
+            _needsFreshLobbyBinding || !HasBinding
             || !IsHostBinding
             || HasQueuedResult(MatchId);
         public bool IsCompletingMatch =>
@@ -368,6 +370,7 @@ namespace EchoProtocol.Networking.Authority
             ResetLocalRewardTracking();
             MatchId = matchId;
             IsHostBinding = true;
+            _needsFreshLobbyBinding = false;
             _nextLeaseRenewal = Time.unscaledTime + LeaseRenewIntervalSeconds;
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
@@ -984,7 +987,9 @@ namespace EchoProtocol.Networking.Authority
 
                     if (IsSuccessful(result))
                     {
-                        if (playerState == null
+                        if (MatchId != bindingMatchId
+                            || !IsHostBinding
+                            || playerState == null
                             || playerState.Object == null
                             || !playerState.Object.IsValid
                             || playerState.Object.InputAuthority
@@ -994,7 +999,7 @@ namespace EchoProtocol.Networking.Authority
                         }
 
                         playerState.ApplyVerifiedBackendIdentity(
-                            result.Data.data.userId);
+                            result.Data.data.userId, bindingMatchId);
 
                         if (Guid.TryParse(
                                 result.Data.data.userId,
@@ -1026,7 +1031,7 @@ namespace EchoProtocol.Networking.Authority
                     if (playerState != null
                         && playerState.Object != null
                         && playerState.Object.IsValid
-                        && playerState.HasVerifiedBackendIdentity)
+                        && IsPlayerBound(actorNumber, playerState.BackendUserId.ToString()))
                     {
                         return;
                     }

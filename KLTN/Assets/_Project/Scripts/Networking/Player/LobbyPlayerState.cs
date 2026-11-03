@@ -206,6 +206,9 @@ namespace EchoProtocol.Networking
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
 
+        [Networked]
+        public NetworkString<_64> BackendMatchId { get; private set; }
+
         // Snapshot-safe reconnect identity. The raw Fusion connection
         // token remains local and is never replicated.
         [Networked]
@@ -498,7 +501,10 @@ namespace EchoProtocol.Networking
             // Spawn, actor discovery and backend session attachment can
             // complete in different frames. Keep retrying the local identity
             // at a bounded rate until BackendUserId has been verified.
-            if (!HasVerifiedBackendIdentity
+            if ((!HasVerifiedBackendIdentity
+                    || BackendMatchId.ToString() != authority.MatchId.ToString("D")
+                    || (Runner.IsServer && !authority.IsPlayerBound(
+                        FusionActorNumber, BackendUserId.ToString())))
                 && (Runner.IsServer || FusionActorNumber > 0)
                 && Time.unscaledTime >= _nextIdentityRetryAt)
             {
@@ -508,8 +514,7 @@ namespace EchoProtocol.Networking
 
                 authority.TrySubmitLocalIdentity(
                     this,
-                    NetworkBootstrap.Instance
-                        ?.ReconnectIdentityPending == true);
+                    true);
             }
         }
 
@@ -617,7 +622,7 @@ namespace EchoProtocol.Networking
         }
 
         public void ApplyVerifiedBackendIdentity(
-            string userId)
+            string userId, Guid matchId)
         {
             if (!Object.HasStateAuthority
                 || !Guid.TryParse(userId, out _))
@@ -627,6 +632,7 @@ namespace EchoProtocol.Networking
 
             BackendUserId =
                 userId;
+            BackendMatchId = matchId.ToString("D");
 
             NetworkBootstrap.Instance
                 ?.RequestHostMigrationSnapshotCheckpoint(

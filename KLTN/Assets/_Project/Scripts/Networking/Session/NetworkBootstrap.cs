@@ -158,6 +158,12 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            // Fusion's scene callback can precede Unity activating Lobby.
+            // Reconcile after activation as well, rather than relying on callback timing.
+            if (State == NetworkSessionState.InMatch && HasRunningRunner
+                && !IsSceneLoading && !Runner.IsSceneManagerBusy
+                && SceneManager.GetActiveScene().name == LobbySceneName)
+                RestoreRetainedLobby(Runner);
             if (State != NetworkSessionState.InMatch)
             {
                 Cursor.lockState = CursorLockMode.None;
@@ -189,6 +195,29 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
                 "MA|CLIENT_ROSTER_REBIND_ACK");
+        }
+
+        private void RestoreRetainedLobby(NetworkRunner runner)
+        {
+            if (runner == null || runner != Runner || !runner.IsRunning) return;
+            ResultSession.Clear();
+            PlayerInteractionControlLock.ReleaseAll();
+            ClearLocalInputProvider();
+            _completedMatchObserved = false;
+            _reconnectIdentityPending = false;
+            _matchStartPending = false;
+            if (runner.IsServer) MatchAuthorityRuntime.EnsureExists(this).RequireFreshLobbyBinding();
+            foreach (var player in runner.ActivePlayers)
+                if (runner.IsServer && runner.TryGetPlayerObject(player, out var playerObject)
+                    && playerObject != null && playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyPlayer))
+                    lobbyPlayer.ResetForLobbyAuthoritative();
+            if (runner.IsServer && runner.SessionInfo.IsValid)
+            {
+                runner.SessionInfo.IsOpen = true;
+                runner.SessionInfo.IsVisible = true;
+            }
+            SetState(NetworkSessionState.InLobby, "Match finished; room retained.");
+            RuntimeLog.Log(RuntimeLogCategory.NetworkSession, "[NetworkSession] Retained Lobby reset complete.");
         }
 
         private void Awake()
@@ -2902,31 +2931,8 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.NetworkSession,
                 $"[NetworkSession] Scene load complete: {sceneName}.");
-            if (Runner == runner
-                && sceneName == LobbySceneName
-                && State == NetworkSessionState.InMatch)
-            {
-                ResultSession.Clear();
-                PlayerInteractionControlLock.ReleaseAll();
-                ClearLocalInputProvider();
-                _completedMatchObserved = false;
-                _reconnectIdentityPending = false;
-
-                if (runner.IsServer && runner.SessionInfo.IsValid)
-                {
-                    runner.SessionInfo.IsOpen = true;
-                    runner.SessionInfo.IsVisible = true;
-                }
-
-                SetState(
-                    NetworkSessionState.InLobby,
-                    "Match finished; room retained.");
-                _matchStartPending = false;
-                foreach (var player in runner.ActivePlayers)
-                    if (runner.IsServer && runner.TryGetPlayerObject(player, out var playerObject)
-                        && playerObject != null && playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyPlayer))
-                        lobbyPlayer.ResetForLobbyAuthoritative();
-            }
+            if (Runner == runner && sceneName == LobbySceneName && State == NetworkSessionState.InMatch)
+                RestoreRetainedLobby(runner);
             if (Runner == runner
                 && sceneName == EchoProtocol.Core.GameConstants.SceneResult
                 && State == NetworkSessionState.InMatch)
