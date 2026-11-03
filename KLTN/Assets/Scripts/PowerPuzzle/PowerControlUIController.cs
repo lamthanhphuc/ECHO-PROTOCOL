@@ -483,7 +483,12 @@ public class PowerControlUIController : MonoBehaviour
         {
             if (lockedPanel != null) lockedPanel.SetActive(false);
             if (keypadPanel != null) keypadPanel.SetActive(false);
-            if (onlinePanel != null) onlinePanel.SetActive(true);
+            if (onlinePanel != null)
+            {
+                foreach (var text in onlinePanel.GetComponentsInChildren<TMPro.TMP_Text>(true))
+                    text.text = EchoProtocol.Settings.GameLanguage.Translate(text.text);
+                onlinePanel.SetActive(true);
+            }
 
             if (statusBannerText != null)
             {

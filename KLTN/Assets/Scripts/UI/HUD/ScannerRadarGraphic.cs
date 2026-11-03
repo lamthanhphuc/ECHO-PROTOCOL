@@ -73,16 +73,16 @@ namespace EchoProtocol.UI.HUD
             vh.Clear();
             float r = Mathf.Min(rectTransform.rect.width, rectTransform.rect.height) * 0.44f;
             Vector2 center = rectTransform.rect.center;
-            Color grid = new Color(_accent.r, _accent.g, _accent.b, 0.18f);
-            for (int i = -4; i <= 4; i++)
+            Color grid = new Color(_accent.r, _accent.g, _accent.b, 0.10f);
+            for (int i = -2; i <= 2; i++)
             {
                 float x = r * i / 5f;
                 float extent = Mathf.Sqrt(r * r - x * x);
                 Line(vh, center + new Vector2(x, -extent), center + new Vector2(x, extent), 0.8f, grid);
                 Line(vh, center + new Vector2(-extent, x), center + new Vector2(extent, x), 0.8f, grid);
             }
-            for (int i = 1; i <= 4; i++)
-                Ring(vh, center, r * i / 4f, 1f, new Color(_accent.r, _accent.g, _accent.b, i == 4 ? 0.65f : 0.25f));
+            for (int i = 1; i <= 3; i++)
+                Ring(vh, center, r * i / 3f, 1f, new Color(_accent.r, _accent.g, _accent.b, i == 3 ? 0.65f : 0.18f));
             if (_scanning)
                 Ring(vh, center, r * _pulse, 1f, new Color(_accent.r, _accent.g, _accent.b, (1f - _pulse) * 0.4f));
             Vector2 forward = Vector2.up;

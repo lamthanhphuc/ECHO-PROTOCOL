@@ -141,6 +141,7 @@ namespace EchoProtocol.Settings
         }
 
         private const string Catalog = @"
+TÍN HIỆU VẪN ĐANG HOẠT ĐỘNG|THE SIGNAL IS STILL ALIVE
 HỒ SƠ NHÂN SỰ  ///  THÔNG TIN ĐIỀU TRA VIÊN|PERSONNEL DATABASE  ///  OPERATOR PROFILE
 THỐNG KÊ NHIỆM VỤ|MISSION STATISTICS
 TỔNG SỐ TRẬN|TOTAL MATCHES
@@ -174,6 +175,9 @@ trước khi xác thực bảo mật|BEFORE INITIATING SECURITY AUTHENTICATION
 Đóng [ESC]|CLOSE [ESC]
 02 Giải mã|02 DECODE
 03 Đồng bộ|03 SYNC
+02 Giải mã|02  DECODE
+03 Đồng bộ|03  SYNC
+ĐỒNG BỘ TÍN HIỆU  >|SYNC SIGNAL  >
 Phân tích tín hiệu|SIGNAL ANALYZER
 Lịch sử kiểm tra|TRANSMISSION LOG
 Chọn chữ số|SIGNAL BANK
@@ -622,6 +626,10 @@ Cửa thoát hiểm đang khóa|Emergency exit locked
 Cửa đã mở - Chạy thoát!|Exit open - Run!
 Dạng sóng|Waveform
 Dừng khẩn cấp|Emergency stop
+DỪNG KHẨN CẤP|EMERGENCY STOP
+ĐÃ KHÔI PHỤC NGUỒN ĐIỆN CHÍNH|MAIN POWER RESTORED
+LƯỚI ĐIỆN CƠ SỞ ĐÃ HOẠT ĐỘNG|FACILITY GRID ONLINE
+ĐÃ KÍCH HOẠT QUY TRÌNH PHONG TỎA AN NINH|SECURITY LOCKDOWN PROTOCOLS ENGAGED
 Giải mã|Decode
 Giảm máy phát; kiểm tra tần số và tải|Reduce generator output; check frequency and load
 Giảm tải; kiểm tra điện áp và tần số|Reduce load; check voltage and frequency

@@ -28,9 +28,8 @@ namespace EchoProtocol.Networking
         public bool IsAvailable => Object != null && Object.IsValid && !IsConsumed;
 
         public override string InteractionPrompt =>
-            string.IsNullOrWhiteSpace(_toolDisplayName)
-                ? "Pick Up Team Tool"
-                : $"Pick Up {_toolDisplayName}";
+            EchoProtocol.Settings.GameLanguage.Choose("Nhặt ", "Pick Up ")
+            + EchoProtocol.Settings.GameLanguage.TeamToolName(_toolId);
 
         public override void Spawned()
         {

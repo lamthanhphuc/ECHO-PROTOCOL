@@ -8,6 +8,42 @@ namespace EchoProtocol.UI.Tests
 {
     public sealed class UiTypographyThemeTests
     {
+        [TestCase("HeaderText")]
+        [TestCase("SystemLabel")]
+        [TestCase("TitleRedEcho")]
+        public void RuntimeLocalizationPreservesAuthoredMainMenuWordmark(string labelName)
+        {
+            Type controllerType = Type.GetType("EchoProtocol.UI.MainMenu.MainMenuTypographyController, Assembly-CSharp");
+            Type localizationType = Type.GetType("EchoProtocol.UI.LocalizedCanvas, Assembly-CSharp");
+            Type labelType = Type.GetType("TMPro.TextMeshProUGUI, Unity.TextMeshPro");
+            Assert.That(controllerType, Is.Not.Null);
+            Assert.That(localizationType, Is.Not.Null);
+            Assert.That(labelType, Is.Not.Null);
+            var root = new GameObject("MainMenuTest", typeof(RectTransform), typeof(Canvas));
+            try
+            {
+                root.AddComponent(controllerType);
+                var labelObject = new GameObject(labelName, typeof(RectTransform));
+                labelObject.transform.SetParent(root.transform, false);
+                Component label = labelObject.AddComponent(labelType);
+                var font = Resources.Load("UI/MainMenuTypography/IndustrialTitleTMP");
+                var material = Resources.Load<Material>("UI/MainMenuTypography/TitleMetal");
+                Assert.That(font, Is.Not.Null);
+                Assert.That(material, Is.Not.Null);
+                labelType.GetProperty("font").SetValue(label, font);
+                labelType.GetProperty("fontSharedMaterial").SetValue(label, material);
+                var ink = new Color(0.81f, 0.12f, 0.16f, 0.8f);
+                ((Graphic)label).color = ink;
+                Component localization = root.AddComponent(localizationType);
+                localizationType.GetMethod("Register", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(localization, new object[] { label });
+                Assert.That(labelType.GetProperty("font").GetValue(label), Is.SameAs(font));
+                Assert.That(labelType.GetProperty("fontSharedMaterial").GetValue(label), Is.SameAs(material));
+                Assert.That(((Graphic)label).color, Is.EqualTo(ink));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(root); }
+        }
+
         [Test]
         public void ThemeUsesLobbyBodyAndMainMenuButtonFonts()
         {

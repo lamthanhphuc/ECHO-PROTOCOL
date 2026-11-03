@@ -241,6 +241,12 @@ namespace EchoProtocol.RelayA
         private void RefreshStabilization()
         {
             if (_controller == null || _controller.Config == null) return;
+            if (_stabilizationStop != null)
+            {
+                var label = _stabilizationStop.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                    label.text = EchoProtocol.Settings.GameLanguage.Choose("DỪNG KHẨN CẤP", "EMERGENCY STOP");
+            }
             var state = _controller.Circuit.Stabilization.Snapshot;
             var config = _controller.Config;
             float[] controls = { state.Controls.x, state.Controls.y, state.Controls.z };

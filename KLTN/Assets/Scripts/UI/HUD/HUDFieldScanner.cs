@@ -272,7 +272,8 @@ namespace EchoProtocol.UI.HUD
             SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
             SetText(controlsText, "");
             SetText(detectedText, motion ? $"<size=18>{count}</size>\nPHÁT HIỆN" : $"<size=18>{count}</size>  {coreTargetLabel}");
-            SetText(signalDetailText, "GẦN NHẤT\n<size=16>" + (count > 0 ? $"{nearest:F0}m" : "—") + "</size>");
+            SetText(signalDetailText, "<size=12>" + EchoProtocol.Settings.GameLanguage.Choose("MỤC TIÊU GẦN NHẤT", "NEAREST TARGET")
+                + "</size>\n<size=30>" + (count > 0 ? $"{nearest:F0} <size=18>m</size>" : "—") + "</size>");
             int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
             if (motion)
             {
@@ -295,9 +296,10 @@ namespace EchoProtocol.UI.HUD
             if (scanTimerText != null)
             {
                 if (!connected) SetText(scanTimerText, "MẤT KẾT NỐI");
-                else if (active) SetText(scanTimerText, $"ĐANG QUÉT  {Mathf.Max(1, Mathf.CeilToInt(activeRemaining)):00}s");
-                else if (cooldown > 0.05f) SetText(scanTimerText, $"HỒI  {Mathf.CeilToInt(cooldown):00}s");
-                else SetText(scanTimerText, "SẴN SÀNG");
+                else if (active) SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("ĐANG QUÉT", "SCANNING") + $"   <size=28>{Mathf.Max(1, Mathf.CeilToInt(activeRemaining)):00}s</size>");
+                else if (cooldown > 0.05f) SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("HỒI CHIÊU", "COOLDOWN") + $"   <size=28>{Mathf.CeilToInt(cooldown):00}s</size>");
+                else SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("SẴN SÀNG  ·  [Chuột trái] Quét", "READY  ·  [Left click] Scan"));
+                scanTimerText.color = active ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
             }
 
             string status = !connected ? "ĐANG CHỜ KẾT NỐI" : active
@@ -376,7 +378,7 @@ namespace EchoProtocol.UI.HUD
             var root = (RectTransform)transform;
             root.anchorMin = root.anchorMax = root.pivot = Vector2.one;
             root.anchoredPosition = new Vector2(-32f, -276f);
-            root.sizeDelta = new Vector2(380f, 390f);
+            root.sizeDelta = new Vector2(380f, 466f);
             parentCanvas = GetComponentInParent<Canvas>();
             if (panelBackground != null)
             {
@@ -399,7 +401,7 @@ namespace EchoProtocol.UI.HUD
                 badge = go.transform;
             }
             var badgeImage = badge.GetComponent<Image>();
-            badgeImage.color = new Color(0.65f, 0.73f, 0.72f, 0.15f);
+            badgeImage.color = Color.clear;
             badgeImage.raycastTarget = false;
             var badgeRect = (RectTransform)badge;
             badgeRect.anchorMin = Vector2.zero; badgeRect.anchorMax = Vector2.one;
@@ -416,8 +418,8 @@ namespace EchoProtocol.UI.HUD
             if (radar.GetComponent<Canvas>() == null) radar.gameObject.AddComponent<Canvas>();
             radar.anchorMin = radar.anchorMax = new Vector2(0.5f, 1f);
             radar.pivot = new Vector2(0.5f, 1f);
-            radar.anchoredPosition = new Vector2(0, -36);
-            radar.sizeDelta = new Vector2(292, 292);
+            radar.anchoredPosition = new Vector2(0, -88);
+            radar.sizeDelta = new Vector2(272, 272);
             radarBoxBackground.sprite = null;
             radarBoxBackground.color = new Color(0.02f, 0.035f, 0.038f, 0.85f);
             radarBoxBackground.raycastTarget = false;
@@ -433,10 +435,11 @@ namespace EchoProtocol.UI.HUD
             radarGraphic.rectTransform.anchorMin = Vector2.zero;
             radarGraphic.rectTransform.anchorMax = Vector2.one;
             radarGraphic.rectTransform.offsetMin = radarGraphic.rectTransform.offsetMax = Vector2.zero;
-            scanTimerText = Label(scanTimerText, "ScanTimer", radar, 20, TextAnchor.UpperCenter);
-            Place(scanTimerText.rectTransform, 0f, 1f, 0f, 30f, 8f, 8f);
-            statusText = Label(statusText, "Status", transform, 11, TextAnchor.MiddleCenter);
-            Place(statusText.rectTransform, 0, 1, 326, 20, 8, 8);
+            scanTimerText = Label(scanTimerText, "ScanTimer", transform, 18, TextAnchor.MiddleCenter);
+            Place(scanTimerText.rectTransform, 0f, 1f, 40f, 40f, 12f, 12f);
+            scanTimerText.transform.SetAsLastSibling();
+            statusText = Label(statusText, "Status", transform, 13, TextAnchor.MiddleCenter);
+            Place(statusText.rectTransform, 0, 1, 366, 26, 12, 12);
             detectedText = Label(detectedText, "DetectedCount", transform, 11, TextAnchor.MiddleCenter);
             signalDetailText = Label(signalDetailText, "SignalDetail", transform, 11, TextAnchor.MiddleCenter);
             signalBarsText = Label(signalBarsText, "SignalBars", transform, 11, TextAnchor.MiddleCenter);
@@ -445,11 +448,11 @@ namespace EchoProtocol.UI.HUD
             Place(signalBarsText.rectTransform, 2f / 3, 1, 348, 42, 4, 4);
             detectedText.gameObject.SetActive(false);
             signalBarsText.gameObject.SetActive(false);
-            Place(signalDetailText.rectTransform, 0, 1, 348, 42, 4, 4);
+            Place(signalDetailText.rectTransform, 0, 1, 402, 60, 12, 12);
             Divider("Divider1", 0, 1, 35, 1);
-            Divider("Divider2", 0, 1, 346, 1);
-            Divider("FooterSeparator1", 1f / 3, 1f / 3, 354, 30);
-            Divider("FooterSeparator2", 2f / 3, 2f / 3, 354, 30);
+            Divider("Divider2", 0, 1, 396, 1);
+            foreach (string name in new[] { "FooterSeparator1", "FooterSeparator2" })
+                if (transform.Find(name) != null) transform.Find(name).gameObject.SetActive(false);
             RenderScannerState();
         }
 
@@ -462,12 +465,15 @@ namespace EchoProtocol.UI.HUD
                 existing = go.GetComponent<Text>();
             }
             existing.font = UiTypographyTheme.BodyLegacy;
+            if (existing.transform.parent != parent) existing.transform.SetParent(parent, false);
+            existing.enabled = true;
+            existing.gameObject.SetActive(true);
             existing.fontSize = size;
             existing.fontStyle = FontStyle.Normal;
             existing.alignment = alignment;
             existing.supportRichText = true;
             existing.horizontalOverflow = HorizontalWrapMode.Overflow;
-            existing.verticalOverflow = VerticalWrapMode.Truncate;
+            existing.verticalOverflow = VerticalWrapMode.Overflow;
             existing.color = IndustrialUiStyle.Text;
             existing.raycastTarget = false;
             return existing;

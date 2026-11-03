@@ -44,8 +44,13 @@ namespace EchoProtocol.UI.MainMenu
             {
                 UiTypographyTheme.Apply(text, text.GetComponentInParent<Button>() != null);
                 text.fontStyle=FontStyle.Normal; text.raycastTarget=false;
+                text.enabled = true;
+                text.canvasRenderer.SetAlpha(1f);
+                // Lobby fonts have taller metrics than the original shop font.
+                // Keep authored boxes and never discard an entire line by truncating it.
+                text.verticalOverflow = VerticalWrapMode.Overflow;
                 if(text.name=="SectionTitle"){text.gameObject.SetActive(true);text.fontSize=56;text.resizeTextForBestFit=false;}
-                if(text.name=="SelectedName" || text.name=="SelectedCharacterName"){text.fontSize=48;text.resizeTextForBestFit=false;}
+                if(text.name=="SelectedName" || text.name=="SelectedCharacterName"){text.fontSize=36;text.resizeTextForBestFit=false;}
                 if(text.name=="Caption" && text.transform.parent.name.Contains("BuyButton")){text.fontSize=30;text.resizeTextForBestFit=false;}
                 if(text.name=="SelectedName" || text.name=="SelectedCharacterName")text.color=Gold;
                 else if(text.name.Contains("Price")){text.fontSize=24;text.color=Gold;text.alignment=TextAnchor.MiddleLeft;}

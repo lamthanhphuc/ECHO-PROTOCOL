@@ -58,6 +58,24 @@ namespace EchoProtocol.Tests.EditMode.Controls
             Assert.That(GameLanguage.Translate("<b>Nhiệm vụ</b>\nCần cứu · 12s"),
                 Is.EqualTo("<b>Objectives</b>\nNeeds revival · 12s"));
         }
+        [TestCase("02  DECODE", "02 Giải mã", "02 DECODE")]
+        [TestCase("03  SYNC", "03 Đồng bộ", "03 SYNC")]
+        [TestCase("SYNC SIGNAL  >", "ĐỒNG BỘ TÍN HIỆU  >", "SYNC SIGNAL  >")]
+        [TestCase("EMERGENCY STOP", "DỪNG KHẨN CẤP", "EMERGENCY STOP")]
+        [TestCase("THE SIGNAL IS STILL ALIVE", "TÍN HIỆU VẪN ĐANG HOẠT ĐỘNG", "THE SIGNAL IS STILL ALIVE")]
+        [TestCase("MAIN POWER RESTORED", "ĐÃ KHÔI PHỤC NGUỒN ĐIỆN CHÍNH", "MAIN POWER RESTORED")]
+        [TestCase("FACILITY GRID ONLINE", "LƯỚI ĐIỆN CƠ SỞ ĐÃ HOẠT ĐỘNG", "FACILITY GRID ONLINE")]
+        [TestCase("SECURITY LOCKDOWN PROTOCOLS ENGAGED", "ĐÃ KÍCH HOẠT QUY TRÌNH PHONG TỎA AN NINH", "SECURITY LOCKDOWN PROTOCOLS ENGAGED")]
+        public void RelaySerializedLabelsTranslateInBothDirections(
+            string serialized, string vietnamese, string english)
+        {
+            Assert.That(GameLanguage.Translate(serialized), Is.EqualTo(vietnamese));
+            GameLanguage.Set(GameLocale.English);
+            Assert.That(GameLanguage.Translate(vietnamese), Is.EqualTo(english));
+            GameLanguage.Set(GameLocale.Vietnamese);
+            Assert.That(GameLanguage.Translate(english), Is.EqualTo(vietnamese));
+        }
+
         [TestCase("ROOM_ABC123")]
         [TestCase("NeinMon")]
         [TestCase("01001000")]

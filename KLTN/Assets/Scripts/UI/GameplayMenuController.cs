@@ -17,6 +17,7 @@ namespace EchoProtocol.UI
         private GameObject _overlay;
         private Button _lobby;
         private Button _mainMenu;
+        private Button _resume, _options;
         private RectTransform _panel;
         private RectTransform _footer;
         private bool _transitioning;
@@ -40,6 +41,18 @@ namespace EchoProtocol.UI
         private void Awake()
         {
             EnsureEventSystem();
+        }
+        private void OnEnable() => GameLanguage.Changed += RefreshLanguage;
+        private void RefreshLanguage()
+        {
+            if (_panel == null) return;
+            _panel.Find("MenuSubtitle").GetComponent<Text>().text =
+                GameLanguage.Choose("Trận đấu vẫn tiếp diễn", "The match continues");
+            if (_resume != null) _resume.GetComponentInChildren<Text>(true).text = GameLanguage.Choose("Tiếp tục", "Resume");
+            if (_options != null) _options.GetComponentInChildren<Text>(true).text = GameLanguage.Choose("Cài đặt", "Options");
+            _lobby.GetComponentInChildren<Text>(true).text = GameLanguage.Choose("Đưa cả đội về phòng chờ", "Return team to lobby");
+            _mainMenu.GetComponentInChildren<Text>(true).text = GameLanguage.Choose("Về màn hình chính", "Exit to main menu");
+            _footer.GetComponent<Text>().text = GameLanguage.Choose("ESC · Tiếp tục", "ESC · Resume");
         }
 
         private void Update()
@@ -76,6 +89,7 @@ namespace EchoProtocol.UI
             _lock.Acquire(player, Close, allowWhileDowned: true);
             if (!_lock.IsLocked) return;
             if (_overlay == null) BuildMenu();
+            RefreshLanguage();
             UpdateMenuLayout();
             Canvas.ForceUpdateCanvases();
             _overlay.SetActive(true);
@@ -171,8 +185,8 @@ namespace EchoProtocol.UI
             outline.effectDistance = new Vector2(1,-1);
             Label(panel.transform, "MENU", 28, 22, 36).gameObject.name = "MenuHeading";
             Label(panel.transform, GameLanguage.Choose("Trận đấu vẫn tiếp diễn", "The match continues"), 14, 62, 24).gameObject.name = "MenuSubtitle";
-            MenuButton(panel.transform, GameLanguage.Choose("Tiếp tục", "Resume"), 108, Close);
-            MenuButton(panel.transform, GameLanguage.Choose("Cài đặt", "Options"), 170, OpenSettings);
+            _resume = MenuButton(panel.transform, GameLanguage.Choose("Tiếp tục", "Resume"), 108, Close);
+            _options = MenuButton(panel.transform, GameLanguage.Choose("Cài đặt", "Options"), 170, OpenSettings);
             _lobby = MenuButton(panel.transform, GameLanguage.Choose("Đưa cả đội về phòng chờ", "Return team to lobby"), 244, () => ConfirmExit(true));
             _mainMenu = MenuButton(panel.transform, GameLanguage.Choose("Về màn hình chính", "Exit to main menu"), IsHost ? 306 : 244, () => ConfirmExit(false));
             _footer = Label(panel.transform, "ESC · " + GameLanguage.Choose("Tiếp tục", "Resume"), 12, 376, 22).rectTransform;
@@ -227,7 +241,7 @@ namespace EchoProtocol.UI
             owner.GetComponent<InputSystemUIInputModule>().AssignDefaultActions();
         }
 
-        private void OnDisable() => Close();
+        private void OnDisable() { GameLanguage.Changed -= RefreshLanguage; Close(); }
         private void OnDestroy() => Close();
     }
 }

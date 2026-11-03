@@ -67,8 +67,10 @@ namespace EchoProtocol.Tools.Scanner
             }
         }
 
-        public override string InteractionPrompt => _pickupPrompt;
-        string IInteractable.InteractionPrompt => _pickupPrompt;
+        public override string InteractionPrompt =>
+            EchoProtocol.Settings.GameLanguage.Choose("Nhặt ", "Pick Up ")
+            + EchoProtocol.Settings.GameLanguage.TeamToolName(_toolId);
+        string IInteractable.InteractionPrompt => InteractionPrompt;
 
         private void Awake() => ConfigurePassThroughCollider();
 

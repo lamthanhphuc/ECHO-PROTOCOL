@@ -148,10 +148,10 @@ namespace EchoProtocol.Networking
                     if (CanAcceptJammer())
                     {
                         return HasDoorJammerTool(null)
-                            ? "Chắn ván cửa [E] / [Chuột trái]"
-                            : "Cửa hỏng (Cần Ván gỗ)";
+                            ? EchoProtocol.Settings.GameLanguage.Choose("Chắn ván cửa [E] / [Chuột trái]", "Barricade door [E] / [Left click]")
+                            : EchoProtocol.Settings.GameLanguage.Choose("Cửa hỏng (Cần Ván gỗ)", "Broken door (Wooden plank required)");
                     }
-                    return "Door broken";
+                    return EchoProtocol.Settings.GameLanguage.Choose("Cửa hỏng", "Door broken");
                 }
 
                 return CurrentState switch

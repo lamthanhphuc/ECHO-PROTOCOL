@@ -43,6 +43,7 @@ namespace EchoProtocol.UI.Auth
     private void Awake()
     {
       EchoProtocol.UI.IndustrialUiStyle.Controls(transform);
+      ConfigureTypography();
       ConfigureInputField(loginUsernameInput);
       ConfigureInputField(loginPasswordInput);
       ConfigureInputField(registerEmailInput);
@@ -347,15 +348,47 @@ namespace EchoProtocol.UI.Auth
 
       if (input.textComponent != null)
       {
+        input.textComponent.font = EchoProtocol.UI.UiTypographyTheme.BodyLegacy;
+        input.textComponent.fontSize = 20;
+        input.textComponent.resizeTextForBestFit = false;
+        input.textComponent.verticalOverflow = VerticalWrapMode.Overflow;
+        input.textComponent.color = EchoProtocol.UI.IndustrialUiStyle.Text;
+        input.textComponent.enabled = true;
+        input.textComponent.canvasRenderer.SetAlpha(1f);
         input.textComponent.raycastTarget = false;
       }
 
       if (input.placeholder is Graphic placeholderGraphic)
       {
+        placeholderGraphic.enabled = true;
+        placeholderGraphic.canvasRenderer.SetAlpha(1f);
+        placeholderGraphic.color = EchoProtocol.UI.IndustrialUiStyle.Muted;
+        if (placeholderGraphic is Text placeholder)
+        {
+          placeholder.font = EchoProtocol.UI.UiTypographyTheme.BodyLegacy;
+          placeholder.fontSize = 20;
+          placeholder.resizeTextForBestFit = false;
+          placeholder.verticalOverflow = VerticalWrapMode.Overflow;
+        }
         placeholderGraphic.raycastTarget = false;
       }
 
       input.ForceLabelUpdate();
+    }
+
+    private void ConfigureTypography()
+    {
+      foreach (var label in GetComponentsInChildren<Text>(true))
+      {
+        bool button = label.GetComponentInParent<Button>() != null;
+        EchoProtocol.UI.UiTypographyTheme.Apply(label, button);
+        label.fontSize = button ? 22 : 20;
+        label.resizeTextForBestFit = false;
+        label.verticalOverflow = VerticalWrapMode.Overflow;
+        label.color = button ? EchoProtocol.UI.IndustrialUiStyle.Accent : EchoProtocol.UI.IndustrialUiStyle.Text;
+        label.enabled = true;
+        label.canvasRenderer.SetAlpha(1f);
+      }
     }
 
     private void ResetInputFields()

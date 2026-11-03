@@ -69,7 +69,11 @@ namespace EchoProtocol.UI
         {
             if (_labels.ContainsKey(label)) return;
             if (IsPlayerData(label)) return;
-            bool isMainMenuTypography = label.name == "CinematicTMP";
+            var mainMenuTypography = label.GetComponentInParent<EchoProtocol.UI.MainMenu.MainMenuTypographyController>();
+            bool isMainMenuTypography = label.name == "CinematicTMP"
+                || (mainMenuTypography != null
+                    && label.transform.parent == mainMenuTypography.transform
+                    && (label.name == "HeaderText" || label.name == "SystemLabel" || label.name == "TitleRedEcho"));
             bool isButton = label.GetComponentInParent<Button>() != null;
             bool cinematic = label.GetComponentInParent<EchoProtocol.UI.Loading.CinematicMatchLoadingScreen>() != null
                 || label.GetComponentInParent<CinematicResultSceneController>() != null;

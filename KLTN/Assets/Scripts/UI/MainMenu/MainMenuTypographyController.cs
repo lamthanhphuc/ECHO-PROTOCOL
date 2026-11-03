@@ -65,7 +65,7 @@ namespace EchoProtocol.UI.MainMenu
             // The authored assets also remain dynamic for later language changes.
             const string oswaldCharacters =
                 "ECHO PROTOCOL HOST GAME JOIN GAME OPTIONS LOGOUT TẠO PHÒNG VÀO PHÒNG CÀI ĐẶT ĐĂNG XUẤT";
-            const string monoCharacters = "THE SIGNAL IS STILL ALIVE";
+            const string monoCharacters = "THE SIGNAL IS STILL ALIVE TÍN HIỆU VẪN ĐANG HOẠT ĐỘNG";
             // This TMP version returns false when every requested glyph is
             // already present. Check actual coverage after the add attempt.
             oswald.TryAddCharacters(oswaldCharacters);
@@ -91,6 +91,7 @@ namespace EchoProtocol.UI.MainMenu
                 TextAlignmentOptions.Center, 0f, false);
             if (_subtitle != null)
             {
+                RefreshSubtitleLanguage();
                 _subtitleBaseColor = _subtitle.color;
                 _nextSignalDip = Time.unscaledTime + 6.7f;
             }
@@ -213,6 +214,24 @@ namespace EchoProtocol.UI.MainMenu
             MainMenuButtonTextFeedback feedback = button.GetComponent<MainMenuButtonTextFeedback>();
             if (feedback == null) feedback = button.gameObject.AddComponent<MainMenuButtonTextFeedback>();
             feedback.Initialize(button, label);
+        }
+
+        private void OnEnable()
+        {
+            EchoProtocol.Settings.GameLanguage.Changed += RefreshSubtitleLanguage;
+            RefreshSubtitleLanguage();
+        }
+
+        private void OnDisable()
+        {
+            EchoProtocol.Settings.GameLanguage.Changed -= RefreshSubtitleLanguage;
+        }
+
+        private void RefreshSubtitleLanguage()
+        {
+            if (_subtitle != null)
+                _subtitle.text = EchoProtocol.Settings.GameLanguage.Choose(
+                    "TÍN HIỆU VẪN ĐANG HOẠT ĐỘNG", "THE SIGNAL IS STILL ALIVE");
         }
 
         private void Update()
