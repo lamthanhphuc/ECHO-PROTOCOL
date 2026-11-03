@@ -19,7 +19,6 @@ namespace EchoProtocol.UI.Result
     [DisallowMultipleComponent]
     public sealed class CinematicResultSceneController : MonoBehaviour
     {
-        private const string ReduceMotionKey = "EchoProtocol.Result.ReduceMotion";
         private static readonly Color VictoryAccent = new(0.43f, 0.65f, 0.57f, 1f);
         private static readonly Color DefeatAccent = new(0.76f, 0.25f, 0.27f, 1f);
         private static readonly Color Muted = new(0.62f, 0.65f, 0.62f, 1f);
@@ -43,15 +42,12 @@ namespace EchoProtocol.UI.Result
         private CanvasGroup[] _statRows;
         private Button _returnButton;
         private Button _retryButton;
-        private Button _motionButton;
-        private Button _skipButton;
         private Image _recordingDot;
         private Image _glitchBand;
         private Image _defeatFlash;
         private Image _backgroundShade;
         private RectTransform _canvasRect;
         private RectTransform _designRoot;
-        private RectTransform _controlsRoot;
         private RectTransform _titleRect;
         private RectTransform _subtitleRect;
         private RectTransform _titleRuleRect;
@@ -59,7 +55,6 @@ namespace EchoProtocol.UI.Result
         private AudioSource _ambience;
         private CancellationTokenSource _rewardCancellation;
         private Coroutine _intro;
-        private bool _reducedMotion;
         private bool _introComplete;
         private bool _navigating;
         private bool _victory;
@@ -76,21 +71,18 @@ namespace EchoProtocol.UI.Result
             _rewardGroup = Find<CanvasGroup>("RewardGroup");
             _actionsGroup = Find<CanvasGroup>("ActionsGroup");
             _introBlack = Find<CanvasGroup>("IntroBlack");
-            _statRows = new CanvasGroup[5];
+            _statRows = new CanvasGroup[3];
             for (int i = 0; i < _statRows.Length; i++)
                 _statRows[i] = Find<CanvasGroup>($"StatRow{i}");
 
             _returnButton = Find<Button>("ReturnButton");
             _retryButton = Find<Button>("RetryButton");
-            _motionButton = Find<Button>("MotionButton");
-            _skipButton = Find<Button>("SkipButton");
             _recordingDot = Find<Image>("RecordingDot");
             _glitchBand = Find<Image>("GlitchBand");
             _defeatFlash = Find<Image>("DefeatFlash");
             _backgroundShade = Find<Image>("BackgroundShade");
             _canvasRect = GetComponent<RectTransform>();
             _designRoot = Find<RectTransform>("DesignRoot");
-            _controlsRoot = Find<RectTransform>("ControlsRoot");
             _titleRect = Find<RectTransform>("TitleMain");
             _subtitleRect = Find<RectTransform>("TitleSub");
             _titleRuleRect = Find<RectTransform>("AccentTitleRule");
@@ -98,8 +90,6 @@ namespace EchoProtocol.UI.Result
 
             if (_returnButton != null) _returnButton.onClick.AddListener(ReturnToLobby);
             if (_retryButton != null) _retryButton.onClick.AddListener(RetryMission);
-            if (_motionButton != null) _motionButton.onClick.AddListener(ToggleReducedMotion);
-            if (_skipButton != null) _skipButton.onClick.AddListener(FinishIntro);
             IndustrialUiStyle.Controls(transform);
         }
 
@@ -118,8 +108,6 @@ namespace EchoProtocol.UI.Result
             ApplyPalette(victory);
             UpdateResponsiveLayout(force: true);
 
-            _reducedMotion = PlayerPrefs.GetInt(ReduceMotionKey, 0) != 0;
-            RefreshMotionLabel();
             GameAudioRuntime.EnsureInitialized();
             _ambience = GameAudioRuntime.CreateSource(gameObject, false);
             GameAudioRuntime.Loop(_ambience, victory
@@ -130,12 +118,8 @@ namespace EchoProtocol.UI.Result
             if (_snapshot != null && Guid.TryParse(_snapshot.MatchId, out var matchId))
                 _ = PollRewardAsync(matchId, _rewardCancellation.Token);
 
-            if (_reducedMotion) FinishIntro();
-            else
-            {
-                _introStartedAt = Time.unscaledTime;
-                _intro = StartCoroutine(Reveal());
-            }
+            _introStartedAt = Time.unscaledTime;
+            _intro = StartCoroutine(Reveal());
         }
 
         private void Update()
@@ -157,12 +141,12 @@ namespace EchoProtocol.UI.Result
             }
             if (_recordingDot != null)
                 _recordingDot.color = new Color(0.78f, 0.15f, 0.18f,
-                    _reducedMotion ? 1f : 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 2.8f));
-            if (_backgroundShade != null && !_reducedMotion)
+                    0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 2.8f));
+            if (_backgroundShade != null)
                 _backgroundShade.color = new Color(0.025f, 0.028f, 0.028f,
                     0.55f + Mathf.PerlinNoise(Time.unscaledTime * 0.65f, 0.37f) * 0.025f);
 
-            if (_introComplete || _reducedMotion) return;
+            if (_introComplete) return;
             if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame
                 || Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 FinishIntro();
@@ -172,8 +156,6 @@ namespace EchoProtocol.UI.Result
         {
             if (_returnButton != null) _returnButton.onClick.RemoveListener(ReturnToLobby);
             if (_retryButton != null) _retryButton.onClick.RemoveListener(RetryMission);
-            if (_motionButton != null) _motionButton.onClick.RemoveListener(ToggleReducedMotion);
-            if (_skipButton != null) _skipButton.onClick.RemoveListener(FinishIntro);
             _rewardCancellation?.Cancel();
             _rewardCancellation?.Dispose();
             if (_ambience != null) _ambience.Stop();
@@ -203,9 +185,6 @@ namespace EchoProtocol.UI.Result
             var now = DateTime.Now;
             SetText("TimeStamp", now.ToString("HH:mm:ss"));
             SetText("DateStamp", now.ToString("dd MMM yyyy").ToUpperInvariant());
-            string caseId = _snapshot != null && Guid.TryParse(_snapshot.MatchId, out var id)
-                ? id.ToString("N")[..8].ToUpperInvariant() : "UNAVAILABLE";
-            SetText("CaseFile", "CASE FILE // " + caseId);
             SetText("TitleMain", victory
                 ? "YOU <color=#6FBF9B>SURVIVED...</color>"
                 : "THE PROTOCOL\nHAS <color=#C44149>FAILED.</color>");
@@ -221,8 +200,6 @@ namespace EchoProtocol.UI.Result
                 ? $"{Mathf.RoundToInt(_snapshot.ObjectiveCompletion * 100f)}%" : "NO DATA");
             SetText("StatValue2", hasResult && _snapshot.Survivors >= 0 && _snapshot.TeamSize > 0
                 ? $"{_snapshot.Survivors} / {_snapshot.TeamSize}" : "NO DATA");
-            SetText("StatValue3", "NO DATA");
-            SetText("StatValue4", "NO DATA");
 
             int count = hasResult ? Mathf.Min(4, _snapshot.Players.Count) : 0;
             SetActive("TeamEmpty", count == 0);
@@ -261,8 +238,6 @@ namespace EchoProtocol.UI.Result
             bool host = inRoom && runner.IsSceneAuthority && runner.IsServer;
             SetText("RetryLabel", host ? "RETRY MISSION" : inRoom ? "HOST ONLY" : "PLAY AGAIN");
             SetText("ReturnLabel", "RETURN TO LOBBY");
-            SetText("RetryHint", host ? ""
-                : inRoom ? "ONLY THE HOST MAY RESTART" : "OPEN LOBBY TO START A NEW MISSION");
         }
 
         private void SetTitleLayout(bool victory)
@@ -301,7 +276,6 @@ namespace EchoProtocol.UI.Result
             float scale = Mathf.Min(canvasSize.x / 1920f, canvasSize.y / 1080f);
             if (float.IsNaN(scale) || float.IsInfinity(scale) || scale <= 0f) return;
             if (_designRoot != null) _designRoot.localScale = Vector3.one * scale;
-            if (_controlsRoot != null) _controlsRoot.localScale = Vector3.one * scale;
         }
 
         private static string FormatDuration(float seconds)
@@ -421,7 +395,6 @@ namespace EchoProtocol.UI.Result
             if (_glitchBand != null) _glitchBand.color = Color.clear;
             if (_titleRect != null) _titleRect.anchoredPosition = _titleBasePosition;
             SetActionsEnabled(true);
-            SetActive("SkipButton", false);
         }
 
         private void SetActionsEnabled(bool enabled)
@@ -434,18 +407,6 @@ namespace EchoProtocol.UI.Result
                     || runner.IsServer && runner.IsSceneAuthority);
             }
         }
-
-        private void ToggleReducedMotion()
-        {
-            _reducedMotion = !_reducedMotion;
-            PlayerPrefs.SetInt(ReduceMotionKey, _reducedMotion ? 1 : 0);
-            PlayerPrefs.Save();
-            RefreshMotionLabel();
-            if (_reducedMotion) FinishIntro();
-        }
-
-        private void RefreshMotionLabel() => SetText("MotionLabel",
-            _reducedMotion ? "MOTION: REDUCED" : "MOTION: CINEMATIC");
 
         private async Task PollRewardAsync(Guid matchId, CancellationToken token)
         {

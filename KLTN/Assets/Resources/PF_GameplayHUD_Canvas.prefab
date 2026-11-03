@@ -518,7 +518,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &453554318153579202
 RectTransform:
   m_ObjectHideFlags: 0
@@ -606,12 +606,12 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 11188013075088976}
+  m_Father: {fileID: 3986367478347732447}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -16, y: 30}
+  m_AnchoredPosition: {x: 0, y: -40}
+  m_SizeDelta: {x: -24, y: 40}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &1904012615317910728
 CanvasRenderer:
@@ -643,16 +643,16 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: 256d28ab65e77be4eb14f87b7911b196, type: 3}
-    m_FontSize: 20
+    m_FontSize: 18
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
     m_MaxSize: 40
-    m_Alignment: 1
+    m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "M\u1EA4T K\u1EBET N\u1ED0I"
 --- !u!1 &756413382022662530
@@ -826,7 +826,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "<size=18>0</size>  L\xD5I N\u0102NG L\u01AF\u1EE2NG"
 --- !u!1 &836192825337522946
@@ -1415,8 +1415,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -348}
-  m_SizeDelta: {x: -8, y: 42}
+  m_AnchoredPosition: {x: 0, y: -402}
+  m_SizeDelta: {x: -24, y: 60}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &7566434134622323063
 CanvasRenderer:
@@ -1457,9 +1457,9 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "G\u1EA6N NH\u1EA4T\n<size=16>\u2014</size>"
+  m_Text: "<size=12>M\u1EE4C TI\xCAU G\u1EA6N NH\u1EA4T</size>\n<size=30>\u2014</size>"
 --- !u!1 &1099712473483692057
 GameObject:
   m_ObjectHideFlags: 0
@@ -1878,7 +1878,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.65, g: 0.73, b: 0.72, a: 0.15}
+  m_Color: {r: 0, g: 0, b: 0, a: 0}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -3731,7 +3731,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 
 --- !u!1 &2730060465598291322
@@ -4228,7 +4228,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -346}
+  m_AnchoredPosition: {x: 0, y: -396}
   m_SizeDelta: {x: -16, y: 1}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &6982148770506661918
@@ -5227,8 +5227,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -326}
-  m_SizeDelta: {x: -16, y: 20}
+  m_AnchoredPosition: {x: 0, y: -366}
+  m_SizeDelta: {x: -24, y: 26}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &7122081741426030865
 CanvasRenderer:
@@ -5260,7 +5260,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: 256d28ab65e77be4eb14f87b7911b196, type: 3}
-    m_FontSize: 11
+    m_FontSize: 13
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
@@ -5269,7 +5269,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "\u0110ANG CH\u1EDC K\u1EBET N\u1ED0I"
 --- !u!1 &3902981958419327013
@@ -7000,7 +7000,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &7652019685022013052
 RectTransform:
   m_ObjectHideFlags: 0
@@ -7734,12 +7734,13 @@ RectTransform:
   - {fileID: 4350061365759022188}
   - {fileID: 453554318153579202}
   - {fileID: 7652019685022013052}
+  - {fileID: 1968308973903665604}
   m_Father: {fileID: 4496959851185329169}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: -32, y: -276}
-  m_SizeDelta: {x: 380, y: 390}
+  m_SizeDelta: {x: 380, y: 466}
   m_Pivot: {x: 1, y: 1}
 --- !u!225 &5157952850528470541
 CanvasGroup:
@@ -8583,7 +8584,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "[Chu\u1ED9t ph\u1EA3i] \u0110\u1ED5i ch\u1EBF \u0111\u1ED9"
 --- !u!1 &7072706825171855724
@@ -8987,14 +8988,13 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 1968308973903665604}
   - {fileID: 8571793497917725628}
   m_Father: {fileID: 3986367478347732447}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: -36}
-  m_SizeDelta: {x: 292, y: 292}
+  m_AnchoredPosition: {x: 0, y: -88}
+  m_SizeDelta: {x: 272, y: 272}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &8670933366127234486
 CanvasRenderer:
@@ -11010,7 +11010,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "T\xCDN HI\u1EC6U\n<size=16><color=#3E5050>\u2582</color> <color=#3E5050>\u2584</color>
     <color=#3E5050>\u2586</color> <color=#3E5050>\u2588</color> </size>"
@@ -11431,7 +11431,7 @@ MonoBehaviour:
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 1
-    m_VerticalOverflow: 0
+    m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "L\xD5I N\u0102NG L\u01AF\u1EE2NG"
 --- !u!1 &8911072111976355822
