@@ -35,21 +35,21 @@ public class EscapeDoorCountdown : MonoBehaviour, IInteractable
         {
             if (_isComplete)
             {
-                return string.IsNullOrWhiteSpace(completePrompt) || completePrompt == "Escape ready" ? "Cửa đã mở - Chạy thoát!" : completePrompt;
+                return EchoProtocol.Settings.GameLanguage.Translate(string.IsNullOrWhiteSpace(completePrompt) || completePrompt == "Escape ready" ? "Cửa đã mở - Chạy thoát!" : completePrompt);
             }
 
             if (_isCountingDown)
             {
                 string cPrompt = string.IsNullOrWhiteSpace(countingPrompt) || countingPrompt == "Escape opening" ? "Đang mở cửa" : countingPrompt;
-                return cPrompt + " (" + Mathf.CeilToInt(_remainingSeconds) + "s)";
+                return EchoProtocol.Settings.GameLanguage.Translate(cPrompt) + " (" + Mathf.CeilToInt(_remainingSeconds) + "s)";
             }
 
             if (CanStartCountdown())
             {
-                return string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Start escape countdown" ? "Mở Cửa Thoát Hiểm" : startPrompt;
+                return EchoProtocol.Settings.GameLanguage.Translate(string.IsNullOrWhiteSpace(startPrompt) || startPrompt == "Start escape countdown" ? "Mở Cửa Thoát Hiểm" : startPrompt);
             }
 
-            return string.IsNullOrWhiteSpace(lockedPrompt) || lockedPrompt == "Escape locked" ? "Cửa thoát hiểm đang khóa" : lockedPrompt;
+            return EchoProtocol.Settings.GameLanguage.Translate(string.IsNullOrWhiteSpace(lockedPrompt) || lockedPrompt == "Escape locked" ? "Cửa thoát hiểm đang khóa" : lockedPrompt);
         }
     }
 

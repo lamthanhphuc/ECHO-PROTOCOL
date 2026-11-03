@@ -35,6 +35,21 @@ namespace EchoProtocol.Networking
         private Zone3ConvoyRoutePoint _currentPoint = Zone3ConvoyRoutePoint.Point00;
         private Zone3ConvoyRoutePoint _targetPoint = Zone3ConvoyRoutePoint.Point01;
         private float _currentSpeed;
+        public bool DebugFastConvoy { get; private set; }
+        public const float DebugSpeedMultiplier = 5f;
+
+        public bool ToggleDebugFastConvoy()
+        {
+            var runner = NetworkBootstrap.Instance != null ? NetworkBootstrap.Instance.Runner : null;
+            if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority
+                || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
+                return false;
+            DebugFastConvoy = !DebugFastConvoy;
+            EchoProtocol.UI.GameUIFeedback.Instance.Toast(EchoProtocol.Settings.GameLanguage.Choose(
+                DebugFastConvoy ? "Tốc độ tàu demo ×5" : "Tốc độ tàu bình thường",
+                DebugFastConvoy ? "Demo convoy speed ×5" : "Normal convoy speed"));
+            return true;
+        }
         private float _cruiseHeight;
         private Vector3 _segmentDirection;
         private bool _initialized;
@@ -70,10 +85,10 @@ namespace EchoProtocol.Networking
         {
             get
             {
-                if (!_initialized) return "SPACEFRIGATE\nINITIALIZE TRANSPORT";
-                if (IsFuelEmpty && _currentPoint != Zone3ConvoyRoutePoint.Final) return "FUEL REQUIRED\nFIND A CONVOY FUEL CELL";
+                if (!_initialized) return EchoProtocol.Settings.GameLanguage.Choose("TÀU\nKHỞI ĐỘNG VẬN CHUYỂN", "SPACEFRIGATE\nINITIALIZE TRANSPORT");
+                if (IsFuelEmpty && _currentPoint != Zone3ConvoyRoutePoint.Final) return EchoProtocol.Settings.GameLanguage.Choose("CẦN NHIÊN LIỆU\nTÌM PIN NHIÊN LIỆU CHO TÀU", "FUEL REQUIRED\nFIND A CONVOY FUEL CELL");
                 if (_waitingForRouteChoice) return BuildRouteChoicePrompt();
-                return "SPACEFRIGATE - ESCORT ACTIVE";
+                return EchoProtocol.Settings.GameLanguage.Choose("TÀU - ĐANG HỘ TỐNG", "SPACEFRIGATE - ESCORT ACTIVE");
             }
         }
 
@@ -250,8 +265,10 @@ namespace EchoProtocol.Networking
             int escortCount = CountNearbyAlivePlayers();
             float targetSpeed = escortCount <= 0 ? 0f
                 : normalSpeed * (escortCount == 1 ? soloEscortSpeedMultiplier : 1f);
+            float demoMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : 1f;
+            targetSpeed *= demoMultiplier;
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, targetSpeed,
-                (targetSpeed > _currentSpeed ? acceleration : deceleration) * deltaTime);
+                (targetSpeed > _currentSpeed ? acceleration : deceleration) * demoMultiplier * deltaTime);
             MoveTowardTarget(deltaTime);
         }
 
@@ -379,10 +396,10 @@ namespace EchoProtocol.Networking
         private string BuildRouteChoicePrompt()
         {
             var options = new List<string>(4);
-            if (TryGetRoutePointForTurn(RouteTurn.Left, out _)) options.Add("1 Trai");
-            if (TryGetRoutePointForTurn(RouteTurn.Straight, out _)) options.Add("2 Thang");
-            if (TryGetRoutePointForTurn(RouteTurn.Right, out _)) options.Add("3 Phai");
-            if (TryGetRoutePointForTurn(RouteTurn.Back, out _)) options.Add("4 Lui");
+            if (TryGetRoutePointForTurn(RouteTurn.Left, out _)) options.Add(EchoProtocol.Settings.GameLanguage.Choose("1 Trái", "1 Left"));
+            if (TryGetRoutePointForTurn(RouteTurn.Straight, out _)) options.Add(EchoProtocol.Settings.GameLanguage.Choose("2 Thẳng", "2 Straight"));
+            if (TryGetRoutePointForTurn(RouteTurn.Right, out _)) options.Add(EchoProtocol.Settings.GameLanguage.Choose("3 Phải", "3 Right"));
+            if (TryGetRoutePointForTurn(RouteTurn.Back, out _)) options.Add(EchoProtocol.Settings.GameLanguage.Choose("4 Lùi", "4 Back"));
             return "SPACEFRIGATE: " + string.Join(" | ", options);
         }
 

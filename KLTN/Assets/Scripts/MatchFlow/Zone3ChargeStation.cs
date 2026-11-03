@@ -38,8 +38,8 @@ namespace EchoProtocol.Networking
         }
         public bool RequiresHold => true;
         public string InteractionPrompt => IsCharging
-            ? $"TRANSFERRING EMERGENCY POWER {Mathf.RoundToInt(Progress01 * 100f)}%"
-            : $"HOLD E - INITIATE POWER TRANSFER {Mathf.RoundToInt(Progress01 * 100f)}%";
+            ? EchoProtocol.Settings.GameLanguage.Choose($"ĐANG CHUYỂN ĐIỆN KHẨN CẤP {Mathf.RoundToInt(Progress01 * 100f)}%", $"TRANSFERRING EMERGENCY POWER {Mathf.RoundToInt(Progress01 * 100f)}%")
+            : EchoProtocol.Settings.GameLanguage.Choose($"BẮT ĐẦU CHUYỂN ĐIỆN {Mathf.RoundToInt(Progress01 * 100f)}%", $"INITIATE POWER TRANSFER {Mathf.RoundToInt(Progress01 * 100f)}%");
 
         public bool CanInteract(GameObject interactor)
         {

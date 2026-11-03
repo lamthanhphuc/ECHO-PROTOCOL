@@ -45,6 +45,16 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
             return;
         }
 
+        if (keyboard.tKey.wasPressedThisFrame)
+        {
+            if (!PlayerInteractionControlLock.HasModal
+                && !(UnityEngine.EventSystems.EventSystem.current != null
+                    && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != null
+                    && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.GetComponentInParent<UnityEngine.UI.InputField>() != null))
+                FindAnyObjectByType<Zone3ConvoyController>()?.ToggleDebugFastConvoy();
+            return;
+        }
+
         NetworkPlayerLifeState localLife =
             FindLocalLifeState();
 

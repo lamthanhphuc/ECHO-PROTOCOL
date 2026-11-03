@@ -120,7 +120,7 @@ namespace EchoProtocol.Networking
     {
         public const float DefaultMatchDurationSeconds = 7200f;
         public const float DefaultEscapeDurationSeconds = 45f;
-        public const float MinimumPowerTransferEscapeDurationSeconds = 180f;
+        public const float MinimumPowerTransferEscapeDurationSeconds = 600f;
 
         public static event Action<NetworkMatchState> StateChanged;
 

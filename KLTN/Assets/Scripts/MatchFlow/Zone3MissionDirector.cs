@@ -311,7 +311,7 @@ namespace EchoProtocol.Networking
 
     public sealed class Zone3ExitDoor : MonoBehaviour, IInteractable
     {
-        public string InteractionPrompt => "EXIT ONLINE - ESCAPE";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("CỬA THOÁT ĐÃ MỞ - THOÁT HIỂM", "EXIT ONLINE - ESCAPE");
         public bool CanInteract(GameObject interactor) => Zone3MissionDirector.Instance?.CanExit(interactor) == true;
         public void Interact(GameObject interactor) => Zone3MissionDirector.Instance?.RegisterExit(interactor);
     }

@@ -7,7 +7,8 @@ namespace EchoProtocol.Networking
         private Zone3ConvoyController _convoy;
         private Zone3ConvoyRoutePoint _point;
 
-        public string InteractionPrompt => $"ROUTE {_point}\nPRESS [E] TO SEND SPACEFRIGATE";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose(
+            $"TUYẾN {_point}\nNHẤN [E] ĐỂ ĐIỀU TÀU", $"ROUTE {_point}\nPRESS [E] TO SEND SPACEFRIGATE");
 
         public void Bind(Zone3ConvoyController convoy, Zone3ConvoyRoutePoint point)
         {

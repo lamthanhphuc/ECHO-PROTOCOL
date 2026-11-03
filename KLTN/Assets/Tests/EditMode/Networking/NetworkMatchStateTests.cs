@@ -375,10 +375,10 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void MATCH_NET_PowerTransferAllowsAtLeastThreeMinutesRegardlessOfScenario()
+        public void MATCH_NET_PowerTransferAllowsAtLeastTenMinutesRegardlessOfScenario()
         {
             var source = LoadNetworkMatchStateSource();
-            StringAssert.Contains("MinimumPowerTransferEscapeDurationSeconds = 180f", source);
+            StringAssert.Contains("MinimumPowerTransferEscapeDurationSeconds = 600f", source);
             StringAssert.Contains("reason == \"ZONE3_POWER_TRANSFER\"", source);
             StringAssert.Contains("Mathf.Max(MinimumPowerTransferEscapeDurationSeconds, CurrentScenarioEscapeDoorTimerSeconds)", source);
             StringAssert.Contains("TickTimer.CreateFromSeconds(Runner, duration)", source);
