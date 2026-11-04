@@ -1,26 +1,40 @@
+
 stateDiagram-v2
     [*] --> Alive
 
-    Alive --> Downed : valid damage or monster down / budget available
-    Alive --> Eliminated : revive budget exceeded or forced elimination
-    Alive --> Escaped : TryEscape accepted by State Authority
-    Alive --> Caught : TryCatchAuthoritative accepted (mode-dependent)
+    Alive --> Downed : Valid damage / revive budget available
+    Alive --> Eliminated : Forced elimination or budget exceeded
+    Alive --> Escaped : Authoritative escape accepted
 
-    Downed --> Downed : ReviveStarted / ReviveCancelled (same status)
-    Downed --> Alive : CompleteReviveAuthoritative / kit consumed
-    Downed --> Eliminated : bleedout or revive limit
+    Downed --> Downed : Revive started or cancelled
+    Downed --> Alive : Eligible revive completed
+    Downed --> Eliminated : Bleedout or revive limit
 
-    Caught --> Downed : catch timer expired / nonfatal
-    Caught --> Eliminated : catch timer expired / fatal
+    Alive --> Caught : Valid ghost catch / mode-dependent
+    Caught --> Downed : Nonfatal catch timer expired
+    Caught --> Eliminated : Fatal catch timer expired
 
     Eliminated --> [*]
     Escaped --> [*]
 
     note right of Downed
-        Revive is a timed process while status remains Downed.
-        Not a separate NetworkPlayerLifeStatus enum value.
+        Revive is a timed operation.
+        Player status remains Downed
+        until revive completion.
     end note
+
     note right of Caught
-        Shared life-state enum; capture behavior is mode-dependent.
-        Do not imply every Expedition path uses Caught.
+        Caught is a shared optional life state.
+        It is triggered by validated
+        ghost capture behaviour.
+        It is not a mandatory Stalker
+        attack transition in Expedition.
+    end note
+
+    note left of Alive
+        Mandatory Expedition acceptance:
+        Alive, Downed, Revive,
+        Eliminated and Escaped.
+        Optional capture is documented
+        for shared state completeness.
     end note

@@ -7,7 +7,7 @@ flowchart TB
         E --> F["Backend: Process configured reward and progression"]
         F --> G{"Reward completed?"}
         G -->|No| H(["Pending: Show no unconfirmed Credits; retry later"])
-        G -->|Yes| I["Player: GET /reward/me and view confirmed Credits / XP"]
+        G -->|Yes| I["Player: GET /api/matches/{matchId}/reward/me and view confirmed Credits / XP"]
     end
 
     subgraph SHOP["02 - Purchase and ownership (Player / Backend / PostgreSQL)"]
