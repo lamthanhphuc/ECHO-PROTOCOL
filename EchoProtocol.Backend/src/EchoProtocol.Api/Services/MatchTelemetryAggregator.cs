@@ -225,9 +225,11 @@ public sealed class MatchTelemetryAggregator : IMatchTelemetryAggregator
         };
         var researchEnabled = TryReadBoolean(starts[0].ValueJson, "context", "researchCaptureEnabled", out var enabled) && enabled;
 
+        var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly;
         return new MatchTelemetryAggregation(
-            matchId, userId, result.EndedAtUtc, MatchProfileEligibilityStatus.Eligible,
-            completeness, reasons, SupportedSchemaVersion, sourceFingerprint,
+            matchId, userId, result.EndedAtUtc,
+            testOnly ? MatchProfileEligibilityStatus.Ineligible : MatchProfileEligibilityStatus.Eligible,
+            completeness, testOnly ? [.. reasons, "TEST_ONLY_MATCH"] : reasons, SupportedSchemaVersion, sourceFingerprint,
             researchEnabled, null, metrics, behaviorSignals);
     }
 

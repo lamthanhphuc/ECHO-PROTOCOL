@@ -65,16 +65,19 @@ public sealed class MatchProfilePostProcessingWorker(
                 return;
             }
 
-            var updater = scope.ServiceProvider.GetRequiredService<IPlayerAIProfileUpdater>();
-            var users = await db.MatchPlayerBindings.AsNoTracking().Where(item => item.MatchId == job.MatchId)
-                .Select(item => item.UserId).Distinct().OrderBy(userId => userId).ToListAsync(ct);
-            foreach (var userId in users)
+            if (match!.MatchDataPolicy != RemoteFixedBalanceContract.TestOnly)
             {
-                var updated = await updater.ProcessAsync(job.MatchId, userId, ct);
-                if (!updated.IsSuccess)
+                var updater = scope.ServiceProvider.GetRequiredService<IPlayerAIProfileUpdater>();
+                var users = await db.MatchPlayerBindings.AsNoTracking().Where(item => item.MatchId == job.MatchId)
+                    .Select(item => item.UserId).Distinct().OrderBy(userId => userId).ToListAsync(ct);
+                foreach (var userId in users)
                 {
-                    await RetryAsync(db, job.MatchId, job.Attempts + 1, updated.ErrorCode ?? "PLAYER_PROFILE_PENDING", ct);
-                    return;
+                    var updated = await updater.ProcessAsync(job.MatchId, userId, ct);
+                    if (!updated.IsSuccess)
+                    {
+                        await RetryAsync(db, job.MatchId, job.Attempts + 1, updated.ErrorCode ?? "PLAYER_PROFILE_PENDING", ct);
+                        return;
+                    }
                 }
             }
             var team = await scope.ServiceProvider.GetRequiredService<ITeamProfileService>().ProcessAsync(job.MatchId, ct);
