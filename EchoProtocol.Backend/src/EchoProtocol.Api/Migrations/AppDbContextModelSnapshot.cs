@@ -246,6 +246,22 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BalanceHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BalanceProtocolVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BalanceSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BalanceVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -272,8 +288,19 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("MatchDataPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("STANDARD");
+
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ResolutionMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTime?>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -288,6 +315,8 @@ namespace EchoProtocol.Api.Migrations
 
                     b.HasKey("MatchId");
 
+                    b.HasIndex("BalanceVersion");
+
                     b.HasIndex("HostUserId");
 
                     b.HasIndex("FusionSessionName", "Status");
@@ -296,6 +325,8 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("MatchAuthorityBindings", null, t =>
                         {
+                            t.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", "COALESCE((\r\n    \"ResolutionMode\" IS NULL\r\n    AND \"BalanceSource\" IS NULL\r\n    AND \"BalanceProtocolVersion\" IS NULL\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" = 'STANDARD'\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'LOCAL'\r\n    AND \"ResolutionMode\" IN ('FIXED', 'ADAPTIVE')\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" = 'STANDARD'\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'REMOTE_FIXED'\r\n    AND \"ResolutionMode\" = 'FIXED'\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NOT NULL\r\n    AND \"BalanceHash\" IS NOT NULL\r\n    AND \"MatchDataPolicy\" = 'TEST_ONLY'\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n    AND \"MapId\" IN ('SciFi', 'Scene_A')\r\n    AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD')\r\n), FALSE)");
+
                             t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
                         });
                 });
@@ -1250,6 +1281,52 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.RemoteFixedBalanceVersion", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MapId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProtocolVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Version");
+
+                    b.HasIndex("MapId", "Difficulty", "ProtocolVersion")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RemoteFixedBalance_Active")
+                        .HasFilter("\"IsActive\"");
+
+                    b.ToTable("RemoteFixedBalanceVersions", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioApplyReceipt", b =>
                 {
                     b.Property<Guid>("DecisionId")
@@ -2089,6 +2166,11 @@ namespace EchoProtocol.Api.Migrations
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.MatchAuthorityBinding", b =>
                 {
+                    b.HasOne("EchoProtocol.Api.Entities.RemoteFixedBalanceVersion", null)
+                        .WithMany()
+                        .HasForeignKey("BalanceVersion")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("EchoProtocol.Api.Entities.User", "HostUser")
                         .WithMany()
                         .HasForeignKey("HostUserId")

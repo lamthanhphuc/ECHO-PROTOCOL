@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
+    public DbSet<RemoteFixedBalanceVersion> RemoteFixedBalanceVersions => Set<RemoteFixedBalanceVersion>();
     public DbSet<MatchPlayerBinding> MatchPlayerBindings => Set<MatchPlayerBinding>();
     public DbSet<MatchResult> MatchResults => Set<MatchResult>();
     public DbSet<MatchResultPlayer> MatchResultPlayers => Set<MatchResultPlayer>();
@@ -197,18 +198,77 @@ public class AppDbContext : DbContext
                 .HasDatabaseName("IX_Wallets_UserId");
         });
 
+        modelBuilder.Entity<RemoteFixedBalanceVersion>(entity =>
+        {
+            entity.ToTable("RemoteFixedBalanceVersions");
+            entity.HasKey(e => e.Version);
+            entity.Property(e => e.Version).HasMaxLength(80);
+            entity.Property(e => e.MapId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Difficulty).IsRequired().HasMaxLength(16);
+            entity.Property(e => e.ProtocolVersion).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.SnapshotJson).IsRequired().HasColumnType("text");
+            entity.Property(e => e.ContentHash).IsRequired().HasMaxLength(64);
+            entity.HasIndex(e => new { e.MapId, e.Difficulty, e.ProtocolVersion })
+                .IsUnique()
+                .HasFilter("\"IsActive\"")
+                .HasDatabaseName("UX_RemoteFixedBalance_Active");
+        });
+
         modelBuilder.Entity<MatchAuthorityBinding>(entity =>
         {
-            entity.ToTable("MatchAuthorityBindings", table => table.HasCheckConstraint(
-                "CK_MatchAuthorityBindings_LeaderboardContext",
-                "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR " +
-                "(\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND " +
-                "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND " +
-                "\"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))"));
+            entity.ToTable("MatchAuthorityBindings", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MatchAuthorityBindings_LeaderboardContext",
+                    "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR " +
+                    "(\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND " +
+                    "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND " +
+                    "\"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
+                table.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", """
+                    COALESCE((
+                        "ResolutionMode" IS NULL
+                        AND "BalanceSource" IS NULL
+                        AND "BalanceProtocolVersion" IS NULL
+                        AND "BalanceVersion" IS NULL
+                        AND "BalanceHash" IS NULL
+                        AND "MatchDataPolicy" = 'STANDARD'
+                    )
+                    OR
+                    (
+                        "BalanceSource" = 'LOCAL'
+                        AND "ResolutionMode" IN ('FIXED', 'ADAPTIVE')
+                        AND "BalanceProtocolVersion" = 'RFB-1'
+                        AND "BalanceVersion" IS NULL
+                        AND "BalanceHash" IS NULL
+                        AND "MatchDataPolicy" = 'STANDARD'
+                        AND "MapId" IS NOT NULL
+                        AND "Difficulty" IS NOT NULL
+                    )
+                    OR
+                    (
+                        "BalanceSource" = 'REMOTE_FIXED'
+                        AND "ResolutionMode" = 'FIXED'
+                        AND "BalanceProtocolVersion" = 'RFB-1'
+                        AND "BalanceVersion" IS NOT NULL
+                        AND "BalanceHash" IS NOT NULL
+                        AND "MatchDataPolicy" = 'TEST_ONLY'
+                        AND "MapId" IS NOT NULL
+                        AND "Difficulty" IS NOT NULL
+                        AND "MapId" IN ('SciFi', 'Scene_A')
+                        AND "Difficulty" IN ('EASY', 'NORMAL', 'HARD')
+                    ), FALSE)
+                    """);
+            });
             entity.HasKey(e => e.MatchId);
             entity.Property(e => e.FusionSessionName).IsRequired().HasMaxLength(128);
             entity.Property(e => e.MapId).HasMaxLength(64);
             entity.Property(e => e.Difficulty).HasMaxLength(16);
+            entity.Property(e => e.ResolutionMode).HasMaxLength(16);
+            entity.Property(e => e.BalanceSource).HasMaxLength(20);
+            entity.Property(e => e.BalanceProtocolVersion).HasMaxLength(20);
+            entity.Property(e => e.BalanceVersion).HasMaxLength(80);
+            entity.Property(e => e.BalanceHash).HasMaxLength(64);
+            entity.Property(e => e.MatchDataPolicy).IsRequired().HasMaxLength(20).HasDefaultValue("STANDARD");
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => new { e.FusionSessionName, e.Status });
             entity.HasIndex(e => e.HostUserId);
@@ -216,6 +276,10 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.HostUser)
                 .WithMany()
                 .HasForeignKey(e => e.HostUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<RemoteFixedBalanceVersion>()
+                .WithMany()
+                .HasForeignKey(e => e.BalanceVersion)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Result)
                 .WithOne(e => e.Match)

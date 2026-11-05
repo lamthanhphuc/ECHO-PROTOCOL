@@ -81,6 +81,19 @@ public sealed class MatchAuthorityController : ControllerBase
         CancellationToken cancellationToken) =>
         Respond(await _service.StartAsync(UserId(), matchId, cancellationToken, request));
 
+    [HttpPost("{matchId:guid}/start-v2")]
+    public async Task<IActionResult> StartV2(
+        Guid matchId,
+        [FromBody] StartMatchV2Request request,
+        CancellationToken cancellationToken) =>
+        Respond(await _service.StartV2Async(UserId(), matchId, request, cancellationToken));
+
+    [HttpGet("{matchId:guid}/balance")]
+    public async Task<IActionResult> GetBalance(
+        Guid matchId,
+        CancellationToken cancellationToken) =>
+        Respond(await _service.GetLockedBalanceAsync(UserId(), matchId, cancellationToken));
+
     [HttpPost("{matchId:guid}/end")]
     public async Task<IActionResult> End(
         Guid matchId,
@@ -109,6 +122,9 @@ public sealed class MatchAuthorityController : ControllerBase
     {
         ErrorCodes.MatchNotFound or ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.MatchAuthorityForbidden => StatusCodes.Status403Forbidden,
+        ErrorCodes.BalanceTestDisabled => StatusCodes.Status403Forbidden,
+        ErrorCodes.BalanceVersionUnavailable or ErrorCodes.BalanceNotRemoteFixed => StatusCodes.Status404NotFound,
+        ErrorCodes.BalanceSnapshotInvalid => StatusCodes.Status409Conflict,
         ErrorCodes.MatchSessionConflict or ErrorCodes.MatchPlayerBindingConflict => StatusCodes.Status409Conflict,
         ErrorCodes.MatchAuthorityTakeoverNotReady => StatusCodes.Status409Conflict,
         ErrorCodes.MatchLeaseExpired or ErrorCodes.MatchAlreadyEnded => StatusCodes.Status410Gone,

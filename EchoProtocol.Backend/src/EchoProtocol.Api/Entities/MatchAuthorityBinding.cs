@@ -11,6 +11,12 @@ public sealed class MatchAuthorityBinding
     public int MaxPlayers { get; set; }
     public string? MapId { get; set; }
     public string? Difficulty { get; set; }
+    public string? ResolutionMode { get; set; }
+    public string? BalanceSource { get; set; }
+    public string? BalanceProtocolVersion { get; set; }
+    public string? BalanceVersion { get; set; }
+    public string? BalanceHash { get; set; }
+    public string MatchDataPolicy { get; set; } = "STANDARD";
     public MatchAuthorityStatus Status { get; set; }
     public DateTime LeaseExpiresAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }

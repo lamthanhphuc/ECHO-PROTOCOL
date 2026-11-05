@@ -242,6 +242,30 @@ milestone decision and is not implied by the ingestion-age validation.
 | CreatedAtUtc / UpdatedAtUtc | TIMESTAMPTZ | Audit timestamps |
 | EndedAtUtc | TIMESTAMPTZ NULL | Telemetry delegation retention anchor |
 
+| ResolutionMode | VARCHAR(16) NULL | FIXED / ADAPTIVE; null for legacy |
+| BalanceSource | VARCHAR(20) NULL | LOCAL / REMOTE_FIXED; null for legacy |
+| BalanceProtocolVersion | VARCHAR(20) NULL | RFB-1; null for legacy |
+| BalanceVersion | VARCHAR(80) NULL FK | Immutable published version; null for local/legacy |
+| BalanceHash | VARCHAR(64) NULL | Hash of locked snapshot; null for local/legacy |
+| MatchDataPolicy | VARCHAR(20) NOT NULL DEFAULT STANDARD | TEST_ONLY for Remote Fixed V1 |
+
+## RemoteFixedBalanceVersions (Remote Fixed Balance V1)
+
+| Column | Type | Notes |
+|---|---|---|
+| Version | VARCHAR(80) PK | Immutable version identifier |
+| MapId | VARCHAR(64) | Supported map scope |
+| Difficulty | VARCHAR(16) | EASY, NORMAL, or HARD |
+| ProtocolVersion | VARCHAR(20) | Snapshot protocol (RFB-1) |
+| SnapshotJson | TEXT | Exact bytes hashed and returned to clients |
+| ContentHash | VARCHAR(64) | Lowercase SHA-256 of SnapshotJson UTF-8 bytes |
+| IsActive | BOOLEAN | Only one active version per map/difficulty/protocol |
+| CreatedAtUtc | TIMESTAMPTZ | Publication timestamp |
+
+The unique filtered index UX_RemoteFixedBalance_Active enforces one active
+version per scope. PostgreSQL triggers make published version content immutable
+(only IsActive can change) and freeze match balance context after start.
+
 ## MatchPlayerBindings (M2 implemented)
 
 | Column | Type | Notes |
