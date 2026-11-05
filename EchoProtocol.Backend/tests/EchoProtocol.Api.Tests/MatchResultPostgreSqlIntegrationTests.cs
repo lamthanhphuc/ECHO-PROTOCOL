@@ -37,8 +37,52 @@ public sealed class M4PostgreSqlCollectionDefinition;
 [Collection("M4 PostgreSQL")]
 public sealed class MatchResultPostgreSqlIntegrationTests
 {
+    [Fact, Trait("Category", "M4PostgreSqlIntegration"), Trait("Feature", "AEDV02")]
+    public async Task AEDV02PilotMigrationRoundTripPreservesExistingMatchAndUserRows()
+    {
+        const string previous = "20261011053603_AddAEDPhase8DirectorApprovals";
+        const string pilot = "20261014102100_AddAEDV02PilotLedger";
+        await using var scope = await PostgresScope.CreateAsync(previous);
+        await using var db = scope.CreateDbContext();
+        Assert.Equal(0, await LeaderboardContextColumnCountAsync(db));
+        var seed = await scope.SeedMatchAsync(legacyBindings: true);
+        int users = await db.Users.CountAsync();
+        await db.GetService<IMigrator>().MigrateAsync();
+        Assert.Equal(2, await LeaderboardContextColumnCountAsync(db));
+        Assert.Contains(pilot, await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(x => x.MatchId == seed.MatchId));
+        Assert.All(await db.MatchPlayerBindings.Where(x => x.MatchId == seed.MatchId).ToArrayAsync(), x => Assert.False(x.HadGameplayDisconnect));
+        var disconnected = await db.MatchPlayerBindings.SingleAsync(x => x.MatchId == seed.MatchId && x.UserId == seed.HostId);
+        disconnected.HadGameplayDisconnect = true;
+        await db.SaveChangesAsync();
+        Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
+        Assert.Equal(0, await db.AEDV02VerifiedSources.CountAsync());
+        Assert.Equal(0, await db.AEDV02SkillObservations.CountAsync());
+        Assert.Equal(0, await db.AEDV02SceneContents.CountAsync());
+        await db.GetService<IMigrator>().MigrateAsync(previous);
+        Assert.Equal(0, await LeaderboardContextColumnCountAsync(db));
+        Assert.Contains(pilot, await db.Database.GetPendingMigrationsAsync());
+        Assert.Equal(users, await db.Users.CountAsync());
+        Assert.True(await db.MatchAuthorityBindings.AnyAsync(x => x.MatchId == seed.MatchId));
+        await db.GetService<IMigrator>().MigrateAsync();
+        await db.GetService<IMigrator>().MigrateAsync();
+        Assert.Equal(2, await LeaderboardContextColumnCountAsync(db));
+        Assert.Equal(0, await db.AEDV02Decisions.CountAsync());
+        Assert.Equal(users, await db.Users.CountAsync());
+        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        db.ChangeTracker.Clear();
+        Assert.Equal(2, await db.MatchPlayerBindings.CountAsync(x => x.MatchId == seed.MatchId));
+        Assert.All(await db.MatchPlayerBindings.Where(x => x.MatchId == seed.MatchId).ToArrayAsync(), x => Assert.False(x.HadGameplayDisconnect));
+    }
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+
+    private static Task<int> LeaderboardContextColumnCountAsync(AppDbContext db) =>
+        db.Database.SqlQueryRaw<int>("""
+            SELECT count(*)::int AS "Value" FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'MatchAuthorityBindings'
+              AND column_name IN ('MapId', 'Difficulty')
+            """).SingleAsync();
 
     [Fact, Trait("Category", "M4PostgreSqlIntegration")]
     public async Task MigrationAppliesToRealPostgreSql()
@@ -1019,6 +1063,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                 new RewardPolicyV1(),
                 new ProgressionService(new ProgressionPolicyV1()),
                 new FixedTimeProvider(Now)),
+            new MatchProfilePostProcessingService(db, new FixedTimeProvider(Now)),
             NullLogger<MatchResultsController>.Instance)
         {
             ControllerContext = new ControllerContext
@@ -1042,6 +1087,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             .Include(item => item.Players)
             .SingleAsync(item => item.MatchId == seed.MatchId);
         Assert.Equal(MatchRewardStatus.Completed, stored.RewardStatus);
+        var processing = await verify.MatchProfileProcessingJobs.AsNoTracking()
+            .SingleAsync(job => job.MatchId == seed.MatchId);
+        Assert.Equal("PENDING", processing.Status);
         Assert.Equal(2, stored.Players.Count);
         Assert.All(await verify.Wallets.AsNoTracking().ToListAsync(), wallet =>
             Assert.Equal(230, wallet.Balance));
@@ -2041,7 +2089,12 @@ public sealed class MatchResultPostgreSqlIntegrationTests
     {
         var clock = new FixedTimeProvider(Now);
         var builder = new AdaptiveInputSnapshotBuilder(db, clock);
-        return new ScenarioService(db, new ScenarioConfigRegistry(db), builder, clock);
+        return new ScenarioService(
+            db,
+            new ScenarioConfigRegistry(db),
+            builder,
+            clock,
+            Options.Create(new AEDPreMatchPolicySettings { Enabled = false }));
     }
 
     private static async Task<MatchSeed> SeedScenarioDecisionAsync(PostgresScope scope)
@@ -2236,13 +2289,33 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
         public AppDbContext CreateDbContext() => new(_options);
 
-        public async Task<MatchSeed> SeedMatchAsync()
+        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false)
         {
             var hostId = Guid.NewGuid();
             var playerId = Guid.NewGuid();
             var matchId = Guid.NewGuid();
             await using var db = CreateDbContext();
             db.Users.AddRange(CreateUser(hostId, "host"), CreateUser(playerId, "player"));
+            if (legacyBindings)
+            {
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO "MatchAuthorityBindings"
+                        ("MatchId", "FusionSessionName", "HostUserId", "MaxPlayers", "Status",
+                         "LeaseExpiresAtUtc", "CreatedAtUtc", "UpdatedAtUtc", "StartedAtUtc")
+                    VALUES ({matchId}, {$"integration-{matchId:N}"}, {hostId}, {4}, {nameof(MatchAuthorityStatus.InMatch)},
+                            {Now.AddMinutes(1).UtcDateTime}, {Now.AddMinutes(-3).UtcDateTime},
+                            {Now.AddMinutes(-2).UtcDateTime}, {Now.AddMinutes(-2).UtcDateTime})
+                    """);
+                foreach (var binding in new[] { CreateBinding(matchId, hostId, 1), CreateBinding(matchId, playerId, 2) })
+                    await db.Database.ExecuteSqlInterpolatedAsync($"""
+                        INSERT INTO "MatchPlayerBindings"
+                            ("Id", "MatchId", "UserId", "FusionActorNumber", "JoinProofId", "BoundAtUtc", "LastSeenAtUtc")
+                        VALUES ({binding.Id}, {binding.MatchId}, {binding.UserId}, {binding.FusionActorNumber},
+                            {binding.JoinProofId}, {binding.BoundAtUtc}, {binding.LastSeenAtUtc})
+                        """);
+                return new MatchSeed(matchId, hostId, playerId);
+            }
             db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
             {
                 MatchId = matchId,

@@ -494,7 +494,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var now = UtcNow();
-        match!.LeaseExpiresAtUtc = now.AddSeconds(_settings.LeaseLifetimeSeconds);
+        var renewedUntil = now.AddSeconds(_settings.LeaseLifetimeSeconds);
+        if (match!.LeaseExpiresAtUtc < renewedUntil) match.LeaseExpiresAtUtc = renewedUntil;
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match authority lease renewed");
@@ -647,6 +648,11 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             player.Participated = player.DisconnectedAtUtc == null;
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
+        // Unity scene loading can pause host heartbeats; resume the normal lease on the next renewal.
+        match.LeaseExpiresAtUtc = now.AddSeconds(_settings.LeaseLifetimeSeconds * 2);
+        var pendingPreMatch = await _db.AEDV02Decisions.Where(x => x.MatchId == matchId && x.HostUserId == hostUserId &&
+            x.DecisionPoint == "PRE_MATCH" && x.ApprovalStatus == "APPROVED" && x.ApplyStatus == "PENDING").ToListAsync(cancellationToken);
+        foreach (var decision in pendingPreMatch) decision.ExpiresAtUtc = match.LeaseExpiresAtUtc;
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");
@@ -752,7 +758,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                         && binding.LeaseExpiresAtUtc > now))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(item => item.DisconnectedAtUtc, (DateTime?)now)
-                    .SetProperty(item => item.LastSeenAtUtc, now),
+                    .SetProperty(item => item.LastSeenAtUtc, now)
+                    .SetProperty(item => item.HadGameplayDisconnect,
+                        item => item.HadGameplayDisconnect || match.Status == MatchAuthorityStatus.InMatch),
                     cancellationToken);
 
             if (affected != 1)
@@ -772,8 +780,10 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             // Unit-test in-memory provider does not support ExecuteUpdate.
             player.DisconnectedAtUtc = now;
             player.LastSeenAtUtc = now;
+            if (match.Status == MatchAuthorityStatus.InMatch) player.HadGameplayDisconnect = true;
             await _db.SaveChangesAsync(cancellationToken);
         }
+
 
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");
     }

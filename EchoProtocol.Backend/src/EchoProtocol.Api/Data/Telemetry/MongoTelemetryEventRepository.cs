@@ -16,7 +16,8 @@ public sealed class MongoTelemetryEventRepository : ITelemetryEventRepository
         "WARDEN_TELEGRAPH_STARTED",
         "WARDEN_ROUTE_ACTION_APPLIED",
         "WARDEN_ROUTE_SAFETY_CHECKED",
-        "WARDEN_ROUTE_ACTION_RELEASED"
+        "WARDEN_ROUTE_ACTION_RELEASED",
+        "AED_V02_RESOURCE_ACTION"
     ];
 
     private readonly IMongoCollection<TelemetryEventDocument> _collection;

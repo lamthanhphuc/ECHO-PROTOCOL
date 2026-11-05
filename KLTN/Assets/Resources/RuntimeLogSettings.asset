@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 022a2742ea2b87b4a95a4c01803e72ac, type: 3}
   m_Name: RuntimeLogSettings
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Diagnostics.RuntimeLogSettings
-  enableInfoLogs: 0
-  enabledCategories: 0
+  enableInfoLogs: 1
+  enabledCategories: -1

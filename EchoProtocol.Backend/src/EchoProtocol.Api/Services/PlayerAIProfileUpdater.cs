@@ -276,6 +276,12 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
             SurvivalStatus = ProfileDimensionStatus.ColdStart,
             NoiseScore = 50m,
             NoiseStatus = ProfileDimensionStatus.ColdStart,
+            ObjectiveScore = null,
+            ObjectiveStatus = ProfileDimensionStatus.ColdStart,
+            ObjectiveSampleCount = 0,
+            ToolUsageScore = null,
+            ToolUsageStatus = ProfileDimensionStatus.ColdStart,
+            ToolUsageSampleCount = 0,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -288,6 +294,21 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
             profile.AlphaConfigVersion != _policy.AlphaConfigVersion)
         {
             return false;
+        }
+
+        if (dimensions.Contains(PlayerAIDimension.ToolUsage))
+        {
+            var expectedVersion =
+                $"TOOL_USAGE_COUNT_MAX_{_policy.ToolUsageCountMax!.Value.ToString(CultureInfo.InvariantCulture)}_V1";
+
+            if (profile.ToolUsageSampleCount == 0)
+            {
+                profile.ToolUsageNormalizationVersion = expectedVersion;
+            }
+            else if (profile.ToolUsageNormalizationVersion != expectedVersion)
+            {
+                return false;
+            }
         }
 
         if (!dimensions.Contains(PlayerAIDimension.Noise))
@@ -348,9 +369,7 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
                 .OrderBy(item => item.MatchEndTs)
                 .ThenBy(item => item.MatchId.ToString("D"), StringComparer.Ordinal)
                 .ToArray();
-            var alpha = dimension == PlayerAIDimension.Survival
-                ? _policy.SurvivalAlpha!.Value
-                : _policy.NoiseAlpha!.Value;
+            var alpha = _policy.GetAlpha(dimension);
             var score = 50m;
             for (var index = 0; index < ordered.Length; index++)
             {
@@ -381,7 +400,7 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
             profile.SurvivalLastMatchId = last?.MatchId;
             profile.SurvivalLastUpdatedAtUtc = now;
         }
-        else
+        else if (dimension == PlayerAIDimension.Noise)
         {
             profile.NoiseScore = active ? score : 50m;
             profile.NoiseStatus = active ? ProfileDimensionStatus.Active : ProfileDimensionStatus.ColdStart;
@@ -389,6 +408,29 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
             profile.NoiseLastMatchEndTs = last?.MatchEndTs;
             profile.NoiseLastMatchId = last?.MatchId;
             profile.NoiseLastUpdatedAtUtc = now;
+        }
+        else if (dimension == PlayerAIDimension.Objective)
+        {
+            profile.ObjectiveScore = active ? score : null;
+            profile.ObjectiveStatus = active
+                ? ProfileDimensionStatus.Active
+                : ProfileDimensionStatus.ColdStart;
+            profile.ObjectiveSampleCount = ordered.Count;
+        }
+        else if (dimension == PlayerAIDimension.ToolUsage)
+        {
+            profile.ToolUsageScore = active ? score : null;
+            profile.ToolUsageStatus = active
+                ? ProfileDimensionStatus.Active
+                : ProfileDimensionStatus.ColdStart;
+            profile.ToolUsageSampleCount = ordered.Count;
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(dimension),
+                dimension,
+                "Unsupported Player AI dimension");
         }
     }
 

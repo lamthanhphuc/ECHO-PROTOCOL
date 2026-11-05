@@ -92,12 +92,7 @@ public sealed class MongoTelemetryEventRepositoryIntegrationTests
     [Fact]
     public async Task AtomicCommitBatchAsync_ConcurrentTerminalAndHigherSequence_NeverAcceptsBoth()
     {
-        var mongoUri = Environment.GetEnvironmentVariable(MongoUriEnvironmentVariable);
-        // Opt-in integration test. Phase 6R runtime validation supplies ECHO_PHASE6R_MONGO_URI explicitly.
-        if (string.IsNullOrWhiteSpace(mongoUri))
-        {
-            return;
-        }
+        var mongoUri = RequiredLocalMongoUri();
 
         var databaseName = CreateDatabaseName();
         var clientA = new MongoClient(mongoUri);
@@ -185,12 +180,7 @@ public sealed class MongoTelemetryEventRepositoryIntegrationTests
 
     private static async Task WithRepositoryAsync(Func<IMongoDatabase, MongoTelemetryEventRepository, Task> body)
     {
-        var mongoUri = Environment.GetEnvironmentVariable(MongoUriEnvironmentVariable);
-        // Opt-in integration tests. Phase 6R runtime validation supplies ECHO_PHASE6R_MONGO_URI explicitly.
-        if (string.IsNullOrWhiteSpace(mongoUri))
-        {
-            return;
-        }
+        var mongoUri = RequiredLocalMongoUri();
 
         var databaseName = CreateDatabaseName();
         var client = new MongoClient(mongoUri);
@@ -218,6 +208,21 @@ public sealed class MongoTelemetryEventRepositoryIntegrationTests
 
     private static string CreateDatabaseName() =>
         $"echo_protocol_phase6r_it_{Guid.NewGuid():N}";
+
+    private static string RequiredLocalMongoUri()
+    {
+        var uri = Environment.GetEnvironmentVariable(MongoUriEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(uri)) throw new InvalidOperationException($"MongoDB integration tests NOT RUN: set {MongoUriEnvironmentVariable}.");
+        MongoUrl target;
+        try { target = new MongoUrl(uri); }
+        catch (Exception ex) when (ex is MongoConfigurationException or FormatException)
+        { throw new InvalidOperationException("MongoDB integration connection is invalid."); }
+        if (target.Servers.Any(x => x.Host is not ("127.0.0.1" or "localhost" or "::1")))
+            throw new InvalidOperationException("Integration tests require loopback MongoDB and generated test databases.");
+        if (target.DirectConnection != true)
+            throw new InvalidOperationException("Integration tests require directConnection=true to keep replica discovery on loopback.");
+        return uri;
+    }
 
     private static async Task<IReadOnlyList<TelemetryEventDocument>> LoadTelemetryEventsAsync(IMongoDatabase database) =>
         await database

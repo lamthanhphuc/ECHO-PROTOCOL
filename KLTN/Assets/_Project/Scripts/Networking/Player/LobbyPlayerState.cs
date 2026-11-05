@@ -647,12 +647,19 @@ namespace EchoProtocol.Networking
             AnyStateChanged?.Invoke();
         }
 
+        public void ClearVerifiedBackendIdentityAuthoritative()
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+                BackendUserId = default;
+        }
+
         [Rpc(RpcSources.StateAuthority, RpcTargets.InputAuthority)]
         private void RpcConfirmBackendIdentity(
             [RpcTarget] PlayerRef target)
         {
             NetworkBootstrap.Instance
                 ?.MarkReconnectProofSubmitted();
+
         }
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]

@@ -119,6 +119,17 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(created.IsSuccess);
 
         await BindAsync(service, hostId, hostId, created.Data!.MatchId, "solo-room", 1);
+        var binding = await db.MatchAuthorityBindings.SingleAsync();
+        var preMatch = new AEDV02Decision { DecisionId = Guid.NewGuid(), MatchId = created.Data.MatchId, HostUserId = hostId,
+            DecisionPoint = "PRE_MATCH", ApprovalStatus = "APPROVED", ApplyStatus = "PENDING", ExpiresAtUtc = Now.UtcDateTime.AddSeconds(1) };
+        var inMatch = new AEDV02Decision { DecisionId = Guid.NewGuid(), MatchId = created.Data.MatchId, HostUserId = hostId,
+            DecisionPoint = "SAFE_WINDOW", ApprovalStatus = "APPROVED", ApplyStatus = "PENDING", ExpiresAtUtc = Now.UtcDateTime.AddSeconds(1) };
+        db.AEDV02Decisions.AddRange(preMatch, inMatch);
+        await db.SaveChangesAsync();
+        binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(-1);
+        Assert.False((await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None)).IsSuccess);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(1), preMatch.ExpiresAtUtc);
+        binding.LeaseExpiresAtUtc = Now.UtcDateTime.AddSeconds(1);
 
         var started = await service.StartAsync(hostId, created.Data.MatchId, CancellationToken.None);
 
@@ -127,6 +138,12 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal(
             Now.UtcDateTime,
             (await db.MatchAuthorityBindings.SingleAsync()).StartedAtUtc);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(90), started.Data.LeaseExpiresAtUtc);
+        Assert.Equal(started.Data.LeaseExpiresAtUtc, preMatch.ExpiresAtUtc);
+        Assert.Equal(Now.UtcDateTime.AddSeconds(1), inMatch.ExpiresAtUtc);
+        var renewed = await service.RenewLeaseAsync(hostId, created.Data.MatchId, CancellationToken.None);
+        Assert.True(renewed.IsSuccess);
+        Assert.Equal(started.Data.LeaseExpiresAtUtc, renewed.Data!.LeaseExpiresAtUtc);
     }
 
     [Fact]
@@ -551,8 +568,8 @@ public sealed class MatchAuthorityServiceTests
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
 
         var boundPlayer = await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId);
-        boundPlayer.DisconnectedAtUtc = Now.UtcDateTime;
-        await db.SaveChangesAsync();
+        Assert.True((await service.MarkPlayerDisconnectedAsync(hostId, matchId, 2, playerId, CancellationToken.None)).IsSuccess);
+        Assert.True(boundPlayer.HadGameplayDisconnect);
         var reconnectProof = await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None);
         Assert.True(reconnectProof.IsSuccess);
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
@@ -560,6 +577,7 @@ public sealed class MatchAuthorityServiceTests
             new BindMatchPlayerRequest { FusionActorNumber = 2, JoinProof = reconnectProof.Data!.Proof },
             CancellationToken.None)).IsSuccess);
         Assert.Null((await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId)).DisconnectedAtUtc);
+        Assert.True(boundPlayer.HadGameplayDisconnect);
     }
 
     [Fact]
@@ -796,7 +814,7 @@ public sealed class MatchAuthorityServiceTests
 
         Assert.Equal(hostId, unchanged.HostUserId);
         Assert.Equal(
-            Now.UtcDateTime.AddSeconds(45),
+            Now.UtcDateTime.AddSeconds(90),
             unchanged.LeaseExpiresAtUtc);
     }
 
