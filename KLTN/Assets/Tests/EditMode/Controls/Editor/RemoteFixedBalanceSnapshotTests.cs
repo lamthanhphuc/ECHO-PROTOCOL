@@ -94,5 +94,117 @@ namespace EchoProtocol.Networking.Tests
             Assert.That(RemoteFixedBalanceSnapshot.TryDecode(
                 Convert.ToBase64String(bytes), Hash(bytes), out _), Is.False);
         }
+
+        private static (
+            MatchAuthorityDto Context,
+            LockedBalanceDto Locked,
+            Guid MatchId) LockedExample()
+        {
+            var bytes = Encoding.UTF8.GetBytes(ValidJson);
+            var hash = Hash(bytes);
+            var matchId = Guid.NewGuid();
+
+            return (
+                new MatchAuthorityDto
+                {
+                    matchId = matchId.ToString("D"),
+                    mapId = "SciFi",
+                    difficulty = "NORMAL",
+                    resolutionMode = "FIXED",
+                    balanceSource = "REMOTE_FIXED",
+                    balanceProtocolVersion = "RFB-1",
+                    balanceVersion = "pr3-test-version",
+                    balanceHash = hash,
+                    matchDataPolicy = "TEST_ONLY"
+                },
+                new LockedBalanceDto
+                {
+                    matchId = matchId.ToString("D"),
+                    balanceVersion = "pr3-test-version",
+                    balanceHash = hash,
+                    balanceProtocolVersion = "RFB-1",
+                    snapshotPayloadBase64 =
+                        Convert.ToBase64String(bytes)
+                },
+                matchId
+            );
+        }
+
+        [Test]
+        public void LockedBalance_ValidContext_IsAccepted()
+        {
+            var data = LockedExample();
+
+            Assert.That(
+                RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                    data.Context,
+                    data.Locked,
+                    data.MatchId,
+                    "SciFi",
+                    "NORMAL",
+                    out var snapshot),
+                Is.True);
+
+            Assert.That(snapshot.player.maxHealth, Is.EqualTo(100f));
+        }
+
+        [TestCase("version")]
+        [TestCase("hash")]
+        [TestCase("policy")]
+        [TestCase("map")]
+        [TestCase("difficulty")]
+        [TestCase("match")]
+        [TestCase("protocol")]
+        [TestCase("mode")]
+        public void LockedBalance_ContextMismatch_IsRejected(
+            string mismatch)
+        {
+            var data = LockedExample();
+
+            switch (mismatch)
+            {
+                case "version":
+                    data.Locked.balanceVersion = "other-version";
+                    break;
+
+                case "hash":
+                    data.Locked.balanceHash = new string('0', 64);
+                    break;
+
+                case "policy":
+                    data.Context.matchDataPolicy = "STANDARD";
+                    break;
+
+                case "map":
+                    data.Context.mapId = "Scene_A";
+                    break;
+
+                case "difficulty":
+                    data.Context.difficulty = "HARD";
+                    break;
+
+                case "match":
+                    data.Locked.matchId = Guid.NewGuid().ToString("D");
+                    break;
+
+                case "protocol":
+                    data.Locked.balanceProtocolVersion = "RFB-2";
+                    break;
+
+                case "mode":
+                    data.Context.resolutionMode = "ADAPTIVE";
+                    break;
+            }
+
+            Assert.That(
+                RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                    data.Context,
+                    data.Locked,
+                    data.MatchId,
+                    "SciFi",
+                    "NORMAL",
+                    out _),
+                Is.False);
+        }
     }
 }

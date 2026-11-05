@@ -720,8 +720,34 @@ Validation rules:
 - Stalker and Minion balance is applied on State Authority.
 - The verified snapshot is retained for the current match.
 - Legacy /start remains the default.
-- Remote Fixed Host Migration restoration is deferred to PR 3.
 - TEST_ONLY must remain isolated from real player data until PR 4.
+
+### Unity Match Readiness & Host Migration (PR 3)
+
+- Remote Fixed gameplay readiness is coordinated by the existing
+  MatchLoadingCoordinator.
+- The Host validates every connected player's replicated Remote Fixed
+  movement, stamina and maximum health settings before releasing loading.
+- Clients acknowledge readiness only after their replicated Remote Fixed
+  player settings are available.
+- During Host Migration reconciliation, the core authoritative Player,
+  Stalker, Minion and MatchState simulation loops are gated.
+- The promoted Host uses the backend takeover response to identify
+  the locked Remote Fixed context.
+- The promoted Host requests GET /balance and verifies match identity,
+  map, difficulty, mode, protocol, version, hash and TEST_ONLY policy.
+- A failure to recover or validate the locked snapshot rejects migration.
+  There is no fallback to LOCAL.
+- Existing replicated Player health, stamina, inventory and state
+  must not be reset during migration.
+- Stalker and Minion local-only balance overrides are reapplied
+  from the same verified locked snapshot before reconciliation completes.
+- Changes to the currently active published version do not replace
+  the version locked to an already-started match.
+- Remote Fixed Host Migration validation in this PR is scoped to SciFi.
+  Scene_A Host Migration is not yet supported by the existing
+  PlayerSpawner authoritative-world restoration contract.
+- TEST_ONLY data isolation remains required before production rollout.
 
 ---
 

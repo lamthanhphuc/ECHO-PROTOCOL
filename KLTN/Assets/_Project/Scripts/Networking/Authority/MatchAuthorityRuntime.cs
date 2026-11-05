@@ -1027,6 +1027,7 @@ namespace EchoProtocol.Networking.Authority
 
             MatchId = sessionMatchId;
             IsHostBinding = false;
+            _remoteFixedBalance = null;
             requestedScenarioResolutionMode =
                 ReadScenarioResolutionMode(runner);
             requestedDifficulty =
@@ -1053,10 +1054,67 @@ namespace EchoProtocol.Networking.Authority
 
                 if (IsSuccessful(result))
                 {
+                    var context = result.Data.data;
+
+                    if (!Guid.TryParse(context.matchId, out var returnedMatchId)
+                        || returnedMatchId != sessionMatchId)
+                    {
+                        Debug.LogError("[RemoteFixed] Takeover match identity mismatch.");
+                        return false;
+                    }
+
+                    if (context.balanceSource == "REMOTE_FIXED")
+                    {
+                        var locked = await _api.GetLockedBalanceAsync(sessionMatchId);
+
+                        if (!IsSuccessful(locked)
+                            || !RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                                context,
+                                locked.Data.data,
+                                sessionMatchId,
+                                UnityEngine.SceneManagement.SceneManager.GetActiveScene().name,
+                                requestedDifficulty.ToString().ToUpperInvariant(),
+                                out var recovered))
+                        {
+                            Debug.LogError(
+                                "[RemoteFixed] Host Migration rejected: locked snapshot verification failed.");
+                            return false;
+                        }
+
+                        _remoteFixedBalance = recovered;
+
+                        Debug.Log(
+                            $"[RemoteFixed] Host Migration verified: " +
+                            $"match={sessionMatchId:D}, " +
+                            $"version={context.balanceVersion}, " +
+                            $"hash={context.balanceHash}");
+                    }
+                    else
+                    {
+                        if ((context.balanceSource != null &&
+                             context.balanceSource != "LOCAL")
+                            || !string.IsNullOrEmpty(context.balanceVersion)
+                            || !string.IsNullOrEmpty(context.balanceHash)
+                            || context.matchDataPolicy != "STANDARD")
+                        {
+                            Debug.LogError(
+                                "[MatchAuthority] Invalid non-remote takeover context.");
+                            return false;
+                        }
+
+                        _remoteFixedBalance = null;
+                    }
+
                     _migratedResultRoster.Clear();
-                    foreach (var participant in result.Data.data.players ?? Array.Empty<MatchRosterPlayerDto>())
+
+                    foreach (var participant in
+                             context.players ?? Array.Empty<MatchRosterPlayerDto>())
+                    {
                         if (Guid.TryParse(participant.userId, out var participantId))
-                            _migratedResultRoster[participantId] = participant.disconnected;
+                            _migratedResultRoster[participantId] =
+                                participant.disconnected;
+                    }
+
                     break;
                 }
 
@@ -1102,7 +1160,9 @@ namespace EchoProtocol.Networking.Authority
             if (runner == null
                 || !runner.IsRunning
                 || !runner.IsServer
-                || !runner.SessionInfo.IsValid)
+                || !runner.SessionInfo.IsValid
+                || MatchId != sessionMatchId
+                || _bootstrap?.Runner != runner)
             {
                 Debug.LogWarning("[MatchAuthority] Backend Host takeover succeeded, but the Fusion runner is no longer authoritative.");
                 return false;
@@ -2050,38 +2110,21 @@ namespace EchoProtocol.Networking.Authority
 
                 try
                 {
-                    var started = result.Data.data;
-                    if (!Guid.TryParse(started.matchId, out var startedId) ||
-                        startedId != matchId || started.mapId != mapId ||
-                        started.difficulty != difficulty || started.resolutionMode != "FIXED" ||
-                        started.balanceSource != "REMOTE_FIXED" ||
-                        started.balanceProtocolVersion != "RFB-1" ||
-                        started.matchDataPolicy != "TEST_ONLY" ||
-                        string.IsNullOrWhiteSpace(started.balanceVersion) ||
-                        string.IsNullOrWhiteSpace(started.balanceHash))
+                    var locked = await _api.GetLockedBalanceAsync(matchId);
+
+                    if (!IsSuccessful(locked))
                     {
-                        failure = "Backend returned an invalid Remote Fixed context.";
+                        failure = $"Cannot fetch locked balance: {Describe(locked)}";
                     }
-                    else
+                    else if (!RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                        result.Data.data,
+                        locked.Data.data,
+                        matchId,
+                        mapId,
+                        difficulty,
+                        out snapshot))
                     {
-                        var locked = await _api.GetLockedBalanceAsync(matchId);
-                        if (!IsSuccessful(locked))
-                        {
-                            failure = $"Cannot fetch locked balance: {Describe(locked)}";
-                        }
-                        else
-                        {
-                            var data = locked.Data.data;
-                            if (!Guid.TryParse(data.matchId, out var lockedId) ||
-                                lockedId != matchId || data.balanceVersion != started.balanceVersion ||
-                                data.balanceHash != started.balanceHash ||
-                                data.balanceProtocolVersion != "RFB-1" ||
-                                !RemoteFixedBalanceSnapshot.TryDecode(
-                                    data.snapshotPayloadBase64, started.balanceHash, out snapshot))
-                            {
-                                failure = "Locked Remote Fixed snapshot validation failed.";
-                            }
-                        }
+                        failure = "Locked Remote Fixed snapshot validation failed.";
                     }
 
                     if (failure == null &&

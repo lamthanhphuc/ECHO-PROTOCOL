@@ -283,6 +283,25 @@ namespace EchoProtocol.AI.Stalker.Networking
             SetLegacySimulationSuppressed(_networkSimulationOwned);
         }
 
+        public bool RestoreRemoteFixedBalanceAuthoritative(
+            RemoteFixedBalanceSnapshot snapshot)
+        {
+            if (snapshot == null
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+                return false;
+
+            if (controller == null)
+                controller = GetComponent<StalkerController>();
+
+            if (controller == null)
+                return false;
+
+            controller.ApplyRemoteFixedBalance(snapshot);
+            return true;
+        }
+
         public override void Spawned()
         {
             ResetCabinetNetwork();
@@ -396,6 +415,12 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void FixedUpdateNetwork()
         {
+            if (NetworkBootstrap.IsHostMigrationReconciliationPending)
+            {
+                ClearFrameBuffers();
+                return;
+            }
+
             ResolveLocalDependencies();
 
             if (!CanRunAuthoritativeSimulation())
