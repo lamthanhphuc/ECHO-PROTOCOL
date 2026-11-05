@@ -155,17 +155,80 @@ public sealed class MatchTelemetryAggregator : IMatchTelemetryAggregator
                 MetricAvailability.Available, "FILTERED_PENALTY_COUNT", Fingerprint(noiseEvents.Select(item => item.SemanticFingerprint)));
         }
 
+        var coreEvents = documents
+            .Where(x => x.UserId == userId && x.EventType == "CORE_PLACED")
+            .ToArray();
+        var toolEvents = documents
+            .Where(x => x.UserId == userId && x.EventType == "TEAM_TOOL_USED")
+            .ToArray();
+        var downEvents = documents
+            .Where(x => x.UserId == userId && x.EventType == "PLAYER_DOWNED")
+            .ToArray();
+        var reviveEvents = documents
+            .Where(x => x.UserId == userId && x.EventType == "PLAYER_REVIVED")
+            .ToArray();
+        var behaviorEvents = coreEvents
+            .Concat(toolEvents)
+            .Concat(downEvents)
+            .Concat(reviveEvents)
+            .OrderBy(x => x.EventSequence)
+            .ThenBy(x => x.Id)
+            .ToArray();
+        var behaviorSignals = new PlayerMatchBehaviorSignals(
+            coreEvents.Length,
+            toolEvents.Length,
+            downEvents.Length,
+            reviveEvents.Length,
+            complete,
+            Fingerprint(behaviorEvents.Select(x => x.SemanticFingerprint)));
+
+        var objectiveOpportunity = documents.Any(x => x.EventType == "CORE_PLACED");
+        var toolOpportunity = documents.Any(x => x.EventType == "TEAM_TOOL_USED"
+            && x.UserId.HasValue);
+
+        AggregatedMetric BehaviorMetric(
+            PlayerAIDimension dimension,
+            decimal? value,
+            bool opportunity,
+            IEnumerable<string> fingerprints)
+        {
+            var availability = !complete || !opportunity
+                ? MetricAvailability.Unavailable
+                : MetricAvailability.Available;
+
+            return new AggregatedMetric(
+                dimension,
+                availability == MetricAvailability.Available ? value : null,
+                availability,
+                !complete
+                    ? "SOURCE_COVERAGE_INCOMPLETE"
+                    : !opportunity
+                        ? "OPPORTUNITY_NOT_OBSERVED"
+                        : "ACCEPTED_MATCH_EVENTS",
+                Fingerprint(fingerprints));
+        }
+
         var metrics = new Dictionary<PlayerAIDimension, AggregatedMetric>
         {
             [PlayerAIDimension.Survival] = survival,
-            [PlayerAIDimension.Noise] = noise
+            [PlayerAIDimension.Noise] = noise,
+            [PlayerAIDimension.Objective] = BehaviorMetric(
+                PlayerAIDimension.Objective,
+                coreEvents.Length > 0 ? 100m : 0m,
+                objectiveOpportunity,
+                coreEvents.Select(x => x.SemanticFingerprint)),
+            [PlayerAIDimension.ToolUsage] = BehaviorMetric(
+                PlayerAIDimension.ToolUsage,
+                toolEvents.Length,
+                toolOpportunity,
+                toolEvents.Select(x => x.SemanticFingerprint))
         };
         var researchEnabled = TryReadBoolean(starts[0].ValueJson, "context", "researchCaptureEnabled", out var enabled) && enabled;
 
         return new MatchTelemetryAggregation(
             matchId, userId, result.EndedAtUtc, MatchProfileEligibilityStatus.Eligible,
             completeness, reasons, SupportedSchemaVersion, sourceFingerprint,
-            researchEnabled, null, metrics);
+            researchEnabled, null, metrics, behaviorSignals);
     }
 
     private static List<string> ValidateIntegrity(

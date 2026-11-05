@@ -11,6 +11,14 @@ namespace EchoProtocol.AI.Stalker
             IReadOnlyList<StalkerPerceptionTargetSnapshot> targets,
             AiSimulationTime observedAt,
             List<StalkerTargetCandidate> results)
+            => Collect(sensor, targets, observedAt, results, null);
+
+        public static int CollectV02VisibleTargetCandidates(StalkerVisionSensor sensor,
+            IReadOnlyList<StalkerPerceptionTargetSnapshot> targets, AiSimulationTime observedAt,
+            List<StalkerTargetCandidate> results, Func<PlayerId, int> tier) => Collect(sensor, targets, observedAt, results, tier);
+
+        private static int Collect(StalkerVisionSensor sensor, IReadOnlyList<StalkerPerceptionTargetSnapshot> targets,
+            AiSimulationTime observedAt, List<StalkerTargetCandidate> results, Func<PlayerId, int> tier)
         {
             if (targets == null)
             {
@@ -37,9 +45,10 @@ namespace EchoProtocol.AI.Stalker
                     continue;
                 }
 
-                if (!sensor.TryEvaluateCandidate(
+                if (!sensor.TryEvaluateV02Candidate(
                         target.TargetSample,
                         target.TargetHierarchyRoot,
+                        tier == null ? -1 : tier(target.PlayerId),
                         out var physicalObservation))
                 {
                     continue;

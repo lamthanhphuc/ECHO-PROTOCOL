@@ -1,5 +1,9 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Minions;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
@@ -10,6 +14,7 @@ using Fusion;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
+using Random = UnityEngine.Random;
 
 namespace EchoProtocol.Networking
 {
@@ -43,6 +48,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _map2LizardPrefab;
         [SerializeField] private RegionGraphAsset _map2RegionGraph;
         [SerializeField] private RegionGraphAsset _map2HuntRegionGraph;
+
         [SerializeField] private NetworkObject _creepMinionPrefab;
         [Header("Creep Minion Spawn")]
         [SerializeField, Min(1f)] private float _minionSpawnCheckInterval = 3f;
@@ -153,8 +159,8 @@ namespace EchoProtocol.Networking
             EnsureZone3Stalker(runner, matchState);
 
             var phase = matchState.CurrentPhase;
-            if (phase == NetworkMatchPhase.Zone3FindFrigate
-                || phase == NetworkMatchPhase.Zone3PushFrigate
+            if (((phase == NetworkMatchPhase.Zone3FindFrigate || phase == NetworkMatchPhase.Zone3PushFrigate)
+                 && !HasAdaptiveV02Plan())
                 || phase == NetworkMatchPhase.FinalHunt
                 || phase == NetworkMatchPhase.Escape)
             {
@@ -1196,6 +1202,7 @@ namespace EchoProtocol.Networking
         {
             prefab ??= _monsterPrefab;
             if (_monsterInstance == null && prefab != null)
+
             {
                 var stalkerSpawn = GameObject.Find("MonsterSpawn_Stalker_EMPTY");
                 bool valid = AlienHuntMission.Instance
@@ -1436,13 +1443,22 @@ namespace EchoProtocol.Networking
             var profile = MatchDifficultyProfiles.Get(difficulty);
             var authority = MatchAuthorityRuntime.Instance;
             if (difficulty == MatchDifficulty.Normal && authority != null &&
+                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+                AEDv2Authority.TryGetV02(authority.MatchId, out var v02, out _))
+                profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
+            else if (difficulty == MatchDifficulty.Normal && authority != null &&
                 authority.TryGetMatchId(out var aedMatchId) &&
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
-            var zone = _zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01;
-            int cap = zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone1MinionCap;
+            bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
+            var zone = _zone3MonsterSpawned && HasAdaptiveV02Plan() ? RegionSemanticZone.Zone03 : (_zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01);
+            int cap = zone == RegionSemanticZone.Zone01 ? profile.Zone1MinionCap : zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone3MinionCap;
+            _v02ObservedMinionZone = (int)zone;
+            _v02ObservedMinionCap = cap;
+            _v02ObservedMinionRevision = authority != null && AEDv2Authority.TryGetV02(authority.MatchId, out _, out var observedRevision) ? observedRevision : 0;
             int originalCount = 0;
             int disruptorCount = 0;
+
             foreach (var obj in _creepMinionInstances)
             {
                 if (!IsValidNetworkObject(obj)
@@ -1458,7 +1474,6 @@ namespace EchoProtocol.Networking
             }
             int count = originalCount + disruptorCount;
             bool disruptor = disruptorCount < originalCount;
-            bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
             if (count >= cap) return;
 
             if (map2 && disruptor)
@@ -1475,8 +1490,17 @@ namespace EchoProtocol.Networking
             }
 
             if (!TryGetCreepMinionSpawnAnchor(zone, out var stalker)) return;
-            if (TryFindCreepMinionSpawnPosition(runner, stalker, out var position))
-                SpawnCreepMinion(runner, position, zone, map2 ? false : disruptor);
+            if (!TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
+            if (zone == RegionSemanticZone.Zone03 && _v02ObservedMinionRevision > 0)
+            {
+                var state = NetworkMatchState.Instance;
+                if (authority == null || !authority.V02Zone3SpawnEntitled || state == null ||
+                    state.CurrentPhase != NetworkMatchPhase.Zone3FindFrigate || !state.IsV02SafeWindow() ||
+                    !AEDV02SceneSource.TryLoad(out var manifest, out _) || !AEDV02SceneSource.TryGetDoorSources(runner, state, out var doors) ||
+                    !manifest.HasReachableGeometry(new[] { (double)stalker.transform.position.x, stalker.transform.position.y, stalker.transform.position.z },
+                        new[] { (double)position.x, position.y, position.z }, doors)) return;
+            }
+            SpawnCreepMinion(runner, position, zone, map2 ? false : disruptor);
         }
 
         private sealed class PurgeActivityGroup
@@ -1577,7 +1601,7 @@ namespace EchoProtocol.Networking
             if (!FloodedWaterBoundary.TryGetWaterBounds(out var water)) return false;
             var blockers = new List<Collider>();
             var playBounds = default(Bounds);
-            foreach (var collider in Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
+            foreach (var collider in UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsSortMode.None))
             {
                 if (collider == null || !collider.enabled || !collider.name.StartsWith("_BLOCKERCUBE")) continue;
                 if (blockers.Count == 0) playBounds = collider.bounds;
@@ -1669,15 +1693,38 @@ namespace EchoProtocol.Networking
                     && path.status == NavMeshPathStatus.PathComplete)
                     return true;
             return false;
+
+        }
+
+        private static bool HasAdaptiveV02Plan()
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            return authority != null
+                && authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
+                && AEDv2Authority.TryGetV02(authority.MatchId, out _, out _);
+        }
+
+        private int _v02ObservedMinionZone;
+        private int _v02ObservedMinionCap;
+        private int _v02ObservedMinionRevision;
+        public bool TryReadV02MinionCap(Guid matchId, int revision, AEDV02Key key, out double value, out string[] objectIds)
+        {
+            value = 0; objectIds = Array.Empty<string>();
+            int zone = key == AEDV02Key.Zone1MinionCap ? 1 : key == AEDV02Key.Zone2MinionCap ? 2 : key == AEDV02Key.Zone3AdaptiveMinionCap ? 3 : 0;
+            if (zone == 0 || MatchAuthorityRuntime.Instance?.MatchId != matchId || _v02ObservedMinionRevision != revision || _v02ObservedMinionZone != zone) return false;
+            value = _v02ObservedMinionCap;
+            objectIds = _creepMinionInstances.Where(x => IsValidNetworkObject(x) && x.TryGetComponent<CreepMinionRuntime>(out var minion) &&
+                (int)minion.Zone == zone && !minion.IsDying).Select(x => x.Id.ToString()).ToArray();
+            return key != AEDV02Key.Zone3AdaptiveMinionCap || value != 1 || objectIds.Length != 0;
         }
 
         private bool TryGetCreepMinionSpawnAnchor(
             RegionSemanticZone zone,
             out NetworkObject stalker)
         {
-            stalker = zone == RegionSemanticZone.Zone02
-                ? _zone2MonsterInstance
-                : _monsterInstance;
+            stalker = zone == RegionSemanticZone.Zone03
+                ? _zone3MonsterInstance
+                : (zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance);
 
             return IsValidNetworkObject(stalker);
         }
@@ -1730,6 +1777,13 @@ namespace EchoProtocol.Networking
             position = default;
 
             var path = new NavMeshPath();
+            var authority = MatchAuthorityRuntime.Instance;
+            bool adaptiveV02 = authority != null &&
+                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+                AEDv2Authority.TryGetV02(authority.MatchId, out _, out _);
+            AEDV02SceneManifest safeRoomManifest = null;
+            if (adaptiveV02 && (!AEDV02SceneSource.TryLoad(out safeRoomManifest, out _) || safeRoomManifest == null))
+                return false;
 
             for (int attempt = 0; attempt < attempts; attempt++)
             {
@@ -1763,6 +1817,16 @@ namespace EchoProtocol.Networking
 
                 if (!NavMesh.CalculatePath(stalkerPosition, hit.position, NavMesh.AllAreas, path)
                     || path.status != NavMeshPathStatus.PathComplete)
+                {
+                    continue;
+                }
+
+                if (adaptiveV02 &&
+                    (!safeRoomManifest.TryIsInsideSafeRoom(hit.position.x, hit.position.y, hit.position.z, out var inside) ||
+                     inside ||
+                     !safeRoomManifest.TryPathIntersectsSafeRoom(
+                         path.corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(), out var routeIntersects) ||
+                     routeIntersects))
                 {
                     continue;
                 }
@@ -1901,6 +1965,7 @@ namespace EchoProtocol.Networking
                     if (graph != null) controller.ConfigureRegionGraph(graph, zone);
                     else controller.ConfigurePatrolZone(zone);
                 });
+
             if (spawned != null)
             {
                 RuntimeLog.Log(RuntimeLogCategory.PlayerSpawner,
@@ -1971,6 +2036,8 @@ namespace EchoProtocol.Networking
                     sectorBox.InitializeAuthoritative(_matchStateInstance.Id);
                 }
             }
+            MatchAuthorityRuntime.Instance?.RegisterCoreObjectiveSlots(
+                _sectorBoxInstances, TargetSectorBoxCount);
         }
 
         private void RegisterExistingNetworkSectorBoxes()
@@ -2470,6 +2537,8 @@ var toolId =
         : state.ToolId;
                 var teamId = state.TeamId > 0 ? state.TeamId : slot;
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
+                if (gameplay && toolId != 0 && playerObject.HasStateAuthority && _bootstrap?.Runner != null)
+                    MatchAuthorityRuntime.Instance?.TryRecordPhase8LobbyLoadout(playerObject, _bootstrap.Runner.Tick.Raw);
             }
 
             if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) &&

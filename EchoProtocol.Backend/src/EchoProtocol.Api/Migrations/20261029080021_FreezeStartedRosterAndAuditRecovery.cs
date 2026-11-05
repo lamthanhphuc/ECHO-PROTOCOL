@@ -25,7 +25,7 @@ namespace EchoProtocol.Api.Migrations
 
             // Preserve legacy started matches; historical lobby attendance cannot
             // be reconstructed reliably. New starts freeze only connected members.
-            migrationBuilder.Sql("UPDATE \"MatchPlayerBindings\" AS p SET \"Participated\" = TRUE FROM \"MatchAuthorityBindings\" AS m WHERE p.\"MatchId\" = m.\"MatchId\" AND m.\"StartedAtUtc\" IS NOT NULL");
+            migrationBuilder.Sql("UPDATE \"MatchPlayerBindings\" AS p SET \"Participated\" = TRUE FROM \"MatchAuthorityBindings\" AS m WHERE p.\"MatchId\" = m.\"MatchId\" AND m.\"StartedAtUtc\" IS NOT NULL;");
         }
 
         /// <inheritdoc />

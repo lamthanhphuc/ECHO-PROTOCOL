@@ -259,6 +259,8 @@ namespace EchoProtocol.AI.Listener.Noise
         }
 
         public string NoiseEventId { get; }
+        internal string SourcePlayerId => _sourcePlayerId ?? string.Empty;
+        internal string SourceEntityId => _sourceEntityId ?? string.Empty;
         public RuntimeNoiseEventOrderKey EventOrderKey { get; }
         public RuntimeNoiseType NoiseType { get; }
         public Vector3 WorldPosition { get; }

@@ -88,6 +88,12 @@ namespace EchoProtocol.Networking
         [Networked] private NetworkBool AnimationPushHeld { get; set; }
         [Networked] public NetworkBool IsHidden { get; set; }
         [Networked] public ulong CurrentHideSpotId { get; set; }
+        [Networked] public NetworkString<_32> AEDV02HideTokenId { get; set; }
+        [Networked] public ulong AEDV02ProtectedHideSpotId { get; set; }
+        [Networked] public TickTimer AEDV02HideProtectionTimer { get; set; }
+        [Networked] public TickTimer AEDV02HideGraceTimer { get; set; }
+        [Networked] public int AEDV02HidePlanRevision { get; set; }
+        [Networked] public int AEDV02HideGrantsUsed { get; set; }
         [Networked] public NetworkBool IsCrouching { get; set; }
         [Networked] private TickTimer ExternalSlowTimer { get; set; }
         [Networked] private float ExternalSlowMultiplier { get; set; }
@@ -100,6 +106,8 @@ namespace EchoProtocol.Networking
             && Zone2InterruptTimer.IsRunning && !Zone2InterruptTimer.Expired(Runner);
 
         public float CurrentPitch => LookPitch;
+        public long V02SlowUntilTick => Object != null && Object.IsValid && Runner != null && ExternalSlowTimer.IsRunning
+            ? Runner.Tick.Raw + System.Math.Max(0, ExternalSlowTimer.RemainingTicks(Runner) ?? 0) : 0;
         private bool UsesPurgeStamina => SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
         public float MaxStamina => UsesPurgeStamina
             ? 250f
@@ -110,6 +118,7 @@ namespace EchoProtocol.Networking
         public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
             ? _controller != null && _controller.Grounded
             : _unityCharacterController != null && _unityCharacterController.isGrounded;
+
         public float CurrentStamina
         {
             get
@@ -469,6 +478,12 @@ namespace EchoProtocol.Networking
                 {
                     IsHidden = false;
                     CurrentHideSpotId = 0UL;
+                    AEDV02HideTokenId = default;
+                    AEDV02ProtectedHideSpotId = 0;
+                    AEDV02HideProtectionTimer = TickTimer.None;
+                    AEDV02HideGraceTimer = TickTimer.None;
+                    AEDV02HidePlanRevision = 0;
+                    AEDV02HideGrantsUsed = 0;
 
                     NetworkCurrentStamina =
                         MaxStamina;
@@ -1123,6 +1138,10 @@ namespace EchoProtocol.Networking
 
                 hideSpotId = authoritativeSpotId;
 
+                if (!IsHidden)
+                    foreach (var stalker in FindObjectsByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>())
+                        if (stalker.Runner == Runner) stalker.ObserveCabinetEntry(this, authoritativeSpot);
+
                 Transform hidePoint = authoritativeSpot.HidePoint;
                 position = hidePoint.position;
                 rotation = authoritativeSpot.FacingRotation;
@@ -1154,10 +1173,18 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            if (!isHidden && AEDV02ProtectedHideSpotId == previousSpotId && previousSpotId != 0)
+            {
+                if (System.Guid.TryParse(AEDV02HideTokenId.ToString(), out var tokenId))
+                    EchoProtocol.AI.AED.AEDv2Authority.ExitV02HideToken(tokenId, previousSpotId, Runner.Tick.Raw / (double)Runner.TickRate);
+                AEDV02HideProtectionTimer = TickTimer.None;
+                AEDV02HideGraceTimer = TickTimer.CreateFromSeconds(Runner, (float)EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.ProtectionGraceSeconds);
+            }
             IsHidden = isHidden;
             CurrentHideSpotId = isHidden
                 ? hideSpotId
                 : 0UL;
+            if (isHidden) TryActivateAEDV02HideProtection();
 
             if (_controller != null)
             {
@@ -1228,6 +1255,8 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            if (BlocksAEDV02HideForceExit()) return false;
+
             ulong previousSpotId = CurrentHideSpotId;
 
             IsHidden = false;
@@ -1259,6 +1288,28 @@ namespace EchoProtocol.Networking
 
             return true;
         }
+
+        public bool TryActivateAEDV02HideProtection()
+        {
+            if (Runner == null || Object == null || !Object.IsValid || !Object.HasStateAuthority || !IsHidden ||
+                MatchAuthorityRuntime.Instance == null || !MatchAuthorityRuntime.Instance.TryProtectAEDV02Hiding(this, out var token)) return false;
+            double now = Runner.Tick.Raw / (double)Runner.TickRate;
+            bool newToken = AEDV02HideTokenId.ToString() != token.TokenId.ToString("N");
+            AEDV02HideTokenId = token.TokenId.ToString("N"); AEDV02ProtectedHideSpotId = token.HideSpotId;
+            AEDV02HidePlanRevision = token.PlanRevision; AEDV02HideGrantsUsed = token.GrantOrdinal;
+            AEDV02HideProtectionTimer = token.ExpiresSeconds > now && !token.VoluntaryExit ? TickTimer.CreateFromSeconds(Runner, (float)(token.ExpiresSeconds - now)) : TickTimer.None;
+            AEDV02HideGraceTimer = token.GraceUntilSeconds > now ? TickTimer.CreateFromSeconds(Runner, (float)(token.GraceUntilSeconds - now)) : TickTimer.None;
+            if (newToken) Debug.Log($"[AED_V02][P4_TOKEN] match={token.MatchId:D} token={token.TokenId:N} actor={Object.InputAuthority.PlayerId} spot={token.HideSpotId} revision={token.PlanRevision} quota={token.GrantOrdinal} ttl={token.ExpiresSeconds - now:F2}");
+            return true;
+        }
+
+        public bool BlocksAEDV02HideForceExit()
+        {
+            if (Runner == null || Object == null || !Object.IsValid || !Object.HasStateAuthority || !IsHidden || CurrentHideSpotId == 0) return false;
+            TryActivateAEDV02HideProtection();
+            return AEDV02ProtectedHideSpotId == CurrentHideSpotId && !AEDV02HideGraceTimer.ExpiredOrNotRunning(Runner);
+        }
+        public float AEDV02HideProtectionRemaining => Runner != null ? AEDV02HideGraceTimer.RemainingTime(Runner) ?? 0 : 0;
 
         public bool TryBroadcastHideSpotLockoutAuthoritative(
             ulong hideSpotId,
@@ -1443,6 +1494,13 @@ namespace EchoProtocol.Networking
             _unityCharacterController.center = Vector3.up * ((_unityCharacterController.height - _standingHeight) * 0.5f);
         }
 
+#if AED_V02_PILOT_HARNESS
+        public void RestoreNativeInput()
+        {
+            if (Object != null && Object.IsValid && Object.HasInputAuthority)
+                _bootstrap?.RegisterLocalInputProvider(Object, ReadLocalInput);
+        }
+#endif
         private NetworkPlayerInput ReadLocalInput()
         {
             if (!Object.HasInputAuthority) return default;
