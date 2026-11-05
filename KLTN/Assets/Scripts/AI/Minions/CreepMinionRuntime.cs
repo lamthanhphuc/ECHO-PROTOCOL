@@ -438,6 +438,21 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
 
+            if (!NetworkBootstrap.IsHostMigrationResumeActive)
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                if (authority != null &&
+                    authority.TryGetRemoteFixedBalance(out var snapshot))
+                {
+                    roamSpeed = snapshot.minion.roamSpeed;
+                    trackSpeed = snapshot.minion.trackSpeed;
+                    attackDamage = snapshot.minion.attackDamage;
+                    Debug.Log(
+                        $"[RemoteFixed] Minion applied: roam={roamSpeed}, " +
+                        $"track={trackSpeed}, damage={attackDamage}");
+                }
+            }
+
             if (!global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 IsDying = false;
