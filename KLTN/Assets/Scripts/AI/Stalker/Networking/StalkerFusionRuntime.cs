@@ -290,7 +290,18 @@ namespace EchoProtocol.AI.Stalker.Networking
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
             if (Object != null && Object.HasStateAuthority)
+            {
                 ApplyMatchDifficulty();
+
+                if (!NetworkBootstrap.IsHostMigrationResumeActive)
+                {
+                    RemoteFixedBalanceSnapshot snapshot = null;
+                    var authority = MatchAuthorityRuntime.Instance;
+                    if (authority != null)
+                        authority.TryGetRemoteFixedBalance(out snapshot);
+                    controller?.ApplyRemoteFixedBalance(snapshot);
+                }
+            }
             if (!EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 specialEncounterRuntime?.ResetForMatch();

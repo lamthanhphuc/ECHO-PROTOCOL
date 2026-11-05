@@ -34,6 +34,14 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0f)] private float _staminaRegenPerSecond = 18f;
         [SerializeField, Min(0f)] private float _minStaminaToSprint = 5f;
 
+        private float EffectiveWalkSpeed =>
+            Object != null && Object.IsValid && RemoteFixedWalkSpeed > 0f
+                ? RemoteFixedWalkSpeed : _walkSpeed;
+
+        private float EffectiveSprintSpeed =>
+            Object != null && Object.IsValid && RemoteFixedSprintSpeed > 0f
+                ? RemoteFixedSprintSpeed : _sprintSpeed;
+
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
@@ -68,6 +76,9 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(0f)] private float _downedHeight = 0.75f;
         [SerializeField, Min(0f)] private float _crouchTransitionSpeed = 10f;
 
+        [Networked] private float RemoteFixedWalkSpeed { get; set; }
+        [Networked] private float RemoteFixedSprintSpeed { get; set; }
+        [Networked] private float RemoteFixedMaxStamina { get; set; }
         [Networked] private float NetworkCurrentStamina { get; set; }
         [Networked] private NetworkBool StaminaExhausted { get; set; }
         [Networked] private float LookPitch { get; set; }
@@ -98,7 +109,10 @@ namespace EchoProtocol.Networking
         public long V02SlowUntilTick => Object != null && Object.IsValid && Runner != null && ExternalSlowTimer.IsRunning
             ? Runner.Tick.Raw + System.Math.Max(0, ExternalSlowTimer.RemainingTicks(Runner) ?? 0) : 0;
         private bool UsesPurgeStamina => SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
-        public float MaxStamina => UsesPurgeStamina ? 250f : _maxStamina;
+        public float MaxStamina => UsesPurgeStamina
+            ? 250f
+            : Object != null && Object.IsValid && RemoteFixedMaxStamina > 0f
+                ? RemoteFixedMaxStamina : _maxStamina;
         private float SprintStaminaDrain => UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
         private float StaminaRegen => UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
         public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
@@ -389,10 +403,10 @@ namespace EchoProtocol.Networking
 
             float speed =
                 _offlineAnimationCrouching
-                    ? _walkSpeed * 0.55f
+                ? EffectiveWalkSpeed * 0.55f
                     : isSprintMoving
-                        ? _sprintSpeed
-                        : _walkSpeed;
+                    ? EffectiveSprintSpeed
+                    : EffectiveWalkSpeed;
 
             _offlineAnimationMoveInput =
                 new Vector2(
@@ -431,6 +445,26 @@ namespace EchoProtocol.Networking
             finalMotion = FloodedWaterBoundary.ConstrainMotion(_unityCharacterController, finalMotion);
             _unityCharacterController.Move(finalMotion);
 
+        }
+
+        public void ApplyRemoteFixedBalanceAuthoritative(
+            RemoteFixedBalanceSnapshot snapshot)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+                return;
+
+            RemoteFixedWalkSpeed = snapshot != null ? snapshot.player.walkSpeed : 0f;
+            RemoteFixedSprintSpeed = snapshot != null ? snapshot.player.sprintSpeed : 0f;
+            RemoteFixedMaxStamina = snapshot != null ? snapshot.player.maxStamina : 0f;
+            NetworkCurrentStamina = MaxStamina;
+            StaminaExhausted = false;
+
+            if (snapshot != null)
+            {
+                Debug.Log(
+                    $"[RemoteFixed] Player movement applied: walk={EffectiveWalkSpeed}, " +
+                    $"sprint={EffectiveSprintSpeed}, stamina={MaxStamina}");
+            }
         }
 
         public override void Spawned()
@@ -759,10 +793,10 @@ namespace EchoProtocol.Networking
             AnimationSprintHeld = isSprintMoving;
 
             var baseSpeed = effectiveCrouch
-                ? _walkSpeed * 0.55f
+                ? EffectiveWalkSpeed * 0.55f
                 : isSprintMoving
-                ? _sprintSpeed
-                : _walkSpeed;
+                    ? EffectiveSprintSpeed
+                    : EffectiveWalkSpeed;
             var lobbyPlayer = lobbyState;
             var coreCarryMultiplier = 1f;
             if (isCarryingCore)

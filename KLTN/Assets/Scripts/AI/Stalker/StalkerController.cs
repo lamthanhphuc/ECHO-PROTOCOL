@@ -12,6 +12,7 @@ using EchoProtocol.AI.Stalker.Telemetry;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
+using EchoProtocol.Networking.Authority;
 using EchoProtocol.Player;
 using Fusion;
 using UnityEngine;
@@ -56,6 +57,24 @@ namespace EchoProtocol.AI.Stalker
         [Header("Movement Speed")]
         [SerializeField, Min(0f)] private float patrolSpeed = 6f;
         [SerializeField, Min(0f)] private float chaseSpeed = 7f;
+        private bool _hasRemoteFixedSpeeds;
+        private float _remoteFixedPatrolSpeed;
+        private float _remoteFixedChaseSpeed;
+
+        public void ApplyRemoteFixedBalance(RemoteFixedBalanceSnapshot snapshot)
+        {
+            _hasRemoteFixedSpeeds = snapshot != null;
+            if (_hasRemoteFixedSpeeds)
+            {
+                _remoteFixedPatrolSpeed = snapshot.stalker.patrolSpeed;
+                _remoteFixedChaseSpeed = snapshot.stalker.chaseSpeed;
+                Debug.Log(
+                    $"[RemoteFixed] Stalker applied: patrol={_remoteFixedPatrolSpeed}, " +
+                    $"chase={_remoteFixedChaseSpeed}");
+            }
+
+            ApplyMovementSpeedForCurrentState();
+        }
 
         [Header("Diagnostics")]
         [SerializeField] private bool enableDiagnostics;
@@ -4665,6 +4684,8 @@ namespace EchoProtocol.AI.Stalker
         private float GetChaseSpeed()
         {
             if(_purgeControlled) return _purgeChaseSpeed;
+            if (_hasRemoteFixedSpeeds)
+                return _remoteFixedChaseSpeed;
             var value =
                 ShouldUseScenarioMonsterParameters()
                     ? (float)_scenarioMonsterParameters.ChaseSpeed
@@ -7013,7 +7034,11 @@ namespace EchoProtocol.AI.Stalker
                 || currentState == StalkerState.ATTACK
                 || (rushingToHeardNoiseOrigin && (!_purgeControlled || _purgeHunting))
                     ? GetChaseSpeed()
-                    : Mathf.Max(0f, _purgeControlled ? 3.2f : patrolSpeed);
+                    : Mathf.Max(0f, _purgeControlled
+                        ? 3.2f
+                        : _hasRemoteFixedSpeeds
+                            ? _remoteFixedPatrolSpeed
+                            : patrolSpeed);
         }
 
         private void LogDiagnosticWarning(string message)

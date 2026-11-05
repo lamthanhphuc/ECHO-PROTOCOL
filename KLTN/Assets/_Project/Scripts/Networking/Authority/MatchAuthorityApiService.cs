@@ -87,6 +87,23 @@ namespace EchoProtocol.Networking.Authority
                     difficulty = difficulty
                 });
 
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartV2Async(
+            Guid matchId, string mapId, string difficulty) =>
+            PostAsync<StartMatchV2Request, MatchAuthorityDto>(
+                $"/api/matches/{matchId:D}/start-v2",
+                new StartMatchV2Request
+                {
+                    mapId = mapId,
+                    difficulty = difficulty,
+                    resolutionMode = "FIXED",
+                    balanceSource = "REMOTE_FIXED",
+                    balanceProtocolVersion = "RFB-1"
+                });
+
+        public Task<ApiResult<ApiResponse<LockedBalanceDto>>> GetLockedBalanceAsync(
+            Guid matchId) =>
+            GetAsync<LockedBalanceDto>($"/api/matches/{matchId:D}/balance");
+
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> EndAsync(Guid matchId, string reason) =>
             PostAsync<EndMatchAuthorityRequest, MatchAuthorityDto>(
                 $"/api/matches/{matchId:D}/end",

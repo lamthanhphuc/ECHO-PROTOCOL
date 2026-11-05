@@ -708,6 +708,21 @@ Validation rules:
 - Invalid or unavailable snapshots must not trigger
   automatic fallback to local balance.
 
+### Unity Remote Fixed Integration (PR 2)
+
+- Remote Fixed is opt-in for isolated testing.
+- Unity Host calls POST /start-v2 with FIXED and REMOTE_FIXED.
+- Host validates the returned match context.
+- Host retrieves GET /balance.
+- Host verifies SHA-256 against the original decoded payload bytes.
+- Failed validation aborts the backend match; no local fallback.
+- Player stats are replicated through Fusion Networked properties.
+- Stalker and Minion balance is applied on State Authority.
+- The verified snapshot is retained for the current match.
+- Legacy /start remains the default.
+- Remote Fixed Host Migration restoration is deferred to PR 3.
+- TEST_ONLY must remain isolated from real player data until PR 4.
+
 ---
 
 ## Scenario resolution and decision logging (M4-051/M4-049)

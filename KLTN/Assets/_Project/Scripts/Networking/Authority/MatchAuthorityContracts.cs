@@ -19,6 +19,14 @@ namespace EchoProtocol.Networking.Authority
         public int maxPlayers;
         public string status;
         public string leaseExpiresAtUtc;
+        public string mapId;
+        public string difficulty;
+        public string resolutionMode;
+        public string balanceSource;
+        public string balanceProtocolVersion;
+        public string balanceVersion;
+        public string balanceHash;
+        public string matchDataPolicy;
     }
 
     [Serializable]
@@ -82,6 +90,26 @@ namespace EchoProtocol.Networking.Authority
     {
         public string mapId;
         public string difficulty;
+    }
+
+    [Serializable]
+    public sealed class StartMatchV2Request
+    {
+        public string mapId;
+        public string difficulty;
+        public string resolutionMode;
+        public string balanceSource;
+        public string balanceProtocolVersion;
+    }
+
+    [Serializable]
+    public sealed class LockedBalanceDto
+    {
+        public string matchId;
+        public string balanceVersion;
+        public string balanceHash;
+        public string balanceProtocolVersion;
+        public string snapshotPayloadBase64;
     }
 
     [Serializable]
