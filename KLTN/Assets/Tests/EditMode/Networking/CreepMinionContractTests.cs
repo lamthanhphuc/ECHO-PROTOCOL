@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -75,13 +75,25 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void Zone2Minions_UseZone2StalkerAsAnchor()
+        public void Minions_UseStalkerAnchorFromTheirZone()
         {
             string source = File.ReadAllText(SpawnerSource);
-            StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
-            StringAssert.Contains("? _zone2MonsterInstance", source);
-            StringAssert.Contains(": _monsterInstance;", source);
-            StringAssert.Contains("NavMesh.SamplePosition(", source);
+            string anchor = ExtractMethod(
+                source,
+                "private bool TryGetCreepMinionSpawnAnchor(",
+                "private bool TryFindCreepMinionSpawnPosition(");
+
+            StringAssert.Contains("RegionSemanticZone.Zone03", anchor);
+            StringAssert.Contains("_zone3MonsterInstance", anchor);
+            StringAssert.Contains("RegionSemanticZone.Zone02", anchor);
+            StringAssert.Contains("_zone2MonsterInstance", anchor);
+            StringAssert.Contains("_monsterInstance", anchor);
+            StringAssert.Contains("IsValidNetworkObject(stalker)", anchor);
+
+            StringAssert.Contains(
+                "TryGetCreepMinionSpawnAnchor(zone, out var stalker)",
+                source);
+            StringAssert.Contains("profile.Zone3MinionCap", source);
         }
 
         [Test]
@@ -278,6 +290,111 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void MinionResearchBaselineMatchesNormalProduction()
+        {
+            var difficultyType = System.Type.GetType(
+                "EchoProtocol.Gameplay.MatchDifficulty, Assembly-CSharp");
+            var profilesType = System.Type.GetType(
+                "EchoProtocol.Gameplay.MatchDifficultyProfiles, Assembly-CSharp");
+            Assert.That(difficultyType, Is.Not.Null);
+            Assert.That(profilesType, Is.Not.Null);
+            var normal = profilesType.GetMethod("Get").Invoke(
+                null, new[] { System.Enum.Parse(difficultyType, "Normal") });
+            Assert.That((int)normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(3));
+            Assert.That((int)normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(5));
+            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(0));
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Resources/PF_CreepMinionNetwork.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            var minion = FindComponentByTypeName(prefab,
+                "EchoProtocol.AI.Minions.CreepMinionRuntime");
+            Assert.That(minion, Is.Not.Null);
+            var serialized = new SerializedObject(minion);
+            Assert.That(serialized.FindProperty("visionRange").floatValue, Is.EqualTo(20f));
+            Assert.That(serialized.FindProperty("trackSpeed").floatValue, Is.EqualTo(8f));
+            Assert.That(serialized.FindProperty("harassSpeed").floatValue, Is.EqualTo(10f));
+            Assert.That(serialized.FindProperty("attackCooldownSeconds").floatValue, Is.EqualTo(0.65f));
+            Assert.That(serialized.FindProperty("alertCooldownSeconds").floatValue, Is.EqualTo(4f));
+            Assert.That(serialized.FindProperty("stealToolRange").floatValue, Is.EqualTo(3f));
+            Assert.That(serialized.FindProperty("toolFleeSeconds").floatValue, Is.EqualTo(15f));
+            Assert.That(serialized.FindProperty("stolenToolDropMinDistance").floatValue, Is.EqualTo(12f));
+            Assert.That(serialized.FindProperty("stolenToolDropMaxDistance").floatValue, Is.EqualTo(45f));
+        }
+
+        [Test]
+        public void MinionProductionSpawnKeepsSafetyConstraints()
+        {
+            string source = File.ReadAllText(SpawnerSource);
+            StringAssert.Contains("_minionSpawnMinDistanceFromPlayer = 18f", source);
+            StringAssert.Contains("_minionSpawnCheckInterval = 3f", source);
+            StringAssert.Contains("NavMeshPathStatus.PathComplete", source);
+            StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var stalker)", source);
+            StringAssert.Contains("IsCreepMinionSpawnFarFromPlayers", source);
+        }
+
+        [Test]
+        public void ToolDivePreservesAEDEvidenceAndFleeGuard()
+        {
+            string source = File.ReadAllText(MinionSource);
+            string dive = ExtractMethod(source, "private void TickToolDive()", "public void GetToolCarryPose");
+            string networkTick = ExtractMethod(source, "public override void FixedUpdateNetwork()", "private void UpdateTargetAndMovement()");
+            StringAssert.Contains("AEDMinionFactKindV1.AttackAttempted", dive);
+            StringAssert.Contains("effectKind: \"CORE\"", dive);
+            StringAssert.Contains("effectKind: \"TOOL\"", dive);
+            StringAssert.Contains("accepted: forcedDrop", dive);
+            StringAssert.Contains("accepted: relocated", dive);
+            StringAssert.Contains("PublishAEDSnapshot();", networkTick);
+            StringAssert.Contains("|| StolenToolId.IsValid", source);
+            StringAssert.Contains("if (StolenToolId.IsValid)\n" +
+                "            {\n" +
+                "                ReplicatedToolRouteRetries = 0;\n" +
+                "                BeginFleeTo(", dive.Replace("\r\n", "\n"));
+        }
+
+        [Test]
+        public void MinionAbilities_AreIndependent()
+        {
+            string source = File.ReadAllText(MinionSource);
+
+            string tracking = ExtractMethod(
+                source,
+                "private void UpdateTargetAndMovement()",
+                "private void TickStalkerAlertObservation(");
+
+            string attack = ExtractMethod(
+                source,
+                "private void AttackPlayer(",
+                "private void CommitAttack(");
+
+            StringAssert.Contains("TickStalkerAlertObservation(targetObject)", tracking);
+            StringAssert.Contains("AttackPlayer(targetObject, lifeState)", tracking);
+            Assert.That(tracking.IndexOf("TickStalkerAlertObservation(targetObject)"),
+                Is.LessThan(tracking.IndexOf("AttackPlayer(targetObject, lifeState)")));
+            StringAssert.DoesNotContain("_stalkerAlertDeliveredForTarget", attack);
+            StringAssert.Contains("BeginToolDive(playerObject, canSteal)", attack);
+        }
+
+        [Test]
+        public void MinionSteal_RequiresFrontView()
+        {
+            string source = File.ReadAllText(MinionSource);
+            string dive = ExtractMethod(source, "private void TickToolDive()", "public void GetToolCarryPose");
+
+            StringAssert.Contains(
+                "private bool IsInsidePlayerViewCone(",
+                source);
+
+            StringAssert.Contains(
+                "IsInsidePlayerViewCone(",
+                dive);
+
+            StringAssert.Contains(
+                "PlayerCanSeeMinion(",
+                dive);
+        }
+
+        [Test]
         public void Disruptor_UsesNetworkedRoleAndCyclesAllMonster10Visuals()
         {
             string minion = File.ReadAllText(MinionSource);
@@ -293,7 +410,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("CrossFade(\"GetHit\")", minion);
             StringAssert.Contains("private const float ResonanceDeathSeconds = 1f", minion);
             StringAssert.Contains("private const float ResonanceHitRadius = 0.75f", flashlight);
-            StringAssert.Contains("Physics.SphereCastAll(origin, ResonanceHitRadius", flashlight);
+            StringAssert.Contains("Physics.SphereCastNonAlloc(origin, ResonanceHitRadius", flashlight);
             StringAssert.Contains("CrossFade(\"Die\")", minion);
             StringAssert.Contains("DeathClipSeconds()", minion);
             StringAssert.Contains("_agent.radius = 0.65f", minion);

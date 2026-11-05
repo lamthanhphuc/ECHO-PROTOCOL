@@ -171,6 +171,20 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void FND_NET_LIFECYCLE_ReconnectWaitsForVerifiedBackendRebind()
+        {
+            var lifecycle = LoadLifecycleSource();
+            var player = File.ReadAllText("Assets/_Project/Scripts/Networking/Player/LobbyPlayerState.cs");
+            var session = File.ReadAllText("Assets/_Project/Scripts/Networking/Session/NetworkBootstrap.cs");
+            var authority = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
+
+            StringAssert.Contains("state.ClearVerifiedBackendIdentityAuthoritative()", lifecycle);
+            StringAssert.Contains("BackendUserId = default", player);
+            StringAssert.Contains("state.HasVerifiedBackendIdentity && !state.Disconnected", session);
+            StringAssert.DoesNotContain("MarkReconnectProofSubmitted()", authority);
+        }
+
+        [Test]
         public void HOST_MIGRATION_InputLifecycleUsesFusionAuthorityCallbacks()
         {
             var movementType = ResolveType(

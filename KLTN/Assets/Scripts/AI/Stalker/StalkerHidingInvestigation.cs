@@ -11,7 +11,8 @@ namespace EchoProtocol.AI.Stalker
         Inspecting,
         Empty,
         Occupied,
-        Invalid
+        Invalid,
+        Protected
     }
 
     public readonly struct StalkerHidingInvestigationTickResult
@@ -120,6 +121,12 @@ namespace EchoProtocol.AI.Stalker
             }
 
             var inspectedCandidate = _selectedCandidate;
+            if (result.Protected)
+            {
+                _memory.RecordProtectedInspection(inspectedCandidate.StableId, now.Seconds, result.RetryAfterSeconds);
+                Reset();
+                return new StalkerHidingInvestigationTickResult(StalkerHidingInvestigationTickStatus.Protected, inspectedCandidate, result);
+            }
             if (result.Occupied)
             {
                 _memory.RecordConfirmedUse(inspectedCandidate.StableId, now);

@@ -22,6 +22,90 @@ public sealed class ScenarioConfigRegistryTests
         Assert.Empty(result.ReasonCodes);
     }
 
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveCandidates_RequireApprovedConfiguration()
+    {
+        await using var fixture =
+            await Fixture.CreateAsync(includeFallback: true);
+
+        var registry = new ScenarioConfigRegistry(fixture.Db);
+
+        var missing = await registry
+            .GetProductionAdaptiveCandidatesAsync(Compatibility);
+
+        Assert.False(missing.IsSuccess);
+        Assert.Equal(
+            ErrorCodes.ScenarioConfigNotFound,
+            missing.ErrorCode);
+
+        var candidate = Config(
+            "adaptive", ScenarioConfigSource.Adaptive);
+
+        fixture.Db.ScenarioConfigs.Add(candidate);
+        await fixture.Db.SaveChangesAsync();
+
+        var valid = await registry
+            .GetProductionAdaptiveCandidatesAsync(Compatibility);
+
+        Assert.True(valid.IsSuccess);
+        Assert.Single(valid.Data!);
+        Assert.Equal(
+            "adaptive",
+            valid.Data![0].ScenarioConfigId);
+
+        candidate.IsProductionApproved = false;
+        await fixture.Db.SaveChangesAsync();
+
+        var unapproved = await registry
+            .GetProductionAdaptiveCandidatesAsync(Compatibility);
+
+        Assert.False(unapproved.IsSuccess);
+    }
+
+    [Fact, Trait("Category", "AEDv2")]
+    public async Task AdaptiveCandidates_RejectInvalidOrIncompatibleConfig()
+    {
+        await using var fixture =
+            await Fixture.CreateAsync(includeFallback: true);
+
+        var candidate = Config(
+            "adaptive", ScenarioConfigSource.Adaptive);
+
+        fixture.Db.ScenarioConfigs.Add(candidate);
+        await fixture.Db.SaveChangesAsync();
+
+        var registry = new ScenarioConfigRegistry(fixture.Db);
+
+        var incompatible = await registry
+            .GetProductionAdaptiveCandidatesAsync("OTHER_VERSION");
+
+        Assert.False(incompatible.IsSuccess);
+
+        candidate.PolicyVersion = "UNSUPPORTED";
+        await fixture.Db.SaveChangesAsync();
+
+        var invalid = await registry
+            .GetProductionAdaptiveCandidatesAsync(Compatibility);
+
+        Assert.False(invalid.IsSuccess);
+        Assert.Equal(
+            ErrorCodes.ScenarioConfigInvalid,
+            invalid.ErrorCode);
+
+        candidate.PolicyVersion =
+            ScenarioConfigValidator.SupportedPolicyVersion;
+        candidate.FallbackConfigId = "UNKNOWN";
+        await fixture.Db.SaveChangesAsync();
+
+        var wrongFallback = await registry
+            .GetProductionAdaptiveCandidatesAsync(Compatibility);
+
+        Assert.False(wrongFallback.IsSuccess);
+        Assert.Equal(
+            ErrorCodes.ScenarioConfigInvalid,
+            wrongFallback.ErrorCode);
+    }
+
     [Fact, Trait("Category", "M4Scenario")]
     public void VersionMismatch_IsRejected()
     {

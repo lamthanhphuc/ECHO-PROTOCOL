@@ -11,7 +11,7 @@ using UnityEngine.AI;
 namespace EchoProtocol.AI.Stalker.Special
 {
     [DisallowMultipleComponent]
-    public sealed class StalkerSpecialEncounterRuntime : MonoBehaviour
+    public sealed partial class StalkerSpecialEncounterRuntime : MonoBehaviour
     {
         [SerializeField] private StalkerSpecialEncounterSettings settings = new StalkerSpecialEncounterSettings();
         [SerializeField] private StalkerController controller;
@@ -45,16 +45,19 @@ namespace EchoProtocol.AI.Stalker.Special
         private bool _ownsControllerOverride;
         private bool _returnToPatrolAfterJumpIn;
 
-        public bool IsActive => _phase != StalkerSpecialEncounterPhase.None;
-        public StalkerSpecialEncounterPhase Phase => _phase;
-        public float PhaseElapsed => _phaseElapsed;
+        public bool IsActive => _phase != StalkerSpecialEncounterPhase.None || _cabinet.IsActive;
+        public StalkerSpecialEncounterPhase Phase => _cabinet.IsActive ? CabinetPresentationPhase : _phase;
+        public float PhaseElapsed => _cabinet.IsActive ? (float)_cabinet.Elapsed(_cabinetNow) : _phaseElapsed;
         public uint SequenceOrdinal => _sequenceOrdinal;
         public bool PresentationVisible => _presentationVisible;
-        public float PhaseProgress01 => GetPhaseDuration(_phase) <= 0f ? 1f : Mathf.Clamp01(_phaseElapsed / GetPhaseDuration(_phase));
+        public float PhaseProgress01 => _cabinet.IsActive
+            ? (_cabinet.Phase == EchoProtocol.AI.Common.AED.AEDV02CabinetPhase.JumpIn ? Mathf.Clamp01(PhaseElapsed / 3f) : 1f)
+            : GetPhaseDuration(_phase) <= 0f ? 1f : Mathf.Clamp01(_phaseElapsed / GetPhaseDuration(_phase));
 
         public void ResetForMatch()
         {
             Cleanup();
+            ResetCabinet();
             _cooldownUntil = AiSimulationTime.Invalid;
             _sequenceOrdinal = 0;
             _lastJumpInPosition = null;
@@ -66,6 +69,7 @@ namespace EchoProtocol.AI.Stalker.Special
             settings ??= new StalkerSpecialEncounterSettings();
             settings.SetCooldownSeconds(seconds);
         }
+        public float AppliedCooldownSeconds => settings.CooldownSeconds;
 
         public void SetAEDv2Pacing(float entryReuse, float postSpecial)
         {
@@ -120,6 +124,9 @@ namespace EchoProtocol.AI.Stalker.Special
         {
             if (AlienHuntMission.Instance) { SuppressForPurge(); return; }
             ResolveDependencies();
+            if (step.IsValid) _cabinetNow = step.Time.Seconds;
+            if (_cabinet.IsActive || _cabinet.Phase == EchoProtocol.AI.Common.AED.AEDV02CabinetPhase.Backoff)
+            { TickCabinet(runner, step); if (_cabinet.IsActive) return; }
             if (settings == null || controller == null || !step.IsValid)
             {
                 return;
@@ -967,6 +974,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         private void SetPhase(StalkerSpecialEncounterPhase phase)
         {
+            if (phase != StalkerSpecialEncounterPhase.None) RecordCabinetSharedSpecial();
             _phase = phase;
             _phaseElapsed = 0f;
             RuntimeLog.Log(RuntimeLogCategory.StalkerCombat, $"[STK_SPECIAL][{phase.ToString().ToUpperInvariant()}]");
@@ -1034,6 +1042,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         private void Cleanup()
         {
+            if (_phase != StalkerSpecialEncounterPhase.None) RecordCabinetSharedSpecial();
             _pendingFact = default;
 
             _phase =
@@ -1082,9 +1091,9 @@ namespace EchoProtocol.AI.Stalker.Special
             //
             // Compare the monotonic Seconds clock directly instead.
             //
-            return _cooldownUntil.IsValid
-                && now.IsValid
-                && now.Seconds < _cooldownUntil.Seconds;
+            return now.IsValid
+                && ((_cooldownUntil.IsValid && now.Seconds < _cooldownUntil.Seconds)
+                    || now.Seconds - _cabinet.LastActivationAt < EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.SharedSpecialSeparationSeconds);
         }
 
         private static AiSimulationTime AddSeconds(AiSimulationTime time, float seconds)

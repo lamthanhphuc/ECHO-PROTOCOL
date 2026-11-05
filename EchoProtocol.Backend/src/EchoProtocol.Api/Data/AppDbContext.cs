@@ -1,5 +1,6 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Entities;
+using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace EchoProtocol.Api.Data;
@@ -36,13 +37,62 @@ public class AppDbContext : DbContext
     public DbSet<AdaptiveInputSnapshotPlayer> AdaptiveInputSnapshotPlayers => Set<AdaptiveInputSnapshotPlayer>();
     public DbSet<ScenarioDecision> ScenarioDecisions => Set<ScenarioDecision>();
     public DbSet<ScenarioApplyReceipt> ScenarioApplyReceipts => Set<ScenarioApplyReceipt>();
+    public DbSet<ScenarioAdaptivePlanV2> ScenarioAdaptivePlansV2 => Set<ScenarioAdaptivePlanV2>();
+    public DbSet<AEDDirectorDecisionV1> AEDDirectorDecisionsV1 => Set<AEDDirectorDecisionV1>();
+    public DbSet<AEDPhase8VerifiedSourceV1> AEDPhase8VerifiedSourcesV1 => Set<AEDPhase8VerifiedSourceV1>();
+    public DbSet<AEDV02Decision> AEDV02Decisions => Set<AEDV02Decision>();
+    public DbSet<AEDV02VerifiedSource> AEDV02VerifiedSources => Set<AEDV02VerifiedSource>();
+    public DbSet<AEDV02SceneContent> AEDV02SceneContents => Set<AEDV02SceneContent>();
+    public DbSet<AEDV02SkillObservation> AEDV02SkillObservations => Set<AEDV02SkillObservation>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentCheckout> PaymentCheckouts => Set<PaymentCheckout>();
     public DbSet<PaymentProviderEvent> PaymentProviderEvents => Set<PaymentProviderEvent>();
     public DbSet<PaymentFulfillment> PaymentFulfillments => Set<PaymentFulfillment>();
+    public DbSet<MatchProfileProcessingJob> MatchProfileProcessingJobs => Set<MatchProfileProcessingJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AEDV02Decision>(entity =>
+        {
+            entity.HasKey(x => x.DecisionId);
+            entity.HasIndex(x => new { x.MatchId, x.PlanRevision }).IsUnique();
+            entity.HasIndex(x => new { x.MatchId, x.PhaseOrdinal, x.DecisionPoint, x.WindowSequence }).IsUnique();
+            entity.HasIndex(x => x.ReceiptId).IsUnique();
+            entity.Property(x => x.DecisionPoint).HasMaxLength(24);
+            entity.Property(x => x.WindowId).HasMaxLength(64);
+            entity.Property(x => x.PlanValuesJson).HasColumnType("text");
+            entity.Property(x => x.ProposalJson).HasColumnType("text");
+            entity.Property(x => x.ActionFingerprint).HasMaxLength(64);
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02Cancellation>(entity =>
+        {
+            entity.ToTable("AEDV02Cancellations");
+            entity.HasKey(x => x.DecisionId);
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02VerifiedSource>(entity =>
+        {
+            entity.HasKey(x => x.Fingerprint); entity.Property(x => x.Fingerprint).HasMaxLength(64);
+            entity.HasIndex(x => new { x.MatchId, x.PhaseOrdinal, x.EndTick });
+            entity.Property(x => x.ReconstructedJson).HasColumnType("text");
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02SceneContent>(entity =>
+        {
+            entity.HasKey(x => x.Fingerprint); entity.Property(x => x.Fingerprint).HasMaxLength(64);
+            entity.Property(x => x.SceneVersion).HasMaxLength(128);
+            entity.Property(x => x.ManifestJson).HasColumnType("text");
+        });
+        modelBuilder.Entity<AEDV02SkillObservation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Dimension).HasMaxLength(32);
+            entity.Property(x => x.ComparisonContextKey).HasMaxLength(128);
+            entity.HasIndex(x => new { x.MatchId, x.UserId, x.Dimension, x.ComparisonContextKey }).IsUnique();
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<UserAgreementAcceptance>(entity =>
         {
             entity.ToTable("UserAgreementAcceptances");
@@ -714,7 +764,23 @@ public class AppDbContext : DbContext
                 t.HasCheckConstraint("CK_PlayerAIProfiles_SurvivalScore_Range", "CAST(\"SurvivalScore\" AS NUMERIC) >= 0 AND CAST(\"SurvivalScore\" AS NUMERIC) <= 100");
                 t.HasCheckConstraint("CK_PlayerAIProfiles_NoiseScore_Range", "CAST(\"NoiseScore\" AS NUMERIC) >= 0 AND CAST(\"NoiseScore\" AS NUMERIC) <= 100");
                 t.HasCheckConstraint("CK_PlayerAIProfiles_SampleCounts_NonNegative", "\"SurvivalSampleCount\" >= 0 AND \"NoiseSampleCount\" >= 0");
-                t.HasCheckConstraint("CK_PlayerAIProfiles_Deferred_Null", "\"ObjectiveScore\" IS NULL AND \"TeamworkScore\" IS NULL AND \"ExplorationScore\" IS NULL AND \"NavigationScore\" IS NULL AND \"ToolUsageScore\" IS NULL AND \"RiskScore\" IS NULL AND \"ReviveScore\" IS NULL");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_Deferred_Null",
+                    "\"TeamworkScore\" IS NULL " +
+                    "AND \"ExplorationScore\" IS NULL " +
+                    "AND \"NavigationScore\" IS NULL " +
+                    "AND \"RiskScore\" IS NULL " +
+                    "AND \"ReviveScore\" IS NULL");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_ExpandedScores_Range",
+                    "(\"ObjectiveScore\" IS NULL OR " +
+                    "(CAST(\"ObjectiveScore\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveScore\" AS NUMERIC) <= 100)) " +
+                    "AND (\"ToolUsageScore\" IS NULL OR " +
+                    "(CAST(\"ToolUsageScore\" AS NUMERIC) >= 0 AND CAST(\"ToolUsageScore\" AS NUMERIC) <= 100))");
+                t.HasCheckConstraint(
+                    "CK_PlayerAIProfiles_ExpandedSamples_NonNegative",
+                    "\"ObjectiveSampleCount\" >= 0 " +
+                    "AND \"ToolUsageSampleCount\" >= 0");
             });
 
             entity.HasKey(e => e.UserId);
@@ -722,11 +788,24 @@ public class AppDbContext : DbContext
             entity.Property(e => e.MatchScoreFormulaVersion).IsRequired().HasMaxLength(80);
             entity.Property(e => e.NormalizationConfigVersion).HasMaxLength(80);
             entity.Property(e => e.ProfileNoiseFilterVersion).HasMaxLength(80);
+            entity.Property(e => e.ToolUsageNormalizationVersion).HasMaxLength(80);
             entity.Property(e => e.AlphaConfigVersion).IsRequired().HasMaxLength(80);
-            entity.Property(e => e.SurvivalScore).HasPrecision(9, 6).HasDefaultValue(50m);
-            entity.Property(e => e.NoiseScore).HasPrecision(9, 6).HasDefaultValue(50m);
+            entity.Property(e => e.SurvivalScore)
+                .HasPrecision(9, 6)
+                .HasDefaultValue(50m)
+                .ValueGeneratedNever();
+            entity.Property(e => e.NoiseScore)
+                .HasPrecision(9, 6)
+                .HasDefaultValue(50m)
+                .ValueGeneratedNever();
             entity.Property(e => e.SurvivalStatus).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.NoiseStatus).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.ObjectiveScore).HasPrecision(9, 6);
+            entity.Property(e => e.ToolUsageScore).HasPrecision(9, 6);
+            entity.Property(e => e.ObjectiveStatus).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(ProfileDimensionStatus.ColdStart);
+            entity.Property(e => e.ToolUsageStatus).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(ProfileDimensionStatus.ColdStart);
         });
 
         modelBuilder.Entity<MatchScore>(entity =>
@@ -811,6 +890,15 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<MatchProfileProcessingJob>(entity =>
+        {
+            entity.ToTable("MatchProfileProcessingJobs");
+            entity.HasKey(item => item.MatchId);
+            entity.Property(item => item.Status).IsRequired().HasMaxLength(20);
+            entity.Property(item => item.LastError).IsRequired().HasMaxLength(200);
+            entity.HasIndex(item => new { item.Status, item.NextAttemptAtUtc });
+        });
+
         modelBuilder.Entity<ScenarioContentDefinition>(entity =>
         {
             entity.ToTable(t => t.HasCheckConstraint(
@@ -872,6 +960,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.SnapshotId);
             entity.Property(e => e.DecisionPoint).IsRequired().HasMaxLength(30);
             entity.Property(e => e.SnapshotContentFingerprint).IsRequired().HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.FingerprintVersion).IsRequired().HasMaxLength(10).HasDefaultValue("V1");
             entity.Property(e => e.RosterIdentity).IsRequired().HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.Validity).HasConversion<string>().HasMaxLength(20);
             entity.Property(e => e.ReasonCodesJson).IsRequired().HasColumnType("jsonb");
@@ -880,8 +969,16 @@ public class AppDbContext : DbContext
             entity.Property(e => e.NoiseComparisonKey).HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.SurvivalAggregationStatus).IsRequired().HasMaxLength(20);
             entity.Property(e => e.NoiseAggregationStatus).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ObjectiveAggregationStatus).IsRequired().HasMaxLength(20)
+                .HasDefaultValue("UNAVAILABLE");
+            entity.Property(e => e.ToolUsageAggregationStatus).IsRequired().HasMaxLength(20)
+                .HasDefaultValue("UNAVAILABLE");
+            entity.Property(e => e.ObjectiveComparisonKey).HasMaxLength(64).IsFixedLength();
+            entity.Property(e => e.ToolUsageComparisonKey).HasMaxLength(64).IsFixedLength();
             entity.Property(e => e.SurvivalMeanObservedScore).HasPrecision(9, 6);
             entity.Property(e => e.NoiseMeanObservedScore).HasPrecision(9, 6);
+            entity.Property(e => e.ObjectiveMeanObservedScore).HasPrecision(9, 6);
+            entity.Property(e => e.ToolUsageMeanObservedScore).HasPrecision(9, 6);
             entity.HasIndex(e => new { e.MatchId, e.CreatedAtUtc });
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(e => e.MatchId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -951,6 +1048,62 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.MatchId).IsUnique();
             entity.HasOne(e => e.Decision).WithOne(e => e.ApplyReceipt).HasForeignKey<ScenarioApplyReceipt>(e => e.DecisionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.ReportedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ScenarioAdaptivePlanV2>(entity =>
+        {
+            entity.ToTable("ScenarioAdaptivePlansV2");
+            entity.HasKey(e => e.DecisionId);
+            entity.Property(e => e.DecisionPoint).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.PolicyVersion).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.BaselineVersion).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.PreviousPlanFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ResultingPlanFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ChangedKey).IsRequired().HasMaxLength(80);
+            entity.Property(e => e.AdaptationIntent).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.DecisionReason).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SnapshotFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.PlanValuesJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.CommitStatus).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ApplyStatus).IsRequired().HasMaxLength(20);
+            entity.HasIndex(e => new { e.MatchId, e.PhaseOrdinal }).IsUnique();
+            entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(e => e.MatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.HostUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AdaptiveInputSnapshot>().WithMany().HasForeignKey(e => e.SnapshotId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AEDDirectorDecisionV1>(entity =>
+        {
+            entity.ToTable("AEDDirectorDecisionsV1");
+            entity.HasKey(x => x.DecisionId);
+            entity.Property(x => x.DirectorKind).IsRequired().HasMaxLength(30);
+            entity.Property(x => x.PolicyVersion).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SnapshotFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SourceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.PayloadFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.PayloadJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(x => x.ApprovalScope).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.Status).IsRequired().HasMaxLength(20);
+            entity.Property(x => x.ReasonCode).HasMaxLength(100);
+            entity.HasIndex(x => new { x.MatchId, x.CompletedPhaseOrdinal, x.DirectorKind }).IsUnique();
+            entity.HasIndex(x => new { x.MatchId, x.DirectorKind, x.Status });
+        });
+
+        modelBuilder.Entity<AEDPhase8VerifiedSourceV1>(entity =>
+        {
+            entity.ToTable("AEDPhase8VerifiedSourcesV1");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.MatchId, x.CompletedPhaseOrdinal, x.SourceVersion }).IsUnique();
+            entity.Property(x => x.SourceVersion).IsRequired().HasMaxLength(80);
+            entity.Property(x => x.EvidenceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.SourceFingerprint).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.RosterIdentity).IsRequired().HasMaxLength(64);
+            entity.Property(x => x.ReasonCode).IsRequired().HasMaxLength(100);
+            entity.Property(x => x.VerifiedContentJson).IsRequired().HasColumnType("jsonb");
         });
     }
 }

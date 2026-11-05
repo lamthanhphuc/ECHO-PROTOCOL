@@ -60,12 +60,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             yield return WaitUntilState(fixture.Controller, "DETECT", MaxDetectFrames);
 
-            var leftPosition = new Vector3(-3f, 1f, 5f);
+            var leftPosition = new Vector3(-1.5f, 1f, 5f);
             fixture.PlayerDummy.transform.position = leftPosition;
-            for (var frame = 0; frame < 10; frame++)
-            {
-                yield return null;
-            }
+            yield return WaitUntilFacing(
+                fixture.Controller, fixture.Stalker.transform, leftPosition);
 
             AssertState(fixture.Controller, "DETECT");
             Assert.That(
@@ -74,12 +72,10 @@ namespace EchoProtocol.AI.Stalker.Tests
                     FlattenDirection(leftPosition - fixture.Stalker.transform.position)),
                 Is.LessThan(10f));
 
-            var rightPosition = new Vector3(3f, 1f, 5f);
+            var rightPosition = new Vector3(1.5f, 1f, 5f);
             fixture.PlayerDummy.transform.position = rightPosition;
-            for (var frame = 0; frame < 10; frame++)
-            {
-                yield return null;
-            }
+            yield return WaitUntilFacing(
+                fixture.Controller, fixture.Stalker.transform, rightPosition);
 
             Assert.That(
                 Vector3.Angle(
@@ -213,6 +209,27 @@ namespace EchoProtocol.AI.Stalker.Tests
             }
 
             return new StalkerFixture(stalker, playerDummy, controller, visionSensor);
+        }
+
+        private static IEnumerator WaitUntilFacing(
+            Component controller,
+            Transform stalker,
+            Vector3 targetPosition)
+        {
+            float deadline = Time.time + 2f;
+            while (Time.time < deadline)
+            {
+                yield return null;
+                Assert.That(
+                    GetEnumPropertyName(controller, "CurrentState"),
+                    Is.EqualTo("DETECT"));
+                float angle = Vector3.Angle(
+                    stalker.forward,
+                    FlattenDirection(targetPosition - stalker.position));
+                if (angle < 10f)
+                    yield break;
+            }
+            Assert.Fail("Stalker did not face the visible detection target within 2 seconds.");
         }
 
         private static IEnumerator WaitUntilState(Component controller, string expectedStateName, int maxFrames)

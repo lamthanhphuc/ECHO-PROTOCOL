@@ -12,9 +12,17 @@ internal sealed record TelemetryValidationResult(
 
 internal static class TelemetrySchemaDispatcher
 {
-    public static bool IsResearchCaptureEvent(TelemetryEventRequest telemetryEvent) =>
-        telemetryEvent.SchemaVersion == "1.1" &&
-        TelemetryV11Validator.IsResearchCaptureEvent(telemetryEvent.EventType);
+    public static bool IsResearchCaptureEvent(
+        TelemetryEventRequest telemetryEvent) =>
+        telemetryEvent.SchemaVersion switch
+        {
+            "1.1" => TelemetryV11Validator.IsResearchCaptureEvent(
+                telemetryEvent.EventType),
+            "1.2" => TelemetryV12LifecycleValidator.IsLifecycleEvent(
+                telemetryEvent.EventType),
+            "1.3" => TelemetryV13AEDValidator.IsSourceEvent(telemetryEvent.EventType),
+            _ => false
+        };
 
     public static bool TryValidate(
         TelemetryEventRequest telemetryEvent,
@@ -25,6 +33,10 @@ internal static class TelemetrySchemaDispatcher
         return telemetryEvent.SchemaVersion switch
         {
             "1.1" => TelemetryV11Validator.TryValidate(
+                telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
+            "1.2" => TelemetryV12LifecycleValidator.TryValidate(
+                telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
+            "1.3" => TelemetryV13AEDValidator.TryValidate(
                 telemetryEvent, researchCaptureAllowed, out result, out rejectReason),
             "1.0" => Reject("TELEMETRY_LEGACY_V10_UNSUPPORTED", out result, out rejectReason),
             _ => Reject("TELEMETRY_SCHEMA_UNSUPPORTED", out result, out rejectReason)
@@ -57,7 +69,8 @@ internal static class TelemetryV11Validator
         "authorityTick",
         "scenarioConfigVersion",
         "policyVersion",
-        "configSource"
+        "configSource",
+        "occurrenceKey"
     ];
 
     private static readonly HashSet<string> MatchStartedOptionalContextFields =
@@ -844,6 +857,14 @@ internal static class TelemetryV11Validator
             !HasText(context, "scenarioConfigVersion") ||
             !HasText(context, "policyVersion") ||
             !HasOneOf(context, "configSource", ["FIXED", "ADAPTIVE"], out reason, "TELEMETRY_COMMON_CONTEXT_INVALID"))
+        {
+            reason = "TELEMETRY_COMMON_CONTEXT_INVALID";
+            return false;
+        }
+
+        if (context.TryGetProperty("occurrenceKey", out var occurrenceKey) &&
+            (occurrenceKey.ValueKind != JsonValueKind.String ||
+             string.IsNullOrWhiteSpace(occurrenceKey.GetString())))
         {
             reason = "TELEMETRY_COMMON_CONTEXT_INVALID";
             return false;

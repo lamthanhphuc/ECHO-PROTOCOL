@@ -21,6 +21,7 @@ namespace EchoProtocol.Gameplay
             float specialEncounterCooldownSeconds,
             int zone1MinionCap,
             int zone2MinionCap,
+            int zone3MinionCap,
             int maximumRevivesPerZone,
             bool objectiveInvestigationEnabled)
         {
@@ -40,6 +41,7 @@ namespace EchoProtocol.Gameplay
             SpecialEncounterCooldownSeconds = specialEncounterCooldownSeconds;
             Zone1MinionCap = zone1MinionCap;
             Zone2MinionCap = zone2MinionCap;
+            Zone3MinionCap = zone3MinionCap;
             MaximumRevivesPerZone = maximumRevivesPerZone;
             ObjectiveInvestigationEnabled = objectiveInvestigationEnabled;
         }
@@ -60,6 +62,7 @@ namespace EchoProtocol.Gameplay
         public float SpecialEncounterCooldownSeconds { get; }
         public int Zone1MinionCap { get; }
         public int Zone2MinionCap { get; }
+        public int Zone3MinionCap { get; }
         public int MaximumRevivesPerZone { get; }
         public bool ObjectiveInvestigationEnabled { get; }
     }
@@ -88,16 +91,17 @@ namespace EchoProtocol.Gameplay
                         600f,
                         0,
                         0,
+                        0,
                         4,
                         false);
                 case MatchDifficulty.Hard:
                     return new MatchDifficultyProfile(
                         5, 8f, 9f, 0.75f, 30f, 3f, 3f, 0.35f,
-                        1f, 3f, 75f, 15f, 1.25f, 300f, 15, 15, 2, true);
+                        1f, 3f, 75f, 15f, 1.25f, 300f, 15, 15, 0, 2, true);
                 default:
                     return new MatchDifficultyProfile(
                         5, 6.5f, 7.5f, 1.25f, 25f, 2.25f, 2.7f, 0.6f,
-                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 3, 5, 3, true);
+                        1.4f, 4.5f, 120f, 25f, 1f, 420f, 3, 5, 0, 3, true);
             }
         }
     }
