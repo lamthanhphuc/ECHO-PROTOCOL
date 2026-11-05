@@ -92,6 +92,11 @@ namespace EchoProtocol.Networking
 
         [Header("Health / Down")]
         [SerializeField, Min(1f)] private float _maximumHealth = 100f;
+        [Networked] private float RemoteFixedMaximumHealth { get; set; }
+
+        private float EffectiveMaximumHealth =>
+            Object != null && Object.IsValid && RemoteFixedMaximumHealth > 0f
+                ? RemoteFixedMaximumHealth : _maximumHealth;
         [SerializeField, Min(0.1f)] private float _bleedoutSeconds = 45f;
         [SerializeField, Range(0.05f, 1f)] private float _crawlSpeedMultiplier = 0.32f;
 
@@ -185,6 +190,17 @@ namespace EchoProtocol.Networking
             : 1f - Mathf.Clamp01(Remaining(ReviveTimer) /
                 Mathf.Max(0.1f, ActiveReviveDurationSeconds));
 
+        public void ApplyRemoteFixedBalanceAuthoritative(
+            RemoteFixedBalanceSnapshot snapshot)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority)
+                return;
+
+            RemoteFixedMaximumHealth = snapshot != null ? snapshot.player.maxHealth : 0f;
+            if (snapshot != null)
+                Debug.Log($"[RemoteFixed] Player maxHealth={EffectiveMaximumHealth}");
+        }
+
         public override void Spawned()
         {
             EnsureLegacyPresentationComponents();
@@ -193,7 +209,7 @@ namespace EchoProtocol.Networking
             {
                 DebugGodMode = false;
                 Status = NetworkPlayerLifeStatus.Alive;
-                Health = _maximumHealth;
+                Health = EffectiveMaximumHealth;
                 Reviver = PlayerRef.None;
                 IsCrawling = false;
                 DownCount = 0;
@@ -273,7 +289,7 @@ namespace EchoProtocol.Networking
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
             DebugGodMode = false;
             Status = NetworkPlayerLifeStatus.Alive;
-            Health = _maximumHealth;
+            Health = EffectiveMaximumHealth;
             Reviver = PlayerRef.None;
             IsCrawling = false;
             DownCount = 0;
@@ -382,12 +398,12 @@ namespace EchoProtocol.Networking
 
         public bool TryHeal(float amount)
         {
-            if (!Object.HasStateAuthority || Status != NetworkPlayerLifeStatus.Alive || Health >= _maximumHealth)
+            if (!Object.HasStateAuthority || Status != NetworkPlayerLifeStatus.Alive || Health >= EffectiveMaximumHealth)
             {
                 return false;
             }
 
-            Health = Mathf.Min(Health + amount, _maximumHealth);
+            Health = Mathf.Min(Health + amount, EffectiveMaximumHealth);
             HandleReplicatedStateChanged();
             return true;
         }
@@ -636,7 +652,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             PausedBleedoutRemainingSeconds = 0f;
             IsCrawling = false;
-            Health = Mathf.Clamp(_revivedHealth, 1f, _maximumHealth);
+            Health = Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
             ReviveCount++;
             ProtectionTimer = _reviveProtectionSeconds > 0f
                 ? TickTimer.CreateFromSeconds(Runner, _reviveProtectionSeconds)
@@ -832,7 +848,7 @@ namespace EchoProtocol.Networking
                 CatchEndsInDeath = false;
 
                 IsCrawling = false;
-                Health = _maximumHealth;
+                Health = EffectiveMaximumHealth;
 
                 GetComponent<PlayerJumpscareController>()
                     ?.StopJumpscare();

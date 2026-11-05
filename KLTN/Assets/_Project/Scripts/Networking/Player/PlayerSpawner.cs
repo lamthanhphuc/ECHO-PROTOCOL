@@ -2445,6 +2445,14 @@ namespace EchoProtocol.Networking
             if (gameplay && playerObject.TryGetComponent<LobbyPlayerState>(out var existingState)
                 && existingState.IsGameplayPlayer) return;
 
+            RemoteFixedBalanceSnapshot remoteBalance = null;
+            if (gameplay)
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                if (authority != null)
+                    authority.TryGetRemoteFixedBalance(out remoteBalance);
+            }
+
             var slot = GetOrAssignSlot(player);
             var pose = gameplay ? GetGameplaySpawnPose(slot) : GetLobbySpawnPose(slot);
             if (playerObject.TryGetComponent<LobbyPlayerState>(out var state))
@@ -2464,8 +2472,10 @@ var toolId =
                 state.InitializeAuthoritativeSelection(teamId, toolId, gameplay);
             }
 
-            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) && playerObject.HasStateAuthority)
+            if (playerObject.TryGetComponent<NetworkPlayerLifeState>(out var lifeState) &&
+                playerObject.HasStateAuthority)
             {
+                lifeState.ApplyRemoteFixedBalanceAuthoritative(remoteBalance);
                 lifeState.ResetForMatchAuthoritative();
             }
 
@@ -2477,6 +2487,7 @@ var toolId =
             playerObject.TryGetComponent<NetworkPlayerMovement>(out var movement);
             if (movement != null && playerObject.HasStateAuthority)
             {
+                movement.ApplyRemoteFixedBalanceAuthoritative(remoteBalance);
                 movement.IsHidden = false;
                 movement.CurrentHideSpotId = 0UL;
             }

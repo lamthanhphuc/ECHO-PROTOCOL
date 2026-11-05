@@ -17,6 +17,7 @@ namespace EchoProtocol.Networking
         public const string GameSceneName = "SciFi";
 
         [SerializeField] private NetworkBootstrap _bootstrap;
+        [SerializeField] private bool _useRemoteFixedBalanceTest;
         private bool _matchStartInProgress;
         private Task<bool> _lobbyBindingTask;
         private float _nextLobbyBindingAttempt;
@@ -314,7 +315,7 @@ namespace EchoProtocol.Networking
                     return;
                 }
                 var (accepted, error) =
-                    await authority.StartMatchAsync();
+                    await authority.StartMatchAsync(_useRemoteFixedBalanceTest);
                 Debug.LogWarning(
                     $"[NETDIAG][BackendStartResult] Accepted={accepted}; " +
                     $"SameRunner={ReferenceEquals(runner, _bootstrap?.Runner)}; " +

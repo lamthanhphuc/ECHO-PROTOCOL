@@ -46,6 +46,13 @@ namespace EchoProtocol.Networking.Authority
 
         private static MatchAuthorityRuntime _instance;
         private MatchAuthorityApiService _api;
+        private RemoteFixedBalanceSnapshot _remoteFixedBalance;
+
+        public bool TryGetRemoteFixedBalance(out RemoteFixedBalanceSnapshot snapshot)
+        {
+            snapshot = IsHostBinding && HasBinding ? _remoteFixedBalance : null;
+            return snapshot != null;
+        }
         private NetworkBootstrap _bootstrap;
         private float _nextLeaseRenewal;
         private bool _leaseRequestInProgress;
@@ -1403,49 +1410,126 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
-        public async Task<(bool Accepted, string Error)> StartMatchAsync()
+        public async Task<(bool Accepted, string Error)> StartMatchAsync(
+            bool useRemoteFixedTest = false)
         {
             if (_backendEndRequestInProgress)
-            {
                 return (false, "Previous match is still being finalized.");
-            }
 
             if (HasBinding && !IsHostBinding)
-            {
-                return (false, "Backend match has already ended; prepare a new host binding.");
-            }
+                return (false, "Backend match has already ended.");
 
             if (!IsHostBinding || !HasBinding)
+                return (false, "Backend Host binding is unavailable.");
+
+            var runner = _bootstrap?.Runner;
+            if (runner == null || !runner.IsRunning ||
+                !runner.IsServer || !runner.SessionInfo.IsValid)
+                return (false, "Authoritative room is unavailable.");
+
+            if (useRemoteFixedTest &&
+                requestedScenarioResolutionMode != ScenarioResolutionMode.Fixed)
+                return (false, "Remote Fixed requires FIXED mode.");
+
+            var matchId = MatchId;
+            var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
+            var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
+            var result = useRemoteFixedTest
+                ? await _api.StartV2Async(matchId, mapId, difficulty)
+                : await _api.StartAsync(matchId, mapId, difficulty);
+
+            if (!IsSuccessful(result))
             {
-                const string error = "Backend Host binding is not available.";
-                Debug.LogWarning($"[MatchAuthority] {error}");
+                var error = Describe(result);
+                Debug.LogWarning($"[MatchAuthority] Backend start rejected: {error}");
                 return (false, error);
             }
 
-            var runner = _bootstrap?.Runner;
-            if (runner == null || !runner.IsRunning || !runner.IsServer
-                || !runner.SessionInfo.IsValid)
+            if (useRemoteFixedTest)
             {
-                return (false, "Authoritative room is unavailable at match start.");
+                string failure = null;
+                RemoteFixedBalanceSnapshot snapshot = null;
+
+                try
+                {
+                    var started = result.Data.data;
+                    if (!Guid.TryParse(started.matchId, out var startedId) ||
+                        startedId != matchId || started.mapId != mapId ||
+                        started.difficulty != difficulty || started.resolutionMode != "FIXED" ||
+                        started.balanceSource != "REMOTE_FIXED" ||
+                        started.balanceProtocolVersion != "RFB-1" ||
+                        started.matchDataPolicy != "TEST_ONLY" ||
+                        string.IsNullOrWhiteSpace(started.balanceVersion) ||
+                        string.IsNullOrWhiteSpace(started.balanceHash))
+                    {
+                        failure = "Backend returned an invalid Remote Fixed context.";
+                    }
+                    else
+                    {
+                        var locked = await _api.GetLockedBalanceAsync(matchId);
+                        if (!IsSuccessful(locked))
+                        {
+                            failure = $"Cannot fetch locked balance: {Describe(locked)}";
+                        }
+                        else
+                        {
+                            var data = locked.Data.data;
+                            if (!Guid.TryParse(data.matchId, out var lockedId) ||
+                                lockedId != matchId || data.balanceVersion != started.balanceVersion ||
+                                data.balanceHash != started.balanceHash ||
+                                data.balanceProtocolVersion != "RFB-1" ||
+                                !RemoteFixedBalanceSnapshot.TryDecode(
+                                    data.snapshotPayloadBase64, started.balanceHash, out snapshot))
+                            {
+                                failure = "Locked Remote Fixed snapshot validation failed.";
+                            }
+                        }
+                    }
+
+                    if (failure == null &&
+                        (MatchId != matchId || !IsHostBinding ||
+                         _bootstrap?.Runner != runner || !runner.IsRunning || !runner.IsServer))
+                    {
+                        failure = "Host authority changed while loading balance.";
+                    }
+                }
+                catch (Exception exception)
+                {
+                    failure = $"Remote Fixed initialization failed: {exception.Message}";
+                }
+
+                if (failure != null)
+                {
+                    if (MatchId == matchId && IsHostBinding)
+                    {
+                        try
+                        {
+                            await EndAsync("REMOTE_FIXED_BALANCE_INVALID");
+                        }
+                        catch (Exception exception)
+                        {
+                            Debug.LogWarning(
+                                $"[MatchAuthority] Backend abort failed: {exception.Message}");
+                        }
+                    }
+
+                    Debug.LogError($"[MatchAuthority] {failure}");
+                    return (false, failure);
+                }
+
+                _remoteFixedBalance = snapshot;
+                Debug.Log(
+                    $"[RemoteFixed] Verified match={matchId:D}, " +
+                    $"version={result.Data.data.balanceVersion}, " +
+                    $"hash={result.Data.data.balanceHash}");
             }
 
-            var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
-            var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
-            var result = await _api.StartAsync(MatchId, mapId, difficulty);
-            var success = IsSuccessful(result);
-            if (success)
-            {
-                _backendMatchStartedAtRealtime =
-                    Time.realtimeSinceStartup;
+            _backendMatchStartedAtRealtime = Time.realtimeSinceStartup;
 
-                RuntimeLog.Log(
+            RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
-                $"[MatchAuthority] Backend confirmed match start. Match={MatchId:D}.");
-                return (true, string.Empty);
-            }
-            var failure = Describe(result);
-            Debug.LogWarning($"[MatchAuthority] Backend rejected match start: {failure}.");
-            return (false, failure);
+                $"[MatchAuthority] Backend confirmed match start. Match={matchId:D}.");
+            return (true, string.Empty);
         }
 
         public void RecordObjectiveContribution(PlayerRef actor)
@@ -1471,6 +1555,7 @@ namespace EchoProtocol.Networking.Authority
             _bindingGeneration++;
             var oldMatchId = MatchId;
             MatchId = Guid.Empty;
+            _remoteFixedBalance = null;
             IsHostBinding = false;
             requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
             requestedDifficulty = MatchDifficulty.Normal;
