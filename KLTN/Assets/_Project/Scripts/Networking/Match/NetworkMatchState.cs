@@ -644,7 +644,9 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority) return;
+            if (!Object.HasStateAuthority
+                || NetworkBootstrap.IsHostMigrationReconciliationPending)
+                return;
 
             if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
                 && _aedv2Boundary.Transaction != null)

@@ -42,6 +42,24 @@ namespace EchoProtocol.Networking
             Object != null && Object.IsValid && RemoteFixedSprintSpeed > 0f
                 ? RemoteFixedSprintSpeed : _sprintSpeed;
 
+        public bool HasRemoteFixedBalance =>
+            Object != null
+            && Object.IsValid
+            && RemoteFixedWalkSpeed > 0f
+            && RemoteFixedSprintSpeed > 0f
+            && RemoteFixedMaxStamina > 0f;
+
+        public bool MatchesRemoteFixedBalance(
+            RemoteFixedBalanceSnapshot snapshot) =>
+            snapshot != null
+            && HasRemoteFixedBalance
+            && Mathf.Approximately(
+                RemoteFixedWalkSpeed, snapshot.player.walkSpeed)
+            && Mathf.Approximately(
+                RemoteFixedSprintSpeed, snapshot.player.sprintSpeed)
+            && Mathf.Approximately(
+                RemoteFixedMaxStamina, snapshot.player.maxStamina);
+
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
@@ -699,6 +717,9 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
+            if (NetworkBootstrap.IsHostMigrationReconciliationPending)
+                return;
+
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
             {

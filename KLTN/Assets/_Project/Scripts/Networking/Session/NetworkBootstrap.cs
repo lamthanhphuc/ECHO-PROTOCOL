@@ -2068,6 +2068,18 @@ namespace EchoProtocol.Networking
                         }
                     }
 
+                    if (_matchAuthority.TryGetRemoteFixedBalance(
+                            out var lockedBalance))
+                    {
+                        if (!RestoreMigratedRemoteFixedGameplay(
+                                migrationRunner,
+                                lockedBalance))
+                        {
+                            throw new InvalidOperationException(
+                                "Remote Fixed Host Migration gameplay restoration failed.");
+                        }
+                    }
+
                     // Publish an immediate fresh snapshot after the new
                     // Host has successfully assumed backend authority.
                     await migrationRunner
@@ -2193,6 +2205,87 @@ namespace EchoProtocol.Networking
                 _sessionOperationInProgress = false;
                 _hostMigrationInProgress = false;
             }
+        }
+
+        private bool RestoreMigratedRemoteFixedGameplay(
+            NetworkRunner runner,
+            RemoteFixedBalanceSnapshot snapshot)
+        {
+            if (runner == null
+                || !runner.IsRunning
+                || !runner.IsServer
+                || snapshot == null)
+                return false;
+
+            var restoredPlayers = 0;
+
+            foreach (var movement in FindObjectsByType<NetworkPlayerMovement>(
+                         FindObjectsInactive.Include))
+            {
+                if (movement == null
+                    || movement.Runner != runner
+                    || movement.Object == null
+                    || !movement.Object.IsValid
+                    || !movement.Object.HasStateAuthority)
+                    continue;
+
+                var life = movement.GetComponent<NetworkPlayerLifeState>();
+
+                if (life == null
+                    || !movement.MatchesRemoteFixedBalance(snapshot)
+                    || !life.MatchesRemoteFixedBalance(snapshot))
+                {
+                    Debug.LogError(
+                        "[RemoteFixed] Migrated player balance mismatch.");
+                    return false;
+                }
+
+                restoredPlayers++;
+            }
+
+            if (restoredPlayers == 0)
+            {
+                Debug.LogError(
+                    "[RemoteFixed] No restored authoritative players.");
+                return false;
+            }
+
+            foreach (var stalker in
+                     FindObjectsByType<
+                         EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>(
+                         FindObjectsInactive.Include))
+            {
+                if (stalker == null
+                    || stalker.Runner != runner
+                    || stalker.Object == null
+                    || !stalker.Object.IsValid
+                    || !stalker.Object.HasStateAuthority)
+                    continue;
+
+                if (!stalker.RestoreRemoteFixedBalanceAuthoritative(snapshot))
+                    return false;
+            }
+
+            foreach (var minion in FindObjectsByType<
+                         EchoProtocol.AI.Minions.CreepMinionRuntime>(
+                         FindObjectsInactive.Include))
+            {
+                if (minion == null
+                    || minion.Runner != runner
+                    || minion.Object == null
+                    || !minion.Object.IsValid
+                    || !minion.Object.HasStateAuthority)
+                    continue;
+
+                if (!minion.ApplyRemoteFixedBalanceAuthoritative(snapshot))
+                    return false;
+            }
+
+            RuntimeLog.Log(
+                RuntimeLogCategory.NetworkSession,
+                $"HM_REMOTE_FIXED_RESTORED|players={restoredPlayers}");
+
+            return true;
         }
 
         private void ResumeHostMigrationTracked(NetworkRunner migrationRunner)
