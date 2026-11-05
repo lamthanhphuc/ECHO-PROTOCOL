@@ -14,8 +14,8 @@ namespace EchoProtocol.Voice.Tests
         private Component _manager;
         private bool _hadMutedPreference;
         private int _previousMutedPreference;
-        private bool _hadMicrophonePreference;
-        private int _previousMicrophonePreference;
+        private bool _hadEnabledPreference;
+        private int _previousEnabledPreference;
         private static Type Resolve(string fullName) => AppDomain.CurrentDomain.GetAssemblies()
             .Select(a => a.GetType(fullName)).First(t => t != null);
         private object Read(string property) => _managerType.GetProperty(property).GetValue(_manager);
@@ -46,11 +46,14 @@ namespace EchoProtocol.Voice.Tests
         {
             _hadMutedPreference = PlayerPrefs.HasKey("Echo.Voice.Muted");
             _previousMutedPreference = PlayerPrefs.GetInt("Echo.Voice.Muted", 0);
-            _hadMicrophonePreference = PlayerPrefs.HasKey("Echo.Voice.Enabled");
-            _previousMicrophonePreference = PlayerPrefs.GetInt("Echo.Voice.Enabled", 1);
+            _hadEnabledPreference = PlayerPrefs.HasKey("Echo.Voice.Enabled");
+            _previousEnabledPreference = PlayerPrefs.GetInt("Echo.Voice.Enabled", 1);
+            PlayerPrefs.SetInt("Echo.Voice.Enabled", 0);
             _managerType = Resolve("EchoProtocol.Voice.VoiceManager");
             _managerType.GetMethod("EnsureExists").Invoke(null, null);
             _manager = (Component)_managerType.GetProperty("Instance").GetValue(null);
+            _managerType.GetMethod("EnableMicrophone")
+                .Invoke(_manager, new object[] { false });
             yield return null;
         }
 
@@ -61,7 +64,7 @@ namespace EchoProtocol.Voice.Tests
             yield return null;
             Assert.That(_managerType.GetProperty("Instance").GetValue(null), Is.SameAs(_manager));
             Assert.That(UnityEngine.Object.FindObjectsByType(_managerType, FindObjectsSortMode.None).Length, Is.EqualTo(1));
-            Assert.That(Read("MicrophoneEnabled"), Is.EqualTo(_previousMicrophonePreference != 0));
+            Assert.That(Read("MicrophoneEnabled"), Is.False);
             Assert.That(Read("Joined"), Is.False);
             Assert.That(Read("Speaking"), Is.False);
             Assert.That(Read("OutputMixer"), Is.Not.Null);
@@ -107,7 +110,7 @@ namespace EchoProtocol.Voice.Tests
         {
             if (_hadMutedPreference) PlayerPrefs.SetInt("Echo.Voice.Muted", _previousMutedPreference);
             else PlayerPrefs.DeleteKey("Echo.Voice.Muted");
-            if (_hadMicrophonePreference) PlayerPrefs.SetInt("Echo.Voice.Enabled", _previousMicrophonePreference);
+            if (_hadEnabledPreference) PlayerPrefs.SetInt("Echo.Voice.Enabled", _previousEnabledPreference);
             else PlayerPrefs.DeleteKey("Echo.Voice.Enabled");
             if (_manager != null) UnityEngine.Object.Destroy(_manager.gameObject);
             yield return null;

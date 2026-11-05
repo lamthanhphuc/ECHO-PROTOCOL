@@ -479,7 +479,7 @@ namespace EchoProtocol.MatchFlow
                 var flow = FindAnyObjectByType<MatchFlowController>();
                 if (flow != null)
                 {
-                    flow.NotifySecurityHoldComplete();
+                    flow.NotifySecurityHoldComplete(_offlineAuthCode);
                 }
             }
         }

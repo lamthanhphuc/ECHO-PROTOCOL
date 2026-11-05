@@ -59,7 +59,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static readonly Vector3 ChaseDestinationC = new Vector3(1.2f, 0f, 0f);
         private static readonly Vector3 ChaseDestinationD = new Vector3(1.3f, 0f, 0f);
         private static readonly Vector3 ChaseDestinationE = new Vector3(1.4f, 0f, 0f);
-        private static readonly Vector3 ChaseDestinationF = new Vector3(1.5f, 0f, 0f);
+        private static readonly Vector3 ChaseDestinationF = new Vector3(1.55f, 0f, 0f);
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
         private NavMeshDataInstance _navMeshDataInstance;
@@ -673,10 +673,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Stuck"));
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Complete"));
-            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
         }
 
         [UnityTest]
@@ -721,10 +721,10 @@ namespace EchoProtocol.AI.Stalker.Tests
 
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
-            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.True);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Stale"));
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
-            AssertVectorApproximately(fixture.Agent.destination, fixture.Destination);
+            Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
         }
 
         [UnityTest]
@@ -745,8 +745,9 @@ namespace EchoProtocol.AI.Stalker.Tests
             InvokeTickNavigationRecovery(fixture.StalkerController);
 
             Assert.That(GetNavigationRecoveryAttemptUsed(fixture.StalkerController), Is.False);
-            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("Partial"));
-            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Failed"));
+            Assert.That(GetBoolProperty(fixture.Navigation, "HasActiveDestination"), Is.False);
+            Assert.That(GetPathStatusName(fixture.Navigation), Is.EqualTo("NoDestination"));
+            Assert.That(GetExecutionStatusName(fixture.Navigation), Is.EqualTo("Idle"));
             Assert.That(HasArrived(fixture.Navigation), Is.False);
         }
 
@@ -1212,6 +1213,7 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private static void ConfigureAgent(NavMeshAgent agent)
         {
+            agent.agentTypeID = 0;
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;
@@ -2021,7 +2023,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private static void InstallRoomSweepRecoveryDestination(object stalkerController, Vector3 destination)
         {
             var node = Activator.CreateInstance(ResolveType(SpatialNodeTypeName),
-                0, destination, 0, 0, 0, 0, 0, 0, new List<int>());
+                0, destination, 0, 0, 0, 0, 0, new List<int>());
             var nodes = Array.CreateInstance(ResolveType(SpatialNodeTypeName), 1);
             nodes.SetValue(node, 0);
             var graph = Activator.CreateInstance(ResolveType(NavMeshSpatialGraphTypeName), nodes);

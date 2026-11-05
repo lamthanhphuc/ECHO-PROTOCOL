@@ -80,6 +80,12 @@ builder.Services.Configure<PlayerAIProfileSettings>(
     builder.Configuration.GetSection(PlayerAIProfileSettings.SectionName));
 builder.Services.Configure<TeamProfileSettings>(
     builder.Configuration.GetSection(TeamProfileSettings.SectionName));
+builder.Services.AddOptions<AEDPreMatchPolicySettings>()
+    .Bind(builder.Configuration.GetSection(
+        AEDPreMatchPolicySettings.SectionName))
+    .Validate(x => x.IsContractValid(),
+        "AED pre-match policy configuration is invalid")
+    .ValidateOnStart();
 builder.Services.AddOptions<LoadoutSettings>()
     .Bind(builder.Configuration.GetSection(LoadoutSettings.SectionName))
     .Validate(settings => settings.TeamToolSlotCount == 1,
@@ -229,6 +235,15 @@ builder.Services.AddScoped<IScenarioConfigRegistry, ScenarioConfigRegistry>();
 builder.Services.AddScoped<IAIProfileReadService, AIProfileReadService>();
 builder.Services.AddScoped<IAdaptiveInputSnapshotBuilder, AdaptiveInputSnapshotBuilder>();
 builder.Services.AddScoped<IScenarioService, ScenarioService>();
+builder.Services.AddScoped<IScenarioSnapshotReadService, ScenarioSnapshotReadService>();
+builder.Services.AddScoped<IScenarioAdaptivePlanV2Service, ScenarioAdaptivePlanV2Service>();
+builder.Services.Configure<AEDV02PilotSettings>(builder.Configuration.GetSection("AEDV02Pilot"));
+builder.Services.AddScoped<AEDV02SourceVerifier>();
+builder.Services.AddScoped<AEDV02DecisionService>();
+builder.Services.AddScoped<IAEDv2PhaseEvidenceVerifier, AEDv2PhaseEvidenceVerifier>();
+builder.Services.AddScoped<IAEDDirectorApprovalV1Service, AEDDirectorApprovalV1Service>();
+builder.Services.AddScoped<IMatchProfilePostProcessingService, MatchProfilePostProcessingService>();
+builder.Services.AddHostedService<MatchProfilePostProcessingWorker>();
 builder.Services.AddScoped<IPaymentOrderService, PaymentOrderService>();
 builder.Services.AddSingleton<IPaymentCatalogService, PaymentCatalogService>();
 builder.Services.AddHttpClient<PayOSPaymentProvider>();
@@ -291,6 +306,10 @@ if (app.Environment.IsDevelopment())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+        if (scope.ServiceProvider.GetRequiredService<IOptions<AEDV02PilotSettings>>().Value.Enabled)
+            await AEDV02SceneRegistry.RegisterPilotAsync(db,
+                await File.ReadAllTextAsync(Path.Combine(app.Environment.ContentRootPath, "Content/AEDV02/Rev02SceneManifest.json")),
+                scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime);
 
         await DbInitializer.InitializeAsync(
             db,

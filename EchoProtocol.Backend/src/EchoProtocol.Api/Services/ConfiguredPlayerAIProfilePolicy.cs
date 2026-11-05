@@ -19,6 +19,9 @@ public sealed class ConfiguredPlayerAIProfilePolicy : IPlayerAIProfilePolicy
         AlphaConfigVersion = value.AlphaConfigVersion;
         SurvivalAlpha = value.SurvivalAlpha;
         NoiseAlpha = value.NoiseAlpha;
+        ObjectiveAlpha = value.ObjectiveAlpha;
+        ToolUsageAlpha = value.ToolUsageAlpha;
+        ToolUsageCountMax = value.ToolUsageCountMax;
         ProfileNoiseCountMin = value.ProfileNoiseCountMin;
         ProfileNoiseCountMax = value.ProfileNoiseCountMax;
         _noisePenaltyTypes = value.NoisePenaltyTypes.ToHashSet(StringComparer.Ordinal);
@@ -31,10 +34,22 @@ public sealed class ConfiguredPlayerAIProfilePolicy : IPlayerAIProfilePolicy
     public string? AlphaConfigVersion { get; }
     public decimal? SurvivalAlpha { get; }
     public decimal? NoiseAlpha { get; }
+    public decimal? ObjectiveAlpha { get; }
+    public decimal? ToolUsageAlpha { get; }
+    public decimal? ToolUsageCountMax { get; }
     public decimal? ProfileNoiseCountMin { get; }
     public decimal? ProfileNoiseCountMax { get; }
 
     public bool IsNoisePenalty(string noiseType) => _noisePenaltyTypes.Contains(noiseType);
+
+    public decimal GetAlpha(PlayerAIDimension dimension) => dimension switch
+    {
+        PlayerAIDimension.Survival => SurvivalAlpha!.Value,
+        PlayerAIDimension.Noise => NoiseAlpha!.Value,
+        PlayerAIDimension.Objective => ObjectiveAlpha!.Value,
+        PlayerAIDimension.ToolUsage => ToolUsageAlpha!.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(dimension))
+    };
 
     public bool TryValidate(PlayerAIDimension dimension, out string reason)
     {
@@ -46,10 +61,40 @@ public sealed class ConfiguredPlayerAIProfilePolicy : IPlayerAIProfilePolicy
             return false;
         }
 
-        var alpha = dimension == PlayerAIDimension.Survival ? SurvivalAlpha : NoiseAlpha;
+        if (!Enum.IsDefined(typeof(PlayerAIDimension), dimension)
+            || dimension is not (PlayerAIDimension.Survival
+                or PlayerAIDimension.Noise
+                or PlayerAIDimension.Objective
+                or PlayerAIDimension.ToolUsage))
+        {
+            reason = "PROFILE_DIMENSION_UNSUPPORTED";
+            return false;
+        }
+
+        decimal? alpha = dimension switch
+        {
+            PlayerAIDimension.Survival => SurvivalAlpha,
+            PlayerAIDimension.Noise => NoiseAlpha,
+            PlayerAIDimension.Objective => ObjectiveAlpha,
+            PlayerAIDimension.ToolUsage => ToolUsageAlpha,
+            _ => null
+        };
+        if (dimension == PlayerAIDimension.Objective && ObjectiveAlpha is null)
+        {
+            reason = "OBJECTIVE_ALPHA_MISSING";
+            return false;
+        }
+
         if (alpha is null or <= 0 or > 1)
         {
             reason = $"EMA alpha for {dimension} is not configured or outside (0,1]";
+            return false;
+        }
+
+        if (dimension == PlayerAIDimension.ToolUsage
+            && ToolUsageCountMax is null or <= 0 or > 100000)
+        {
+            reason = "TOOL_USAGE_NORMALIZATION_INVALID";
             return false;
         }
 

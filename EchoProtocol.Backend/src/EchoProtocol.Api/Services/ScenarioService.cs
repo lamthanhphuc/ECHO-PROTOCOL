@@ -1,12 +1,14 @@
 using System.Data;
 using System.Text.Json;
 using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace EchoProtocol.Api.Services;
@@ -15,7 +17,8 @@ public sealed class ScenarioService(
     AppDbContext db,
     IScenarioConfigRegistry registry,
     IAdaptiveInputSnapshotBuilder snapshotBuilder,
-    TimeProvider timeProvider) : IScenarioService
+    TimeProvider timeProvider,
+    IOptions<AEDPreMatchPolicySettings> policyOptions) : IScenarioService
 {
     public async Task<ServiceResult<ScenarioDecisionResponse>> ResolvePreMatchAsync(
         Guid callerUserId, Guid matchId, ResolveScenarioRequest request,
@@ -35,11 +38,17 @@ public sealed class ScenarioService(
             var existingById = await LoadDecisionAsync(request.DecisionId, cancellationToken);
             if (existingById is not null)
             {
+                if (!existingById.IsCurrent)
+                    return Fail(
+                        "Scenario decision is no longer current",
+                        ErrorCodes.ScenarioDecisionConflict);
                 if (existingById.MatchId != matchId || existingById.HostUserId != callerUserId
                     || !string.Equals(existingById.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
                     return Fail("DecisionId has conflicting semantics", ErrorCodes.ScenarioDecisionIdentityConflict);
                 if (!await RosterStillMatchesAsync(existingById, cancellationToken))
                     return Fail("Decision snapshot roster is stale", ErrorCodes.ScenarioDecisionStaleRoster);
+                if (!CommittedConfigMatches(existingById))
+                    return Fail("Committed scenario config has changed", ErrorCodes.ScenarioApplyConflict);
                 await tx.RollbackAsync(cancellationToken);
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(existingById, true), "Scenario decision replayed");
             }
@@ -66,13 +75,114 @@ public sealed class ScenarioService(
                 return Fail(fixedResult.Message, fixedResult.ErrorCode!);
             var config = fixedResult.Data!;
             var adaptive = request.ResolutionMode == ScenarioResolutionMode.Adaptive;
-            var fallbackReason = adaptive ? "POLICY_CONFIG_INVALID" : null;
+            var settings = policyOptions.Value;
+
+            string? fallbackReason = adaptive ? "POLICY_CONFIG_INVALID" : null;
+
+            ScenarioCandidateValidationStatus? candidateStatus =
+                adaptive ? ScenarioCandidateValidationStatus.NotEvaluated : null;
+
+            var resolutionResult = adaptive
+                ? "FIXED_FALLBACK"
+                : "FIXED_CONFIG_ISSUED";
+
+            if (adaptive && settings.Enabled)
+            {
+                candidateStatus = ScenarioCandidateValidationStatus.Invalid;
+
+                if (!settings.IsContractValid() ||
+                    config.ContentWhitelistVersion != settings.ContentWhitelistVersion ||
+                    !settings.SupportItemBudgetCandidateValues.Contains(
+                        config.SupportItemBudget) ||
+                    !settings.ChaseSpeedCandidateValues.Contains(config.ChaseSpeed))
+                {
+                    fallbackReason = "POLICY_CONFIG_INVALID";
+                }
+                else
+                {
+                    var snapshot = snapshotResult.Snapshot;
+
+                    var evidenceComplete =
+                        snapshot.Players.Count == snapshot.TeamSize &&
+                        snapshot.Players.All(x =>
+                            x.SurvivalStatus == "ACTIVE" &&
+                            x.NoiseStatus == "ACTIVE" &&
+                            x.SurvivalSampleCount >=
+                                settings.MinimumSurvivalSampleCountPerObservedPlayer &&
+                            x.NoiseSampleCount >=
+                                settings.MinimumNoiseSampleCountPerObservedPlayer);
+
+                    var rule = evidenceComplete
+                        ? AEDPreMatchPolicyV1.SelectRule(
+                            snapshot,
+                            settings.SurvivalLowThreshold,
+                            settings.SurvivalHighThreshold,
+                            settings.NoiseLowThreshold,
+                            settings.NoiseHighThreshold)
+                        : null;
+
+                    if (rule is null)
+                    {
+                        fallbackReason = "INPUT_INVALID";
+                    }
+                    else if (rule == "AED-PRE-040-MIXED-HOLD")
+                    {
+                        fallbackReason = "HOLD_RULE";
+                        candidateStatus = ScenarioCandidateValidationStatus.Valid;
+                    }
+                    else
+                    {
+                        var candidates = await registry
+                            .GetProductionAdaptiveCandidatesAsync(
+                                request.UnityCompatibilityVersion,
+                                cancellationToken);
+
+                        if (!candidates.IsSuccess || candidates.Data is null)
+                        {
+                            fallbackReason = "ADAPTIVE_CONFIG_UNAVAILABLE";
+                        }
+                        else
+                        {
+                            var relief = rule is
+                                "AED-PRE-010-SURVIVAL-LOW-RELIEVE" or
+                                "AED-PRE-020-NOISE-LOW-RELIEVE";
+
+                            var values = relief
+                                ? settings.SupportItemBudgetCandidateValues
+                                : settings.ChaseSpeedCandidateValues;
+
+                            if (AEDPreMatchCandidateV1.TrySelect(
+                                    rule,
+                                    config,
+                                    candidates.Data,
+                                    values,
+                                    out var selected,
+                                    out var reason) && selected is not null)
+                            {
+                                config = selected;
+                                fallbackReason = null;
+                                candidateStatus =
+                                    ScenarioCandidateValidationStatus.Valid;
+                                resolutionResult = "ADAPTIVE_CONFIG_ISSUED";
+                            }
+                            else
+                            {
+                                fallbackReason = reason;
+                            }
+                        }
+                    }
+                }
+            }
+
             var configFingerprint = ScenarioFingerprint.Config(config);
             var decisionFingerprint = ScenarioFingerprint.Hash(
                 matchId.ToString("D"), "PRE_MATCH", request.ResolutionMode.ToString().ToUpperInvariant(),
                 snapshotResult.Snapshot.SnapshotContentFingerprint, config.ScenarioConfigId,
                 config.ScenarioConfigVersion, configFingerprint, config.PolicyVersion,
-                config.ContentWhitelistVersion, config.FallbackConfigVersion, fallbackReason);
+                config.ContentWhitelistVersion, config.FallbackConfigVersion, fallbackReason,
+                adaptive && settings.Enabled ? settings.PolicyConfigVersion : null,
+                adaptive && settings.Enabled ? settings.EvidencePolicyVersion : null,
+                adaptive && settings.Enabled ? settings.ParameterRegistryVersion : null);
             var decision = new ScenarioDecision
             {
                 DecisionId = request.DecisionId, MatchId = matchId, HostUserId = callerUserId,
@@ -80,11 +190,19 @@ public sealed class ScenarioService(
                 ExperimentCondition = request.ExperimentCondition?.Trim(), RequestFingerprint = requestFingerprint,
                 DecisionSemanticFingerprint = decisionFingerprint, ScenarioConfigId = config.ScenarioConfigId,
                 ScenarioConfigVersion = config.ScenarioConfigVersion, ScenarioConfigFingerprint = configFingerprint,
-                PolicyVersion = config.PolicyVersion, ContentWhitelistVersion = config.ContentWhitelistVersion,
+                PolicyVersion = config.PolicyVersion,
+                PolicyConfigVersion = adaptive && settings.Enabled
+                    ? settings.PolicyConfigVersion : null,
+                EvidencePolicyVersion = adaptive && settings.Enabled
+                    ? settings.EvidencePolicyVersion : null,
+                ParameterRegistryVersion = adaptive && settings.Enabled
+                    ? settings.ParameterRegistryVersion : null,
+                ContentWhitelistVersion = config.ContentWhitelistVersion,
                 FallbackConfigId = config.FallbackConfigId, FallbackConfigVersion = config.FallbackConfigVersion,
-                UsedFixedFallback = adaptive, FallbackReasonCode = fallbackReason,
-                CandidateValidationStatus = adaptive ? ScenarioCandidateValidationStatus.NotEvaluated : null,
-                ResolutionResult = adaptive ? "FIXED_FALLBACK" : "FIXED_CONFIG_ISSUED",
+                UsedFixedFallback = adaptive && config.ConfigSource == ScenarioConfigSource.Fixed,
+                FallbackReasonCode = fallbackReason,
+                CandidateValidationStatus = candidateStatus,
+                ResolutionResult = resolutionResult,
                 Status = ScenarioDecisionStatus.Committed, IsCurrent = true,
                 CommittedAtUtc = timeProvider.GetUtcNow().UtcDateTime,
                 Snapshot = snapshotResult.Snapshot
@@ -99,8 +217,11 @@ public sealed class ScenarioService(
             await tx.RollbackAsync(cancellationToken);
             db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(request.DecisionId, cancellationToken);
-            if (stored is not null && stored.MatchId == matchId && stored.HostUserId == callerUserId
-                && string.Equals(stored.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
+            if (stored is { IsCurrent: true } &&
+                stored.MatchId == matchId && stored.HostUserId == callerUserId
+                && string.Equals(stored.RequestFingerprint, requestFingerprint, StringComparison.Ordinal)
+                && await RosterStillMatchesAsync(stored, cancellationToken)
+                && CommittedConfigMatches(stored))
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(stored, true), "Scenario decision replayed");
             return Fail("Concurrent scenario decision conflict", ErrorCodes.ScenarioDecisionConflict);
         }
@@ -121,6 +242,8 @@ public sealed class ScenarioService(
             var decision = await LoadDecisionAsync(decisionId, cancellationToken);
             if (decision is null || decision.MatchId != matchId)
                 return Fail("Scenario decision was not found", ErrorCodes.ScenarioDecisionNotFound);
+            if (!CommittedConfigMatches(decision))
+                return Fail("Committed scenario config has changed", ErrorCodes.ScenarioApplyConflict);
             if (!decision.IsCurrent || !await RosterStillMatchesAsync(decision, cancellationToken))
                 return Fail("Scenario decision snapshot is stale", ErrorCodes.ScenarioDecisionStaleRoster);
             if (!Matches(decision, request))
@@ -146,7 +269,10 @@ public sealed class ScenarioService(
         {
             await tx.RollbackAsync(cancellationToken); db.ChangeTracker.Clear();
             var stored = await LoadDecisionAsync(decisionId, cancellationToken);
-            if (stored is not null && Matches(stored, request) && stored.ApplyReceipt is not null)
+            if (stored is { IsCurrent: true } &&
+                await RosterStillMatchesAsync(stored, cancellationToken) &&
+                CommittedConfigMatches(stored)
+                && Matches(stored, request) && stored.ApplyReceipt is not null)
                 return ServiceResult<ScenarioDecisionResponse>.Success(Map(stored, true), "Scenario apply confirmation replayed");
             return Fail("Concurrent apply confirmation conflict", ErrorCodes.ScenarioApplyConflict);
         }
@@ -174,6 +300,12 @@ public sealed class ScenarioService(
         string.Equals(d.ScenarioConfigId, r.ScenarioConfigId, StringComparison.Ordinal)
         && string.Equals(d.ScenarioConfigVersion, r.ScenarioConfigVersion, StringComparison.Ordinal)
         && string.Equals(d.ScenarioConfigFingerprint, r.ScenarioConfigFingerprint, StringComparison.OrdinalIgnoreCase);
+    private static bool CommittedConfigMatches(ScenarioDecision decision) =>
+        decision.ScenarioConfig is not null &&
+        string.Equals(
+            decision.ScenarioConfigFingerprint,
+            ScenarioFingerprint.Config(decision.ScenarioConfig),
+            StringComparison.Ordinal);
     private static bool IsConcurrencyFailure(Exception exception)
     {
         var hasDbUpdateException = false;

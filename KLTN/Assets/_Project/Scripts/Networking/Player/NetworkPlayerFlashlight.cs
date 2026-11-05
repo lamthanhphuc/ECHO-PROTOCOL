@@ -258,6 +258,15 @@ namespace EchoProtocol.Networking
 
             ApplyVisuals();
         }
+#if AED_V02_PILOT_HARNESS
+        public void RequestNativeToggle()
+        {
+            if (!Debug.isDebugBuild || Object == null || !Object.IsValid || !Object.HasInputAuthority ||
+                Time.time < _cooldownUntil || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return;
+            _cooldownUntil = Time.time + _toggleCooldown;
+            ToggleFlashlight();
+        }
+#endif
 
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcToggleFlashlight(NetworkBool nextState)

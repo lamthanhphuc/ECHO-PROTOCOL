@@ -10,6 +10,14 @@ namespace EchoProtocol.RelayB.Tests
     {
         private RelayBConfig _config;
 
+        private static void UnlockSignalStage(RelayBSignalSimulation sim)
+        {
+            sim.Surge.ApplyRemote(
+                RelayBSurgePhase.Contained,
+                default, default,
+                0f, 0f, 0f, 0);
+        }
+
         [SetUp]
         public void SetUp()
         {
@@ -35,6 +43,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, 2, true, seed);
+                UnlockSignalStage(sim);
                 var preset = sim.GetCurrentPreset();
                 waves.Add(preset.ReferenceWaveform);
                 sim.ScanSpectrum();
@@ -67,6 +76,7 @@ namespace EchoProtocol.RelayB.Tests
 
         private void PrepareStage3(RelayBSignalSimulation sim)
         {
+            UnlockSignalStage(sim);
             sim.ScanSpectrum();
             sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
             sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor);
@@ -88,6 +98,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             var sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            UnlockSignalStage(sim);
             sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
             Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(-1));
             sim.SetActiveTab(1);
@@ -105,6 +116,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             var sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            UnlockSignalStage(sim);
             sim.ScanSpectrum();
             sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
 
@@ -124,6 +136,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, 0, true, seed);
+                UnlockSignalStage(sim);
                 var preset = sim.GetCurrentPreset();
                 int matches = 0;
                 for (int i = 0; i < preset.Candidates.Length; i++)
@@ -149,6 +162,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex, true, 123);
+                UnlockSignalStage(sim);
                 sim.ScanSpectrum();
                 sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
                 int selected = sim.SelectedChannelIndex;
@@ -175,6 +189,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex, true, 123);
+                UnlockSignalStage(sim);
                 sim.ScanSpectrum();
                 sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
                 var seen = new System.Collections.Generic.HashSet<int>();
@@ -203,6 +218,8 @@ namespace EchoProtocol.RelayB.Tests
             var client = new RelayBSignalSimulation();
             host.Initialize(_config, 2, true, 123);
             client.Initialize(_config, 2, true, 123);
+            UnlockSignalStage(host);
+            UnlockSignalStage(client);
             host.ScanSpectrum();
             client.ScanSpectrum();
             int channel = host.GetCurrentPreset().CorrectChannelIndex;
@@ -264,6 +281,7 @@ namespace EchoProtocol.RelayB.Tests
                 var signal = preset.GetCandidate(preset.CorrectChannelIndex);
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex);
+                UnlockSignalStage(sim);
                 sim.ScanSpectrum();
                 sim.SelectChannel(preset.CorrectChannelIndex);
                 sim.SetFrequency(preset.TargetFrequency);
@@ -307,6 +325,7 @@ namespace EchoProtocol.RelayB.Tests
                 RelayBPreset preset = _config.Presets[i];
                 RelayBSignalSimulation sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, i);
+                UnlockSignalStage(sim);
 
                 sim.ScanSpectrum();
                 sim.SelectChannel(preset.CorrectChannelIndex);
@@ -379,6 +398,7 @@ namespace EchoProtocol.RelayB.Tests
 
                     RelayBSignalSimulation sim = new RelayBSignalSimulation();
                     sim.Initialize(_config, p);
+                    UnlockSignalStage(sim);
 
                     sim.ScanSpectrum();
                     sim.SelectChannel(c);
@@ -400,6 +420,7 @@ namespace EchoProtocol.RelayB.Tests
             RelayBPreset preset = _config.Presets[0];
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            UnlockSignalStage(sim);
 
             // Channel 3 has Triangle waveform, preset 0 expects Sine
             sim.ScanSpectrum();

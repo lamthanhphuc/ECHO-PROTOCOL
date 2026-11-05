@@ -29,6 +29,7 @@ public class PlayerInteraction : MonoBehaviour
     public string CurrentPrompt => _suppressInteractionPrompt ? string.Empty : _currentPrompt;
     public bool IsInteractHeld => _heldInteractable != null;
     public bool IsInteractionPromptSuppressed => _suppressInteractionPrompt;
+    public float InteractionDistance => interactDistance;
 
     public void SetInteractionPromptSuppressed(bool suppressed)
     {
