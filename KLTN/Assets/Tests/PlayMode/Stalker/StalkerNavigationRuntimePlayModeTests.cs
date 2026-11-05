@@ -15,7 +15,7 @@ namespace EchoProtocol.AI.Stalker.Tests
         private const float PathSettleTimeoutSeconds = 2f;
         private const float ArrivalTimeoutSeconds = 8f;
         private const int PathSettleFrameCap = 300;
-        private const float ArrivalWallTimeoutSeconds = 30f;
+        private const int ArrivalFrameCap = 10000;
 
         private static readonly Vector3 AgentStart = new Vector3(-3f, 0f, 0f);
         private static readonly Vector3 Destination = new Vector3(3f, 0f, 0f);
@@ -64,18 +64,17 @@ namespace EchoProtocol.AI.Stalker.Tests
         public IEnumerator NAV_3_OffMeshAgent_ReattachesWithinRecoveryDistance()
         {
             BuildRuntimeNavMesh();
-            var offMeshStart = new Vector3(10f, 0f, 0f);
-            var agent = CreateInactiveConfiguredAgent(offMeshStart);
+            var agent = CreateInactiveConfiguredAgent(new Vector3(5.2f, 0f, 0f));
             agent.gameObject.SetActive(true);
             yield return null;
             Assert.That(agent.isOnNavMesh, Is.False);
             var controller = CreateController(agent);
 
             var recovered = InvokeMethod(controller, "TryReattachToNearestNavMesh",
-                new[] { typeof(float) }, new object[] { 10f });
+                new[] { typeof(float) }, new object[] { 2f });
             Assert.That(recovered, Is.EqualTo(true));
             Assert.That(agent.isOnNavMesh, Is.True);
-            Assert.That(Vector3.Distance(agent.transform.position, offMeshStart), Is.LessThanOrEqualTo(10f));
+            Assert.That(Vector3.Distance(agent.transform.position, new Vector3(5.2f, 0f, 0f)), Is.LessThanOrEqualTo(2f));
         }
 
         [UnityTest]
@@ -113,7 +112,7 @@ namespace EchoProtocol.AI.Stalker.Tests
             yield return fixture.ActivateAndWait();
 
             AssertPlanResult(RequestDestination(fixture.Controller, Destination), "Accepted", Destination, true);
-            yield return WaitUntilArrived(fixture.Controller, ArrivalTimeoutSeconds);
+            yield return WaitUntilArrived(fixture.Controller, ArrivalTimeoutSeconds, ArrivalFrameCap);
 
             Assert.That(GetPathStatusName(fixture.Controller), Is.EqualTo("Complete"));
             Assert.That(GetExecutionStatusName(fixture.Controller), Is.EqualTo("Arrived"));
@@ -218,7 +217,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             _createdObjects.Add(agentRoot);
 
             var agent = agentRoot.AddComponent<NavMeshAgent>();
-            agent.agentTypeID = 0;
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;
@@ -321,22 +319,23 @@ namespace EchoProtocol.AI.Stalker.Tests
                 $"Expected to observe Complete path before arrival within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
         }
 
-        private static IEnumerator WaitUntilArrived(object controller, float timeoutSeconds)
+        private static IEnumerator WaitUntilArrived(object controller, float timeoutSeconds, int frameCap)
         {
             var elapsed = 0f;
-            var wallDeadline = Time.realtimeSinceStartup + ArrivalWallTimeoutSeconds;
+            var frames = 0;
             while (!HasArrived(controller)
                 && elapsed < timeoutSeconds
-                && Time.realtimeSinceStartup < wallDeadline)
+                && frames < frameCap)
             {
                 yield return null;
                 elapsed += Time.deltaTime;
+                frames++;
             }
 
             Assert.That(
                 HasArrived(controller),
                 Is.True,
-                $"Expected current HasArrived semantics to become true within {timeoutSeconds:0.###} gameplay seconds and {ArrivalWallTimeoutSeconds:0.###} wall seconds; observed {elapsed:0.###} gameplay seconds.");
+                $"Expected current HasArrived semantics to become true within {timeoutSeconds:0.###} gameplay seconds and {frameCap} frames.");
         }
 
         private static string GetPathStatusName(object controller)

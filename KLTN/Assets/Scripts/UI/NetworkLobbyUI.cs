@@ -2,11 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Fusion;
 using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
-using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking;
 using EchoProtocol.UI.MainMenu;
 using EchoProtocol.Networking.Authority;
@@ -25,8 +23,6 @@ namespace EchoProtocol.UI
         [SerializeField] private TMP_InputField sessionNameInput;
         [Header("Difficulty")]
         [SerializeField] private TMP_Dropdown difficultyDropdown;
-        [SerializeField] private TMP_Dropdown resolutionModeDropdown;
-        [SerializeField] private TMP_Dropdown stalkerModelDropdown;
         [Header("Buttons")]
         [SerializeField] private Button hostButton;
         [SerializeField] private Button joinButton;
@@ -86,19 +82,9 @@ namespace EchoProtocol.UI
             Cursor.visible = true;
             _configured = playerNameInput != null && sessionNameInput != null && hostButton != null
                 && joinButton != null && statusText != null && memberCountText != null && memberListText != null
-                && difficultyDropdown != null && resolutionModeDropdown != null;
+                && difficultyDropdown != null;
             if (!_configured) Debug.LogError("[NetworkLobbyUI] Assign all Input, Host/Join, difficulty and text references.", this);
             ConfigureDifficultyDropdown();
-            ConfigureResolutionModeDropdown();
-            if (stalkerModelDropdown != null)
-            {
-                stalkerModelDropdown.ClearOptions();
-                stalkerModelDropdown.AddOptions(
-                    new List<string> { "ORIGINAL", "LIZARD" });
-
-                stalkerModelDropdown.onValueChanged.AddListener(
-                    OnStalkerModelChanged);
-            }
             if (playerNameInput != null) playerNameInput.characterLimit = 32;
             if (sessionNameInput != null) sessionNameInput.characterLimit = 32;
             if (!_inputsInitialized)
@@ -155,17 +141,6 @@ RefreshMemberList();
             difficultyDropdown.RefreshShownValue();
         }
 
-        private void ConfigureResolutionModeDropdown()
-        {
-            if (resolutionModeDropdown == null) return;
-            resolutionModeDropdown.ClearOptions();
-            resolutionModeDropdown.AddOptions(new List<string> { "FIXED", "ADAPTIVE" });
-            resolutionModeDropdown.SetValueWithoutNotify(
-                MatchAuthorityRuntime.Instance?.RequestedScenarioResolutionMode ==
-                    ScenarioResolutionMode.Adaptive ? 1 : 0);
-            resolutionModeDropdown.RefreshShownValue();
-        }
-
         private void RefreshVisuals()
         {
             if (statusIndicator != null)
@@ -198,33 +173,7 @@ RefreshMemberList();
             if (exitButton != null) exitButton.onClick.RemoveListener(OnExitClicked);
             if (difficultyDropdown != null)
                 difficultyDropdown.onValueChanged.RemoveListener(OnDifficultyChanged);
-            if (stalkerModelDropdown != null)
-                stalkerModelDropdown.onValueChanged.RemoveListener(
-                    OnStalkerModelChanged);
             Unsubscribe();
-        }
-
-        private void OnStalkerModelChanged(int modelId)
-        {
-            var spawner = FindAnyObjectByType<PlayerSpawner>();
-
-            if (modelId < 0
-                || modelId > 1
-                || bootstrap == null
-                || bootstrap.State != NetworkSessionState.InLobby
-                || !_room.IsHost
-                || (modelId == 1 &&
-                    (spawner == null || !spawner.HasLizardPrefab))
-                || !bootstrap.UpdateRoomProperties(
-                    new Dictionary<string, SessionProperty>
-                    {
-                        [PlayerSpawner.StalkerModelSessionKey] = modelId
-                    }))
-            {
-                stalkerModelDropdown.SetValueWithoutNotify(
-                    PlayerSpawner.GetSelectedStalkerModel(
-                        bootstrap != null ? bootstrap.Runner : null));
-            }
         }
 
         private void Update()
@@ -306,8 +255,6 @@ RefreshMemberList();
             playerNameInput.SetTextWithoutNotify(lobbyManager.LocalOperatorName);
             sessionNameInput.SetTextWithoutNotify(session);
             var difficulty = (MatchDifficulty)Mathf.Clamp(difficultyDropdown.value, 0, 2);
-            var resolutionMode = resolutionModeDropdown.value == 1
-                ? ScenarioResolutionMode.Adaptive : ScenarioResolutionMode.Fixed;
             _busy = true;
             SetStatus(host ? "> CREATING ROOM..." : "> JOINING ROOM...");
             RefreshControls();
@@ -315,7 +262,7 @@ RefreshMemberList();
             try
             {
                 var success = host
-                    ? await service.CreateRoomAsync(session, maxPlayers, difficulty, resolutionMode)
+                    ? await service.CreateRoomAsync(session, maxPlayers, difficulty)
                     : await service.JoinRoomAsync(session);
                 if (this == null || !isActiveAndEnabled) return;
                 if (success) OnSessionStateChanged(service.State, string.Empty);
@@ -399,13 +346,6 @@ RefreshMemberList();
             {
                 difficultyDropdown.SetValueWithoutNotify((int)MatchAuthorityRuntime.Instance.Difficulty);
                 difficultyDropdown.RefreshShownValue();
-                if (resolutionModeDropdown != null)
-                {
-                    resolutionModeDropdown.SetValueWithoutNotify(
-                        MatchAuthorityRuntime.Instance.RequestedScenarioResolutionMode ==
-                            ScenarioResolutionMode.Adaptive ? 1 : 0);
-                    resolutionModeDropdown.RefreshShownValue();
-                }
             }
 
             _blinkSignal = state != NetworkSessionState.InLobby && state != NetworkSessionState.InMatch;
@@ -995,20 +935,6 @@ int petId = 0;
                 difficultyDropdown.interactable =
                     canConnect
                     || (inLobby && _room.IsHost);
-            }
-            if (resolutionModeDropdown != null)
-                resolutionModeDropdown.interactable = canConnect;
-
-            if (stalkerModelDropdown != null)
-            {
-                stalkerModelDropdown.interactable =
-                    inLobby && _room.IsHost;
-
-                stalkerModelDropdown.SetValueWithoutNotify(
-                    PlayerSpawner.GetSelectedStalkerModel(
-                        bootstrap != null ? bootstrap.Runner : null));
-
-                stalkerModelDropdown.RefreshShownValue();
             }
 
             if (characterButton != null)

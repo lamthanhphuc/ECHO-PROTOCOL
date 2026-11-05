@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
-using EchoProtocol.AI.Common.AED;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
@@ -195,7 +194,6 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0.05f)] private float attackKnockbackSeconds = 0.3f;
         [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 0.65f;
         [SerializeField, Min(0.1f)] private float attackRecoverySeconds = 3f;
-
         [SerializeField, Min(0.5f)] private float toolFleeSeconds = 1.6f;
 
         [Header("Hit Effects")]
@@ -236,7 +234,6 @@ namespace EchoProtocol.AI.Minions
         [Networked] private float ReplicatedDiveDuration { get; set; }
         [Networked] private float ReplicatedDiveStartHeight { get; set; }
         [Networked] private NetworkBool ReplicatedToolContactResolved { get; set; }
-
         private Transform _toolHand;
         private float _renderFlightHeight = -1f;
         [Networked] public NetworkBool IsMoving { get; private set; }
@@ -247,7 +244,6 @@ namespace EchoProtocol.AI.Minions
         [Networked] public uint AlertSequence { get; private set; }
         [Networked] private TickTimer AttackCooldown { get; set; }
         [Networked] private TickTimer AttackRecovery { get; set; }
-
         [Networked] private TickTimer AlertCooldown { get; set; }
         [Networked] private TickTimer FleeTimer { get; set; }
 
@@ -268,10 +264,8 @@ namespace EchoProtocol.AI.Minions
         private float DisruptorAttackRange => Mathf.Min(meleeRange, 2f);
         private bool IsCatfish => IsPurgeCatfish || IsDisruptor && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
         private bool IsMap2Flyer => !IsDisruptor && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
-
         public RegionSemanticZone Zone => ZoneValue == (int)RegionSemanticZone.Zone01
             || ZoneValue == (int)RegionSemanticZone.Zone02
-            || ZoneValue == (int)RegionSemanticZone.Zone03
             ? (RegionSemanticZone)ZoneValue : RegionSemanticZone.Unknown;
 
         private NavMeshAgent _agent;
@@ -308,7 +302,6 @@ namespace EchoProtocol.AI.Minions
         [Networked] private Vector3 ReplicatedToolVictimPosition { get; set; }
         [Networked] private Vector3 ReplicatedDistractionPoint { get; set; }
         private long _alertOrdinal;
-        private long _attackOrdinal;
         private uint _renderedAttackSequence;
         private uint _renderedAlertSequence;
         private float _actionAnimationUntil;
@@ -319,10 +312,6 @@ namespace EchoProtocol.AI.Minions
         private Material[] _catfishFadeMaterials;
         private Color[] _catfishFadeBaseColors;
         private bool _stalkerAlertDeliveredForTarget;
-        private string _noiseMakerSourceEventId;
-        private PlayerRef _noiseMakerSourcePlayer;
-        private PlayerRef _noiseMakerThreatTarget;
-        private bool _noiseMakerReactionRecorded;
         private Transform _visualRoot;
         private Vector3 _visualBaseLocalPosition;
         private Collider _bodyCollider;
@@ -477,7 +466,6 @@ namespace EchoProtocol.AI.Minions
                 Debug.Log(
                     $"[HM_AI_MINION_RESTORE]|id={Object.Id}|state={State}|target={TargetPlayer}|core={StolenCoreId}|tool={StolenToolId}|flee={ReplicatedFleeDestination}|divePhase={ToolDivePhase}|diveResolved={ReplicatedToolContactResolved}|noiseActive={!ReplicatedDistractionTimer.ExpiredOrNotRunning(Runner)}");
             }
-
             _noiseService = HostRuntimeNoiseService.EnsureExists(MatchAuthorityRuntime.Instance);
             _noiseService.RuntimeNoiseAccepted += HandleRuntimeNoiseAccepted;
             _agent.enabled = false;
@@ -489,16 +477,6 @@ namespace EchoProtocol.AI.Minions
             if ((!IsPurgeCatfish || _catfishOnLand) && !TryActivateAgent())
             {
                 // Runtime log intentionally disabled.
-            }
-
-            if (Runner != null &&
-                Runner.IsServer &&
-                Object != null)
-            {
-                MatchAuthorityRuntime.Instance?.RecordPhase8MinionSpawn(
-                    Object.Id,
-                    (int)Zone,
-                    Runner.Tick.Raw);
             }
         }
 
@@ -538,20 +516,6 @@ namespace EchoProtocol.AI.Minions
             PurgeFishcats.Remove(this);
             _navigation?.SetAuthoritativeLocomotion(false);
             _navigation = null;
-            if (hasState &&
-                runner != null &&
-                runner.IsServer &&
-                Object != null &&
-                Object.HasStateAuthority)
-            {
-                var authority = MatchAuthorityRuntime.Instance;
-                authority?.RecordMinionDespawn(
-                    Object.Id, runner.Tick.Raw);
-                authority?.RecordPhase8MinionDespawn(
-                    Object.Id,
-                    (int)Zone,
-                    runner.Tick.Raw);
-            }
             if (_noiseService != null) _noiseService.RuntimeNoiseAccepted -= HandleRuntimeNoiseAccepted;
             if (hasState && Object.HasStateAuthority)
             {
@@ -562,37 +526,13 @@ namespace EchoProtocol.AI.Minions
 
         private void HandleRuntimeNoiseAccepted(RuntimeNoiseEvent noiseEvent)
         {
-            if (!Object.HasStateAuthority
-                || noiseEvent.NoiseType != RuntimeNoiseType.NOISE_MAKER
-                || StolenCoreId.IsValid
-                || StolenToolId.IsValid
-                || Vector3.Distance(transform.position, noiseEvent.WorldPosition) > noiseEvent.HearingRadius)
+            if (!Object.HasStateAuthority || noiseEvent.NoiseType != RuntimeNoiseType.NOISE_MAKER
+                || StolenCoreId.IsValid || Vector3.Distance(transform.position, noiseEvent.WorldPosition) > noiseEvent.HearingRadius)
             {
                 return;
             }
-            bool activeThreat = (State == CreepMinionState.Track || State == CreepMinionState.Harass)
-                && TargetPlayer.IsRealPlayer && !IsDying;
-            var threatTarget = TargetPlayer;
-            var authority = MatchAuthorityRuntime.Instance;
-            var sourcePlayer = ResolveNoiseSourcePlayer(noiseEvent.SourcePlayerId);
-            _noiseMakerSourceEventId = null;
-            _noiseMakerSourcePlayer = PlayerRef.None;
-            _noiseMakerThreatTarget = PlayerRef.None;
-            _noiseMakerReactionRecorded = false;
-            if (activeThreat && sourcePlayer.IsValid && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
-            {
-                authority?.RecordMinionFact(AEDMinionFactKindV1.NoiseMakerOpportunity,
-                    Object.Id, $"noisemaker-opportunity:{noiseEvent.NoiseEventId}",
-                    Runner.Tick.Raw, sourcePlayer, threatTarget,
-                    effectKind: "ACTIVE_THREAT_DIVERSION", sourceEventId: noiseEvent.NoiseEventId);
-                _noiseMakerSourceEventId = noiseEvent.NoiseEventId;
-                _noiseMakerSourcePlayer = sourcePlayer;
-                _noiseMakerThreatTarget = threatTarget;
-            }
-            else if (activeThreat) authority?.MarkMinionEvidenceIncomplete();
             ReplicatedDistractionPoint = noiseEvent.WorldPosition;
             ReplicatedDistractionTimer = TickTimer.CreateFromSeconds(Runner, noiseMakerDistractionSeconds);
-
             ResetTracking();
             StateValue = (int)CreepMinionState.Roam;
         }
@@ -632,15 +572,7 @@ namespace EchoProtocol.AI.Minions
             foreach(var player in Runner.ActivePlayers)
                 if(Runner.TryGetPlayerObject(player,out var playerObject) && playerObject!=null
                     && playerObject.TryGetComponent<NetworkPlayerFlashlight>(out var emitter)
-                    && emitter.ResonanceActive && emitter.ResonanceTarget==this)
-                {
-                    _resonanceContributors++;
-                    MatchAuthorityRuntime.Instance?.RecordMinionFact(
-                        AEDMinionFactKindV1.FlashlightContribution,
-                        Object.Id, $"flashlight:{Object.Id}:{player.PlayerId}:{Runner.Tick.Raw}",
-                        Runner.Tick.Raw, player, effectKind: "FLASHLIGHT_BEAM",
-                        accepted: true, seconds: Runner.DeltaTime);
-                }
+                    && emitter.ResonanceActive && emitter.ResonanceTarget==this) _resonanceContributors++;
             bool illuminated = _resonanceContributors>0;
             IsUvStunned = illuminated;
 
@@ -752,19 +684,7 @@ namespace EchoProtocol.AI.Minions
                 _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
                 TryNavigateOrFly(ReplicatedDistractionPoint);
                 if (Vector3.Distance(transform.position, ReplicatedDistractionPoint) <= noiseMakerArrivalDistance)
-                {
-                    if (!_noiseMakerReactionRecorded && !string.IsNullOrWhiteSpace(_noiseMakerSourceEventId)
-                        && _noiseMakerSourcePlayer.IsValid && _noiseMakerThreatTarget.IsRealPlayer)
-                    {
-                        MatchAuthorityRuntime.Instance?.RecordMinionFact(AEDMinionFactKindV1.NoiseMakerReaction,
-                            Object.Id, $"noisemaker-reaction:{_noiseMakerSourceEventId}", Runner.Tick.Raw,
-                            _noiseMakerSourcePlayer, _noiseMakerThreatTarget,
-                            effectKind: "ACTIVE_THREAT_DIVERSION", accepted: true,
-                            sourceEventId: _noiseMakerSourceEventId);
-                        _noiseMakerReactionRecorded = true;
-                    }
                     ReplicatedDistractionTimer = TickTimer.None;
-                }
             }
             else
             {
@@ -782,25 +702,7 @@ namespace EchoProtocol.AI.Minions
             }
             IsMoving = _navigation.AuthoritativeMoveSpeed > 0.2f;
             }
-            finally { TickStationaryRecovery(); PublishAEDSnapshot(); }
-        }
-
-        private void PublishAEDSnapshot()
-        {
-            if (Runner == null || !Runner.IsServer || Object == null
-                || !Object.HasStateAuthority || !Object.IsValid) return;
-            MatchAuthorityRuntime.Instance?.RecordMinionSnapshot(Object.Id,
-                Zone.ToString(), State.ToString(), TargetPlayer,
-                Runner.Tick.Raw, Runner.TickRate);
-        }
-
-        private PlayerRef ResolveNoiseSourcePlayer(string sourcePlayerId)
-        {
-            if (Runner == null || string.IsNullOrWhiteSpace(sourcePlayerId)) return PlayerRef.None;
-            foreach (var player in Runner.ActivePlayers)
-                if (string.Equals(player.ToString(), sourcePlayerId, StringComparison.Ordinal))
-                    return player;
-            return PlayerRef.None;
+            finally { TickStationaryRecovery(); }
         }
 
         private void TickStationaryRecovery()
@@ -1126,7 +1028,6 @@ namespace EchoProtocol.AI.Minions
                 return false;
             }
             finally { Physics.queriesHitBackfaces = hitBackfaces; }
-
         }
 
         private void UpdateTargetAndMovement()
@@ -1158,9 +1059,7 @@ namespace EchoProtocol.AI.Minions
                 }
             }
 
-            if (!TryGetEligiblePlayer(
-                    TargetPlayer, out var targetObject,
-                    out var targetLobby, out var lifeState))
+            if (!TryGetEligiblePlayer(TargetPlayer, out var targetObject, out var targetLobby, out var lifeState))
             {
                 if (_seekingPlayer) CancelForcedPlayerSeek();
                 else ResetTracking();
@@ -1215,7 +1114,6 @@ namespace EchoProtocol.AI.Minions
                 }
                 ReplicatedLostSightSeconds += Runner.DeltaTime;
                 if (ReplicatedLostSightSeconds > lostSightGraceSeconds)
-
                 {
                     ResetTracking();
                     Roam();
@@ -1225,7 +1123,6 @@ namespace EchoProtocol.AI.Minions
                     _agent.speed = trackSpeed * ResonanceSpeedMultiplier;
                     TryNavigateOrFly(ReplicatedLastKnownTargetPosition);
                 }
-
                 return;
             }
 
@@ -1250,7 +1147,6 @@ namespace EchoProtocol.AI.Minions
             if (State == CreepMinionState.Harass)
             {
                 _agent.speed = harassSpeed * ResonanceSpeedMultiplier;
-
             }
 
             float distance = IsDisruptor
@@ -1656,61 +1552,8 @@ namespace EchoProtocol.AI.Minions
             return true;
         }
 
-        private bool TryGetFrontDivePoint(NetworkObject target, out Vector3 point)
-        {
-            point = target != null ? target.transform.position : transform.position;
-            if (target == null) return false;
-
-            Vector3 toTarget = target.transform.position - transform.position;
-            float distance = toTarget.magnitude;
-            if (distance <= 0.01f)
-            {
-                point = target.transform.position;
-                return true;
-            }
-
-            Vector3 front = target.transform.position + target.transform.forward * Mathf.Min(1.5f, distance * 0.35f);
-            if (NavMesh.SamplePosition(front, out var hit, 2f, NavMesh.AllAreas))
-            {
-                point = hit.position + Vector3.up * 0.1f;
-                return true;
-            }
-
-            point = target.transform.position;
-            return true;
-        }
-
-        private bool IsInsidePlayerViewCone(NetworkObject playerObject, Vector3 worldPoint)
-        {
-            if (playerObject == null) return false;
-            Vector3 toPoint = worldPoint - playerObject.transform.position;
-            Vector3 planar = Vector3.ProjectOnPlane(toPoint, Vector3.up);
-            float angle = Vector3.Angle(playerObject.transform.forward, planar);
-            return planar.sqrMagnitude <= 0.0001f || angle <= visionHalfAngle;
-        }
-
-        private bool PlayerCanSeeMinion(NetworkObject playerObject)
-        {
-            if (playerObject == null) return false;
-            Vector3 origin = playerObject.transform.position + Vector3.up * 1.3f;
-            Vector3 destination = transform.position + Vector3.up * 1.2f;
-            Vector3 delta = destination - origin;
-            if (delta.sqrMagnitude <= 0.0001f) return true;
-
-            var hits = Physics.RaycastAll(origin, delta.normalized, delta.magnitude, ~0, QueryTriggerInteraction.Ignore);
-            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            foreach (var hit in hits)
-            {
-                if (hit.collider.transform.IsChildOf(playerObject.transform)) continue;
-                if (hit.collider.transform.IsChildOf(transform)) continue;
-                return hit.collider.transform.IsChildOf(transform);
-            }
-            return true;
-        }
-
         private void EmitStalkerAlert()
         {
-            if (State == CreepMinionState.Flee || ToolDivePhase != 0) return;
             _stalkerAlertDeliveredForTarget = TrySendStalkerAlert();
             ReplicatedTrackSeconds = 0f;
             StateValue = (int)CreepMinionState.Harass;
@@ -1721,28 +1564,12 @@ namespace EchoProtocol.AI.Minions
 
         private bool TrySendStalkerAlert()
         {
-            var ordinal = ++_alertOrdinal;
-            var occurrence = $"minion-alert:{Object.Id}:{ordinal}";
-            RuntimeNoiseEvent noiseEvent = default;
             bool accepted = _noiseService != null && _noiseService.TryAccept(
                 TargetPlayer,
                 RuntimeNoiseType.MINION_ALERT,
-                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ordinal),
+                new RuntimeNoiseSourceOccurrenceKey($"minion-alert:{Object.Id}", ++_alertOrdinal),
                 ReplicatedLastKnownTargetPosition,
-                out noiseEvent);
-
-            var authority = MatchAuthorityRuntime.Instance;
-            authority?.RecordMinionFact(AEDMinionFactKindV1.AlertAttempted,
-                Object.Id, occurrence, Runner.Tick.Raw, TargetPlayer,
-                effectKind: "MINION_ALERT", accepted: accepted,
-                sourceEventId: accepted ? noiseEvent.NoiseEventId : null);
-            if (accepted && !string.IsNullOrWhiteSpace(noiseEvent.NoiseEventId))
-                authority?.RecordMinionFact(AEDMinionFactKindV1.AlertAccepted,
-                    Object.Id, occurrence, Runner.Tick.Raw, TargetPlayer,
-                    effectKind: "MINION_ALERT", accepted: true,
-                    sourceEventId: noiseEvent.NoiseEventId);
-            else if (accepted)
-                authority?.MarkMinionEvidenceIncomplete();
+                out _);
 
             if (accepted) AlertSequence++;
 #if false
@@ -1812,9 +1639,7 @@ namespace EchoProtocol.AI.Minions
                     return;
                 }
                 bool damaged = life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
-                bool slowed = damaged && disruptorMovement.TryApplySlowAuthoritative(
-                    slowMultiplier, slowDurationSeconds);
-                RecordAEDSlowAttempt(slowed);
+                if (damaged) disruptorMovement.TryApplySlowAuthoritative(slowMultiplier, IsPurgeCatfish ? 1.25f : slowDurationSeconds);
                 if (!IsPurgeCatfish) disruptorMovement.TryApplyKnockbackAuthoritative(
                     playerObject.transform.position - transform.position,
                     attackKnockbackSpeed,
@@ -1832,7 +1657,6 @@ namespace EchoProtocol.AI.Minions
                     && interactor != null;
                 BeginToolDive(playerObject, canSteal);
             }
-
         }
 
         private void CommitAttack(CreepMinionAttackKind kind)
@@ -1846,20 +1670,6 @@ namespace EchoProtocol.AI.Minions
                 Runner,
                 attackRecoverySeconds);
             RpcPlayAttackPresentation((int)kind);
-        }
-
-        private void RecordAEDSlowAttempt(bool applied)
-        {
-            var ordinal = ++_attackOrdinal;
-            var attempt = $"minion-attack:{Object.Id}:{ordinal}";
-            var authority = MatchAuthorityRuntime.Instance;
-            authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
-                Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                effectKind: "SLOW", attemptOrdinal: ordinal, accepted: applied);
-            if (applied)
-                authority?.RecordMinionFact(AEDMinionFactKindV1.SlowApplied,
-                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                    effectKind: "SLOW_APPLIED", attemptOrdinal: ordinal, accepted: true);
         }
 
         private float SpearContactSeconds()
@@ -1913,7 +1723,6 @@ namespace EchoProtocol.AI.Minions
             if (stealRequested
                 && !TryFindSabotageDropPosition(target.transform.position, out chosenFleeDestination)
                 && !TryFindFleeDestination(target.transform.position, out chosenFleeDestination))
-
             {
                 AttackCooldown = TickTimer.CreateFromSeconds(Runner, 1f);
                 return;
@@ -1928,7 +1737,6 @@ namespace EchoProtocol.AI.Minions
             ReplicatedToolContactResolved = false;
             ToolDiveTimer = TickTimer.None;
             AttackCooldown = TickTimer.CreateFromSeconds(Runner, ReplicatedDiveDuration + StealClipSeconds() + attackCooldownSeconds);
-
         }
 
         private void TickToolDive()
@@ -1944,7 +1752,6 @@ namespace EchoProtocol.AI.Minions
                 ToolDivePhase = 0;
                 ReplicatedToolDiveStealRequested = false;
                 _agent.stoppingDistance = 0.4f;
-
                 return;
             }
             TickStalkerAlertObservation(target);
@@ -1993,71 +1800,29 @@ namespace EchoProtocol.AI.Minions
             }
             FlightHeightValue = ToolDiveHeight;
             if (!ReplicatedToolContactResolved && (ToolDiveTimer.RemainingTime(Runner) ?? 0f) <= StealClipSeconds() * 0.45f)
-
             {
                 ReplicatedToolContactResolved = true;
                 if (Vector3.Distance(transform.position, target.transform.position) <= 2.5f
                     && HasLineOfSight(target))
                 {
-                    if (ReplicatedToolDiveStealRequested
-                        && (!IsInsidePlayerViewCone(target, transform.position)
-                            || !PlayerCanSeeMinion(target)))
-                        return;
                     if (ReplicatedToolDiveStealRequested)
                     {
                         var interactor = target.GetComponent<NetworkPlayerInteractor>();
-                        var ordinal = ++_attackOrdinal;
-                        var attempt = $"minion-attack:{Object.Id}:{ordinal}";
-                        var authority = MatchAuthorityRuntime.Instance;
-                        if (lobby.CarriedCoreId.IsValid)
-                        {
-                            var coreId = lobby.CarriedCoreId.ToString();
-                            TryStealCore(target, lobby, interactor, out var forcedDrop, out var stolen);
-                            authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
-                                Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                                objectId: coreId, effectKind: "CORE", attemptOrdinal: ordinal, accepted: forcedDrop);
-                            if (forcedDrop)
-                                authority?.RecordMinionFact(AEDMinionFactKindV1.CoreForcedDrop,
-                                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                                    objectId: coreId, effectKind: "CORE_FORCED_DROP", attemptOrdinal: ordinal, accepted: true);
-                            if (stolen)
-                                authority?.RecordMinionFact(AEDMinionFactKindV1.CoreStolen,
-                                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                                    objectId: coreId, effectKind: "CORE_STOLEN", attemptOrdinal: ordinal, accepted: true);
-                        }
-                        else if (lobby.ToolId > 0)
-                        {
-                            var toolId = lobby.ToolId;
-                            NetworkId pickupId = default;
-                            var relocated = interactor != null
-                                && interactor.TryTransferTeamToolToMonster(Object.Id, out pickupId);
-                            authority?.RecordMinionFact(AEDMinionFactKindV1.AttackAttempted,
-                                Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                                objectId: $"tool-type:{toolId}", effectKind: "TOOL",
-                                attemptOrdinal: ordinal, accepted: relocated);
-                            if (relocated)
-                            {
-                                StolenToolId = pickupId;
-                                authority?.RecordMinionFact(AEDMinionFactKindV1.ToolRelocated,
-                                    Object.Id, attempt, Runner.Tick.Raw, TargetPlayer,
-                                    objectId: pickupId.ToString(), effectKind: "TOOL_RELOCATED",
-                                    attemptOrdinal: ordinal, accepted: true);
-                            }
-                        }
+                        if (lobby.CarriedCoreId.IsValid) TryStealCore(target, lobby, interactor);
+                        else if (interactor != null && interactor.TryTransferTeamToolToMonster(Object.Id, out var pickupId))
+                            StolenToolId = pickupId;
                     }
                     else
                     {
                         var movement = target.GetComponent<NetworkPlayerMovement>();
                         if (movement != null)
                         {
-                            RecordAEDSlowAttempt(movement.TryApplySlowAuthoritative(
-                                slowMultiplier, slowDurationSeconds));
+                            movement.TryApplySlowAuthoritative(slowMultiplier, slowDurationSeconds);
                             life.TryApplyAuthoritativeDamage(attackDamage, "MINION", transform.position);
                             movement.TryApplyKnockbackAuthoritative(
                                 target.transform.position - transform.position,
                                 attackKnockbackSpeed,
                                 attackKnockbackSeconds);
-
                         }
                     }
                 }
@@ -2070,7 +1835,6 @@ namespace EchoProtocol.AI.Minions
             {
                 ReplicatedToolRouteRetries = 0;
                 BeginFleeTo(ReplicatedFleeDestination, Mathf.Max(toolFleeSeconds, 15f));
-
             }
         }
 
@@ -2152,11 +1916,8 @@ namespace EchoProtocol.AI.Minions
             return best;
         }
 
-        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby,
-            NetworkPlayerInteractor interactor, out bool forcedDrop, out bool stolen)
+        private bool TryStealCore(NetworkObject playerObject, LobbyPlayerState lobby, NetworkPlayerInteractor interactor)
         {
-            forcedDrop = false;
-            stolen = false;
             var coreId = lobby.CarriedCoreId;
             if (interactor == null || !coreId.IsValid) return false;
             if (!Runner.TryFindObject(coreId, out var obj)
@@ -2174,7 +1935,6 @@ namespace EchoProtocol.AI.Minions
 #endif
                 return false;
             }
-            forcedDrop = true;
             // A successful forced drop consumes this hit's one side effect even if carry cannot begin.
             if (!core.TryBeginMonsterCarryAuthoritative(Object.Id, CarryPosition(), transform.rotation))
             {
@@ -2184,7 +1944,6 @@ namespace EchoProtocol.AI.Minions
                 return true;
             }
             StolenCoreId = coreId;
-            stolen = true;
             BeginFlee(playerObject.transform.position, coreCarryTimeoutSeconds);
 #if false
             // Debug.Log($"[CREEP_STEAL_CORE][SUCCESS] core={coreId} destination={ReplicatedFleeDestination}", this);
@@ -2209,11 +1968,6 @@ namespace EchoProtocol.AI.Minions
             if (!Object.HasStateAuthority || IsDying) return;
             ToolDivePhase = 0;
             ReleaseStolenToolAuthoritative();
-
-            MatchAuthorityRuntime.Instance?.RecordMinionFact(
-                AEDMinionFactKindV1.TeamDeathReceipt, Object.Id,
-                $"minion-team-death:{Object.Id}", Runner.Tick.Raw,
-                effectKind: "FLASHLIGHT_DEATH", accepted: true);
 
             // Nếu đang giữ Core thì trả Core trước,
             // không để Core biến mất cùng Minion.
@@ -2360,7 +2114,6 @@ namespace EchoProtocol.AI.Minions
             _lastVisiblePlayerAt = Time.time;
             _nextRoamRetargetAt = 0f;
             _swimDestination = transform.position;
-
         }
 
 

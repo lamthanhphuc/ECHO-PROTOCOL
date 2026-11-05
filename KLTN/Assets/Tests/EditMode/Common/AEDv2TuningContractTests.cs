@@ -84,7 +84,7 @@ namespace EchoProtocol.AI.Common.Tests
         }
 
         [Test]
-        public void PreMatchPolicy_AlwaysKeepsNormalBaseline()
+        public void IdenticalDecisionAndSnapshot_ProducesIdenticalKeyAndFingerprint()
         {
             var request = AEDTestFactory.Request();
             var snapshot = AEDTestFactory.Snapshot(request, 90d, 90d);
@@ -93,10 +93,8 @@ namespace EchoProtocol.AI.Common.Tests
                 AEDTestFactory.Evidence(), AEDTestFactory.CurrentCurrency());
             var a = AEDv2Policy.Evaluate(request, snapshot, gate, config);
             var b = AEDv2Policy.Evaluate(request, snapshot, gate, config);
-            Assert.That(a.Changed, Is.False);
+            Assert.That(a.Changed, Is.True);
             Assert.That(a.Key, Is.EqualTo(b.Key));
-            Assert.That(a.Reason, Is.EqualTo("AED_V2_FIRST_PHASE_BASELINE"));
-            Assert.That(a.Plan.Fingerprint(), Is.EqualTo(AEDv2Plan.Normal().Fingerprint()));
             Assert.That(a.Plan.Fingerprint(), Is.EqualTo(b.Plan.Fingerprint()));
         }
 

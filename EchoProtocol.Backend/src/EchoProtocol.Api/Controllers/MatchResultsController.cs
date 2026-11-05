@@ -15,18 +15,15 @@ public sealed class MatchResultsController : ControllerBase
 {
     private readonly IMatchResultService _service;
     private readonly IRewardService _rewardService;
-    private readonly IMatchProfilePostProcessingService _profilePostProcessing;
     private readonly ILogger<MatchResultsController> _logger;
 
     public MatchResultsController(
         IMatchResultService service,
         IRewardService rewardService,
-        IMatchProfilePostProcessingService profilePostProcessing,
         ILogger<MatchResultsController> logger)
     {
         _service = service;
         _rewardService = rewardService;
-        _profilePostProcessing = profilePostProcessing;
         _logger = logger;
     }
 
@@ -47,13 +44,6 @@ public sealed class MatchResultsController : ControllerBase
         {
             var response = result.Data!;
             var message = result.Message;
-
-            try { await _profilePostProcessing.EnqueueAsync(matchId, cancellationToken); }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Could not enqueue profile processing for accepted match {MatchId}", matchId);
-            }
 
             try
             {

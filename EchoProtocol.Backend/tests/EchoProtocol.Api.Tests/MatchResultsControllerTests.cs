@@ -143,7 +143,6 @@ public sealed class MatchResultsControllerTests
         var controller = new MatchResultsController(
             matchService,
             rewardService,
-            new StubProfilePostProcessingService(),
             NullLogger<MatchResultsController>.Instance);
         controller.ControllerContext = new ControllerContext
         {
@@ -155,11 +154,6 @@ public sealed class MatchResultsControllerTests
             }
         };
         return controller;
-    }
-
-    private sealed class StubProfilePostProcessingService : IMatchProfilePostProcessingService
-    {
-        public Task EnqueueAsync(Guid matchId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubMatchResultService(bool success, bool isReplay) : IMatchResultService

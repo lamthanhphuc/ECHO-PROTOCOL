@@ -96,10 +96,6 @@ namespace EchoProtocol.RelayB.Tests
             try
             {
                 config.InitializeDefaultPresetsIfEmpty(); var sim = new RelayBSignalSimulation(); sim.Initialize(config);
-                sim.Surge.ApplyRemote(
-                    RelayBSurgePhase.Contained,
-                    default, default,
-                    0f, 0f, 0f, 0);
                 sim.ScanSpectrum(); sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex); sim.SetActiveTab(1);
                 sim.SetPipelineSlot(0, RelayBModuleType.NoiseSuppressor); sim.AnalyzeOutput(); sim.StartSynchronization();
                 Assert.IsFalse(sim.IsSynchronizing); sim.SetActiveTab(2); Assert.That(sim.ActiveTab, Is.EqualTo(1));

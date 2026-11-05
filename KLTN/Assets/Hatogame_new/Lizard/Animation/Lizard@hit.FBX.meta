@@ -1,7 +1,7 @@
 fileFormatVersion: 2
-guid: ec8e909a44cd1614897f965eedb6c14e
+guid: ee6a6da43ab1b094baa00bee84245fbe
 ModelImporter:
-  serializedVersion: 22200
+  serializedVersion: 24501
   internalIDToNameTable: []
   externalObjects: {}
   materials:
@@ -141,10 +141,3 @@ ModelImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
-AssetOrigin:
-  serializedVersion: 1
-  productId: 181592
-  packageName: 'Monster: Lizard'
-  packageVersion: 1.0
-  assetPath: Assets/Hatogame_new/Lizard/Animation/Lizard@hit.FBX
-  uploadId: 626863

@@ -3,7 +3,6 @@
     "rootNamespace": "EchoProtocol.AI.Stalker.Tests",
     "references": [
         "EchoProtocol.AI.Common",
-        "Assembly-CSharp",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -601,14 +601,11 @@ namespace EchoProtocol.Networking
                 if (TrySpawnDroppedTeamToolAuthoritative(
                         toolId,
                         remainingUses,
-                        out var pickupId))
+                        out _))
                 {
                     state.SetGameplayToolId(0);
 
-                    ResetTeamToolRuntimeAuthoritative(
-                        preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId);
-                    MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
-                        pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
+                    ResetTeamToolRuntimeAuthoritative();
 
                     return true;
                 }
@@ -638,17 +635,14 @@ namespace EchoProtocol.Networking
                     remainingUses,
                     forcedDropPosition,
                     dropRotation,
-                    out var pickupId))
+                    out _))
             {
                 return false;
             }
 
             state.SetGameplayToolId(0);
 
-            ResetTeamToolRuntimeAuthoritative(
-                preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId);
-            MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
-                pickupId, actor, toolId, remainingUses, Runner.Tick.Raw);
+            ResetTeamToolRuntimeAuthoritative();
 
             return true;
         }
@@ -1211,8 +1205,6 @@ namespace EchoProtocol.Networking
             var result = ValidateRequester(requester, sequence);
             var state = GetComponent<LobbyPlayerState>();
             var targetId = default(NetworkId);
-            var droppedToolId = state != null ? state.ToolId : 0;
-            var droppedUses = state != null ? state.TeamToolUsesRemaining : 0;
             if (result == InteractionValidationResult.Accepted)
             {
                 var lifeState = GetComponent<NetworkPlayerLifeState>();
@@ -1239,10 +1231,7 @@ namespace EchoProtocol.Networking
                 {
                     state.SetGameplayToolId(0);
 
-                    ResetTeamToolRuntimeAuthoritative(
-                        preserveCooldown: droppedToolId == LobbyPlayerState.CoreStabilizerToolId);
-                    MatchAuthorityRuntime.Instance?.RecordPhase8ToolDrop(
-                        targetId, requester, droppedToolId, droppedUses, Runner.Tick.Raw);
+                    ResetTeamToolRuntimeAuthoritative();
                 }
             }
 
@@ -1311,13 +1300,8 @@ namespace EchoProtocol.Networking
 
                 teamToolPickup.SetRemainingUsesAuthoritative(remainingUses);
             }
-            else if (pickupObject.TryGetComponent<NetworkToolPickup>(
-                         out var scannerPickup) &&
-                     scannerPickup.ToolId == toolId)
-            {
-                scannerPickup.SetRemainingUsesAuthoritative(remainingUses);
-            }
-            else
+            else if (!pickupObject.TryGetComponent<NetworkToolPickup>(out var scannerPickup)
+                     || scannerPickup.ToolId != toolId)
             {
                 Runner.Despawn(pickupObject);
                 return false;
@@ -1342,11 +1326,8 @@ namespace EchoProtocol.Networking
                 return false;
             }
             interactable.BeginMonsterCarryAuthoritative(monsterId);
-            bool preserveCooldown =
-                state.ToolId == LobbyPlayerState.CoreStabilizerToolId;
             state.SetGameplayToolId(0);
-            ResetTeamToolRuntimeAuthoritative(
-                preserveCooldown: preserveCooldown);
+            ResetTeamToolRuntimeAuthoritative();
             return true;
         }
 
@@ -1826,7 +1807,6 @@ namespace EchoProtocol.Networking
 
             SetTeamToolCooldown(5f);
 
-            jammer.RecordV02Deployment(requester, $"player:{Object.Id}:tool:{TeamToolOrdinal}");
             ConsumeGameplayTeamTool(state);
 
             return InteractionValidationResult.Accepted;
@@ -2012,7 +1992,6 @@ namespace EchoProtocol.Networking
                 $"player:{Object.Id}:tool:{TeamToolOrdinal}",
                 "DOOR_JAMMER");
             SetTeamToolCooldown(5f);
-            jammer.RecordV02Deployment(requester, $"player:{Object.Id}:tool:{TeamToolOrdinal}");
             ConsumeGameplayTeamTool(state);
             return InteractionValidationResult.Accepted;
         }
@@ -2135,21 +2114,12 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            int consumedToolId = state.ToolId;
             if (!state.ConsumeTeamToolUseAuthoritative())
             {
                 return;
             }
 
-            bool fullyConsumed = state.ToolId == 0;
-            if (Object != null && Object.IsValid && Object.HasStateAuthority && Runner != null)
-            {
-                MatchAuthorityRuntime.Instance?.RecordPhase8ToolUse(
-                    Object.InputAuthority, consumedToolId, state.TeamToolUsesRemaining,
-                    fullyConsumed, Runner.Tick.Raw);
-            }
-
-            if (!fullyConsumed)
+            if (state.ToolId != 0)
             {
                 return;
             }
@@ -2217,10 +2187,6 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public long V02StabilizerUntilTick => IsCoreStabilizerActive
-            ? (long)Runner.Tick.Raw + (CoreStabilizerActiveTimer.RemainingTicks(Runner) ?? 0) : 0;
-        public uint V02StabilizerActivationOrdinal => IsCoreStabilizerActive ? TeamToolOrdinal : 0;
-
         public bool IsCoreStabilizerCovering(Vector3 worldPosition)
         {
             if (!IsCoreStabilizerActive)
@@ -2273,17 +2239,8 @@ namespace EchoProtocol.Networking
 
         private void ResetTeamToolRuntimeAuthoritative()
         {
-            ResetTeamToolRuntimeAuthoritative(false);
-        }
-
-        private void ResetTeamToolRuntimeAuthoritative(
-            bool preserveCooldown = false)
-        {
-            if (!preserveCooldown)
-            {
-                TeamToolCooldown =
-                    TickTimer.None;
-            }
+            TeamToolCooldown =
+                TickTimer.None;
 
             CoreStabilizerActiveTimer =
                 TickTimer.None;

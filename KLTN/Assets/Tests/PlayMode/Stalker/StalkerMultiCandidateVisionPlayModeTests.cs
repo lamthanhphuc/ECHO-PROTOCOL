@@ -16,29 +16,6 @@ namespace EchoProtocol.AI.Stalker.Tests
 
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
 
-        [UnityTest]
-        public IEnumerator AEDV02_PhysicalVisionUsesBoundedRangeAndKeepsLosFovAndLegacyBaseline()
-        {
-            var fixture = CreateSensorFixture();
-            var candidate = CreateCandidate("AEDV02_Visible", new Vector3(0f, 1f, 10.4f));
-            SetSensorFields(fixture.Sensor, fixture.Origin, null, 10f, 90f, 1);
-            Physics.SyncTransforms();
-            var method = fixture.Sensor.GetType().GetMethod("TryEvaluateV02Candidate");
-            var args = new object[] { candidate, candidate, 0, null };
-            Assert.That(method.Invoke(fixture.Sensor, args), Is.True);
-            Assert.That(TryEvaluateCandidate(fixture.Sensor, candidate, out _), Is.False);
-            args[2] = -1; Assert.That(method.Invoke(fixture.Sensor, args), Is.False);
-            candidate.position = new Vector3(0f, 1f, 9f); Physics.SyncTransforms();
-            args[2] = 4; Assert.That(method.Invoke(fixture.Sensor, args), Is.False);
-            Assert.That(TryEvaluateCandidate(fixture.Sensor, candidate, out _), Is.True);
-            var blocker = CreatePrimitive("AEDV02_Wall", PrimitiveType.Cube, new Vector3(0f, 1.5f, 4f));
-            blocker.transform.localScale = new Vector3(3, 4, 1); Physics.SyncTransforms();
-            args[2] = 0; Assert.That(method.Invoke(fixture.Sensor, args), Is.False);
-            blocker.SetActive(false); candidate.position = new Vector3(9f, 1f, 0f); Physics.SyncTransforms();
-            Assert.That(method.Invoke(fixture.Sensor, args), Is.False);
-            yield return null;
-        }
-
         [UnityTearDown]
         public IEnumerator TearDown()
         {

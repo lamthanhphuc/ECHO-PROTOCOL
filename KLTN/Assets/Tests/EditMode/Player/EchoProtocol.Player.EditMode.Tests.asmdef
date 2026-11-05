@@ -3,7 +3,6 @@
     "rootNamespace": "EchoProtocol.Player.Tests",
     "references": [
         "Assembly-CSharp",
-        "EchoProtocol.AI.Common",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

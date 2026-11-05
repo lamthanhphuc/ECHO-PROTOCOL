@@ -59,7 +59,6 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         [Header("Clips – Voice")]
         [SerializeField] private AudioClip detectClip;
-        public AudioClip CabinetWarningClip => detectClip;
         [SerializeField] private AudioClip searchClip;
         [SerializeField] private AudioClip sniffClip;
         [SerializeField] private AudioClip biteClip;

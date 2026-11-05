@@ -1,10 +1,5 @@
 using System;
 using System.Globalization;
-#if AED_V02_PILOT_HARNESS
-using AuthPrefs = EchoProtocol.Auth.AEDPilotTokenPrefs;
-#else
-using AuthPrefs = UnityEngine.PlayerPrefs;
-#endif
 
 namespace EchoProtocol.Auth
 {
@@ -72,43 +67,43 @@ namespace EchoProtocol.Auth
         return false;
       }
 
-      AuthPrefs.SetString(
+      UnityEngine.PlayerPrefs.SetString(
         AccessTokenKey,
         accessToken);
 
-      AuthPrefs.SetString(
+      UnityEngine.PlayerPrefs.SetString(
         AccessExpiresAtKey,
         accessExpiresAtIsoUtc);
 
-      AuthPrefs.SetString(
+      UnityEngine.PlayerPrefs.SetString(
         RefreshTokenKey,
         refreshToken);
 
-      AuthPrefs.SetString(
+      UnityEngine.PlayerPrefs.SetString(
         RefreshExpiresAtKey,
         refreshExpiresAtIsoUtc);
 
-      AuthPrefs.Save();
+      UnityEngine.PlayerPrefs.Save();
       return true;
     }
 
     public static string GetAccessToken() =>
-      AuthPrefs.GetString(
+      UnityEngine.PlayerPrefs.GetString(
         AccessTokenKey,
         string.Empty);
 
     public static string GetExpiresAt() =>
-      AuthPrefs.GetString(
+      UnityEngine.PlayerPrefs.GetString(
         AccessExpiresAtKey,
         string.Empty);
 
     public static string GetRefreshToken() =>
-      AuthPrefs.GetString(
+      UnityEngine.PlayerPrefs.GetString(
         RefreshTokenKey,
         string.Empty);
 
     public static string GetRefreshExpiresAt() =>
-      AuthPrefs.GetString(
+      UnityEngine.PlayerPrefs.GetString(
         RefreshExpiresAtKey,
         string.Empty);
 
@@ -173,15 +168,15 @@ namespace EchoProtocol.Auth
 
     public static void Clear()
     {
-      AuthPrefs.DeleteKey(AccessTokenKey);
-      AuthPrefs.DeleteKey(AccessExpiresAtKey);
-      AuthPrefs.DeleteKey(RefreshTokenKey);
-      AuthPrefs.DeleteKey(RefreshExpiresAtKey);
+      UnityEngine.PlayerPrefs.DeleteKey(AccessTokenKey);
+      UnityEngine.PlayerPrefs.DeleteKey(AccessExpiresAtKey);
+      UnityEngine.PlayerPrefs.DeleteKey(RefreshTokenKey);
+      UnityEngine.PlayerPrefs.DeleteKey(RefreshExpiresAtKey);
 
-      AuthPrefs.DeleteKey(LegacyAccessTokenKey);
-      AuthPrefs.DeleteKey(LegacyUsernameKey);
+      UnityEngine.PlayerPrefs.DeleteKey(LegacyAccessTokenKey);
+      UnityEngine.PlayerPrefs.DeleteKey(LegacyUsernameKey);
 
-      AuthPrefs.Save();
+      UnityEngine.PlayerPrefs.Save();
     }
 
     private static bool TryParseExpiry(

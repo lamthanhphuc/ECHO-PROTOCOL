@@ -17,18 +17,15 @@ public sealed class TelemetryService : ITelemetryService
     private readonly ITelemetryEventRepository _repository;
     private readonly IMatchAuthorityService _matchAuthority;
     private readonly MongoDbSettings _settings;
-    private readonly TimeProvider _clock;
 
     public TelemetryService(
         ITelemetryEventRepository repository,
         IMatchAuthorityService matchAuthority,
-        IOptions<MongoDbSettings> settings,
-        TimeProvider? clock = null)
+        IOptions<MongoDbSettings> settings)
     {
         _repository = repository;
         _matchAuthority = matchAuthority;
         _settings = settings.Value;
-        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<ServiceResult<TelemetryBatchResponse>> IngestBatchAsync(
@@ -60,7 +57,7 @@ public sealed class TelemetryService : ITelemetryService
         var acknowledgements = new TelemetryBatchAckItem?[request.Events.Count];
         var validDocuments = new List<TelemetryEventDocument>(request.Events.Count);
         var validDocumentIndexes = new List<int>(request.Events.Count);
-        var nowUtc = _clock.GetUtcNow().UtcDateTime;
+        var nowUtc = DateTime.UtcNow;
         var earliestAcceptedUtc = nowUtc.AddDays(-_settings.MaxEventAgeDays);
         var latestAcceptedUtc = nowUtc.AddMinutes(_settings.MaxFutureSkewMinutes);
         var batchConflictReasons = FindSameBatchConflictReasons(request.Events);

@@ -8,168 +8,6 @@ namespace EchoProtocol.Networking.Tests
     public sealed class NetworkMatchStateTests
     {
         [Test]
-        public void AEDBackendPreMatch_CommitsCandidateBeforeFinalization()
-        {
-            var source = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
-
-            int start = source.IndexOf(
-                "private void ResolveScenarioConfigAuthoritative(");
-
-            int end = source.IndexOf(
-                "private void ApplyScenarioConfigAuthoritative(",
-                start);
-
-            Assert.That(start, Is.GreaterThanOrEqualTo(0));
-            Assert.That(end, Is.GreaterThan(start));
-
-            var method = source.Substring(start, end - start);
-
-            int backendCommit = method.IndexOf(
-                "ApplyScenarioConfigAuthoritative(backendConfig, matchId)");
-
-            int finalize = method.IndexOf(
-                "scenarioRuntime.FinalizeResolution(");
-
-            Assert.That(backendCommit, Is.GreaterThanOrEqualTo(0));
-            Assert.That(finalize, Is.GreaterThan(backendCommit));
-
-            Assert.That(
-                method.IndexOf(
-                    "ApplyScenarioConfigAuthoritative(backendConfig, matchId)",
-                    backendCommit + 1),
-                Is.EqualTo(-1));
-
-            StringAssert.Contains(
-                "result.CommitDisposition ==",
-                method);
-
-            StringAssert.Contains(
-                "TryGetStagedBackendPreMatch(",
-                method);
-
-            StringAssert.Contains(
-                "TryApplyPreMatchFixedFallbackAuthoritative(",
-                method);
-        }
-
-        [Test]
-        public void AEDFusionConfig_DiagnosticRunsOncePerRevision()
-        {
-            var source = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
-
-            StringAssert.Contains(
-                "private void TryLogFusionScenarioConfig()",
-                source);
-
-            StringAssert.Contains(
-                "[AED_P8][FUSION_CONFIG]",
-                source);
-
-            StringAssert.Contains(
-                "_lastLoggedFusionScenarioConfigRevision ==",
-                source);
-
-            StringAssert.Contains(
-                "_lastLoggedFusionScenarioConfigRevision =\n" +
-                "                ScenarioConfigRevision;",
-                source.Replace("\r\n", "\n"));
-
-            int renderStart = source.IndexOf(
-                "public override void Render()");
-
-            int renderEnd = source.IndexOf(
-                "public void InitializeAuthoritative(",
-                renderStart);
-
-            Assert.That(renderStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(renderEnd, Is.GreaterThan(renderStart));
-
-            var render = source.Substring(
-                renderStart,
-                renderEnd - renderStart);
-
-            StringAssert.Contains(
-                "TryLogFusionScenarioConfig();",
-                render);
-
-            StringAssert.Contains(
-                "TryPublishReplicatedScenarioConfigToRegistry();",
-                render);
-        }
-
-        [Test]
-        public void AEDBackendPreMatch_UsesHostCommitAndRealApplyReceipt()
-        {
-            var match = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Match/NetworkMatchState.cs");
-
-            var lobby = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Session/LobbyManager.cs");
-
-            var runtime = File.ReadAllText(
-                "Assets/Scripts/AI/AED/ScenarioConfigAuthorityRuntime.cs");
-
-            var api = File.ReadAllText(
-                "Assets/Scripts/AI/AED/AEDSnapshotApiService.cs");
-
-            var dto = File.ReadAllText(
-                "Assets/Scripts/AI/AED/AEDSnapshotApiDtos.cs");
-
-            StringAssert.Contains(
-                "TryStageBackendPreMatch(matchId, decision)", lobby);
-
-            StringAssert.Contains(
-                "ApplyScenarioConfigAuthoritative(backendConfig, matchId)",
-                match);
-
-            StringAssert.Contains(
-                "int supportBonus = ScenarioSupportItemBudget;",
-                match);
-
-            StringAssert.Contains(
-                "baselinePerZone + extraZone1",
-                match);
-
-            StringAssert.Contains(
-                "Math.Max(\n                            supportBonus,",
-                match.Replace("\r\n", "\n"));
-
-            StringAssert.Contains(
-                "ConfirmStagedBackendPreMatchAsync(",
-                match);
-
-            StringAssert.Contains(
-                "TeamToolWorldSpawnInitialized &&",
-                match);
-
-            StringAssert.Contains(
-                "ConfirmScenarioAppliedAsync(",
-                runtime);
-
-            StringAssert.Contains(
-                "/scenario/decisions/{decisionId:D}/applied",
-                api);
-
-            StringAssert.Contains(
-                "scenarioConfigFingerprint = config.contentFingerprint",
-                api);
-
-            StringAssert.Contains(
-                "public AEDBackendScenarioConfigDto config;",
-                dto);
-
-            StringAssert.Contains(
-                "ScenarioResolutionMode.Adaptive",
-                lobby);
-
-            StringAssert.Contains(
-                "ClearStagedBackendPreMatch(oldMatchId)",
-                runtime);
-        }
-
-        [Test]
         public void Zone1Completion_DoesNotTeleportPlayersToZone2()
         {
             string source = File.ReadAllText(MatchSourcePath).Replace("\r\n", "\n");
@@ -191,12 +29,6 @@ namespace EchoProtocol.Networking.Tests
                 "Normal Zone1 objective completion must not teleport players.");
             StringAssert.DoesNotContain("TeleportGameplayPlayersAuthoritative(", phaseTransition,
                 "Normal phase transitions must keep player positions; debug skips may teleport separately.");
-            int debugStart = source.IndexOf("private bool DebugSkipToZone2(", System.StringComparison.Ordinal);
-            int debugEnd = source.IndexOf("public void RequestDebugSkipToZone2(", debugStart, System.StringComparison.Ordinal);
-            Assert.That(debugStart, Is.GreaterThanOrEqualTo(0));
-            Assert.That(debugEnd, Is.GreaterThan(debugStart));
-            StringAssert.Contains("TeleportGameplayPlayersAuthoritative(",
-                source.Substring(debugStart, debugEnd - debugStart));
         }
 
         private const string MatchSourcePath =
@@ -324,7 +156,7 @@ namespace EchoProtocol.Networking.Tests
 
             StringAssert.Contains(
                 "TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,\n" +
-                "                NetworkMatchPhase.FinalHunt, \"ZONE3_CHARGE_ACTIVATED\", () =>",
+                "                    NetworkMatchPhase.FinalHunt, \"ZONE3_CHARGE_ACTIVATED\")",
                 source);
 
             StringAssert.Contains(
@@ -369,9 +201,11 @@ namespace EchoProtocol.Networking.Tests
 
             StringAssert.Contains(
                 "if (fromDoorexit " +
-                "&& CurrentPhase == NetworkMatchPhase.FinalHunt) { " +
-                "return TryAdvancePhase(NetworkMatchPhase.FinalHunt, " +
-                "NetworkMatchPhase.Escape, \"FINAL_HUNT\", () =>",
+                "&& CurrentPhase == NetworkMatchPhase.FinalHunt " +
+                "&& !TryAdvancePhase( " +
+                "NetworkMatchPhase.FinalHunt, " +
+                "NetworkMatchPhase.Escape, " +
+                "\"FINAL_HUNT\"))",
                 normalized);
 
             StringAssert.Contains(
@@ -389,8 +223,7 @@ namespace EchoProtocol.Networking.Tests
                 source);
 
             StringAssert.Contains(
-                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective,\n" +
-                "                NetworkMatchPhase.Zone3FindFrigate, \"ZONE2_OBJECTIVE\", () =>",
+                "TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate, \"ZONE2_OBJECTIVE\")",
                 source);
 
             StringAssert.DoesNotContain(
@@ -403,12 +236,10 @@ namespace EchoProtocol.Networking.Tests
         {
             var source = File.ReadAllText(HudObjectiveTrackerPath);
 
-
             StringAssert.Contains("FINAL HUNT // EMERGENCY POWER ACTIVE", source);
             StringAssert.Contains("GetEmergencyPowerRemainingSeconds()", source);
             StringAssert.Contains("IsEmergencyPowerTimerRunning()", source);
             StringAssert.Contains("Cửa thoát đã mở", source);
-
             StringAssert.DoesNotContain("CHARGE SPACEFRIGATE", source);
             StringAssert.DoesNotContain("Scifi Charge", source);
         }

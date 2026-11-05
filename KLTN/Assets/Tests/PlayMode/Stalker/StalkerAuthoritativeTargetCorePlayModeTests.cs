@@ -292,26 +292,12 @@ namespace EchoProtocol.AI.Stalker.Tests
             var fixture = CreateFixture();
             SetDetectLock(fixture.Controller, 1, 1f);
             SetPrivateField(fixture.Controller, "detectionDecayRate", 1f);
-            SetPrivateField(fixture.Controller, "detectionMeterFull", 2f);
-            SetPrivateField(fixture.Controller, "detectionFillRate", 0f);
 
-            Assert.That(
-                Simulate(
-                    fixture.Controller,
-                    0.25f,
-                    CreateCandidateList(
-                        CreateCandidate(1, new Vector3(0f, 1f, 3f), 3f, true),
-                        CreateCandidate(2, new Vector3(0f, 1f, 2f), 2f, true)),
-                    CreateStatusList(
-                        CreateStatus(1, true),
-                        CreateStatus(2, true))),
-                Is.True);
+            Assert.That(Simulate(fixture.Controller, 0.25f, CreateCandidateList(CreateCandidate(2, new Vector3(0f, 1f, 2f), 2f, true)), CreateStatusList(CreateStatus(1, true), CreateStatus(2, true))), Is.True);
 
             AssertState(fixture.Controller, "DETECT");
             AssertPlayerIdValue(GetProperty(GetMemory(fixture.Controller), "DetectionTargetId"), 1);
-            Assert.That(
-                GetFloatProperty(fixture.Controller, "DetectionMeter"),
-                Is.EqualTo(1f).Within(FloatTolerance));
+            Assert.That(GetFloatProperty(fixture.Controller, "DetectionMeter"), Is.EqualTo(0.75f).Within(FloatTolerance));
             yield return null;
         }
 

@@ -40,7 +40,6 @@ namespace EchoProtocol.Telemetry.Unity
         private PlayerTelemetryAdapter _playerAdapter;
         private NoiseTelemetryAdapter _noiseAdapter;
         private MonsterTelemetryAdapter _monsterAdapter;
-        private Phase8LifecycleTelemetryAdapter _phase8LifecycleAdapter;
         private ITelemetryLocalLog _localLog;
         private float _nextFlushAt;
         private bool _initialized;
@@ -55,7 +54,6 @@ namespace EchoProtocol.Telemetry.Unity
         public PlayerTelemetryAdapter PlayerAdapter => _playerAdapter;
         public NoiseTelemetryAdapter NoiseAdapter => _noiseAdapter;
         public MonsterTelemetryAdapter MonsterAdapter => _monsterAdapter;
-        public Phase8LifecycleTelemetryAdapter Phase8LifecycleAdapter => _phase8LifecycleAdapter;
         public string LocalLogPath { get; private set; }
 
         public static TelemetryRuntimeBehaviour EnsureExists()
@@ -167,7 +165,6 @@ namespace EchoProtocol.Telemetry.Unity
             _playerAdapter = new PlayerTelemetryAdapter(_emitter);
             _noiseAdapter = new NoiseTelemetryAdapter(_emitter);
             _monsterAdapter = new MonsterTelemetryAdapter(_emitter);
-            _phase8LifecycleAdapter = new Phase8LifecycleTelemetryAdapter(_emitter);
             _batchSender = new TelemetryBatchSender(
                 _buffer,
                 new TelemetryApiTransport(authRuntime.Client),
@@ -200,15 +197,6 @@ namespace EchoProtocol.Telemetry.Unity
         public bool TryFlushNow()
         {
             return _initialized && _batchSender.TryFlush(DateTime.UtcNow);
-        }
-
-        public bool TryGetPhaseSourceReferences(int completedPhaseOrdinal,
-            out TelemetrySourceIdentity[] references)
-        {
-            references = Array.Empty<TelemetrySourceIdentity>();
-            return _initialized && _eventFactory != null &&
-                _eventFactory.TryGetPhaseSourceReferences(
-                    completedPhaseOrdinal, out references);
         }
     }
 }

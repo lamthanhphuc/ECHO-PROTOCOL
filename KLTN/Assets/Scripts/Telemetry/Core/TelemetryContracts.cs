@@ -7,8 +7,6 @@ namespace EchoProtocol.Telemetry
     {
         public const string LegacyV1 = "1.0";
         public const string CurrentV11 = "1.1";
-        public const string LifecycleV12 = "1.2";
-        public const string AEDV13 = "1.3";
     }
 
     public static class TelemetryEventTypes
@@ -29,17 +27,6 @@ namespace EchoProtocol.Telemetry
         public const string TeamToolUsed = "TEAM_TOOL_USED";
         public const string HelpPingUsed = "HELP_PING_USED";
         public const string NoiseEmitted = "NOISE_EMITTED";
-        public const string TeamToolLifecycle = "TEAM_TOOL_LIFECYCLE";
-        public const string MinionLifecycle = "MINION_LIFECYCLE";
-        public const string AEDV02WorldSample = "AED_V02_WORLD_SAMPLE";
-        public const string AEDV02ActionEffect = "AED_V02_ACTION_EFFECT";
-        public const string AEDV02ToolCarrier = "AED_V02_TOOL_CARRIER";
-        public const string AEDV02CabinetClue = "AED_V02_CABINET_CLUE";
-        public const string AEDV02CausalImpact = "AED_V02_CAUSAL_IMPACT";
-        public const string AEDV02ResourceAction = "AED_V02_RESOURCE_ACTION";
-        public const string AEDV02PlanCommit = "AED_V02_PLAN_COMMIT";
-        public const string AEDV02CaptureExcluded = "AED_V02_CAPTURE_EXCLUDED";
-        public const string AEDV02CaptureSeal = "AED_V02_CAPTURE_SEAL";
 
         public const string MonsterInvestigateStarted = "MONSTER_INVESTIGATE_STARTED";
         public const string MonsterInvestigateResolved = "MONSTER_INVESTIGATE_RESOLVED";
@@ -49,23 +36,6 @@ namespace EchoProtocol.Telemetry
         public const string WardenRouteActionApplied = "WARDEN_ROUTE_ACTION_APPLIED";
         public const string WardenRouteSafetyChecked = "WARDEN_ROUTE_SAFETY_CHECKED";
         public const string WardenRouteActionReleased = "WARDEN_ROUTE_ACTION_RELEASED";
-    }
-
-    public sealed class TelemetrySourceIdentity
-    {
-        public Guid EventId { get; }
-        public long EventSequence { get; }
-        public string EventType { get; }
-        public string OccurrenceKey { get; }
-
-        public TelemetrySourceIdentity(Guid eventId, long eventSequence,
-            string eventType, string occurrenceKey)
-        {
-            EventId = eventId;
-            EventSequence = eventSequence;
-            EventType = eventType;
-            OccurrenceKey = occurrenceKey;
-        }
     }
 
     public enum TelemetryEventStatus
@@ -135,18 +105,7 @@ namespace EchoProtocol.Telemetry
             TelemetryEventTypes.WardenTelegraphStarted,
             TelemetryEventTypes.WardenRouteActionApplied,
             TelemetryEventTypes.WardenRouteSafetyChecked,
-            TelemetryEventTypes.WardenRouteActionReleased,
-            TelemetryEventTypes.TeamToolLifecycle,
-            TelemetryEventTypes.MinionLifecycle,
-            TelemetryEventTypes.AEDV02WorldSample,
-            TelemetryEventTypes.AEDV02ActionEffect,
-            TelemetryEventTypes.AEDV02ToolCarrier,
-            TelemetryEventTypes.AEDV02CabinetClue,
-            TelemetryEventTypes.AEDV02CausalImpact,
-            TelemetryEventTypes.AEDV02ResourceAction,
-            TelemetryEventTypes.AEDV02PlanCommit,
-            TelemetryEventTypes.AEDV02CaptureExcluded,
-            TelemetryEventTypes.AEDV02CaptureSeal
+            TelemetryEventTypes.WardenRouteActionReleased
         };
 
         public static bool TryGetStatus(string eventType, out TelemetryEventStatus status)

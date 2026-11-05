@@ -204,11 +204,9 @@ namespace EchoProtocol.Tests
             StringAssert.Contains("GetRelayOperator(slot) != requester", handler);
             StringAssert.Contains("CaptureRelayACircuitState", handler);
             string ui = File.ReadAllText(prefix + "Assets/Scripts/RelayA/RelayAUIController.Breakers.cs");
-            StringAssert.Contains("\"ResetMatrix\"", ui);
-            StringAssert.Contains("\"Đặt lại ma trận\"", ui);
-            StringAssert.Contains("SendBreaker(-1, true)", ui);
-            StringAssert.Contains("state.StableCount", ui);
-            StringAssert.Contains("state.Moves", ui);
+            StringAssert.Contains("RESET MATRIX", ui);
+            StringAssert.Contains("MOVES", ui);
+            StringAssert.DoesNotContain("VERIFY", ui);
             StringAssert.DoesNotContain("FindOptimalPresses", ui);
         }
     }

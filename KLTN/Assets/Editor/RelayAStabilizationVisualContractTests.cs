@@ -18,39 +18,13 @@ namespace EchoProtocol.Tests
         [Test]
         public void IndustrialHierarchy_ContainsMonitoringControlsStabilityAndConditionalWarning()
         {
-            foreach (string label in new[]
-            {
-                "Relay A · Nguồn điện",
-                "03 · Ổn định đầu ra",
-                "Theo dõi hệ thống",
-                "Điều chỉnh",
-                "STABILITY"
-            })
-            {
+            foreach (string label in new[] { "POWER RELAY A", "STABILIZE OUTPUT", "SYSTEM MONITORING", "MANUAL CONTROL", "STABILITY" })
                 StringAssert.Contains(label, _source);
-            }
-
-            StringAssert.Contains(
-                "AddIndustrialPanel(root, \"SystemMonitoring\"",
-                _source);
-            StringAssert.Contains(
-                "AddIndustrialPanel(root, \"ManualControl\"",
-                _source);
-            StringAssert.Contains(
-                "_stabilizationWarningPanel.gameObject.SetActive(faultVisible && !_controller.IsOnline)",
-                _source);
-            StringAssert.Contains(
-                "_stabilizationStop.gameObject.SetActive(state.IsRunning && !_controller.IsOnline)",
-                _source);
-            StringAssert.Contains(
-                "_stabilizationGauges[i].rectTransform.anchorMax",
-                _source);
-            StringAssert.Contains(
-                "_stabilizationSafeBands[i].rectTransform.anchorMin",
-                _source);
-            StringAssert.Contains(
-                "slider.fillRect = fill.rectTransform",
-                _source);
+            StringAssert.Contains("_stabilizationWarningPanel.gameObject.SetActive(faultVisible", _source);
+            StringAssert.Contains("_stabilizationStop.gameObject.SetActive(state.IsRunning", _source);
+            StringAssert.Contains("_stabilizationGauges[i].rectTransform.anchorMax", _source);
+            StringAssert.Contains("_stabilizationSafeBands[i].rectTransform.anchorMin", _source);
+            StringAssert.Contains("slider.fillRect = fill.rectTransform", _source);
         }
 
         [Test]

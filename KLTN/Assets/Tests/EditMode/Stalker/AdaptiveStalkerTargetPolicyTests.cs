@@ -1,7 +1,5 @@
 using System;
 using System.Reflection;
-using System.Collections.Generic;
-using EchoProtocol.AI.Common;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -11,23 +9,6 @@ namespace EchoProtocol.AI.Stalker.Tests
     {
         private const string Prefix = "EchoProtocol.AI.Stalker.";
         private const BindingFlags PublicStatic = BindingFlags.Public | BindingFlags.Static;
-
-        [Test]
-        public void AEDV02_FairnessChangesOnlyEligibleRankingAndPreservesCorePriority()
-        {
-            var tiers = new Dictionary<PlayerId, int> { [new PlayerId(1)] = 4, [new PlayerId(2)] = 0 };
-            var method = Resolve(Prefix + "AdaptiveStalkerTargetPolicy").GetMethod("TrySelectV02Target", PublicStatic);
-            var args = new object[] { Candidates(Candidate(1, 2f, true), Candidate(2, 2f, true)), tiers, null };
-            Assert.That(method.Invoke(null, args), Is.True); AssertPlayerId(args[2], 2);
-            AssertPlayerId(Select(Candidate(1, 2f, true), Candidate(2, 2f, true)), 1);
-            args[0] = Candidates(Candidate(1, 2f, true, true), Candidate(2, 2f, true));
-            Assert.That(method.Invoke(null, args), Is.True); AssertPlayerId(args[2], 1);
-            args[0] = Candidates(Candidate(1, 2f, true), Candidate(2, 1f, false, true, 1f, 1f));
-            Assert.That(method.Invoke(null, args), Is.True); AssertPlayerId(args[2], 1);
-            tiers[new PlayerId(1)] = -1; tiers[new PlayerId(2)] = -1;
-            args[0] = Candidates(Candidate(1, 2f, true), Candidate(2, 2f, true));
-            Assert.That(method.Invoke(null, args), Is.True); AssertPlayerId(args[2], 1);
-        }
 
         [Test]
         public void STK_ADAPTIVE_NullCandidates_AreRejected()

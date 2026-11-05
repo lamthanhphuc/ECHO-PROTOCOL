@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking.Authority
 {
-        [Serializable] public sealed class PendingMatchResultRecord : ISerializationCallbackReceiver
+        [Serializable] public sealed class PendingMatchResultRecord
         {
             public string matchId, ownerId;
             public long notBeforeUtc, nextLeaseUtc;
@@ -16,9 +16,6 @@ namespace EchoProtocol.Networking.Authority
             public int attempts;
             public long nextAttemptUtc;
             public string lastErrorCode;
-            public void OnBeforeSerialize() { }
-            // JsonUtility materializes null inline objects; keep the existing persisted payload format.
-            public void OnAfterDeserialize() { if (saved) request = null; }
         }
         [Serializable] public sealed class PendingMatchResultQueue { public List<PendingMatchResultRecord> items = new(); }
     public sealed partial class MatchAuthorityRuntime

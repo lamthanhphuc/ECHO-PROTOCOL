@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using EchoProtocol.Auth;
-using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Gameplay;
 using Fusion;
 using Fusion.Matchmaking;
@@ -185,14 +184,6 @@ namespace EchoProtocol.Networking
                 _completedMatchObserved = true;
             if (!_reconnectIdentityPending || !HasRunningRunner
                 || Time.unscaledTime < _nextReconnectProofRetryAt) return;
-            if (Runner.TryGetPlayerObject(Runner.LocalPlayer, out var playerObject)
-                && playerObject != null
-                && playerObject.TryGetComponent<LobbyPlayerState>(out var state)
-                && state.HasVerifiedBackendIdentity && !state.Disconnected)
-            {
-                _reconnectIdentityPending = false;
-                return;
-            }
             _nextReconnectProofRetryAt = Time.unscaledTime + 2f;
             _matchAuthority?.TrySubmitLocalIdentity(force: true);
         }
@@ -263,9 +254,7 @@ namespace EchoProtocol.Networking
         private int _requestedGameMode;
         public Task<bool> CreateRoomAsync(
             string sessionName, int maxPlayers = 4,
-            MatchDifficulty difficulty = MatchDifficulty.Normal, int gameMode = 0,
-            ScenarioResolutionMode resolutionMode = ScenarioResolutionMode.Fixed)
-
+            MatchDifficulty difficulty = MatchDifficulty.Normal, int gameMode = 0)
         {
             if (maxPlayers is < 2 or > 4)
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
@@ -273,15 +262,9 @@ namespace EchoProtocol.Networking
             if (gameMode < 0 || gameMode > 1) return FailWithoutStarting("Invalid game mode.");
             _requestedGameMode = gameMode;
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
-            _matchAuthority.RequestDifficulty(difficulty);
-            _matchAuthority.RequestScenarioResolutionMode(resolutionMode);
-
+            _matchAuthority.RequestDifficulty((MatchDifficulty)EchoProtocol.UI.LobbySelectionMemory.Read("difficulty", (int)difficulty));
             return StartSessionAsync(GameMode.Host, sessionName, maxPlayers);
         }
-
-        public Task<bool> CreateRoomAsync(string sessionName, int maxPlayers,
-            MatchDifficulty difficulty, ScenarioResolutionMode resolutionMode) =>
-            CreateRoomAsync(sessionName, maxPlayers, difficulty, 0, resolutionMode);
 
         public Task<bool> JoinRoomAsync(string sessionName) => StartSessionAsync(GameMode.Client, sessionName, null);
 
@@ -642,22 +625,11 @@ namespace EchoProtocol.Networking
                         ? _reconnectCancellation.Token : CancellationToken.None,
                 };
                 var tokenKey = $"EchoProtocol.ConnectionToken.{userId:D}";
-                string savedToken;
-#if AED_V02_PILOT_HARNESS
-                savedToken = AEDPilotTokenPrefs.GetString(tokenKey, string.Empty);
-#else
-                savedToken = PlayerPrefs.GetString(tokenKey);
-#endif
-                if (!Guid.TryParse(savedToken, out var connectionId))
+                if (!Guid.TryParse(PlayerPrefs.GetString(tokenKey), out var connectionId))
                 {
                     connectionId = Guid.NewGuid();
-#if AED_V02_PILOT_HARNESS
-                    AEDPilotTokenPrefs.SetString(tokenKey, connectionId.ToString("D"));
-                    AEDPilotTokenPrefs.Save();
-#else
                     PlayerPrefs.SetString(tokenKey, connectionId.ToString("D"));
                     PlayerPrefs.Save();
-#endif
                 }
                 args.ConnectionToken = connectionId.ToByteArray();
                 args.PlayerUniqueId = Math.Max(1L, BitConverter.ToInt64(args.ConnectionToken, 0) & long.MaxValue);
@@ -665,11 +637,9 @@ namespace EchoProtocol.Networking
                 if (gameMode == GameMode.Host)
                 {
                     args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
-                    args.SessionProperties[PlayerSpawner.StalkerModelSessionKey] = 0;
                     args.SessionProperties[LobbyMapCatalog.GameModeKey] = _requestedGameMode;
                     args.SessionProperties[LobbyMapCatalog.PropertyKey] = _requestedGameMode == 1 ? 2
                         : Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1);
-
                 }
 
                 RuntimeLog.Log(
@@ -1639,14 +1609,6 @@ namespace EchoProtocol.Networking
             ReturnToBootstrapScene();
         }
 
-#if AED_V02_PILOT_HARNESS
-        public void ReleaseNativeInput()
-        {
-            ClearLocalInputProvider();
-            if (Runner != null && Runner.IsRunning && Runner.TryGetPlayerObject(Runner.LocalPlayer, out var local))
-                local.GetComponent<NetworkPlayerMovement>()?.RestoreNativeInput();
-        }
-#endif
         private void ClearLocalInputProvider()
         {
             _localInputOwner = null;

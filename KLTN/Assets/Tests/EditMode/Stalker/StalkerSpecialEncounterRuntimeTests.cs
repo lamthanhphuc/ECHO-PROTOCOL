@@ -634,29 +634,6 @@ namespace EchoProtocol.AI.Stalker.Tests
                 Is.False);
         }
 
-        [Test]
-        public void AEDV02_CabinetActivationBlocksOrdinarySpecialForSharedSeparationAndResetsForNextMatch()
-        {
-            var cabinet = (EchoProtocol.AI.Common.AED.AEDV02CabinetEncounter)
-                _runtimeType.GetProperty("Cabinet").GetValue(_runtime);
-            var match = Guid.NewGuid();
-            var player = Guid.NewGuid();
-            cabinet.Reset(match);
-            Assert.That(cabinet.TryReserve(match, player, 10, 1, 100, 99,
-                new EchoProtocol.AI.Common.AED.AEDV02PressureSnapshot(new double[5], 0, true, "UNIT_FACTS"),
-                EchoProtocol.AI.Common.AED.AEDV02Plan.Hash("source"), 0, new[] { player }), Is.True);
-            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(1L, 100d)), Is.False);
-            cabinet.AcknowledgeCue(cabinet.EncounterId, player, true, true, 100);
-            cabinet.Tick(102.5, true, false, EchoProtocol.AI.Common.AED.AEDV02CabinetInspection.Pending);
-            cabinet.Abort("ABORT_ENTRY_TELEPORT", 103);
-            cabinet.Tick(193, true, false, EchoProtocol.AI.Common.AED.AEDV02CabinetInspection.Pending);
-            Assert.That(cabinet.IsActive, Is.False);
-            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(2L, 402.49d)), Is.True);
-            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(3L, 402.5d)), Is.False);
-            _runtimeType.GetMethod("ResetForMatch").Invoke(_runtime, null);
-            Assert.That(InvokeIsCoolingDown(CreateSimulationTime(1L, 1d)), Is.False);
-        }
-
         private void AddEligiblePlayer(
             Vector3 position)
         {

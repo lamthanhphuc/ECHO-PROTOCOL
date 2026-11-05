@@ -6,32 +6,6 @@ namespace EchoProtocol.AI.Common.Tests
 {
     public sealed class ScenarioResolutionAdaptiveContractTests
     {
-        [TestCase(0d, 0d, "AED-PRE-010-SURVIVAL-LOW-RELIEVE")]
-        [TestCase(29.99d, 70d, "AED-PRE-010-SURVIVAL-LOW-RELIEVE")]
-        [TestCase(30d, 29.99d, "AED-PRE-020-NOISE-LOW-RELIEVE")]
-        [TestCase(30d, 30d, "AED-PRE-040-MIXED-HOLD")]
-        [TestCase(69.99d, 69.99d, "AED-PRE-040-MIXED-HOLD")]
-        [TestCase(70d, 69.99d, "AED-PRE-040-MIXED-HOLD")]
-        [TestCase(69.99d, 70d, "AED-PRE-040-MIXED-HOLD")]
-        [TestCase(70d, 70d, "AED-PRE-030-BOTH-HIGH-INCREASE")]
-        [TestCase(100d, 100d, "AED-PRE-030-BOTH-HIGH-INCREASE")]
-        public void PreMatch_ThresholdParityWithBackend(
-            double survival,
-            double noise,
-            string expected)
-        {
-            var request = AEDTestFactory.Request();
-
-            var result = AEDPolicyEvaluator.Evaluate(
-                request,
-                AEDTestFactory.Snapshot(
-                    request, survival, noise),
-                AEDTestFactory.Policy());
-
-            Assert.That(result.Evaluated, Is.True);
-            Assert.That(result.RuleId, Is.EqualTo(expected));
-        }
-
         [TestCase(
             20d,
             50d,

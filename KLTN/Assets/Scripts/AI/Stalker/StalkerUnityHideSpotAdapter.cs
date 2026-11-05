@@ -13,7 +13,6 @@ namespace EchoProtocol.AI.Stalker
     {
         private const float InspectPointNavMeshSampleRadius = 1.5f;
         private const float RevealedHideSpotLockoutSeconds = 15f;
-        public NetworkRunner RunnerScope { get; set; }
 
         private readonly Dictionary<ulong, global::HidingSpot> _spotsById =
             new Dictionary<ulong, global::HidingSpot>();
@@ -137,7 +136,6 @@ namespace EchoProtocol.AI.Stalker
 
             for (var i = 0; i < networkMovements.Length; i++)
             {
-                if (RunnerScope != null && networkMovements[i].Runner != RunnerScope) continue;
                 var movement = networkMovements[i];
 
                 if (movement == null
@@ -167,13 +165,6 @@ namespace EchoProtocol.AI.Stalker
 
                 var preExitPosition =
                     movement.transform.position;
-
-                if (movement.BlocksAEDV02HideForceExit())
-                {
-                    result = StalkerHideSpotInspectionResult.ProtectedBy(playerId, movement.AEDV02HideProtectionRemaining);
-                    Debug.Log($"[AED_V02][PROTECT_P4_HIDE_WINDOW] actor={movement.Object.InputAuthority.PlayerId} spot={candidate.StableId} token={movement.AEDV02HideTokenId} remaining={movement.AEDV02HideProtectionRemaining:F2}");
-                    return true;
-                }
 
                 var forceExitSucceeded =
                     movement.TryForceExitHidingAuthoritative(
@@ -237,7 +228,6 @@ namespace EchoProtocol.AI.Stalker
                 return true;
             }
 
-            if (RunnerScope != null) { result = StalkerHideSpotInspectionResult.Empty(); return true; }
             // Preserve non-network/offline hiding behavior.
             if (!spot.TryInspectOccupant(out var occupant)
                 || occupant == null)
@@ -277,15 +267,6 @@ namespace EchoProtocol.AI.Stalker
                 localObservedDirection);
 
             return true;
-        }
-
-        public bool SuppressProtectedFlashlight(ulong clueHideSpotId)
-        {
-            if (clueHideSpotId == 0) return false;
-            // Only a sensed flashlight clue identifies this spot; occupancy never feeds the selector.
-            foreach (var movement in UnityEngine.Object.FindObjectsByType<NetworkPlayerMovement>(FindObjectsInactive.Exclude))
-                if (movement.IsHidden && movement.CurrentHideSpotId == clueHideSpotId && movement.BlocksAEDV02HideForceExit()) return true;
-            return false;
         }
 
         private static bool TryResolvePlayerId(

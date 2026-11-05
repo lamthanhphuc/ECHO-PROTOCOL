@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using EchoProtocol.AI.Common;
@@ -11,69 +10,6 @@ namespace EchoProtocol.AI.Stalker.Tests
 {
     public sealed class StalkerPhase1HideSpotTests
     {
-        [Test]
-        public void AEDV02_HideFairnessResetForgetsPreviousMatchObservedIdentity()
-        {
-            var root = new GameObject("AEDV02_HideKnowledgeReset");
-            try
-            {
-                var controller = root.AddComponent(ResolveType(ControllerTypeName));
-                controller.GetType().GetProperty("V02TargetTiers").SetValue(controller, new Dictionary<PlayerId, int> { [new PlayerId(7)] = 3 });
-                Invoke(controller, "RecordV02SeenHideEntry", 10UL, new PlayerId(7));
-                Assert.That(Invoke(controller, "V02KnownHideTier", 10UL), Is.EqualTo(3));
-                Invoke(controller, "ResetV02PlayerFairness");
-                Assert.That(Invoke(controller, "V02KnownHideTier", 10UL), Is.EqualTo(-1));
-            }
-            finally { UnityEngine.Object.DestroyImmediate(root); }
-        }
-        [TestCase(-1, 10UL)]
-        [TestCase(2, 10UL)]
-        [TestCase(3, 20UL)]
-        public void AEDV02_PP3ReducesKnownInspectionPriorityAndUnknownKeepsBaseline(int tier, ulong expected)
-        {
-            var selector = Activator.CreateInstance(ResolveType(SelectorTypeName));
-            Func<ulong, int> knownTier = spot => spot == 10 ? tier : -1;
-            var args = new object[] { Vector3.zero, CreateCandidateList(Candidate(10, Vector3.right), Candidate(20, Vector3.right * 2)),
-                CreateMemory(), 100f, CreateSelectorConfig(6), knownTier, null };
-            Assert.That((bool)Invoke(selector, "TrySelectV02", args), Is.True);
-            Assert.That(StableId(GetProperty(args[6], "Candidate")), Is.EqualTo(expected));
-            args[1] = CreateCandidateList(Candidate(10, Vector3.right));
-            Assert.That((bool)Invoke(selector, "TrySelectV02", args), Is.True, "PP3 relief does not grant immunity.");
-        }
-        [TestCase(-1, .35f, 1.50f)]
-        [TestCase(0, .45f, 1.25f)]
-        [TestCase(1, .40f, 1.35f)]
-        [TestCase(2, .35f, 1.50f)]
-        [TestCase(3, .25f, 1.80f)]
-        [TestCase(4, .20f, 2.20f)]
-        public void AEDV02_RealOccupiedActionCapturesRevealTierAndTimerUsesFrozenGrace(int tier, float track, float grace)
-        {
-            var gameObject = new GameObject("AEDV02_Reveal");
-            try
-            {
-                var controller = gameObject.AddComponent(ResolveType(ControllerTypeName));
-                var tiers = new Dictionary<PlayerId, int> { [new PlayerId(7)] = tier };
-                controller.GetType().GetProperty("V02TargetTiers").SetValue(controller, tiers);
-                var inspectionType = ResolveType(InspectionResultTypeName);
-                var occupied = inspectionType.GetMethod("OccupiedBy", BindingFlags.Public | BindingFlags.Static, null,
-                    new[] { typeof(PlayerId), typeof(Vector3), typeof(Vector3) }, null).Invoke(null,
-                        new object[] { new PlayerId(7), Vector3.right, Vector3.forward });
-                var result = Activator.CreateInstance(ResolveType(InvestigationTickResultTypeName),
-                    Enum.Parse(ResolveType(InvestigationTickStatusTypeName), "Occupied"), Candidate(10UL, Vector3.zero), occupied);
-                Invoke(controller, "HandleOccupiedHideSpotInspection", result);
-                Assert.That(GetProperty(controller, "AppliedHideRevealTrackSeconds"), Is.EqualTo(track).Within(.0001));
-                Assert.That(GetProperty(controller, "AppliedHideRevealGraceSeconds"), Is.EqualTo(grace).Within(.0001));
-                tiers[new PlayerId(7)] = 0;
-                Assert.That(GetProperty(controller, "AppliedHideRevealGraceSeconds"), Is.EqualTo(grace).Within(.0001));
-                var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-                controller.GetType().GetField("_isSimulating", flags).SetValue(controller, true);
-                controller.GetType().GetField("_currentSimulationDeltaSeconds", flags).SetValue(controller, .1f);
-                controller.GetType().GetField("_hideSpotRevealGraceElapsed", flags).SetValue(controller, 1.2f);
-                Invoke(controller, "TickHideSpotRevealGrace");
-                Assert.That(controller.GetType().GetField("_hideSpotRevealGraceActive", flags).GetValue(controller), Is.EqualTo(grace > 1.3f));
-            }
-            finally { UnityEngine.Object.DestroyImmediate(gameObject); }
-        }
         private const string CandidateTypeName = "EchoProtocol.AI.Stalker.StalkerHideSpotCandidate";
         private const string MemoryTypeName = "EchoProtocol.AI.Stalker.StalkerHideSpotMemory";
         private const string SelectorTypeName = "EchoProtocol.AI.Stalker.StalkerHideSpotSelector";
@@ -303,40 +239,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             Assert.That(GetProperty(GetProperty(inspection, "ConfirmedPlayerId"), "Value"), Is.EqualTo(7));
             Assert.That(GetProperty(snapshot, "ConfirmedUseCount"), Is.EqualTo(1));
             Assert.That(GetProperty(snapshot, "ConsecutiveEmptyInspections"), Is.EqualTo(0));
-        }
-
-        [Test]
-        public void AEDV02_ProtectedInspectionDefersOnlyThisSpotWithoutRecordingAReveal()
-        {
-            var memory = CreateMemory();
-            var protectedResult = ResolveType(InspectionResultTypeName).GetMethod("ProtectedBy")
-                .Invoke(null, new object[] { new PlayerId(7), 3f });
-            var investigation = CreateInvestigation(memory, CreateResolverProxy(protectedResult));
-            Invoke(investigation, "Begin", Candidate(10, Vector3.zero));
-            var result = Invoke(investigation, "Tick", Vector3.zero, 1f, TimeAt(14d), CreateInspectionConfig(1, 0));
-
-            Assert.That(StatusName(result), Is.EqualTo("Protected"));
-            Assert.That(Invoke(memory, "CanInspect", 10UL, 16.99d), Is.False);
-            Assert.That(Invoke(memory, "CanInspect", 10UL, 17d), Is.True);
-            Assert.That(Invoke(memory, "CanInspect", 20UL, 14d), Is.True);
-            var snapshot = Invoke(memory, "GetSnapshot", 10UL);
-            Assert.That(GetProperty(snapshot, "ConfirmedUseCount"), Is.EqualTo(0));
-            Assert.That(GetProperty(snapshot, "ConsecutiveEmptyInspections"), Is.EqualTo(0));
-            var selection = Select(Vector3.zero, memory, CreateSelectorConfig(20), 15f,
-                Candidate(10, Vector3.zero), Candidate(20, new Vector3(2, 0, 0)));
-            Assert.That(StableId(GetProperty(selection, "Candidate")), Is.EqualTo(20UL));
-            Invoke(memory, "Reset");
-            Assert.That(Invoke(memory, "CanInspect", 10UL, 15d), Is.True);
-        }
-
-        [TestCase(float.NaN)]
-        [TestCase(float.PositiveInfinity)]
-        [TestCase(0f)]
-        public void AEDV02_ProtectionRejectsUnboundedOrExpiredWindows(float remaining)
-        {
-            var error = Assert.Throws<TargetInvocationException>(() => ResolveType(InspectionResultTypeName)
-                .GetMethod("ProtectedBy").Invoke(null, new object[] { new PlayerId(7), remaining }));
-            Assert.That(error.InnerException, Is.TypeOf<ArgumentException>());
         }
 
         [Test]

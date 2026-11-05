@@ -55,47 +55,6 @@ namespace EchoProtocol.TeamTools
             return horizontalOffset.sqrMagnitude <= 0.5f * 0.5f;
         }
 
-        public bool TryGetReachablePosition(
-            Vector3 zoneEntry,
-            out Vector3 position,
-            out float pathDistance)
-        {
-            position = default;
-            pathDistance = 0f;
-
-            if (!TryGetSpawnPosition(out position))
-                return false;
-
-            const float maxVerticalOffset = 1f;
-            const float maxHorizontalOffset = 0.75f;
-
-            if (!NavMesh.SamplePosition(zoneEntry, out var start, 2f, NavMesh.AllAreas))
-                return false;
-            if (Mathf.Abs(start.position.y - zoneEntry.y) > maxVerticalOffset)
-                return false;
-            if (!NavMesh.SamplePosition(position, out var destination, 1.5f, NavMesh.AllAreas))
-                return false;
-            if (Mathf.Abs(destination.position.y - position.y) > maxVerticalOffset)
-                return false;
-
-            var horizontal = Vector3.ProjectOnPlane(destination.position - position, Vector3.up);
-            if (horizontal.magnitude > maxHorizontalOffset)
-                return false;
-
-            var path = new NavMeshPath();
-            if (!NavMesh.CalculatePath(start.position, destination.position,
-                NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete)
-                return false;
-
-            var corners = path.corners;
-            if (corners == null || corners.Length == 0)
-                return false;
-            for (int i = 1; i < corners.Length; i++)
-                pathDistance += Vector3.Distance(corners[i - 1], corners[i]);
-
-            return true;
-        }
-
 #if UNITY_EDITOR
         private void OnDrawGizmos() => Gizmos.DrawWireSphere(transform.position, 0.25f);
 #endif

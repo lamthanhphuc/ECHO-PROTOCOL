@@ -142,8 +142,7 @@ namespace EchoProtocol.AI.Stalker
             PlayerId confirmedPlayerId,
             Vector3 confirmedPosition,
             Vector3 confirmedDirection,
-            StalkerTargetEligibilityResult confirmedEligibility,
-            bool protectedOccupant = false, float retryAfterSeconds = 0)
+            StalkerTargetEligibilityResult confirmedEligibility)
         {
             Inspected = inspected;
             Occupied = occupied;
@@ -153,8 +152,6 @@ namespace EchoProtocol.AI.Stalker
                 ? confirmedDirection.normalized
                 : Vector3.forward;
             ConfirmedEligibility = confirmedEligibility;
-            Protected = protectedOccupant;
-            RetryAfterSeconds = Mathf.Max(0, retryAfterSeconds);
         }
 
         public bool Inspected { get; }
@@ -163,14 +160,6 @@ namespace EchoProtocol.AI.Stalker
         public Vector3 ConfirmedPosition { get; }
         public Vector3 ConfirmedDirection { get; }
         public StalkerTargetEligibilityResult ConfirmedEligibility { get; }
-        public bool Protected { get; }
-        public float RetryAfterSeconds { get; }
-        public static StalkerHideSpotInspectionResult ProtectedBy(PlayerId playerId, float retryAfterSeconds)
-        {
-            if (!playerId.IsValid || float.IsNaN(retryAfterSeconds) || float.IsInfinity(retryAfterSeconds) || retryAfterSeconds <= 0)
-                throw new System.ArgumentException("Protection requires an identified player and a finite remaining window.");
-            return new StalkerHideSpotInspectionResult(true, true, playerId, default, Vector3.forward, default, true, retryAfterSeconds);
-        }
 
         public static StalkerHideSpotInspectionResult Empty()
         {

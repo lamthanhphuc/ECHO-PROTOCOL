@@ -21,9 +21,4 @@ public interface IScenarioConfigRegistry
     Task<ServiceResult<ScenarioConfigDefinition>> GetProductionFixedFallbackAsync(
         string unityCompatibilityVersion,
         CancellationToken cancellationToken = default);
-
-    Task<ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>>
-        GetProductionAdaptiveCandidatesAsync(
-            string unityCompatibilityVersion,
-            CancellationToken cancellationToken = default);
 }
