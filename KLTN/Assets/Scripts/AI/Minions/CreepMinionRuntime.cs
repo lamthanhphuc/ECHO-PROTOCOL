@@ -343,6 +343,27 @@ namespace EchoProtocol.AI.Minions
             VisualVariantValue = Mathf.Clamp(visualVariant, 0, 29);
         }
 
+        public bool ApplyRemoteFixedBalanceAuthoritative(
+            RemoteFixedBalanceSnapshot snapshot)
+        {
+            if (snapshot == null
+                || Object == null
+                || !Object.IsValid
+                || !Object.HasStateAuthority)
+                return false;
+
+            roamSpeed = snapshot.minion.roamSpeed;
+            trackSpeed = snapshot.minion.trackSpeed;
+            attackDamage = snapshot.minion.attackDamage;
+
+            Debug.Log(
+                $"[RemoteFixed] Minion applied: " +
+                $"roam={roamSpeed}, track={trackSpeed}, " +
+                $"damage={attackDamage}");
+
+            return true;
+        }
+
         public override void Spawned()
         {
             _agent = GetComponent<NavMeshAgent>();
@@ -430,15 +451,11 @@ namespace EchoProtocol.AI.Minions
             if (!NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 var authority = MatchAuthorityRuntime.Instance;
-                if (authority != null &&
-                    authority.TryGetRemoteFixedBalance(out var snapshot))
+
+                if (authority != null
+                    && authority.TryGetRemoteFixedBalance(out var snapshot))
                 {
-                    roamSpeed = snapshot.minion.roamSpeed;
-                    trackSpeed = snapshot.minion.trackSpeed;
-                    attackDamage = snapshot.minion.attackDamage;
-                    Debug.Log(
-                        $"[RemoteFixed] Minion applied: roam={roamSpeed}, " +
-                        $"track={trackSpeed}, damage={attackDamage}");
+                    ApplyRemoteFixedBalanceAuthoritative(snapshot);
                 }
             }
 
@@ -539,7 +556,10 @@ namespace EchoProtocol.AI.Minions
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority || _agent == null) return;
+            if (!Object.HasStateAuthority
+                || _agent == null
+                || NetworkBootstrap.IsHostMigrationReconciliationPending)
+                return;
 
             try
             {

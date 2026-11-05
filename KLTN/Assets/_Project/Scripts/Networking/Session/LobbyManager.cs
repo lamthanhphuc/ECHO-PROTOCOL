@@ -331,7 +331,10 @@ namespace EchoProtocol.Networking
                 }
                 backendAccepted = true;
                 if (!loading.IsCurrent(runner, loadingAttempt)) return;
-                loading.BackendAuthorized(runner, loadingAttempt);
+                loading.BackendAuthorized(
+                    runner,
+                    loadingAttempt,
+                    _useRemoteFixedBalanceTest);
 
                 if (runner == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || !runner.IsSceneAuthority

@@ -596,7 +596,9 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority) return;
+            if (!Object.HasStateAuthority
+                || NetworkBootstrap.IsHostMigrationReconciliationPending)
+                return;
 
             if (_hostMigrationZone2RestorePending)
             {

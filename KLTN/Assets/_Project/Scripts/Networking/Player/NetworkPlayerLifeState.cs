@@ -97,6 +97,19 @@ namespace EchoProtocol.Networking
         private float EffectiveMaximumHealth =>
             Object != null && Object.IsValid && RemoteFixedMaximumHealth > 0f
                 ? RemoteFixedMaximumHealth : _maximumHealth;
+
+        public bool HasRemoteFixedBalance =>
+            Object != null
+            && Object.IsValid
+            && RemoteFixedMaximumHealth > 0f;
+
+        public bool MatchesRemoteFixedBalance(
+            RemoteFixedBalanceSnapshot snapshot) =>
+            snapshot != null
+            && HasRemoteFixedBalance
+            && Mathf.Approximately(
+                RemoteFixedMaximumHealth,
+                snapshot.player.maxHealth);
         [SerializeField, Min(0.1f)] private float _bleedoutSeconds = 45f;
         [SerializeField, Range(0.05f, 1f)] private float _crawlSpeedMultiplier = 0.32f;
 
@@ -236,7 +249,9 @@ namespace EchoProtocol.Networking
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority) return;
+            if (!Object.HasStateAuthority
+                || NetworkBootstrap.IsHostMigrationReconciliationPending)
+                return;
 
             if (IsCaught)
             {

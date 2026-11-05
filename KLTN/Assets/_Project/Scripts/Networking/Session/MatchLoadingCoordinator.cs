@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using EchoProtocol.Networking.Authority;
 using EchoProtocol.Networking.Loading;
 using EchoProtocol.UI.Loading;
 using Fusion;
@@ -29,6 +30,7 @@ namespace EchoProtocol.Networking
         private NetworkBootstrap _bootstrap;
         private NetworkRunner _runner;
         private bool _subscribed, _releasePending, _recovering;
+        private bool _remoteFixedRequired;
         private int _sequence, _lastHostSequence, _messageId, _sceneDoneFrame, _attemptBeginFrame;
         private float _nextStatus, _nextAck, _phaseStartedAt;
         private MatchLoadingPhase _timedPhase;
@@ -42,7 +44,7 @@ namespace EchoProtocol.Networking
             public string id, scene;
             public int host, seq, kind;
             public int[] members, ready;
-            public bool auth, load, release;
+            public bool auth, load, release, rfb;
             public string error;
         }
 
@@ -140,9 +142,14 @@ namespace EchoProtocol.Networking
             && runner == _runner && runner == _bootstrap?.Runner && runner.IsRunning
             && _barrier.AttemptId == attempt && !NetworkBootstrap.IsHostMigrationReconciliationPending;
 
-        public void BackendAuthorized(NetworkRunner runner, string attempt)
+        public void BackendAuthorized(
+            NetworkRunner runner,
+            string attempt,
+            bool remoteFixedRequired)
         {
             if (!IsCurrent(runner, attempt)) return;
+
+            _remoteFixedRequired = remoteFixedRequired;
             _barrier.Authorize();
             BroadcastStatus();
         }
@@ -200,6 +207,7 @@ namespace EchoProtocol.Networking
 
         private void ResetAttempt()
         {
+            _remoteFixedRequired = false;
             _announced.Clear();
             _pendingReady.Clear();
             _releasePending = false;
@@ -233,6 +241,9 @@ namespace EchoProtocol.Networking
                 _barrier.Begin(packet.id, packet.scene, packet.host, packet.members, Time.realtimeSinceStartupAsDouble);
                 ResetAttempt();
             }
+
+            _remoteFixedRequired = packet.rfb;
+
             if (packet.auth) _barrier.Authorize();
             if (packet.load) _barrier.StartScene();
             if (packet.ready != null)
@@ -342,9 +353,40 @@ namespace EchoProtocol.Networking
             return camera != null && camera.Target == player.transform;
         }
 
-        private bool AuthoritativeSpawnReady(PlayerRef player) => _runner != null
-            && _runner.TryGetPlayerObject(player, out var obj) && obj != null && obj.IsValid
-            && obj.TryGetComponent<LobbyPlayerState>(out var state) && state.IsGameplayPlayer && state.GameplaySpawnReady;
+        private bool AuthoritativeSpawnReady(PlayerRef player)
+        {
+            if (_runner == null
+                || !_runner.TryGetPlayerObject(player, out var obj)
+                || obj == null
+                || !obj.IsValid
+                || !obj.TryGetComponent<LobbyPlayerState>(out var state)
+                || !state.IsGameplayPlayer
+                || !state.GameplaySpawnReady)
+                return false;
+
+            if (!_remoteFixedRequired)
+                return true;
+
+            if (!obj.TryGetComponent<NetworkPlayerMovement>(
+                    out var movement)
+                || !obj.TryGetComponent<NetworkPlayerLifeState>(
+                    out var life))
+                return false;
+
+            if (_runner.IsServer)
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+
+                return authority != null
+                    && authority.TryGetRemoteFixedBalance(
+                        out var snapshot)
+                    && movement.MatchesRemoteFixedBalance(snapshot)
+                    && life.MatchesRemoteFixedBalance(snapshot);
+            }
+
+            return movement.HasRemoteFixedBalance
+                && life.HasRemoteFixedBalance;
+        }
 
         private bool IsConnected(int encoded) => _runner.ActivePlayers.Any(player => player.RawEncoded == encoded);
 
@@ -376,6 +418,7 @@ namespace EchoProtocol.Networking
                 id = _barrier.AttemptId, scene = _barrier.SceneName, host = _barrier.HostPlayer,
                 members = _barrier.RequiredPlayers.ToArray(), ready = _barrier.ReadyPlayers.ToArray(),
                 auth = _barrier.BackendAuthorized, load = _barrier.SceneStarted,
+                rfb = _remoteFixedRequired,
                 release = _barrier.ReleaseReceived, error = LimitError(_barrier.Error), seq = ++_sequence
             };
             try { MatchLoadingRpc.RPC_LoadingStatus(_runner, JsonUtility.ToJson(packet)); }

@@ -37,6 +37,39 @@ namespace EchoProtocol.Networking.Authority
             public float attackDamage;
         }
 
+        public static bool TryDecodeLocked(
+            MatchAuthorityDto context,
+            LockedBalanceDto locked,
+            Guid expectedMatchId,
+            string expectedMap,
+            string expectedDifficulty,
+            out RemoteFixedBalanceSnapshot snapshot)
+        {
+            snapshot = null;
+
+            return context != null
+                && locked != null
+                && Guid.TryParse(context.matchId, out var contextId)
+                && contextId == expectedMatchId
+                && Guid.TryParse(locked.matchId, out var lockedId)
+                && lockedId == expectedMatchId
+                && context.mapId == expectedMap
+                && context.difficulty == expectedDifficulty
+                && context.resolutionMode == "FIXED"
+                && context.balanceSource == "REMOTE_FIXED"
+                && context.balanceProtocolVersion == "RFB-1"
+                && context.matchDataPolicy == "TEST_ONLY"
+                && !string.IsNullOrWhiteSpace(context.balanceVersion)
+                && !string.IsNullOrWhiteSpace(context.balanceHash)
+                && context.balanceVersion == locked.balanceVersion
+                && context.balanceHash == locked.balanceHash
+                && locked.balanceProtocolVersion == "RFB-1"
+                && TryDecode(
+                    locked.snapshotPayloadBase64,
+                    context.balanceHash,
+                    out snapshot);
+        }
+
         public static bool TryDecode(
             string payloadBase64,
             string expectedHash,
