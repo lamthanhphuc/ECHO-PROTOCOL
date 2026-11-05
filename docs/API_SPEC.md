@@ -630,6 +630,86 @@ difficulty context for the leaderboard.
 
 ---
 
+## Remote Fixed Balance V1
+
+POST /api/matches/{matchId}/start-v2 requires mapId, difficulty,
+resolutionMode (FIXED or ADAPTIVE), balanceSource (LOCAL or REMOTE_FIXED), and
+balanceProtocolVersion (RFB-1). The server selects and locks balanceVersion,
+balanceHash, and matchDataPolicy; clients cannot choose those values. ADAPTIVE
+with REMOTE_FIXED is rejected.
+
+GET /api/matches/{matchId}/balance is available to the current Host and
+participating roster members. It returns matchId, balanceVersion, balanceHash,
+balanceProtocolVersion, and snapshotPayloadBase64. balanceHash is lowercase
+SHA-256 over the exact UTF-8 bytes of persisted SnapshotJson; clients verify
+those bytes without reserializing JSON.
+
+Remote Fixed V1 is test-only and disabled by default. It never falls back to a
+local balance automatically. The existing /start endpoint remains available;
+legacy matches use STANDARD, and retries across legacy/V2 protocols or with a
+different locked V2 context return HTTP 409.
+
+Expected errors: HTTP 400 for invalid context, 403 when Remote Fixed testing is
+disabled or the caller is unauthorized, 404 when no active version exists or
+the match has no Remote Fixed balance, and 409 when locked snapshot integrity
+fails or a retry conflicts with the stored context.
+
+### RFB-1 Snapshot Payload
+
+SnapshotJson is UTF-8 JSON with the following exact structure:
+
+```json
+{
+  "schemaVersion": "RFB-1",
+  "player": {
+    "maxHealth": 100,
+    "walkSpeed": 4,
+    "sprintSpeed": 7,
+    "maxStamina": 100
+  },
+  "stalker": {
+    "patrolSpeed": 6,
+    "chaseSpeed": 7
+  },
+  "minion": {
+    "roamSpeed": 5.5,
+    "trackSpeed": 8,
+    "attackDamage": 20
+  }
+}
+```
+
+| Field | Min | Max |
+|---|---:|---:|
+| player.maxHealth | 1 | 500 |
+| player.walkSpeed | 0.5 | 15 |
+| player.sprintSpeed | 0.5 | 25 |
+| player.maxStamina | 1 | 500 |
+| stalker.patrolSpeed | 0.5 | 20 |
+| stalker.chaseSpeed | 0.5 | 25 |
+| minion.roamSpeed | 0.5 | 20 |
+| minion.trackSpeed | 0.5 | 25 |
+| minion.attackDamage | 1 | 100 |
+
+Validation rules:
+
+- All fields are required.
+- Unknown fields are rejected.
+- Numeric values must be within their inclusive ranges.
+- player.sprintSpeed >= player.walkSpeed.
+- stalker.chaseSpeed >= stalker.patrolSpeed.
+- Maximum payload size: 8192 UTF-8 bytes.
+- Remote Fixed V1 supports SciFi and Scene_A only.
+- Supported difficulties: EASY, NORMAL, HARD.
+- The server computes lowercase SHA-256 over the exact
+  persisted UTF-8 payload bytes.
+- Clients must verify the received bytes without
+  serializing the JSON again.
+- Invalid or unavailable snapshots must not trigger
+  automatic fallback to local balance.
+
+---
+
 ## Scenario resolution and decision logging (M4-051/M4-049)
 
 These routes are implemented as a **proposed contract pending freeze with Networking/AI**.

@@ -23,6 +23,12 @@ public sealed class MatchAuthorityResponse
     public DateTime LeaseExpiresAtUtc { get; set; }
     public string? MapId { get; set; }
     public string? Difficulty { get; set; }
+    public string? ResolutionMode { get; set; }
+    public string? BalanceSource { get; set; }
+    public string? BalanceProtocolVersion { get; set; }
+    public string? BalanceVersion { get; set; }
+    public string? BalanceHash { get; set; }
+    public string MatchDataPolicy { get; set; } = "STANDARD";
 }
 
 public sealed class MatchRosterPlayerResponse
@@ -38,6 +44,33 @@ public sealed class StartMatchAuthorityRequest
 
     [StringLength(16)]
     public string? Difficulty { get; set; }
+}
+
+public sealed class StartMatchV2Request
+{
+    [Required, StringLength(64, MinimumLength = 1)]
+    public string MapId { get; set; } = string.Empty;
+
+    [Required, StringLength(16, MinimumLength = 1)]
+    public string Difficulty { get; set; } = string.Empty;
+
+    [Required, StringLength(16, MinimumLength = 1)]
+    public string ResolutionMode { get; set; } = string.Empty;
+
+    [Required, StringLength(20, MinimumLength = 1)]
+    public string BalanceSource { get; set; } = string.Empty;
+
+    [Required, StringLength(20, MinimumLength = 1)]
+    public string BalanceProtocolVersion { get; set; } = string.Empty;
+}
+
+public sealed class LockedBalanceResponse
+{
+    public Guid MatchId { get; set; }
+    public string BalanceVersion { get; set; } = string.Empty;
+    public string BalanceHash { get; set; } = string.Empty;
+    public string BalanceProtocolVersion { get; set; } = string.Empty;
+    public string SnapshotPayloadBase64 { get; set; } = string.Empty;
 }
 
 public sealed class IssueJoinProofRequest

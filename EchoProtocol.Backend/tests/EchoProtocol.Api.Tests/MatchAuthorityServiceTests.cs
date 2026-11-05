@@ -163,6 +163,282 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
+    public async Task LegacyStartWithoutBodyStillWorks()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "legacy-no-body");
+        var result = await service.StartAsync(host, matchId, CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("STANDARD", result.Data!.MatchDataPolicy);
+        Assert.Null(result.Data.ResolutionMode);
+        Assert.Null(result.Data.BalanceVersion);
+    }
+
+    [Fact]
+    public async Task LegacyStartWithMapAndDifficultyStillWorks()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "legacy-context");
+        var result = await service.StartAsync(host, matchId, CancellationToken.None,
+            new StartMatchAuthorityRequest { MapId = "SciFi", Difficulty = "normal" });
+        Assert.True(result.IsSuccess);
+        Assert.Equal("SciFi", result.Data!.MapId);
+        Assert.Equal("NORMAL", result.Data.Difficulty);
+        Assert.Equal("STANDARD", result.Data.MatchDataPolicy);
+    }
+
+    [Fact]
+    public Task V2LocalFixedStartsStandardMatch() => AssertV2LocalStartsStandardMatch("FIXED");
+
+    [Fact]
+    public Task V2LocalAdaptiveStartsStandardMatch() => AssertV2LocalStartsStandardMatch("ADAPTIVE");
+
+    private static async Task AssertV2LocalStartsStandardMatch(string mode)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, $"local-{mode}");
+        var result = await service.StartV2Async(host, matchId, V2Request(mode: mode), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(mode, result.Data!.ResolutionMode);
+        Assert.Equal("LOCAL", result.Data.BalanceSource);
+        Assert.Equal("STANDARD", result.Data.MatchDataPolicy);
+    }
+
+    [Fact]
+    public async Task V2RemoteFixedStartsTestOnlyMatch()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-start");
+        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("FIXED", result.Data!.ResolutionMode);
+        Assert.Equal("REMOTE_FIXED", result.Data.BalanceSource);
+        Assert.Equal("TEST_ONLY", result.Data.MatchDataPolicy);
+        Assert.Equal("TEST-SCIFI-NORMAL-001", result.Data.BalanceVersion);
+    }
+
+    [Fact]
+    public async Task V2RemoteFixedDisabledIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-disabled");
+        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("BALANCE_TEST_DISABLED", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task V2RemoteWithoutActiveVersionIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-unavailable");
+        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("BALANCE_VERSION_UNAVAILABLE", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task V2RemoteInvalidHashIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        version.ContentHash = new string('0', 64);
+        await db.SaveChangesAsync();
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-bad-hash");
+        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("BALANCE_SNAPSHOT_INVALID", result.ErrorCode);
+    }
+
+    [Fact]
+    public Task V2RemoteOnSceneBIsRejected() => AssertV2InvalidContext("Scene_B", "FIXED", "REMOTE_FIXED");
+
+    [Fact]
+    public Task V2AdaptiveRemoteCombinationIsRejected() => AssertV2InvalidContext("SciFi", "ADAPTIVE", "REMOTE_FIXED");
+
+    private static async Task AssertV2InvalidContext(string map, string mode, string source)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, $"invalid-{Guid.NewGuid():N}");
+        var result = await service.StartV2Async(host, matchId,
+            V2Request(source, map: map, mode: mode), CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("VALIDATION_ERROR", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task V2RetrySameContextReturnsSameVersion()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-retry");
+        var first = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        var retry = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.True(retry.IsSuccess);
+        Assert.Equal(first.Data!.BalanceVersion, retry.Data!.BalanceVersion);
+        Assert.Single(await db.RemoteFixedBalanceVersions.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task V2RetryAfterActiveVersionChangesReturnsLockedVersion()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var firstVersion = SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "remote-version-change");
+        var started = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        firstVersion.IsActive = false;
+        var json = RemoteFixedBalanceTests.ValidSnapshot.Replace("\"maxHealth\": 100", "\"maxHealth\": 101");
+        db.RemoteFixedBalanceVersions.Add(new RemoteFixedBalanceVersion
+        {
+            Version = "TEST-SCIFI-NORMAL-002", MapId = "SciFi", Difficulty = "NORMAL",
+            ProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion, SnapshotJson = json,
+            ContentHash = RemoteFixedBalanceContract.ComputeHash(json), IsActive = true, CreatedAtUtc = Now.UtcDateTime
+        });
+        await db.SaveChangesAsync();
+        var retry = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        Assert.Equal(started.Data!.BalanceVersion, retry.Data!.BalanceVersion);
+        Assert.Equal(started.Data.BalanceHash, retry.Data!.BalanceHash);
+    }
+
+    [Fact]
+    public Task V2RetryDifferentModeIsRejected() => AssertV2RetryConflict(V2Request(mode: "ADAPTIVE"));
+
+    [Fact]
+    public Task V2RetryDifferentProtocolIsRejected() => AssertV2RetryConflict(V2Request(protocol: "RFB-2"));
+
+    private static async Task AssertV2RetryConflict(StartMatchV2Request changedRequest)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "local-retry-conflict");
+        await service.StartV2Async(host, matchId, V2Request(), CancellationToken.None);
+        var retry = await service.StartV2Async(host, matchId, changedRequest, CancellationToken.None);
+        Assert.False(retry.IsSuccess);
+        Assert.Equal("MATCH_SESSION_CONFLICT", retry.ErrorCode);
+    }
+
+    [Fact]
+    public async Task V2RetryDifferentDifficultyIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "local-difficulty-conflict");
+        await service.StartV2Async(host, matchId, V2Request(), CancellationToken.None);
+        var retry = await service.StartV2Async(host, matchId, V2Request(difficulty: "HARD"), CancellationToken.None);
+        Assert.Equal("MATCH_SESSION_CONFLICT", retry.ErrorCode);
+    }
+
+    [Fact]
+    public async Task LegacyRetryOnV2MatchIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var firstId = await CreateBoundHostMatch(service, host, "legacy-v2-conflict");
+        await service.StartV2Async(host, firstId, V2Request(), CancellationToken.None);
+        var legacyRetry = await service.StartAsync(host, firstId, CancellationToken.None);
+        Assert.Equal("MATCH_SESSION_CONFLICT", legacyRetry.ErrorCode);
+
+    }
+
+    [Fact]
+    public async Task V2RetryOnLegacyMatchIsRejected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var secondId = await CreateBoundHostMatch(service, host, "v2-legacy-conflict");
+        await service.StartAsync(host, secondId, CancellationToken.None);
+        var v2Retry = await service.StartV2Async(host, secondId, V2Request(), CancellationToken.None);
+        Assert.Equal("MATCH_SESSION_CONFLICT", v2Retry.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UnauthorizedUserCannotFetchBalance()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        var host = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "balance-fetch");
+        await BindAsync(service, host, player, matchId, "balance-fetch", 2);
+        await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        var denied = await service.GetLockedBalanceAsync(Guid.NewGuid(), matchId, CancellationToken.None);
+        Assert.Equal("MATCH_AUTHORITY_FORBIDDEN", denied.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AuthorizedPlayerCanFetchLockedBalance()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        var host = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "authorized-balance-fetch");
+        await BindAsync(service, host, player, matchId, "authorized-balance-fetch", 2);
+        await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        var response = await service.GetLockedBalanceAsync(player, matchId, CancellationToken.None);
+        Assert.True(response.IsSuccess);
+        Assert.Equal(version.ContentHash, response.Data!.BalanceHash);
+        Assert.Equal(version.SnapshotJson, System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(response.Data.SnapshotPayloadBase64)));
+    }
+
+    [Fact]
+    public async Task SnapshotTamperingIsDetected()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "balance-tamper");
+        await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        version.SnapshotJson = version.SnapshotJson.Replace("\"maxHealth\": 100", "\"maxHealth\": 101");
+        await db.SaveChangesAsync();
+        var response = await service.GetLockedBalanceAsync(host, matchId, CancellationToken.None);
+        Assert.Equal("BALANCE_SNAPSHOT_INVALID", response.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RejectedStartDoesNotFreezeRoster()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "rejected-start-roster");
+        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        var match = await db.MatchAuthorityBindings.SingleAsync();
+        Assert.False(result.IsSuccess);
+        Assert.Equal(MatchAuthorityStatus.Lobby, match.Status);
+        Assert.False((await db.MatchPlayerBindings.SingleAsync()).Participated);
+    }
+
+    [Fact]
     public async Task UnboundOrNonHostUser_CannotDelegateTelemetry()
     {
         await using var db = CreateDb();
@@ -1270,7 +1546,7 @@ public sealed class MatchAuthorityServiceTests
         return new AppDbContext(options);
     }
 
-    private static MatchAuthorityService CreateService(AppDbContext db)
+    private static MatchAuthorityService CreateService(AppDbContext db, bool remoteEnabled = false)
     {
         var time = new FixedTimeProvider(Now);
         var settings = Options.Create(new MatchAuthoritySettings
@@ -1278,13 +1554,46 @@ public sealed class MatchAuthorityServiceTests
             ProofSigningKey = "test-proof-key-that-is-at-least-32-bytes",
             JoinProofLifetimeSeconds = 120,
             LeaseLifetimeSeconds = 45,
-            TelemetryDelegationRetentionHours = 24
+            TelemetryDelegationRetentionHours = 24,
+            EnableRemoteFixedTest = remoteEnabled
         });
         return new MatchAuthorityService(
             db,
             new MatchJoinProofService(settings, time),
             settings,
             time);
+    }
+
+    private static RemoteFixedBalanceVersion SeedBalance(AppDbContext db)
+    {
+        var json = RemoteFixedBalanceTests.ValidSnapshot;
+        var version = new RemoteFixedBalanceVersion
+        {
+            Version = "TEST-SCIFI-NORMAL-001", MapId = "SciFi", Difficulty = "NORMAL",
+            ProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion, SnapshotJson = json,
+            ContentHash = RemoteFixedBalanceContract.ComputeHash(json), IsActive = true, CreatedAtUtc = Now.UtcDateTime
+        };
+        db.RemoteFixedBalanceVersions.Add(version);
+        db.SaveChanges();
+        return version;
+    }
+
+    private static StartMatchV2Request V2Request(
+        string source = "LOCAL", string map = "SciFi", string mode = "FIXED",
+        string protocol = "RFB-1", string difficulty = "NORMAL") => new()
+    {
+        MapId = map, Difficulty = difficulty, ResolutionMode = mode,
+        BalanceSource = source, BalanceProtocolVersion = protocol
+    };
+
+    private static async Task<Guid> CreateBoundHostMatch(
+        MatchAuthorityService service, Guid hostId, string sessionName)
+    {
+        var created = await service.CreateAsync(hostId,
+            new CreateMatchAuthorityRequest { FusionSessionName = sessionName, MaxPlayers = 4 }, CancellationToken.None);
+        Assert.True(created.IsSuccess);
+        await BindAsync(service, hostId, hostId, created.Data!.MatchId, sessionName, 1);
+        return created.Data.MatchId;
     }
 
     private static User CreateUser(

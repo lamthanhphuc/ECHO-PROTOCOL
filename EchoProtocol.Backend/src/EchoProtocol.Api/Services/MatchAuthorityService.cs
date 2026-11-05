@@ -508,13 +508,58 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
     public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(Guid hostUserId, Guid matchId,
         CancellationToken cancellationToken, StartMatchAuthorityRequest? request) =>
-        WithMatchLockAsync(matchId, () => StartCoreAsync(hostUserId, matchId, cancellationToken, request), cancellationToken);
+        WithMatchLockAsync(matchId,
+            () => StartCoreAsync(hostUserId, matchId, cancellationToken, request, null),
+            cancellationToken);
+
+    public Task<ServiceResult<MatchAuthorityResponse>> StartV2Async(
+        Guid hostUserId,
+        Guid matchId,
+        StartMatchV2Request request,
+        CancellationToken cancellationToken) =>
+        WithMatchLockAsync(matchId,
+            () => StartCoreAsync(hostUserId, matchId, cancellationToken, null, request),
+            cancellationToken);
 
     private async Task<ServiceResult<MatchAuthorityResponse>> StartCoreAsync(Guid hostUserId, Guid matchId,
-        CancellationToken cancellationToken, StartMatchAuthorityRequest? request)
+        CancellationToken cancellationToken, StartMatchAuthorityRequest? legacyRequest,
+        StartMatchV2Request? v2Request)
     {
-        var mapId = request?.MapId?.Trim();
-        var difficulty = request?.Difficulty?.Trim().ToUpperInvariant();
+        var isV2 = v2Request is not null;
+        var mapId = (v2Request?.MapId ?? legacyRequest?.MapId)?.Trim();
+        var difficulty = (v2Request?.Difficulty ?? legacyRequest?.Difficulty)?.Trim().ToUpperInvariant();
+        var mode = v2Request?.ResolutionMode?.Trim().ToUpperInvariant();
+        var source = v2Request?.BalanceSource?.Trim().ToUpperInvariant();
+        var protocol = v2Request?.BalanceProtocolVersion?.Trim();
+
+        MatchAuthorityBinding? match = await _db.MatchAuthorityBindings.Include(item => item.Players)
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+        if (isV2)
+        {
+            var existingFailure = ValidateActiveHost(match, hostUserId);
+            if (existingFailure is not null)
+                return Failure<MatchAuthorityResponse>(existingFailure.Value.Message, existingFailure.Value.Code);
+
+            if (match!.Status == MatchAuthorityStatus.InMatch)
+            {
+                if (match.MapId != mapId || match.Difficulty != difficulty
+                    || match.ResolutionMode != mode || match.BalanceSource != source
+                    || match.BalanceProtocolVersion != protocol)
+                    return Failure<MatchAuthorityResponse>(
+                        "Locked match context differs from the request", ErrorCodes.MatchSessionConflict);
+
+                return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match already started");
+            }
+        }
+        else if (match?.Status == MatchAuthorityStatus.InMatch && match.BalanceProtocolVersion is not null)
+        {
+            var existingFailure = ValidateActiveHost(match, hostUserId);
+            if (existingFailure is not null)
+                return Failure<MatchAuthorityResponse>(existingFailure.Value.Message, existingFailure.Value.Code);
+            return Failure<MatchAuthorityResponse>(
+                "Legacy request conflicts with locked V2 match context", ErrorCodes.MatchSessionConflict);
+        }
+
         if ((mapId is null) != (difficulty is null)
             || (mapId is not null && !LeaderboardCatalog.IsKnownMap(mapId))
             || (difficulty is not null && !LeaderboardCatalog.IsKnownDifficulty(difficulty)))
@@ -524,8 +569,16 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 ErrorCodes.ValidationError);
         }
 
-        var match = await _db.MatchAuthorityBindings.Include(item => item.Players)
-            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+        if (isV2 && (mapId is null || difficulty is null
+            || mode is not ("FIXED" or "ADAPTIVE")
+            || source is not ("LOCAL" or "REMOTE_FIXED")
+            || (source == "REMOTE_FIXED" && mode != "FIXED")
+            || (source == "REMOTE_FIXED" && mapId is not ("SciFi" or "Scene_A"))))
+        {
+            return Failure<MatchAuthorityResponse>(
+                "Invalid Remote Fixed start context", ErrorCodes.ValidationError);
+        }
+
         var authorityFailure = ValidateActiveHost(match, hostUserId);
         if (authorityFailure is not null)
         {
@@ -534,16 +587,25 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         if (match!.Status == MatchAuthorityStatus.InMatch)
         {
-            if (mapId is not null
-                && (match.MapId != mapId || match.Difficulty != difficulty))
+            if (isV2)
             {
-                return Failure<MatchAuthorityResponse>(
-                    "Match start context cannot change after the match has started",
-                    ErrorCodes.MatchSessionConflict);
+                if (match.MapId != mapId || match.Difficulty != difficulty
+                    || match.ResolutionMode != mode || match.BalanceSource != source
+                    || match.BalanceProtocolVersion != protocol)
+                    return Failure<MatchAuthorityResponse>(
+                        "Locked match context differs from the request", ErrorCodes.MatchSessionConflict);
             }
+            else if (match.BalanceProtocolVersion is not null ||
+                     (mapId is not null && (match.MapId != mapId || match.Difficulty != difficulty)))
+                return Failure<MatchAuthorityResponse>(
+                    "Legacy request conflicts with locked match context", ErrorCodes.MatchSessionConflict);
 
             return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match already started");
         }
+
+        if (isV2 && protocol != RemoteFixedBalanceContract.ProtocolVersion)
+            return Failure<MatchAuthorityResponse>(
+                "Unsupported balance protocol version", ErrorCodes.ValidationError);
 
         if (match.Players.Count(item => item.DisconnectedAtUtc is null) < 1)
         {
@@ -552,16 +614,78 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 ErrorCodes.ValidationError);
         }
 
+        RemoteFixedBalanceVersion? selected = null;
+        if (source == "REMOTE_FIXED")
+        {
+            if (!_settings.EnableRemoteFixedTest)
+                return Failure<MatchAuthorityResponse>("Remote Fixed testing is disabled", ErrorCodes.BalanceTestDisabled);
+
+            selected = await _db.RemoteFixedBalanceVersions.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.IsActive && item.MapId == mapId && item.Difficulty == difficulty &&
+                item.ProtocolVersion == protocol, cancellationToken);
+            if (selected is null)
+                return Failure<MatchAuthorityResponse>("No active Remote Fixed Balance version", ErrorCodes.BalanceVersionUnavailable);
+
+            if (!RemoteFixedBalanceContract.IsValidSnapshot(selected.SnapshotJson) ||
+                !string.Equals(RemoteFixedBalanceContract.ComputeHash(selected.SnapshotJson),
+                    selected.ContentHash, StringComparison.Ordinal))
+                return Failure<MatchAuthorityResponse>("Remote Fixed Balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
+        }
+
         var now = UtcNow();
         match.MapId = mapId;
+        match.Difficulty = difficulty;
+        match.ResolutionMode = mode;
+        match.BalanceSource = source;
+        match.BalanceProtocolVersion = protocol;
+        match.BalanceVersion = selected?.Version;
+        match.BalanceHash = selected?.ContentHash;
+        match.MatchDataPolicy = selected is null
+            ? RemoteFixedBalanceContract.Standard
+            : RemoteFixedBalanceContract.TestOnly;
         foreach (var player in match.Players)
             player.Participated = player.DisconnectedAtUtc == null;
-        match.Difficulty = difficulty;
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
         match.UpdatedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
         return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Match started");
+    }
+
+    public async Task<ServiceResult<LockedBalanceResponse>> GetLockedBalanceAsync(
+        Guid userId,
+        Guid matchId,
+        CancellationToken cancellationToken)
+    {
+        var match = await _db.MatchAuthorityBindings.AsNoTracking().Include(item => item.Players)
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+        if (match is null)
+            return Failure<LockedBalanceResponse>("Match not found", ErrorCodes.MatchNotFound);
+
+        if (match.HostUserId != userId && !match.Players.Any(item => item.UserId == userId && item.Participated))
+            return Failure<LockedBalanceResponse>("Not authorized for this match", ErrorCodes.MatchAuthorityForbidden);
+
+        if (match.BalanceSource != "REMOTE_FIXED" || match.BalanceVersion is null ||
+            match.BalanceHash is null || match.BalanceProtocolVersion is null)
+            return Failure<LockedBalanceResponse>("Match has no Remote Fixed Balance", ErrorCodes.BalanceNotRemoteFixed);
+
+        var version = await _db.RemoteFixedBalanceVersions.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Version == match.BalanceVersion, cancellationToken);
+        if (version is null || version.MapId != match.MapId || version.Difficulty != match.Difficulty ||
+            version.ProtocolVersion != match.BalanceProtocolVersion ||
+            !RemoteFixedBalanceContract.IsValidSnapshot(version.SnapshotJson) ||
+            !string.Equals(RemoteFixedBalanceContract.ComputeHash(version.SnapshotJson), match.BalanceHash, StringComparison.Ordinal) ||
+            !string.Equals(version.ContentHash, match.BalanceHash, StringComparison.Ordinal))
+            return Failure<LockedBalanceResponse>("Locked balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
+
+        return ServiceResult<LockedBalanceResponse>.Success(new LockedBalanceResponse
+        {
+            MatchId = matchId,
+            BalanceVersion = version.Version,
+            BalanceHash = match.BalanceHash,
+            BalanceProtocolVersion = version.ProtocolVersion,
+            SnapshotPayloadBase64 = Convert.ToBase64String(RemoteFixedBalanceContract.GetBytes(version.SnapshotJson))
+        });
     }
 
     public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(
@@ -833,6 +957,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         LeaseExpiresAtUtc = match.LeaseExpiresAtUtc,
         MapId = match.MapId,
         Difficulty = match.Difficulty,
+        ResolutionMode = match.ResolutionMode,
+        BalanceSource = match.BalanceSource,
+        BalanceProtocolVersion = match.BalanceProtocolVersion,
+        BalanceVersion = match.BalanceVersion,
+        BalanceHash = match.BalanceHash,
+        MatchDataPolicy = match.MatchDataPolicy,
         Players = match.Players.Where(player => match.Status != MatchAuthorityStatus.InMatch || player.Participated).Select(player => new MatchRosterPlayerResponse
         {
             UserId = player.UserId,

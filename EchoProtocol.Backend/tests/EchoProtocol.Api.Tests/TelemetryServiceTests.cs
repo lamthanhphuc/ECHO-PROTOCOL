@@ -1131,6 +1131,8 @@ public sealed class TelemetryServiceTests
 
         public Task<ServiceResult<MatchAuthorityResponse>> RenewLeaseAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchAuthorityResponse>> StartAsync(Guid hostUserId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<MatchAuthorityResponse>> StartV2Async(Guid hostUserId, Guid matchId, StartMatchV2Request request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ServiceResult<LockedBalanceResponse>> GetLockedBalanceAsync(Guid userId, Guid matchId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchPlayerBindingResponse>> MarkPlayerDisconnectedAsync(Guid hostUserId, Guid matchId, int fusionActorNumber, Guid expectedUserId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ServiceResult<MatchAuthorityResponse>> EndAsync(Guid hostUserId, Guid matchId, EndMatchAuthorityRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
     }

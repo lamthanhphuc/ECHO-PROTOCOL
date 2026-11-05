@@ -8,6 +8,7 @@ using EchoProtocol.Api.Data;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.DTOs.MatchResults;
 using EchoProtocol.Api.DTOs.Inventory;
+using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.DTOs.Admin;
 using EchoProtocol.Api.DTOs.Payments;
 using EchoProtocol.Api.DTOs.Shop;
@@ -60,7 +61,214 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         Assert.Contains(applied, name => name.EndsWith("AddPaymentOrdersM4054"));
         Assert.Contains(applied, name => name.EndsWith("AddPayOSCheckoutWebhookFulfillmentM4055M4056M4057"));
         Assert.Contains(applied, name => name.EndsWith("ExtendMatchDurationTo45Minutes"));
+        Assert.Contains(applied, name => name.EndsWith("AddRemoteFixedBalanceV1"));
         Assert.Empty(pending);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RemoteFixedMigrationPreservesLegacyMatches()
+    {
+        const string beforeRfb = "20261030090842_AddUserAgreementAcceptance";
+        await using var scope = await PostgresScope.CreateAsync(beforeRfb);
+        var hostId = Guid.NewGuid();
+        var matchId = Guid.NewGuid();
+        await using (var db = scope.CreateDbContext())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "Users" ("Id", "Email", "Username", "PasswordHash", "Role", "Status", "CreatedAt", "UpdatedAt")
+                VALUES ({hostId}, {$"{hostId:N}@echo.invalid"}, {$"legacy-{hostId:N}"}, {"unused"}, {"PLAYER"}, {"ACTIVE"}, {Now.UtcDateTime}, {Now.UtcDateTime})
+                """);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "MatchAuthorityBindings"
+                    ("MatchId", "FusionSessionName", "HostUserId", "MaxPlayers", "Status", "LeaseExpiresAtUtc", "CreatedAtUtc", "UpdatedAtUtc", "StartedAtUtc", "EndedAtUtc", "MapId", "Difficulty")
+                VALUES ({matchId}, {$"legacy-{matchId:N}"}, {hostId}, {4}, {"Lobby"}, {Now.AddMinutes(1).UtcDateTime}, {Now.UtcDateTime}, {Now.UtcDateTime}, {null}, {null}, {null}, {null})
+                """);
+            await db.GetService<IMigrator>().MigrateAsync();
+        }
+
+        await using var verify = scope.CreateDbContext();
+        var legacy = await verify.MatchAuthorityBindings.SingleAsync(item => item.MatchId == matchId);
+        Assert.Equal("STANDARD", legacy.MatchDataPolicy);
+        Assert.Null(legacy.ResolutionMode);
+        Assert.Null(legacy.BalanceVersion);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task BalancePolicyRejectsPartialContext()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext();
+
+        var hostId = Guid.NewGuid();
+
+        db.Users.Add(CreateScenarioUser(hostId, "rfb-policy-check"));
+
+        db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
+        {
+            MatchId = Guid.NewGuid(),
+            FusionSessionName = $"rfb-partial-{Guid.NewGuid():N}",
+            HostUserId = hostId,
+            MaxPlayers = 2,
+
+            Status = MatchAuthorityStatus.Lobby,
+            LeaseExpiresAtUtc = Now.AddMinutes(5).UtcDateTime,
+            CreatedAtUtc = Now.UtcDateTime,
+            UpdatedAtUtc = Now.UtcDateTime,
+
+            MapId = "SciFi",
+            Difficulty = "NORMAL",
+
+            ResolutionMode = "FIXED",
+            BalanceSource = null,
+            BalanceProtocolVersion = "RFB-1",
+            BalanceVersion = null,
+            BalanceHash = null,
+            MatchDataPolicy = "STANDARD"
+        });
+
+        var error = await Assert.ThrowsAsync<DbUpdateException>(
+            () => db.SaveChangesAsync());
+
+        var postgres = Assert.IsType<PostgresException>(
+            error.InnerException);
+
+        Assert.Equal(
+            PostgresErrorCodes.CheckViolation,
+            postgres.SqlState);
+
+        Assert.Equal(
+            "CK_MatchAuthorityBindings_BalancePolicy",
+            postgres.ConstraintName);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RemoteFixedOnlyOneActiveVersionPerMapDifficultyProtocol()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext();
+        db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-UNIQUE-1"));
+        await db.SaveChangesAsync();
+        db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-UNIQUE-2"));
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public Task RemoteFixedPublishedVersionCannotChangePayload() =>
+        AssertRemoteVersionUpdateRejected("SnapshotJson", "{}");
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public Task RemoteFixedPublishedVersionCannotChangeHash() =>
+        AssertRemoteVersionUpdateRejected("ContentHash", new string('0', 64));
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RemoteFixedVersionCanBeDeactivated()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using (var db = scope.CreateDbContext())
+        {
+            db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-DEACTIVATE"));
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE \"RemoteFixedBalanceVersions\" SET \"IsActive\" = FALSE WHERE \"Version\" = {"RFB-DEACTIVATE"}");
+        }
+        await using var verify = scope.CreateDbContext();
+        Assert.False((await verify.RemoteFixedBalanceVersions.SingleAsync()).IsActive);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RemoteFixedVersionCannotBeDeleted()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext();
+        db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-DELETE"));
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM \"RemoteFixedBalanceVersions\" WHERE \"Version\" = {"RFB-DELETE"}"));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task StartedMatchContextCannotChange()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        await using var db = scope.CreateDbContext();
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"MatchAuthorityBindings\" SET \"StartedAtUtc\" = {null}, \"ResolutionMode\" = {"FIXED"} WHERE \"MatchId\" = {seed.MatchId}"));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task StartedMatchCanRenewLease()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        await using var db = scope.CreateDbContext();
+        var extended = Now.AddMinutes(10).UtcDateTime;
+        Assert.Equal(1, await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"MatchAuthorityBindings\" SET \"LeaseExpiresAtUtc\" = {extended} WHERE \"MatchId\" = {seed.MatchId}"));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task ConcurrentIdenticalV2StartReturnsSameBalance()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await SeedRemoteStartMatchAsync(scope);
+        await using var firstDb = scope.CreateDbContext();
+        await using var secondDb = scope.CreateDbContext();
+        var request = RemoteStartRequest();
+        var results = await Task.WhenAll(
+            CreateRemoteMatchService(firstDb).StartV2Async(seed.HostId, seed.MatchId, request, CancellationToken.None),
+            CreateRemoteMatchService(secondDb).StartV2Async(seed.HostId, seed.MatchId, request, CancellationToken.None));
+        Assert.All(results, item => Assert.True(item.IsSuccess));
+        Assert.Single(results.Select(item => item.Data!.BalanceVersion).Distinct());
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task ConcurrentConflictingV2StartHasOneWinner()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await SeedRemoteStartMatchAsync(scope);
+        await using var firstDb = scope.CreateDbContext();
+        await using var secondDb = scope.CreateDbContext();
+        var first = RemoteStartRequest();
+        var second = new StartMatchV2Request
+        {
+            MapId = "SciFi", Difficulty = "NORMAL", ResolutionMode = "ADAPTIVE",
+            BalanceSource = "LOCAL", BalanceProtocolVersion = "RFB-1"
+        };
+        var results = await Task.WhenAll(
+            CreateRemoteMatchService(firstDb).StartV2Async(seed.HostId, seed.MatchId, first, CancellationToken.None),
+            CreateRemoteMatchService(secondDb).StartV2Async(seed.HostId, seed.MatchId, second, CancellationToken.None));
+        Assert.Single(results, item => item.IsSuccess);
+        Assert.Single(results, item => !item.IsSuccess && item.ErrorCode == ErrorCodes.MatchSessionConflict);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RemoteFixedSelectionRemainsValidDuringPublish()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await SeedRemoteStartMatchAsync(scope);
+        await using var publishDb = scope.CreateDbContext();
+        await using var startDb = scope.CreateDbContext();
+        var json = RemoteFixedBalanceTests.ValidSnapshot.Replace("\"maxHealth\": 100", "\"maxHealth\": 101");
+        var replacement = CreateRemoteBalance("RFB-PUBLISH-2", json);
+        var publish = Task.Run(async () =>
+        {
+            await using var tx = await publishDb.Database.BeginTransactionAsync();
+            await publishDb.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"RemoteFixedBalanceVersions\" SET \"IsActive\" = FALSE WHERE \"Version\" = {"RFB-START-1"}");
+            publishDb.RemoteFixedBalanceVersions.Add(replacement);
+            await publishDb.SaveChangesAsync();
+            await tx.CommitAsync();
+        });
+        var start = CreateRemoteMatchService(startDb).StartV2Async(seed.HostId, seed.MatchId,
+            RemoteStartRequest(), CancellationToken.None);
+        await Task.WhenAll(publish, start);
+        var started = await start;
+        Assert.True(started.IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        var locked = await verify.MatchAuthorityBindings.SingleAsync(item => item.MatchId == seed.MatchId);
+        var selected = await verify.RemoteFixedBalanceVersions.SingleAsync(item => item.Version == locked.BalanceVersion);
+        Assert.Equal(selected.ContentHash, locked.BalanceHash);
+        Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(selected.SnapshotJson));
     }
 
     [Fact, Trait("Category", "M4ScenarioPostgreSqlIntegration")]
@@ -1899,6 +2107,81 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         IsActive = true, IsProductionApproved = true, Provenance = "AUTOMATED_TEST_FIXTURE",
         CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime
     };
+
+    private static async Task AssertRemoteVersionUpdateRejected(string column, string value)
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext();
+        db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-IMMUTABLE"));
+        await db.SaveChangesAsync();
+        var update = column switch
+        {
+            "SnapshotJson" => db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"RemoteFixedBalanceVersions\" SET \"SnapshotJson\" = {value} WHERE \"Version\" = {"RFB-IMMUTABLE"}"),
+            "ContentHash" => db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"RemoteFixedBalanceVersions\" SET \"ContentHash\" = {value} WHERE \"Version\" = {"RFB-IMMUTABLE"}"),
+            _ => throw new ArgumentOutOfRangeException(nameof(column))
+        };
+        await Assert.ThrowsAsync<PostgresException>(() => update);
+    }
+
+    private static RemoteFixedBalanceVersion CreateRemoteBalance(string version, string? snapshot = null)
+    {
+        var json = snapshot ?? RemoteFixedBalanceTests.ValidSnapshot;
+        return new RemoteFixedBalanceVersion
+        {
+            Version = version, MapId = "SciFi", Difficulty = "NORMAL",
+            ProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion,
+            SnapshotJson = json, ContentHash = RemoteFixedBalanceContract.ComputeHash(json),
+            IsActive = true, CreatedAtUtc = Now.UtcDateTime
+        };
+    }
+
+    private static async Task<MatchSeed> SeedRemoteStartMatchAsync(PostgresScope scope)
+    {
+        var hostId = Guid.NewGuid();
+        var matchId = Guid.NewGuid();
+        await using var db = scope.CreateDbContext();
+        db.Users.Add(new User
+        {
+            Id = hostId, Email = $"rfb-{hostId:N}@echo.invalid", Username = $"rfb-{hostId:N}",
+            PasswordHash = "unused", Role = UserRole.PLAYER, Status = UserStatus.ACTIVE,
+            CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime
+        });
+        db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("RFB-START-1"));
+        db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
+        {
+            MatchId = matchId, FusionSessionName = $"rfb-{matchId:N}", HostUserId = hostId,
+            MaxPlayers = 4, Status = MatchAuthorityStatus.Lobby,
+            LeaseExpiresAtUtc = Now.AddMinutes(1).UtcDateTime,
+            CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime,
+            Players = [new MatchPlayerBinding
+            {
+                Id = Guid.NewGuid(), MatchId = matchId, UserId = hostId,
+                FusionActorNumber = 1, JoinProofId = Guid.NewGuid(), Participated = false,
+                BoundAtUtc = Now.UtcDateTime, LastSeenAtUtc = Now.UtcDateTime
+            }]
+        });
+        await db.SaveChangesAsync();
+        return new MatchSeed(matchId, hostId, hostId);
+    }
+
+    private static StartMatchV2Request RemoteStartRequest() => new()
+    {
+        MapId = "SciFi", Difficulty = "NORMAL", ResolutionMode = "FIXED",
+        BalanceSource = "REMOTE_FIXED", BalanceProtocolVersion = "RFB-1"
+    };
+
+    private static MatchAuthorityService CreateRemoteMatchService(AppDbContext db)
+    {
+        var time = new FixedTimeProvider(Now);
+        var settings = Options.Create(new MatchAuthoritySettings
+        {
+            ProofSigningKey = "test-proof-key-that-is-at-least-32-bytes",
+            EnableRemoteFixedTest = true
+        });
+        return new MatchAuthorityService(db, new MatchJoinProofService(settings, time), settings, time);
+    }
 
     private sealed class PostgresScope : IAsyncDisposable
     {
