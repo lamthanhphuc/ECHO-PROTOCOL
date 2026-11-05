@@ -16,6 +16,27 @@ namespace EchoProtocol.AI.Listener.Tests
 {
     public sealed class RuntimeNoiseAndHearingTests
     {
+        [TestCase(-1, false)]
+        [TestCase(0, true)]
+        [TestCase(4, false)]
+        public void AEDV02_HearingRangeUsesTierAndRetainsWatermarkAndOcclusion(int tier, bool expected)
+        {
+            var now = Now();
+            var noise = CreateNoise(RuntimeNoiseType.SPRINT, "v02:sprint", 1, Vector3.zero, now, 1);
+            var sensor = new ListenerHearingSensor(new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLEAR), new ListenerHearingPolicy(0d, .5d, .25d));
+            sensor.BeginMatch(Guid.NewGuid());
+            var origin = Vector3.right * (float)(noise.HearingRadius * 1.02d);
+            Assert.That(sensor.TryEvaluateV02(noise, origin, now, tier, out _, out _), Is.EqualTo(expected));
+            Assert.That(sensor.TryEvaluateV02(noise, Vector3.zero, now, 0, out _, out _), Is.False);
+            sensor = new ListenerHearingSensor(new StaticListenerOcclusionResolver(ListenerOcclusionClass.QUERY_FAILED));
+            sensor.BeginMatch(Guid.NewGuid());
+            Assert.That(sensor.TryEvaluateV02(noise, Vector3.zero, now, tier, out _, out var reason), Is.False);
+            Assert.That(reason, Is.EqualTo(ListenerHearingRejectReason.OcclusionQueryFailed));
+            sensor = new ListenerHearingSensor(new StaticListenerOcclusionResolver(ListenerOcclusionClass.CLEAR));
+            sensor.BeginMatch(Guid.NewGuid());
+            Assert.That(sensor.TryEvaluateV02(CreateNoise(RuntimeNoiseType.NOISE_MAKER, "v02:decoy", 1, Vector3.zero, now, 1),
+                Vector3.zero, now, 4, out _, out _), Is.True);
+        }
         [Test]
         public void LIS001_A_CanonicalNoiseTypeSetIsExact()
         {

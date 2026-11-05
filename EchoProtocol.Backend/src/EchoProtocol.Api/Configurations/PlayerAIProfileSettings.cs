@@ -11,6 +11,9 @@ public sealed class PlayerAIProfileSettings
     public string? AlphaConfigVersion { get; init; }
     public decimal? SurvivalAlpha { get; init; }
     public decimal? NoiseAlpha { get; init; }
+    public decimal? ObjectiveAlpha { get; init; }
+    public decimal? ToolUsageAlpha { get; init; }
+    public decimal? ToolUsageCountMax { get; init; }
     public decimal? ProfileNoiseCountMin { get; init; }
     public decimal? ProfileNoiseCountMax { get; init; }
     public string[] NoisePenaltyTypes { get; init; } = [];

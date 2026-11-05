@@ -45,6 +45,7 @@ appsettings.*.local.json
 Thumbs.db
 
 .codegraph/
+.aed-v2-backup/
 KLTN/.git.backup/
 
 # Local test artifacts

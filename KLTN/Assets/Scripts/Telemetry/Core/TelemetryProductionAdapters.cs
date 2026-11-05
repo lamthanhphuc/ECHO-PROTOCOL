@@ -604,4 +604,194 @@ namespace EchoProtocol.Telemetry
             }, out telemetryEvent, out failureReason);
         }
     }
+
+    public sealed class Phase8LifecycleTelemetryAdapter
+    {
+        private readonly TelemetryEmitter _emitter;
+
+        public Phase8LifecycleTelemetryAdapter(TelemetryEmitter emitter)
+        {
+            _emitter = emitter ?? throw new ArgumentNullException(nameof(emitter));
+        }
+
+        public bool EmitToolLoadout(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, Guid ownerUserId, int? remainingCharges,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, 0);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (toolId is 2 or 4)
+            {
+                if (!remainingCharges.HasValue || remainingCharges.Value is < 1 or > 3)
+                    throw new ArgumentException("AED_P8_LOADOUT_CHARGES_INVALID");
+            }
+            else if (remainingCharges.HasValue)
+                throw new ArgumentException("AED_P8_LOADOUT_CHARGES_INVALID");
+            var data = new TelemetryJsonObject()
+                .AddString("instanceId", instanceId).AddInteger("toolId", toolId)
+                .AddInteger("zone", 0).AddString("action", "LOADOUT")
+                .AddString("origin", "LobbyLoadout")
+                .AddString("ownerUserId", ownerUserId.ToString("D"));
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            return EmitToolSpawn(occurrenceKey, occurredAtUtc, phase, instanceId, toolId, zone,
+                "WorldSpawn", out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolSpawn(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, string origin,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            EmitToolSpawnWithCharges(occurrenceKey, occurredAtUtc, phase, instanceId, toolId, zone, origin, out telemetryEvent, out failureReason, null);
+        public bool EmitToolSpawnWithCharges(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, string origin,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason, int? remainingCharges)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireOneOf(origin, nameof(origin), "WorldSpawn", "ScenePlaced");
+            if (remainingCharges.HasValue && (toolId is not (2 or 4) || remainingCharges.Value is < 1 or > 3)) throw new ArgumentException("AED_P8_SPAWN_CHARGES_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
+                .AddInteger("zone", zone).AddString("action", "SPAWN").AddString("origin", origin);
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase, data,
+                out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolPickup(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, Guid ownerUserId, int? remainingCharges,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (remainingCharges < 0) throw new ArgumentOutOfRangeException(nameof(remainingCharges));
+
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId)
+                .AddInteger("toolId", toolId).AddInteger("zone", zone)
+                .AddString("action", "PICKUP").AddString("ownerUserId", ownerUserId.ToString("D"));
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolUse(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string instanceId, int toolId, int zone, Guid ownerUserId, int remainingCharges, bool consumed,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (remainingCharges < 0 || consumed != (remainingCharges == 0) || (!consumed && toolId is not (2 or 4)))
+                throw new ArgumentException("AED_P8_TOOL_USE_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", instanceId)
+                .AddString("ownerUserId", ownerUserId.ToString("D"))
+                .AddString("action", consumed ? "CONSUME" : "USE")
+                .AddInteger("toolId", toolId).AddInteger("zone", zone).AddInteger("remainingCharges", remainingCharges);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase, data, out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitToolDrop(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string newInstanceId, string parentInstanceId, int toolId, int zone, Guid ownerUserId,
+            int? remainingCharges, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            ValidateTool(toolId, zone);
+            MatchTelemetryAdapter.RequireText(newInstanceId, nameof(newInstanceId));
+            MatchTelemetryAdapter.RequireText(parentInstanceId, nameof(parentInstanceId));
+            MatchTelemetryAdapter.RequireUser(ownerUserId, nameof(ownerUserId));
+            if (newInstanceId == parentInstanceId || remainingCharges < 0)
+                throw new ArgumentException("AED_P8_DROP_LINEAGE_INVALID");
+            var data = new TelemetryJsonObject().AddString("instanceId", newInstanceId)
+                .AddString("parentInstanceId", parentInstanceId)
+                .AddString("ownerUserId", ownerUserId.ToString("D"))
+                .AddString("action", "DROP").AddInteger("toolId", toolId).AddInteger("zone", zone);
+            if (remainingCharges.HasValue) data.AddInteger("remainingCharges", remainingCharges.Value);
+            return Emit(occurrenceKey, TelemetryEventTypes.TeamToolLifecycle, occurredAtUtc, phase,
+                data, out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitMinionLifecycle(string occurrenceKey, DateTime occurredAtUtc, string phase,
+            string networkInstanceId, int zone, string state, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason)
+        {
+            MatchTelemetryAdapter.RequireText(networkInstanceId, nameof(networkInstanceId));
+            MatchTelemetryAdapter.RequireOneOf(state, nameof(state), "SPAWNED", "DESPAWNED");
+            ValidateZone(zone);
+            return Emit(occurrenceKey, TelemetryEventTypes.MinionLifecycle, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("networkInstanceId", networkInstanceId)
+                    .AddInteger("zone", zone).AddString("state", state),
+                out telemetryEvent, out failureReason);
+        }
+
+        public bool EmitAEDV02World(string occurrenceKey, DateTime occurredAtUtc, string phase, string worldJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02WorldSample, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("world", worldJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02Effect(string occurrenceKey, DateTime occurredAtUtc, string phase, string effectJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ActionEffect, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("effect", effectJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02Carrier(string occurrenceKey, DateTime occurredAtUtc, string phase, string carrierJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ToolCarrier, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("carrier", carrierJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02CabinetClue(string occurrenceKey, DateTime occurredAtUtc, string phase, string clueJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CabinetClue, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("clue", clueJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02Commit(string occurrenceKey, DateTime occurredAtUtc, string phase, string commitJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02PlanCommit, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("commit", commitJson), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Impact(string occurrenceKey, DateTime occurredAtUtc, string phase, string impactJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CausalImpact, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("impact", impactJson), out telemetryEvent, out failureReason);
+
+        public bool EmitAEDV02ResourceAction(string occurrenceKey, DateTime occurredAtUtc, string phase, string actionJson,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02ResourceAction, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddRawObject("action", actionJson), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Exclusion(string occurrenceKey, DateTime occurredAtUtc, string phase, string kind,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CaptureExcluded, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("exclusion", kind), out telemetryEvent, out failureReason);
+        public bool EmitAEDV02Seal(string occurrenceKey, DateTime occurredAtUtc, string phase, string kind,
+            out TelemetryEvent telemetryEvent, out TelemetryBufferFailureReason failureReason) =>
+            Emit(occurrenceKey, TelemetryEventTypes.AEDV02CaptureSeal, occurredAtUtc, phase,
+                new TelemetryJsonObject().AddString("exclusion", kind), out telemetryEvent, out failureReason);
+
+        private bool Emit(string occurrenceKey, string eventType, DateTime occurredAtUtc, string phase,
+            TelemetryJsonObject data, out TelemetryEvent telemetryEvent,
+            out TelemetryBufferFailureReason failureReason) => _emitter.TryEmit(
+                new TelemetryEmissionRequest
+                {
+                    SourceOccurrenceKey = occurrenceKey, EventType = eventType, UserId = null,
+                    ReasonCode = null, OccurredAtUtc = occurredAtUtc,
+                    Context = MatchTelemetryAdapter.PhaseContext(phase), Data = data
+                }, out telemetryEvent, out failureReason);
+
+        private static void ValidateTool(int toolId, int zone)
+        {
+            if (toolId is not (1 or 2 or 3 or 4 or 6)) throw new ArgumentOutOfRangeException(nameof(toolId));
+            ValidateZone(zone);
+        }
+
+        private static void ValidateZone(int zone)
+        {
+            if (zone is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(zone));
+        }
+    }
 }

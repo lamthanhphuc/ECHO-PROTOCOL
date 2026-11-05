@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using EchoProtocol.AI.Common.Profile;
 
 namespace EchoProtocol.AI.Common.AED
@@ -82,7 +83,7 @@ namespace EchoProtocol.AI.Common.AED
             new AEDv2ParameterSpec(AEDv2Key.ReviveBonusPerZone, AEDv2Axis.Resource, 0, 1, 0, true),
             new AEDv2ParameterSpec(AEDv2Key.DetectionAcquireSeconds, AEDv2Axis.Detection, 1.25, 1.50, 1.00),
             new AEDv2ParameterSpec(AEDv2Key.DetectionForgetSeconds, AEDv2Axis.Detection, 25, 20, 30),
-            new AEDv2ParameterSpec(AEDv2Key.ChaseSpeed, AEDv2Axis.Pursuit, 8, 7.5, 8.5),
+            new AEDv2ParameterSpec(AEDv2Key.ChaseSpeed, AEDv2Axis.Pursuit, 7.5, 7.0, 8.0),
             new AEDv2ParameterSpec(AEDv2Key.SearchSeconds, AEDv2Axis.Pursuit, 2.25, 1.5, 3),
             new AEDv2ParameterSpec(AEDv2Key.HearingMultiplier, AEDv2Axis.Detection, 1, 0.85, 1.15),
             new AEDv2ParameterSpec(AEDv2Key.SeekPlayersAfterSeconds, AEDv2Axis.Pursuit, 120, 150, 90),
@@ -169,6 +170,13 @@ namespace EchoProtocol.AI.Common.AED
             return changes <= 1;
         }
 
+        public bool IsBounded()
+        {
+            foreach (var spec in AEDv2Catalog.All)
+                if (!spec.IsRegistered(Get(spec.Key))) return false;
+            return true;
+        }
+
         public string Fingerprint()
         {
             var parts = new System.Text.StringBuilder("AED_DIFFICULTY_V2|NORMAL");
@@ -215,6 +223,8 @@ namespace EchoProtocol.AI.Common.AED
             var normal = AEDv2Plan.Normal();
             if (request.ResolutionMode != ScenarioResolutionMode.Adaptive)
                 return Hold(request, normal, "AED_V2_FIXED_MODE");
+            if (request.DecisionPoint == ScenarioDecisionPoint.PreMatch)
+                return Hold(request, normal, "AED_V2_FIRST_PHASE_BASELINE");
             if (request.DecisionPoint != ScenarioDecisionPoint.PreMatch)
                 return Hold(request, normal, "AED_V2_BOUNDARY_HOLD_NO_CURRENT_MATCH_EVIDENCE");
             if (gate == null || gate.Status != AEDInputGateStatus.Eligible ||
@@ -228,23 +238,66 @@ namespace EchoProtocol.AI.Common.AED
 
             var s = policy.SurvivalThresholds.Classify(survival.Value);
             var n = policy.NoiseThresholds.Classify(noise.Value);
-            var intent = s == ScoreBand.Low || n == ScoreBand.Low
-                ? AdaptationIntent.Relieve
-                : (s == ScoreBand.High && n == ScoreBand.High
-                    ? AdaptationIntent.IncreasePressure : AdaptationIntent.Hold);
+
+            var roster = snapshot.RosterProfileSummary;
+
+            bool Ready(
+                RosterDimensionSummary dimension,
+                Func<PlayerProfileSnapshot, PlayerDimensionSnapshot> select)
+            {
+                return dimension != null
+                    && dimension.AggregationStatus == RosterAggregationStatus.Available
+                    && dimension.ObservedActiveCount == snapshot.TeamSize
+                    && dimension.MeanObservedScore.HasValue
+                    && snapshot.PlayerProfileSnapshots.Count == snapshot.TeamSize
+                    && snapshot.PlayerProfileSnapshots.All(player =>
+                    {
+                        var d = select(player);
+                        return d != null
+                            && d.Status == PlayerDimensionStatus.Active
+                            && d.Score.HasValue
+                            && d.SampleCount >= 2;
+                    });
+            }
+
+            var objectiveReady = Ready(
+                roster.Objective, p => p.Objective);
+            var toolReady = Ready(
+                roster.ToolUsage, p => p.ToolUsage);
+
+            var objectiveHigh = objectiveReady
+                && roster.Objective.MeanObservedScore.Value >= 70d;
+            var toolHigh = toolReady
+                && roster.ToolUsage.MeanObservedScore.Value >= 70d;
+
+            var intent = AdaptationIntent.Hold;
+            var key = AEDv2Key.ChaseSpeed;
+
+            if (s == ScoreBand.Low)
+            {
+                intent = AdaptationIntent.Relieve;
+                key = AEDv2Key.SupportBonus;
+            }
+            else if (n == ScoreBand.Low)
+            {
+                intent = AdaptationIntent.Relieve;
+                key = AEDv2Key.DetectionAcquireSeconds;
+            }
+            else if (s == ScoreBand.High && n == ScoreBand.High)
+            {
+                intent = AdaptationIntent.IncreasePressure;
+
+                if (objectiveHigh && toolHigh)
+                    key = AEDv2Key.SpecialCooldownSeconds;
+                else if (objectiveHigh)
+                    key = AEDv2Key.PatrolSpeed;
+                else
+                    key = AEDv2Key.ChaseSpeed;
+            }
+
             if (intent == AdaptationIntent.Hold)
                 return Hold(request, normal, "AED_V2_HOLD");
 
-            // Deterministic key selection. A policy decision modifies ONE registered key,
-            // never a full Easy/Hard preset and never an unbounded parameter bundle.
-            var eligible = new List<AEDv2Key>();
-            foreach (var spec in AEDv2Catalog.All)
-                if (spec.HasTarget(intent)) eligible.Add(spec.Key);
-            if (eligible.Count == 0) return Hold(request, normal, "AED_V2_NO_ELIGIBLE_KEY");
-            var bytes = request.ResolutionId.ToByteArray();
-            var selector = (uint)bytes[0] | ((uint)bytes[1] << 8) |
-                           ((uint)bytes[2] << 16) | ((uint)bytes[3] << 24);
-            var key = eligible[(int)(selector % eligible.Count)];
             return EvaluateKey(request, gate, intent, key);
         }
 

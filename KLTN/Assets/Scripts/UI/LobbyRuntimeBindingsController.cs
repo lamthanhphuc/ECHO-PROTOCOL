@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
+using Fusion;
 using EchoProtocol.UI.MainMenu;
 using TMPro;
 using UnityEngine;
@@ -24,6 +26,7 @@ namespace EchoProtocol.UI
         [SerializeField] private Button readyButton;
         [SerializeField] private Button startButton;
         [SerializeField] private TMP_Dropdown difficultyDropdown;
+        [SerializeField] private TMP_Dropdown stalkerModelDropdown;
 
         [Header("Character")]
         [SerializeField] private Button characterPreviousButton;
@@ -148,6 +151,16 @@ namespace EchoProtocol.UI
                         OnDifficultyChanged);
             }
 
+            if (stalkerModelDropdown != null)
+            {
+                stalkerModelDropdown.ClearOptions();
+                stalkerModelDropdown.AddOptions(
+                    new List<string> { "ORIGINAL", "LIZARD" });
+
+                stalkerModelDropdown.onValueChanged.AddListener(
+                    OnStalkerModelChanged);
+            }
+
             if (characterPreviousButton != null)
             {
                 characterPreviousButton
@@ -200,6 +213,12 @@ namespace EchoProtocol.UI
                     .onValueChanged
                     .RemoveListener(
                         OnDifficultyChanged);
+            }
+
+            if (stalkerModelDropdown != null)
+            {
+                stalkerModelDropdown.onValueChanged.RemoveListener(
+                    OnStalkerModelChanged);
             }
 
             if (characterPreviousButton != null)
@@ -394,6 +413,21 @@ namespace EchoProtocol.UI
 
             RefreshDifficulty(
                 inRoom);
+
+            if (stalkerModelDropdown != null)
+            {
+                stalkerModelDropdown.SetValueWithoutNotify(
+                    PlayerSpawner.GetSelectedStalkerModel(
+                        bootstrap != null ? bootstrap.Runner : null));
+
+                stalkerModelDropdown.RefreshShownValue();
+
+                stalkerModelDropdown.interactable =
+                    inRoom
+                    && bootstrap != null
+                    && bootstrap.State == NetworkSessionState.InLobby
+                    && _room.IsHost;
+            }
         }
 
 
@@ -420,6 +454,34 @@ namespace EchoProtocol.UI
             difficultyDropdown.interactable =
                 inRoom
                 && _room.IsHost;
+        }
+
+
+        private void OnStalkerModelChanged(int modelId)
+        {
+            ResolveServices();
+
+            var spawner = FindAnyObjectByType<PlayerSpawner>();
+
+            if (modelId < 0
+                || modelId > 1
+                || bootstrap == null
+                || bootstrap.State != NetworkSessionState.InLobby
+                || !_room.IsHost
+                || (modelId == 1
+                    && (spawner == null || !spawner.HasLizardPrefab))
+                || !bootstrap.UpdateRoomProperties(
+                    new Dictionary<string, SessionProperty>
+                    {
+                        [PlayerSpawner.StalkerModelSessionKey] = modelId
+                    }))
+            {
+                stalkerModelDropdown.SetValueWithoutNotify(
+                    PlayerSpawner.GetSelectedStalkerModel(
+                        bootstrap != null ? bootstrap.Runner : null));
+
+                stalkerModelDropdown.RefreshShownValue();
+            }
         }
 
 

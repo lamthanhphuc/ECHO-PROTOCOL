@@ -26,6 +26,10 @@ namespace EchoProtocol.RelayB.Tests
             var so = new SerializedObject(_controller); so.FindProperty("config").objectReferenceValue = prefab.GetComponent<RelayBController>().Config;
             so.ApplyModifiedPropertiesWithoutUndo();
             _controller.Simulation.Initialize(_controller.Config, 2, true, 441);
+            _controller.Simulation.Surge.ApplyRemote(
+                RelayBSurgePhase.Contained,
+                default, default,
+                0f, 0f, 0f, 0);
             _controller.Simulation.ScanSpectrum();
             _controller.Simulation.SelectChannel(_controller.Simulation.GetCurrentPreset().CorrectChannelIndex);
             _controller.Simulation.SetActiveTab(1);
@@ -46,7 +50,7 @@ namespace EchoProtocol.RelayB.Tests
             Button("Signal_8").onClick.Invoke(); Button("Signal_6").onClick.Invoke();
             Assert.That(Digit(0), Is.EqualTo("8")); Assert.That(Digit(1), Is.EqualTo("6")); Assert.That(Digit(2), Is.EqualTo("?"));
             Assert.IsFalse(Button("Signal_8").interactable); Assert.IsTrue(Button("Signal_9").interactable);
-            Assert.That(Button("Signal_8").GetComponent<CanvasGroup>().alpha, Is.EqualTo(0.35f));
+            Assert.That(Button("Signal_8").GetComponent<CanvasGroup>().alpha, Is.EqualTo(0.55f));
             foreach (int digit in new[] { 3, 1, 5, 4 }) Button("Signal_" + digit).onClick.Invoke();
             Assert.IsTrue(Button("Transmit").interactable);
         }

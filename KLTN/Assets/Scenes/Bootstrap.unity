@@ -178,8 +178,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Networking.PlayerSpawner
   _bootstrap: {fileID: 970048216}
-  _lobbySpawnOrigin: {x: 0.15, y: 1, z: -5.5}
-  _lobbySpawnSpacing: 1.1
   _doorPrefab: {fileID: 11400000, guid: 10b56fe0b82947259da1a4b1e07407b3, type: 3}
   _pickupItemPrefab: {fileID: 4530120262622144617, guid: fbf86023a47ddf44dbcb7a0f384ba21d, type: 3}
   _energyCoreCount: 4
