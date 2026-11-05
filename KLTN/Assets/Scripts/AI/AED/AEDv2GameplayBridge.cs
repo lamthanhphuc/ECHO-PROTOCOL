@@ -8,6 +8,19 @@ namespace EchoProtocol.AI.AED
     // EchoProtocol.AI.Common assembly.
     public static class AEDv2GameplayBridge
     {
+        public static MatchDifficultyProfile ToV02NormalDifficultyProfile(AEDV02Plan plan)
+        {
+            if (plan == null || !IsNormalCompatible()) throw new InvalidOperationException("AED_V02_BASELINE_DRIFT");
+            var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
+            return new MatchDifficultyProfile(n.TeamToolsPerZone, n.PatrolSpeed, (float)plan.Get(AEDV02Key.ChaseSpeed),
+                (float)plan.Get(AEDV02Key.DetectionAcquireSeconds), n.DetectionDecayDurationSeconds,
+                (float)plan.Get(AEDV02Key.SearchSeconds), n.AttackRange, n.AttackWindupSeconds, n.AttackRecoverySeconds,
+                n.DoorBreakDurationSeconds, n.SeekPlayersAfterSeconds, n.CoreCarrierPursuitDelaySeconds,
+                (float)plan.Get(AEDV02Key.HearingMultiplier), (float)plan.Get(AEDV02Key.SpecialCooldownSeconds),
+                (int)plan.Get(AEDV02Key.Zone1MinionCap), (int)plan.Get(AEDV02Key.Zone2MinionCap),
+                (int)plan.Get(AEDV02Key.Zone3AdaptiveMinionCap), n.MaximumRevivesPerZone, n.ObjectiveInvestigationEnabled);
+        }
+
         public static bool IsNormalCompatible()
         {
             var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
@@ -22,9 +35,7 @@ namespace EchoProtocol.AI.AED
                 && Matches(AEDv2Key.SpecialCooldownSeconds, n.SpecialEncounterCooldownSeconds)
                 && Matches(AEDv2Key.DoorBreakSeconds, n.DoorBreakDurationSeconds)
                 && Matches(AEDv2Key.ObjectiveNoiseInvestigationEnabled,
-                    n.ObjectiveInvestigationEnabled ? 1 : 0)
-                && Matches(AEDv2Key.Zone1MinionCap, n.Zone1MinionCap)
-                && Matches(AEDv2Key.Zone2MinionCap, n.Zone2MinionCap);
+                    n.ObjectiveInvestigationEnabled ? 1 : 0);
         }
 
         private static bool Matches(AEDv2Key key, double value)
@@ -33,7 +44,7 @@ namespace EchoProtocol.AI.AED
         public static MatchDifficultyProfile ToNormalDifficultyProfile(AEDv2Plan plan)
         {
             if (plan == null || !IsNormalCompatible() ||
-                !plan.TrySingleBoundedChange(out _))
+                !plan.IsBounded())
                 throw new InvalidOperationException("AED_V2_PROFILE_INVALID_OR_BASELINE_DRIFT");
             var n = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
             return new MatchDifficultyProfile(
@@ -51,6 +62,7 @@ namespace EchoProtocol.AI.AED
                 (float)plan.Get(AEDv2Key.SpecialCooldownSeconds),
                 (int)plan.Get(AEDv2Key.Zone1MinionCap),
                 (int)plan.Get(AEDv2Key.Zone2MinionCap),
+                n.Zone3MinionCap,
                 n.MaximumRevivesPerZone,
                 plan.Get(AEDv2Key.ObjectiveNoiseInvestigationEnabled) != 0);
         }

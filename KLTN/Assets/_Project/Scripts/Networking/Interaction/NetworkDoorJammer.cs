@@ -40,6 +40,23 @@ namespace EchoProtocol.Networking
         public bool IsFreeStanding =>
             IsActive && !DoorId.IsValid;
 
+        // Authority-only provenance; observing a deployment never changes its gameplay lifetime.
+        public string V02Occurrence { get; private set; } = string.Empty;
+        public long V02DeploymentTick { get; private set; }
+        public System.Guid V02DeploymentMatch { get; private set; }
+        public System.Guid V02DeployerUser { get; private set; }
+        public string V02DeploymentPhase { get; private set; } = string.Empty;
+        public bool V02ColliderBlocking => _blockingCollider != null && _blockingCollider.gameObject.activeInHierarchy && _blockingCollider.enabled && !_blockingCollider.isTrigger;
+        public void RecordV02Deployment(PlayerRef player, string occurrence)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !IsActive || V02Occurrence.Length != 0) return;
+            var authority = EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance;
+            if (authority == null || !authority.V02CollectToolOutcomes || !authority.TryResolveVerifiedBackendUserId(player, out var identity) ||
+                !System.Guid.TryParse(identity, out var user)) return;
+            V02Occurrence = occurrence; V02DeploymentTick = Runner.Tick.Raw;
+            V02DeploymentMatch = authority.MatchId; V02DeployerUser = user; V02DeploymentPhase = authority.V02CurrentSourcePhase;
+        }
+
         public void InitializeOffline()
         {
             _offlineState = NetworkDoorJammerState.Active;

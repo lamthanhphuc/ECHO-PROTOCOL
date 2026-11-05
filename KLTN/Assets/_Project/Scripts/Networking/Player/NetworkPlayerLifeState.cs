@@ -314,12 +314,17 @@ namespace EchoProtocol.Networking
         public void RefreshAEDv2ReviveBonusAuthoritative()
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            var previousBonus = AEDv2ReviveBonus;
             AEDv2ReviveBonus = 0;
             var authority = MatchAuthorityRuntime.Instance;
             if (authority != null && authority.Difficulty == MatchDifficulty.Normal &&
                 authority.TryGetMatchId(out var matchId) &&
                 EchoProtocol.AI.AED.AEDv2Authority.TryGetApplied(matchId, out var plan, out _))
+            {
                 AEDv2ReviveBonus = plan.ReviveBonus;
+                if (AEDv2ReviveBonus != previousBonus)
+                    EchoProtocol.AI.AED.AEDv2E2ELog.State("REVIVE_TUNING_APPLIED");
+            }
         }
 
         public bool ResetZoneReviveBudgetAuthoritative()
@@ -540,6 +545,23 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        private void DropHeldItemsForForcedTransition(string reason)
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            var state = GetComponent<LobbyPlayerState>();
+            if (state == null)
+            {
+                MatchAuthorityRuntime.Instance?.MarkPhase8InventoryEvidenceIncomplete(
+                    "FORCED_DROP_PLAYER_STATE_MISSING:" + reason);
+                return;
+            }
+            if (state.ToolId == 0 && !state.CarriedCoreId.IsValid) return;
+            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+            if (state.ToolId != 0 || state.CarriedCoreId.IsValid)
+                MatchAuthorityRuntime.Instance?.MarkPhase8InventoryEvidenceIncomplete(
+                    "FORCED_DROP_UNRECONCILED:" + reason);
+        }
+
         private void CommitDown(string sourceType, Vector3 hitPosition)
         {
             var nextDownCount = DownCount + 1;
@@ -553,8 +575,9 @@ namespace EchoProtocol.Networking
                 BleedoutTimer = TickTimer.None;
                 IsCrawling = false;
                 DownCount = nextDownCount;
-                GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
-                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit, "REVIVE_LIMIT_REACHED");
+                DropHeldItemsForForcedTransition("DOWN");
+                CommitEliminated(NetworkPlayerLifeTransitionCause.ReviveLimit,
+                    "REVIVE_LIMIT_REACHED", directFromHit: true);
                 return;
             }
 
@@ -566,14 +589,15 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.CreateFromSeconds(Runner, _bleedoutSeconds);
             IsCrawling = true;
             DownCount = nextDownCount;
-            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+            DropHeldItemsForForcedTransition("DOWN");
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.Damage);
             MatchAuthorityRuntime.Instance?.RecordPlayerDowned(
                 Object.InputAuthority,
                 BuildOccurrenceKey("down"),
                 sourceType,
                 DownCount,
-                hitPosition);
+                hitPosition,
+                TransitionOrdinal);
             Debug.Log($"[LifeState] {Object.InputAuthority} Alive -> Downed by {sourceType}.");
         }
 
@@ -663,11 +687,13 @@ namespace EchoProtocol.Networking
                 completedReviver,
                 BuildOccurrenceKey("revive"),
                 ReviveCount,
-                usedFirstAidKit);
+                usedFirstAidKit,
+                TransitionOrdinal);
             Debug.Log($"[LifeState] {Object.InputAuthority} revived by {completedReviver}; protection={_reviveProtectionSeconds:0.##}s.");
         }
 
-        private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason)
+        private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason,
+            bool directFromHit = false)
         {
             if (DebugGodMode)
             {
@@ -680,7 +706,8 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
-            GetComponent<NetworkPlayerInteractor>()?.DropHeldItemsAuthoritative(Object.InputAuthority);
+            if (!directFromHit)
+                DropHeldItemsForForcedTransition("ELIMINATED");
             Health = 0f;
             IsCrawling = false;
             ClearSurvivalTimers();
@@ -688,7 +715,11 @@ namespace EchoProtocol.Networking
             MatchAuthorityRuntime.Instance?.RecordPlayerEliminated(
                 Object.InputAuthority,
                 BuildOccurrenceKey("eliminate"),
-                ReviveCount);
+                ReviveCount,
+                cause,
+                directFromHit,
+                TransitionOrdinal,
+                reason);
             Debug.Log($"[LifeState] {Object.InputAuthority} -> Eliminated reason={reason}.");
             return true;
         }
@@ -782,6 +813,9 @@ namespace EchoProtocol.Networking
             }
 
             state.SetGameplayToolId(toolId);
+            MatchAuthorityRuntime.Instance?.MarkPhase8DebugEvidenceInvalid(
+                Object.InputAuthority,
+                "DEBUG_INVENTORY_OVERRIDE");
         }
 
         private static bool IsDebugTeamToolId(
@@ -840,6 +874,9 @@ namespace EchoProtocol.Networking
 
             if (DebugGodMode)
             {
+                MatchAuthorityRuntime.Instance?.MarkPhase8DebugEvidenceInvalid(
+                    Object.InputAuthority,
+                    "DEBUG_GOD_MODE_ENABLED");
                 ClearSurvivalTimers();
 
                 CatchTimer = TickTimer.None;

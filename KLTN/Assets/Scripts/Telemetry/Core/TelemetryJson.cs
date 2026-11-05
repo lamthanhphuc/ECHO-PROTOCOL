@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 namespace EchoProtocol.Telemetry
@@ -20,6 +21,45 @@ namespace EchoProtocol.Telemetry
         public TelemetryJsonObject AddInteger(string name, long value)
         {
             return AddRaw(name, value.ToString(CultureInfo.InvariantCulture));
+        }
+
+
+        public TelemetryJsonObject AddArray(string name, IEnumerable<TelemetryJsonObject> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add((value ?? throw new ArgumentException("JSON array contains null.", nameof(values))).ToJson());
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
+        }
+
+        public TelemetryJsonObject AddStringArray(string name, IEnumerable<string> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add("\"" + Escape(value ?? throw new ArgumentException("JSON array contains null.", nameof(values))) + "\"");
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
+        }
+
+        public TelemetryJsonObject AddNumberMatrix(string name, IEnumerable<IEnumerable<double>> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var rows = values.Select(row => row == null ? throw new ArgumentException("Null matrix row") :
+                "[" + string.Join(",", row.Select(value => double.IsNaN(value) || double.IsInfinity(value)
+                    ? throw new ArgumentOutOfRangeException(nameof(values)) : value.ToString("R", CultureInfo.InvariantCulture))) + "]");
+            return AddRaw(name, "[" + string.Join(",", rows) + "]");
+        }
+        public TelemetryJsonObject AddNumberArray(string name, IEnumerable<double> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            return AddRaw(name, "[" + string.Join(",", values.Select(value => double.IsNaN(value) || double.IsInfinity(value)
+                ? throw new ArgumentOutOfRangeException(nameof(values)) : value.ToString("R", CultureInfo.InvariantCulture))) + "]");
+        }
+        public TelemetryJsonObject AddIntegerArray(string name, IEnumerable<int> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            var items = new List<string>();
+            foreach (var value in values) items.Add(value.ToString(CultureInfo.InvariantCulture));
+            return AddRaw(name, "[" + string.Join(",", items) + "]");
         }
 
         public TelemetryJsonObject AddNumber(string name, double value)
