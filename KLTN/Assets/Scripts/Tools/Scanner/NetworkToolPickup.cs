@@ -1,7 +1,6 @@
 ﻿using System;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Networking;
-using EchoProtocol.Networking.Authority;
 using Fusion;
 using QuickOutline;
 using UnityEngine;
@@ -44,11 +43,7 @@ namespace EchoProtocol.Tools.Scanner
         [Networked, OnChangedRender(nameof(ApplyReplicatedPose))]
         public Quaternion WorldRotation { get; private set; }
 
-        [Networked]
-        public int RemainingUses { get; private set; }
-
         private bool _localPickedUp;
-        private bool _phase8SceneSourceRegistered;
         public InventoryItemDefinition ToolItemDefinition => _toolItemDefinition;
         public int ToolId => _toolId;
 
@@ -109,10 +104,6 @@ namespace EchoProtocol.Tools.Scanner
                 _localPickedUp = false;
                 WorldPosition = transform.position;
                 WorldRotation = transform.rotation;
-                if (RemainingUses <= 0 &&
-                    (_toolId == LobbyPlayerState.NoiseMakerToolId ||
-                     _toolId == LobbyPlayerState.DoorJammerToolId))
-                    RemainingUses = LobbyPlayerState.MultiUseTeamToolUses;
             }
             else
             {
@@ -123,26 +114,6 @@ namespace EchoProtocol.Tools.Scanner
             ApplyReplicatedPose();
             ConfigureWorldPickupShadows();
             OnReplicatedStateChanged();
-            TryRegisterPhase8SceneSpawn();
-        }
-
-        public void SetRemainingUsesAuthoritative(int remainingUses)
-        {
-            if (Object == null ||
-                !Object.IsValid ||
-                !Object.HasStateAuthority)
-            {
-                return;
-            }
-
-            RemainingUses =
-                _toolId == LobbyPlayerState.NoiseMakerToolId ||
-                _toolId == LobbyPlayerState.DoorJammerToolId
-                    ? Mathf.Clamp(
-                        remainingUses,
-                        1,
-                        LobbyPlayerState.MultiUseTeamToolUses)
-                    : 0;
         }
 
         public void AfterHostMigration()
@@ -309,28 +280,7 @@ namespace EchoProtocol.Tools.Scanner
             // Set authoritative tool ID on player
             if (context.PlayerState != null && context.PlayerState.Object != null && context.PlayerState.Object.IsValid)
             {
-                if (RemainingUses > 0 &&
-                    (_toolId == LobbyPlayerState.NoiseMakerToolId ||
-                     _toolId == LobbyPlayerState.DoorJammerToolId))
-                {
-                    context.PlayerState.SetGameplayToolId(
-                        _toolId,
-                        RemainingUses);
-                }
-                else
-                {
-                    context.PlayerState.SetGameplayToolId(_toolId);
-                }
-
-                int? remainingCharges = null;
-                if (_toolId == LobbyPlayerState.NoiseMakerToolId ||
-                    _toolId == LobbyPlayerState.DoorJammerToolId)
-                    remainingCharges = context.PlayerState.TeamToolUsesRemaining;
-                MatchAuthorityRuntime.Instance?.RecordPhase8ToolPickup(
-                    Object.Id,
-                    context.Player,
-                    Runner.Tick.Raw,
-                    remainingCharges);
+                context.PlayerState.SetGameplayToolId(_toolId);
             }
 
             try
@@ -345,21 +295,8 @@ namespace EchoProtocol.Tools.Scanner
             RuntimeLog.Log(RuntimeLogCategory.Inventory, $"[NetworkToolPickup] Player {context.Player} picked up tool '{_toolItemDefinition?.DisplayName ?? _toolId.ToString()}'.");
         }
 
-        private void TryRegisterPhase8SceneSpawn()
-        {
-            if (_phase8SceneSourceRegistered || Object == null || !Object.IsValid ||
-                !Object.HasStateAuthority || !Object.NetworkTypeId.IsSceneObject ||
-                IsPickedUp || Runner == null) return;
-
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority != null && authority.TryRecordPhase8SceneToolSpawn(
-                    Object.Id, _toolId, Runner.Tick.Raw))
-                _phase8SceneSourceRegistered = true;
-        }
-
         public override void FixedUpdateNetwork()
         {
-            TryRegisterPhase8SceneSpawn();
             if (IsPickedUp)
             {
                 foreach (var c in GetComponentsInChildren<Collider>(true))

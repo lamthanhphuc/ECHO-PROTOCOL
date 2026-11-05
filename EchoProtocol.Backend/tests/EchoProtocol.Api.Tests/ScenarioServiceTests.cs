@@ -1,5 +1,4 @@
 using EchoProtocol.Api.Common;
-using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Entities;
@@ -7,12 +6,11 @@ using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
 
-public sealed partial class ScenarioServiceTests
+public sealed class ScenarioServiceTests
 {
     private static readonly DateTime Now = new(2026, 9, 21, 14, 0, 0, DateTimeKind.Utc);
 
@@ -79,221 +77,6 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal("POLICY_CONFIG_INVALID", result.Data.FallbackReasonCode);
         Assert.Equal("NOT_EVALUATED", result.Data.CandidateValidationStatus);
         Assert.Equal("FIXED", result.Data.Config.ConfigSource);
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveApprovedCandidate_IsCommittedAndReplayed()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-
-        var first = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(first.IsSuccess, first.Message);
-        Assert.NotNull(first.Data);
-        Assert.False(first.Data.UsedFixedFallback);
-        Assert.Null(first.Data.FallbackReasonCode);
-        Assert.Equal("VALID", first.Data.CandidateValidationStatus);
-        Assert.Equal("ADAPTIVE_CONFIG_ISSUED", first.Data.ResolutionResult);
-        Assert.Equal("ADAPTIVE", first.Data.Config.ConfigSource);
-        Assert.Equal(1, first.Data.Config.SupportItemBudget);
-        Assert.Equal(9, first.Data.Config.ChaseSpeed);
-        Assert.Equal("PENDING", first.Data.UnityApplyStatus);
-
-        var replay = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(replay.IsSuccess);
-        Assert.True(replay.Data!.IsReplay);
-        Assert.Equal(
-            first.Data.Config.ContentFingerprint,
-            replay.Data.Config.ContentFingerprint);
-        Assert.Single(await f.Db.ScenarioDecisions.ToArrayAsync());
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveWithoutApprovedCandidate_FailsClosed()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync(addCandidate: false);
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-
-        var result = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Data);
-        Assert.True(result.Data.UsedFixedFallback);
-        Assert.Equal(
-            "ADAPTIVE_CONFIG_UNAVAILABLE",
-            result.Data.FallbackReasonCode);
-        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
-        Assert.Equal("FIXED_FALLBACK", result.Data.ResolutionResult);
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveMixedHold_KeepsFixedBaseline()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        foreach (var profile in f.Db.PlayerAIProfiles)
-        {
-            profile.SurvivalScore = 50;
-            profile.NoiseScore = 50;
-        }
-
-        await f.Db.SaveChangesAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-
-        var result = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(result.IsSuccess, result.Message);
-        Assert.True(result.Data!.UsedFixedFallback);
-        Assert.Equal("HOLD_RULE", result.Data.FallbackReasonCode);
-        Assert.Equal("VALID", result.Data.CandidateValidationStatus);
-        Assert.Equal("FIXED_FALLBACK", result.Data.ResolutionResult);
-        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptivePartialSnapshot_FailsClosed()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        var player = f.Db.PlayerAIProfiles.Single(x => x.UserId == f.PlayerId);
-        player.NoiseSampleCount = 0;
-        await f.Db.SaveChangesAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-
-        var result = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(result.IsSuccess, result.Message);
-        Assert.Equal("PARTIAL", result.Data!.SnapshotValidity);
-        Assert.True(result.Data.UsedFixedFallback);
-        Assert.Equal("INPUT_INVALID", result.Data.FallbackReasonCode);
-        Assert.Equal("INVALID", result.Data.CandidateValidationStatus);
-        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveCandidateWithUnauthorizedChange_IsRejected()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        var candidate = f.Db.ScenarioConfigs.Single(
-            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
-        candidate.SearchDuration = 2;
-        await f.Db.SaveChangesAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-
-        var result = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.True(result.IsSuccess, result.Message);
-        Assert.True(result.Data!.UsedFixedFallback);
-        Assert.Equal(
-            "NO_APPROVED_NEXT_VALUE",
-            result.Data.FallbackReasonCode);
-        Assert.Equal("INVALID", result.Data.CandidateValidationStatus);
-        Assert.Equal("FIXED", result.Data.Config.ConfigSource);
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveReplay_RejectsModifiedCommittedConfig()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-        var first = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-        Assert.True(first.IsSuccess);
-
-        var candidate = f.Db.ScenarioConfigs.Single(
-            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
-        candidate.SearchDuration += 1;
-        await f.Db.SaveChangesAsync();
-
-        var replay = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.False(replay.IsSuccess);
-        Assert.Equal(ErrorCodes.ScenarioApplyConflict, replay.ErrorCode);
-        Assert.Single(await f.Db.ScenarioDecisions.ToArrayAsync());
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task AdaptiveApply_RejectsModifiedCommittedConfig()
-    {
-        await using var f = await Fixture.CreateAsync();
-        await f.EnableApprovedReliefAsync();
-
-        var request = Request();
-        request.ResolutionMode = ScenarioResolutionMode.Adaptive;
-        var first = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-        Assert.True(first.IsSuccess);
-
-        var candidate = f.Db.ScenarioConfigs.Single(
-            x => x.ConfigSource == ScenarioConfigSource.Adaptive);
-        candidate.SearchDuration += 1;
-        await f.Db.SaveChangesAsync();
-
-        var apply = await f.Service.ConfirmAppliedAsync(
-            f.HostId,
-            f.MatchId,
-            request.DecisionId,
-            new ConfirmScenarioAppliedRequest
-            {
-                ScenarioConfigId = first.Data!.Config.ScenarioConfigId,
-                ScenarioConfigVersion = first.Data.Config.ScenarioConfigVersion,
-                ScenarioConfigFingerprint = first.Data.Config.ContentFingerprint
-            });
-
-        Assert.False(apply.IsSuccess);
-        Assert.Equal(ErrorCodes.ScenarioApplyConflict, apply.ErrorCode);
-        Assert.Empty(await f.Db.ScenarioApplyReceipts.ToArrayAsync());
-    }
-
-    [Fact, Trait("Category", "AEDv2")]
-    public async Task SupersededDecision_CannotReplay()
-    {
-        await using var f = await Fixture.CreateAsync();
-        var request = Request();
-        var first = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-        Assert.True(first.IsSuccess);
-
-        var decision = await f.Db.ScenarioDecisions
-            .SingleAsync(x => x.DecisionId == request.DecisionId);
-        decision.IsCurrent = false;
-        await f.Db.SaveChangesAsync();
-
-        var replay = await f.Service.ResolvePreMatchAsync(
-            f.HostId, f.MatchId, request);
-
-        Assert.False(replay.IsSuccess);
-        Assert.Equal(
-            ErrorCodes.ScenarioDecisionConflict,
-            replay.ErrorCode);
     }
 
     [Fact, Trait("Category", "M4ScenarioService")]
@@ -373,46 +156,11 @@ public sealed partial class ScenarioServiceTests
         public Guid MatchId { get; } = Guid.NewGuid();
         public AdaptiveInputSnapshotBuilder Builder { get; }
         public ScenarioService Service { get; }
-        public AEDPreMatchPolicySettings Policy { get; } = new()
-        {
-            Enabled = false,
-            PolicyVersion = ScenarioConfigValidator.SupportedPolicyVersion,
-            PolicyConfigVersion = "AED_POLICY_CONFIG_V1_1",
-            EvidencePolicyVersion = "AED_EVIDENCE_POLICY_V1_1",
-            ParameterRegistryVersion = "AED_PARAMETER_REGISTRY_V1_1",
-            ContentWhitelistVersion = "M2-WHITELIST-1",
-            SurvivalLowThreshold = 30,
-            SurvivalHighThreshold = 70,
-            NoiseLowThreshold = 30,
-            NoiseHighThreshold = 70,
-            MinimumSurvivalSampleCountPerObservedPlayer = 1,
-            MinimumNoiseSampleCountPerObservedPlayer = 1,
-            RequireFullRosterObservedCoverage = true,
-            SupportItemBudgetCandidateValues = [0, 1, 2],
-            ChaseSpeedCandidateValues = [9, 10, 11]
-        };
         private readonly TimeProvider clock = new FixedClock(Now);
-        private Fixture(SqliteConnection c, AppDbContext db, Guid? hostId = null, Guid? playerId = null)
+        private Fixture(SqliteConnection c, AppDbContext db)
         {
-            if (hostId.HasValue) HostId = hostId.Value;
-            if (playerId.HasValue) PlayerId = playerId.Value;
             connection = c; Db = db; Builder = new(db, clock);
-            Service = new(
-                db,
-                new ScenarioConfigRegistry(db),
-                Builder,
-                clock,
-                Options.Create(Policy));
-        }
-        public async Task<Fixture> ForkMatchAsync()
-        {
-            var next = new Fixture(connection, Db, HostId, PlayerId);
-            Db.MatchAuthorityBindings.Add(new MatchAuthorityBinding { MatchId = next.MatchId, HostUserId = HostId,
-                FusionSessionName = "history-" + next.MatchId.ToString("N"), MaxPlayers = 4, Status = MatchAuthorityStatus.InMatch,
-                LeaseExpiresAtUtc = Now.AddMinutes(5), CreatedAtUtc = Now, UpdatedAtUtc = Now,
-                Players = [next.Binding(HostId, 1), next.Binding(PlayerId, 2)] });
-            await Db.SaveChangesAsync();
-            return next;
+            Service = new(db, new ScenarioConfigRegistry(db), Builder, clock);
         }
         public static async Task<Fixture> CreateAsync(bool includeFallback = true, bool includePlayerProfile = true)
         {
@@ -435,43 +183,6 @@ public sealed partial class ScenarioServiceTests
         public async Task AddRosterPlayerAsync()
         {
             var id = Guid.NewGuid(); Db.Users.Add(User(id)); Db.MatchPlayerBindings.Add(Binding(id, 3)); await Db.SaveChangesAsync();
-        }
-        public async Task EnableApprovedReliefAsync(bool addCandidate = true)
-        {
-            Policy.Enabled = true;
-
-            var baseline = Db.ScenarioConfigs.Single();
-            baseline.ChaseSpeed = 9;
-            baseline.ContentWhitelistVersion = Policy.ContentWhitelistVersion;
-
-            foreach (var content in Db.ScenarioContentDefinitions)
-                content.ContentWhitelistVersion = Policy.ContentWhitelistVersion;
-
-            var player = Db.PlayerAIProfiles.Single(x => x.UserId == PlayerId);
-            var host = Db.PlayerAIProfiles.Single(x => x.UserId == HostId);
-            host.SurvivalScore = 10;
-            host.NoiseScore = 20;
-            player.SurvivalStatus = ProfileDimensionStatus.Active;
-            player.NoiseStatus = ProfileDimensionStatus.Active;
-            player.SurvivalSampleCount = 2;
-            player.NoiseSampleCount = 2;
-            player.SurvivalScore = 10;
-            player.NoiseScore = 20;
-
-            if (addCandidate)
-            {
-                var candidate = Config();
-                candidate.ScenarioConfigId = "ADAPTIVE_SUPPORT_1";
-                candidate.ScenarioConfigVersion = "ADAPTIVE_TEST_V1";
-                candidate.ConfigSource = ScenarioConfigSource.Adaptive;
-                candidate.IsFixedFallback = false;
-                candidate.SupportItemBudget = 1;
-                candidate.ChaseSpeed = 9;
-                candidate.ContentWhitelistVersion = Policy.ContentWhitelistVersion;
-                Db.ScenarioConfigs.Add(candidate);
-            }
-
-            await Db.SaveChangesAsync();
         }
         private MatchPlayerBinding Binding(Guid id, int actor) => new()
         { Id = Guid.NewGuid(), MatchId = MatchId, UserId = id, FusionActorNumber = actor, JoinProofId = Guid.NewGuid(), BoundAtUtc = Now, LastSeenAtUtc = Now };

@@ -1,16 +1,12 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Networking;
-using EchoProtocol.Networking.Authority;
 using EchoProtocol.Tools.Scanner;
 using Fusion;
 using UnityEngine;
 
 namespace EchoProtocol.TeamTools
 {
-    public static partial class TeamToolWorldSpawn
+    public static class TeamToolWorldSpawn
     {
         private static readonly int[] RequiredToolIds =
         {
@@ -29,115 +25,6 @@ namespace EchoProtocol.TeamTools
         };
 
         public const int RequiredToolCountPerZone = 5;
-
-        public static bool TryBuildResearchPreview(
-            TeamToolPickupCatalog catalog,
-            AEDResourceProposalV1 proposal,
-            Vector3[] zoneEntryPositions,
-            float minimumSpacing,
-            out IReadOnlyList<AEDResourcePlacementReceiptV1> receipts,
-            string requiredScenePath = null)
-        {
-            receipts = Array.Empty<AEDResourcePlacementReceiptV1>();
-            if (catalog == null || proposal == null ||
-                !AEDResourceDirectorV1.ValidateFairness(proposal) ||
-                zoneEntryPositions == null || zoneEntryPositions.Length != 3)
-                return false;
-
-            var points = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude);
-            var candidates = new List<AEDResourceSpawnCandidateV1>();
-            int rejectedNavMesh = 0;
-            int rejectedNearby = 0;
-            int rejectedCatalog = 0;
-            foreach (var point in points)
-            {
-                if (point == null)
-                    continue;
-
-                if (!string.IsNullOrWhiteSpace(requiredScenePath) &&
-                    !string.Equals(point.gameObject.scene.path,
-                        requiredScenePath, StringComparison.Ordinal))
-                    continue;
-
-                int zone = (int)point.Zone;
-                if (zone < 1 || zone > 3) return false;
-                if (!point.TryGetReachablePosition(
-                    zoneEntryPositions[zone - 1],
-                    out var position,
-                    out var pathDistance))
-                {
-                    rejectedNavMesh++;
-                    continue;
-                }
-
-                if (HasNearbyWorldTeamTool(position, minimumSpacing))
-                {
-                    rejectedNearby++;
-                    continue;
-                }
-
-                var allowed = AEDResourceToolIdsV1.All
-                    .Where(id => point.Allows(id) && IsCorrectTool(catalog.GetPrefab(id), id))
-                    .ToArray();
-                if (allowed.Length == 0)
-                {
-                    rejectedCatalog++;
-                    continue;
-                }
-
-                candidates.Add(new AEDResourceSpawnCandidateV1
-                {
-                    PointId = BuildResearchPointId(point.transform), Zone = zone,
-                    RoomId = point.RoomId, AllowedToolIds = allowed,
-                    NavMeshReachable = true, PathDistanceFromZoneEntry = pathDistance,
-                    X = position.x, Y = position.y, Z = position.z
-                });
-            }
-
-            bool success = AEDResourcePlacementV1.TryPlan(
-                proposal,
-                candidates,
-                minimumSpacing,
-                out receipts);
-
-            if (!success)
-            {
-                Debug.LogWarning(
-                    $"[AED_P5_6] Preview FAILED " +
-                    $"points={points.Length} " +
-                    $"eligible={candidates.Count} " +
-                    $"navRejected={rejectedNavMesh} " +
-                    $"nearbyRejected={rejectedNearby} " +
-                    $"catalogRejected={rejectedCatalog}");
-
-                for (int zone = 1; zone <= 3; zone++)
-                {
-                    int currentZone = zone;
-                    var zoneCandidates = candidates
-                        .Where(p => p.Zone == currentZone)
-                        .ToArray();
-
-                    Debug.LogWarning(
-                        $"[AED_P5_6] Zone{zone} " +
-                        $"candidates={zoneCandidates.Length} " +
-                        $"scanner={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.Scanner))} " +
-                        $"firstAid={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.FirstAid))} " +
-                        $"noise={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.NoiseMaker))} " +
-                        $"jammer={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.DoorJammer))} " +
-                        $"core={zoneCandidates.Count(p => p.AllowedToolIds.Contains(AEDResourceToolIdsV1.CoreStabilizer))}");
-                }
-            }
-
-            return success;
-        }
-
-        private static string BuildResearchPointId(Transform point)
-        {
-            var parts = new Stack<string>();
-            for (var current = point; current != null; current = current.parent)
-                parts.Push($"{current.name}:{current.GetSiblingIndex()}");
-            return point.gameObject.scene.path + "/" + string.Join("/", parts);
-        }
 
         private readonly struct SpawnPlan
         {
@@ -179,7 +66,7 @@ namespace EchoProtocol.TeamTools
             }
 
             TeamToolSpawnPoint[] points =
-                UnityEngine.Object.FindObjectsByType<
+                Object.FindObjectsByType<
                     TeamToolSpawnPoint>(
                     FindObjectsInactive.Exclude);
 
@@ -295,21 +182,6 @@ namespace EchoProtocol.TeamTools
                     "were rolled back.");
 
                 return false;
-            }
-
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority != null)
-            {
-                for (int i = 0; i < spawnedObjects.Count; i++)
-                {
-                    var spawned = spawnedObjects[i];
-                    if (spawned == null || !spawned.Id.IsValid) continue;
-                    authority.RecordPhase8ToolSpawn(
-                        spawned.Id,
-                        completePlan[i].ToolId,
-                        (int)completePlan[i].Point.Zone,
-                        runner.Tick.Raw);
-                }
             }
 
             return true;
@@ -514,7 +386,7 @@ namespace EchoProtocol.TeamTools
             while (candidates.Count > 0)
             {
                 int index =
-                    UnityEngine.Random.Range(
+                    Random.Range(
                         0,
                         candidates.Count);
 
@@ -582,8 +454,6 @@ namespace EchoProtocol.TeamTools
                     spawned,
                     plan.ToolId))
             {
-                if (spawned.TryGetComponent<NetworkInteractable>(out var pickup))
-                    pickup.BindV02SpawnMarker(EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(plan.Point.transform));
                 return spawned;
             }
 
@@ -719,7 +589,7 @@ namespace EchoProtocol.TeamTools
                  i--)
             {
                 int swap =
-                    UnityEngine.Random.Range(
+                    Random.Range(
                         0,
                         i + 1);
 

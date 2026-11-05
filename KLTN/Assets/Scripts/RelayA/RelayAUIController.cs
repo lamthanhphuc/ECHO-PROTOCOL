@@ -15,8 +15,7 @@ namespace EchoProtocol.RelayA
         [SerializeField] private CanvasGroup canvasGroup;
         [SerializeField] private Vector2 preferredPanelSize = new Vector2(1240f, 800f);
 
-        private RelayAPlayerControlLock _controlLock;
-        private RelayAPlayerControlLock ControlLock => _controlLock ??= new RelayAPlayerControlLock();
+        private readonly RelayAPlayerControlLock _controlLock = new RelayAPlayerControlLock();
         private RelayAController _controller;
         [SerializeField] private RectTransform _surface;
         [SerializeField] private RectTransform _board;
@@ -56,7 +55,7 @@ namespace EchoProtocol.RelayA
             if (!IsOpen) return;
             FitPanelToCanvas();
             if (_breakerSurface != null && _breakerSurface.gameObject.activeSelf) RefreshBreakers();
-            if (ControlLock.ShouldAutoRelease() || ControlLock.ConsumeEscape()
+            if (_controlLock.ShouldAutoRelease() || _controlLock.ConsumeEscape()
                 || (TryGetNetworkDirector(out var director) && !director.CanLocalPlayerOperateRelay(_controller))) Close();
         }
 
@@ -70,8 +69,8 @@ namespace EchoProtocol.RelayA
             if (TryGetNetworkDirector(out var director)
                 && (!director.CanLocalPlayerOperateRelay(_controller)
                     || !director.RequestRelayAcquire(_controller))) return;
-            ControlLock.Acquire(interactor, Close);
-            if (!ControlLock.IsLocked) return;
+            _controlLock.Acquire(interactor, Close);
+            if (!_controlLock.IsLocked) return;
             EnsureSurface();
             SetVisible(true);
             if (_controller != null) RefreshCircuit(_controller.CircuitSnapshot);
@@ -79,10 +78,10 @@ namespace EchoProtocol.RelayA
 
         public void Close()
         {
-            if (!ControlLock.IsLocked && !IsOpen) return;
+            if (!_controlLock.IsLocked && !IsOpen) return;
             if (TryGetNetworkDirector(out var director)) director.RequestRelayRelease(_controller);
             SetVisible(false);
-            ControlLock.Release();
+            _controlLock.Release();
         }
 
         public void RefreshCircuit(RelayACircuitSnapshot snapshot)

@@ -1,7 +1,4 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Diagnostics;
 using EchoProtocol.Gameplay;
@@ -12,7 +9,6 @@ using EchoProtocol.Networking.Authority;
 using EchoProtocol.RelayA;
 using EchoProtocol.RelayB;
 using EchoProtocol.TeamTools;
-using EchoProtocol.Telemetry;
 using EchoProtocol.UI.Result;
 using Fusion;
 using UnityEngine;
@@ -97,14 +93,6 @@ namespace EchoProtocol.Networking
 
     public static class NetworkMatchStateRules
     {
-        public static bool CanApplyAEDv2Gameplay(
-            bool enabled,
-            ScenarioResolutionMode mode,
-            MatchDifficulty difficulty) =>
-            enabled
-            && mode == ScenarioResolutionMode.Adaptive
-            && difficulty == MatchDifficulty.Normal;
-
         public static bool CanAdvance(
             NetworkMatchStatus status,
             NetworkMatchPhase current,
@@ -320,8 +308,6 @@ namespace EchoProtocol.Networking
         [Networked] private NetworkBool ReturnToResultRequested { get; set; }
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
         public uint ScenarioConfigRevision { get; private set; }
-        [Networked] public uint AEDv2PlanRevision { get; private set; }
-        [Networked] public NetworkString<_64> AEDv2PlanFingerprint { get; private set; }
         [Networked] public NetworkBool HasAppliedScenarioConfig { get; private set; }
         [Networked] public NetworkString<_64> AppliedScenarioConfigVersion { get; private set; }
         [Networked] public NetworkString<_64> AppliedScenarioPolicyVersion { get; private set; }
@@ -401,11 +387,8 @@ namespace EchoProtocol.Networking
             string.Empty;
         private uint _lastPublishedScenarioConfigRevision;
         private Guid _lastPublishedScenarioConfigMatchId;
-        private uint _lastLoggedFusionScenarioConfigRevision;
         private bool _endingForTeamDowned;
         private string _serverGeneratedAuthCode;
-        private readonly AEDv2BoundaryCoordinator _aedv2Boundary =
-            new AEDv2BoundaryCoordinator();
 
         public bool IsEnded => Status == NetworkMatchStatus.Ended;
         public bool IsEscapeTimerRunning =>
@@ -443,7 +426,6 @@ namespace EchoProtocol.Networking
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
             Instance = this;
-            _lastLoggedFusionScenarioConfigRevision = 0;
             ResultSession.Clear();
             NetworkPlayerLifeState.StateChanged += HandlePlayerLifeStateChanged;
             ResolveLegacyPresentation();
@@ -488,9 +470,6 @@ namespace EchoProtocol.Networking
                 RestoreMainPowerCompleted = false;
                 HasAppliedScenarioConfig = false;
                 ScenarioConfigRevision = 0;
-                AEDv2PlanRevision = 0;
-                AEDv2PlanFingerprint = string.Empty;
-                ResetV02ReplicatedState();
                 ScenarioConfigSourceValue = 0;
                 AppliedScenarioConfigVersion = default;
                 AppliedScenarioPolicyVersion = default;
@@ -520,54 +499,29 @@ namespace EchoProtocol.Networking
                     CloseScenarioDecisionWindow();
                 }
 
-                MatchAuthorityRuntime.Instance?.CommitStagedV02PreMatch(this);
                 if (!TeamToolWorldSpawnInitialized && !AlienHuntMission.Instance)
                 {
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
                     var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
-                    var baselinePerZone = Mathf.Max(
-                        TeamToolWorldSpawn.RequiredToolCountPerZone,
-                        toolsPerZone);
-
-                    int supportBonus = ScenarioSupportItemBudget;
+                    int supportBonus = 0;
                     if (difficulty == MatchDifficulty.Normal &&
                         MatchAuthorityRuntime.Instance != null &&
                         MatchAuthorityRuntime.Instance.TryGetMatchId(out var tuningMatchId) &&
                         AEDv2Authority.TryGetApplied(tuningMatchId, out var tuning, out _))
                     {
-                        supportBonus = Math.Max(
-                            supportBonus,
-                            tuning.SupportBonus);
+                        supportBonus = tuning.SupportBonus;
                     }
                     // The bonus is TOTAL per match, distributed deterministically.
                     var extraZone1 = Math.Min(1, supportBonus);
                     var extraZone2 = Math.Min(1, Math.Max(0, supportBonus - 1));
                     var extraZone3 = Math.Max(0, supportBonus - 2);
-                    TeamToolWorldSpawnInitialized = AEDV02PlanRevision > 0 &&
-                        MatchAuthorityRuntime.Instance != null &&
-                        AEDv2Authority.TryGetV02(MatchAuthorityRuntime.Instance.MatchId, out var v02Plan, out _)
-                        ? TeamToolWorldSpawn.TrySpawnV02Zone(Runner, _teamToolPickupCatalog, MatchAuthorityRuntime.Instance.MatchId,
-                            v02Plan, 1, _teamToolSpawnMinimumSpacing)
-                        : TeamToolWorldSpawn.TrySpawnInitial(
+                    TeamToolWorldSpawnInitialized = TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog,
-                        baselinePerZone + extraZone1,
-                        baselinePerZone + extraZone2,
-                        baselinePerZone + extraZone3,
-                        _teamToolSpawnMinimumSpacing,
-                        supportBonus > 0);
-
-                    if (TeamToolWorldSpawnInitialized &&
-                        MatchAuthorityRuntime.Instance != null &&
-                        MatchAuthorityRuntime.Instance.TryGetMatchId(
-                            out var backendMatchId) &&
-                        ScenarioConfigAuthorityRuntime.Instance != null)
-                    {
-                        _ = ScenarioConfigAuthorityRuntime.Instance
-                            .ConfirmStagedBackendPreMatchAsync(
-                                backendMatchId,
-                                CurrentAppliedScenarioConfig);
-                    }
+                        toolsPerZone + extraZone1,
+                        toolsPerZone + extraZone2,
+                        toolsPerZone + extraZone3,
+                        _teamToolSpawnMinimumSpacing, supportBonus > 0);
                 }
             }
 
@@ -634,26 +588,15 @@ namespace EchoProtocol.Networking
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             ResultSession.Capture(this);
-            _aedv2Boundary.Reset();
             if (Instance == this) Instance = null;
             NetworkPlayerLifeState.StateChanged -= HandlePlayerLifeStateChanged;
             _lastPublishedScenarioConfigRevision = 0;
             _lastPublishedScenarioConfigMatchId = Guid.Empty;
-            _lastLoggedFusionScenarioConfigRevision = 0;
         }
 
         public override void FixedUpdateNetwork()
         {
             if (!Object.HasStateAuthority) return;
-
-            if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
-                && _aedv2Boundary.Transaction != null)
-            {
-                var pending = _aedv2Boundary.Transaction;
-                _aedv2Boundary.TryReconcileReceipt(token =>
-                    new AEDSnapshotApiService().ConfirmPlanAppliedAsync(
-                        pending.MatchId, pending.DecisionId, pending.Plan.Fingerprint(), token));
-            }
 
             if (_hostMigrationZone2RestorePending)
             {
@@ -726,8 +669,6 @@ namespace EchoProtocol.Networking
                 }
                 return;
             }
-
-            TickV02Supply();
 
             if (MatchTimer.Expired(Runner))
             {
@@ -844,9 +785,6 @@ namespace EchoProtocol.Networking
                 TryPublishReplicatedScenarioConfigToRegistry();
             }
 
-            TryLogFusionScenarioConfig();
-            LogV02ReplicatedPlan();
-
             ApplyPresentation(
                 notifyListeners: false);
         }
@@ -902,16 +840,21 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            return TryAdvancePhase(
+            ResetZone2AuthoritativeState();
+            if (!InitializeZone2RelayRuntimeAuthoritative())
+            {
+                return false;
+            }
+            Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
+            if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
                     NetworkMatchPhase.Zone2Objective,
-                    "CORE_COLLECTION",
-                    () =>
-                    {
-                        ResetZone2AuthoritativeState();
-                        InitializeZone2RelayRuntimeAuthoritative();
-                        Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
-                    });
+                    "CORE_COLLECTION"))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         public bool TryDiscoverSecurityTerminal(PlayerRef actor)
@@ -1790,19 +1733,28 @@ namespace EchoProtocol.Networking
             if (!NetworkMatchStateRules.CanAdvance(
                     Status, CurrentPhase, NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate)) return false;
 
-            var accepted = TryAdvancePhase(NetworkMatchPhase.Zone2Objective,
-                NetworkMatchPhase.Zone3FindFrigate, "ZONE2_OBJECTIVE", () =>
-                {
-                    ZoneAccessFailureCount = 0;
-                    ZoneAccessCooldown = TickTimer.None;
-                    ZoneDoorsUnlocked = true;
-                    PowerPuzzleCompleted = true;
-                    RestoreMainPowerCompleted = true;
-                    Zone2Stage = Zone2MissionStage.Zone2Completed;
-                    MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(requester);
-                });
-            if (accepted) result = Zone2NetworkCommandResult.Accepted;
-            return accepted;
+            int previousFailureCount = ZoneAccessFailureCount;
+            TickTimer previousCooldown = ZoneAccessCooldown;
+            ZoneAccessFailureCount = 0;
+            ZoneAccessCooldown = TickTimer.None;
+            ZoneDoorsUnlocked = true;
+            PowerPuzzleCompleted = true;
+            RestoreMainPowerCompleted = true;
+            Zone2Stage = Zone2MissionStage.Zone2Completed;
+            if (!TryAdvancePhase(NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate, "ZONE2_OBJECTIVE"))
+            {
+                ZoneDoorsUnlocked = false;
+                PowerPuzzleCompleted = false;
+                RestoreMainPowerCompleted = false;
+                Zone2Stage = Zone2MissionStage.AuthorizationCodeGranted;
+                ZoneAccessFailureCount = previousFailureCount;
+                ZoneAccessCooldown = previousCooldown;
+                HandleReplicatedStateChanged();
+                return false;
+            }
+            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(requester);
+            result = Zone2NetworkCommandResult.Accepted;
+            return true;
         }
 
         private enum RelayBAction { Scan, StartSync, CancelSync }
@@ -1973,20 +1925,9 @@ namespace EchoProtocol.Networking
                 || Vector3.Distance(lifeState.transform.position, zone3.FrigatePosition) > zone3.PushInteractionDistance)
                 return;
 
-            if (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate)
-            {
-                TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate,
-                    NetworkMatchPhase.Zone3PushFrigate, "ZONE3_FIND_FRIGATE", () =>
-                    {
-                        if (!TryResolveActivePlayer(actor, out var currentLife)
-                            || Vector3.Distance(currentLife.transform.position,
-                                zone3.FrigatePosition) > zone3.PushInteractionDistance) return;
-                        zone3.StartAuthoritativePush(actor, currentLife.gameObject);
-                        MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
-                        Zone3Pusher = actor;
-                    });
-                return;
-            }
+            if (CurrentPhase == NetworkMatchPhase.Zone3FindFrigate
+                && !TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate,
+                    NetworkMatchPhase.Zone3PushFrigate, "ZONE3_FIND_FRIGATE")) return;
             zone3.StartAuthoritativePush(actor, lifeState.gameObject);
             MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone3Pusher = actor;
@@ -2238,19 +2179,17 @@ namespace EchoProtocol.Networking
                 || Zone3ChargeOperator != actor || Zone3ChargeDurationSeconds <= 0f
                 || Zone3ChargeAccumulatedSeconds < Zone3ChargeDurationSeconds
                 || !TryResolveActivePlayer(actor, out var lifeState)
-                || !zone3.IsPlayerNearCharge(lifeState.transform.position)) return false;
-            return TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
-                NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED", () =>
-                {
-                    EmitZone3PowerSurgeNoiseAuthoritative(actor,
-                        zone3.ChargeStation.transform.position);
-                    zone3.StopAllAuthoritativePushers();
-                    Zone3Pusher = PlayerRef.None;
-                    Zone3ChargeOperator = PlayerRef.None;
-                    _zone3ChargeLease = TickTimer.None;
-                    _zone3ChargeNoiseTimer = TickTimer.None;
-                    StartEscapeDeadlineIfNeededAuthoritative("ZONE3_POWER_TRANSFER");
-                });
+                || !zone3.IsPlayerNearCharge(lifeState.transform.position)
+                || !TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
+                    NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED")) return false;
+            EmitZone3PowerSurgeNoiseAuthoritative(actor, zone3.ChargeStation.transform.position);
+            zone3.StopAllAuthoritativePushers();
+            Zone3Pusher = PlayerRef.None;
+            Zone3ChargeOperator = PlayerRef.None;
+            _zone3ChargeLease = TickTimer.None;
+            _zone3ChargeNoiseTimer = TickTimer.None;
+            StartEscapeDeadlineIfNeededAuthoritative("ZONE3_POWER_TRANSFER");
+            return true;
         }
 
         private void StartEscapeDeadlineIfNeededAuthoritative(string reason)
@@ -2299,22 +2238,22 @@ namespace EchoProtocol.Networking
                 || IsEnded
                 || Zone3MissionDirector.IsSciFiSceneLoaded
                 || doorId != EscapeDoorId
-                || !TryResolveActivePlayer(actor, out _))
+                || !TryResolveActivePlayer(actor, out _)
+                || !TryAdvancePhase(
+                    NetworkMatchPhase.FinalHunt,
+                    NetworkMatchPhase.Escape,
+                    "FINAL_HUNT"))
             {
                 return false;
             }
-            return TryAdvancePhase(
-                    NetworkMatchPhase.FinalHunt,
-                    NetworkMatchPhase.Escape,
-                    "FINAL_HUNT", () =>
-                    {
-                        if (!TryResolveActivePlayer(actor, out _)) return;
-                        LastActor = actor;
-                        StartEscapeDeadlineIfNeededAuthoritative("LEGACY_ESCAPE_DOOR");
-                        HandleReplicatedStateChanged();
-                        RuntimeLog.Log(RuntimeLogCategory.MatchState,
-                            $"[MatchState] Escape started by {actor}; remaining={EscapeRemainingSeconds:0.##}s.");
-                    });
+
+            LastActor = actor;
+            StartEscapeDeadlineIfNeededAuthoritative("LEGACY_ESCAPE_DOOR");
+            HandleReplicatedStateChanged();
+            RuntimeLog.Log(
+                RuntimeLogCategory.MatchState,
+                $"[MatchState] Escape started by {actor}; remaining={EscapeRemainingSeconds:0.##}s.");
+            return true;
         }
 
         public bool TryCommitPlayerEscaped(PlayerRef player)
@@ -2354,24 +2293,19 @@ namespace EchoProtocol.Networking
             }
 
             if (fromDoorexit
-                && CurrentPhase == NetworkMatchPhase.FinalHunt)
+                && CurrentPhase == NetworkMatchPhase.FinalHunt
+                && !TryAdvancePhase(
+                    NetworkMatchPhase.FinalHunt,
+                    NetworkMatchPhase.Escape,
+                    "FINAL_HUNT"))
             {
-                return TryAdvancePhase(NetworkMatchPhase.FinalHunt,
-                    NetworkMatchPhase.Escape, "FINAL_HUNT", () =>
-                    {
-                        if (TryResolveActivePlayer(player, out var currentLife))
-                            CommitEscapedAfterBoundary(player, currentLife);
-                    });
+                return false;
             }
-            return CommitEscapedAfterBoundary(player, lifeState);
-        }
 
-        private bool CommitEscapedAfterBoundary(PlayerRef player,
-            NetworkPlayerLifeState lifeState)
-        {
             LastActor = player;
             if (!lifeState.TryEscape()) return false;
             MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(player);
+
             CountFinalPlayers(out var escapedCount, out _, out _, out _, out var ableToExitCount);
             if (ableToExitCount == 0 && escapedCount > 0)
                 TryEndMatch(NetworkMatchResult.Win, NetworkMatchEndReason.PlayerEscaped, player);
@@ -2494,8 +2428,7 @@ namespace EchoProtocol.Networking
         private bool TryAdvancePhase(
             NetworkMatchPhase expected,
             NetworkMatchPhase next,
-            string completedPhase,
-            Action afterTransition = null)
+            string completedPhase)
         {
             if (!Object.HasStateAuthority
                 || !NetworkMatchStateRules.CanAdvance(Status, CurrentPhase, expected, next))
@@ -2503,233 +2436,22 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            NetworkMatchPhase previousPhase = CurrentPhase;
             var runtime = MatchAuthorityRuntime.Instance;
-            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
-            if (NetworkMatchStateRules.CanApplyAEDv2Gameplay(settings?.PacingV02GameplayEnabled == true,
-                runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed, runtime?.Difficulty ?? MatchDifficulty.Normal))
-            {
-                if (_v02BoundaryPending) return true;
-                var match = runtime.MatchId;
-                _v02BoundaryPending = true; _v02BoundaryTarget = PhaseName(next);
-                Action continuation = () =>
-                {
-                    _v02BoundaryPending = false; _v02BoundaryTarget = null;
-                    if (runtime == null || runtime.MatchId != match || Object == null || !Object.IsValid || !Object.HasStateAuthority ||
-                        Status != NetworkMatchStatus.Running || CurrentPhase != expected) return;
-                    RecordCompletedPhase(runtime, completedPhase, expected);
-                    CompletePhaseTransition(expected, next, runtime, afterTransition);
-                };
-                if (!runtime.BeginV02Boundary(this, PhaseName(next), continuation)) continuation();
-                return true;
-            }
-            var gameplayEnabled = NetworkMatchStateRules.CanApplyAEDv2Gameplay(
-                settings?.ExtendedPolicyGameplayEnabled == true,
-                runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
-                runtime?.Difficulty ?? MatchDifficulty.Normal);
-            if (!gameplayEnabled)
-            {
-                RecordCompletedPhase(runtime, completedPhase, expected);
-                CompletePhaseTransition(expected, next, runtime, afterTransition);
-                EvaluateAEDv2BoundaryShadow(runtime, next);
-                return true;
-            }
-
-            if (runtime == null || !runtime.TryGetMatchId(out var matchId)) return false;
-            var nextOrdinal = PhaseOrdinal + 1;
-            if (nextOrdinal == 0) nextOrdinal = 1;
-            if (_aedv2Boundary.IsTransaction(matchId, expected.ToString(),
-                    next.ToString(), nextOrdinal))
-                return true;
-            if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
-                || _aedv2Boundary.State == AEDv2BoundaryState.PendingBackend
-                || _aedv2Boundary.State == AEDv2BoundaryState.Approved)
-            {
-                if (_aedv2Boundary.State != AEDv2BoundaryState.AwaitingReceipt)
-                    return false;
-                RecordCompletedPhase(runtime, completedPhase, expected);
-                CompletePhaseTransition(expected, next, runtime, afterTransition);
-                return true;
-            }
-
-            RecordCompletedPhase(runtime, completedPhase, expected);
-            var evidence = runtime.LastFrozenAEDv2Evidence;
-            AEDv2E2ELog.State("EVIDENCE_FROZEN");
-            if (evidence == null
-                || !AEDPhase8OrdinalContractV1.TryCreate(
-                    evidence.PhaseOrdinal,
-                    PhaseOrdinal,
-                    out var ordinalContext)
-                || ordinalContext.BackendDecisionOrdinal != nextOrdinal)
-            {
-                _aedv2Boundary.Hold("P8_PHASE_ORDINAL_MISMATCH");
-                CompletePhaseTransition(expected, next, runtime, afterTransition);
-                return true;
-            }
-            var previous = AEDv2Authority.TryGetApplied(matchId,
-                out var applied, out _) ? applied : AEDv2Plan.Normal();
-            var point = next == NetworkMatchPhase.FinalHunt
-                ? ScenarioDecisionPoint.FinalHuntSetup
-                : ScenarioDecisionPoint.AllowedPhaseBoundary;
-            var safe = IsAEDv2BoundarySafe();
-            var rosterSafety = AEDv2RosterSafety.FromEvidence(
-                runtime.AEDv2BoundUserIds,
-                runtime.LastFrozenAEDv2PlayerEvidence);
-            var stalkerDiag = FindAnyObjectByType<
-                EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
-            var stalkerUnsafe = stalkerDiag == null
-                || stalkerDiag.ReplicatedSpecialPhaseValue != 0
-                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
-                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
-                || stalkerDiag.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER;
-
-            var playerUnsafe = false;
-            foreach (var player in Runner.ActivePlayers)
-            {
-                if (Runner.TryGetPlayerObject(player, out var playerObject)
-                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                    && (life.IsDowned || life.IsReviveInProgress))
-                {
-                    playerUnsafe = true;
-                    break;
-                }
-            }
-
-            var holdContext = new AEDv2BoundaryHoldContext
-            {
-                StalkerUnsafeState = stalkerUnsafe,
-                PlayerDownedOrReviving = playerUnsafe,
-                ExpectedPhaseName = completedPhase
-            };
-
-            Debug.LogWarning(
-                $"[AED_V2][BOUNDARY_DIAG] " +
-                $"safe={safe} " +
-                $"stalkerState={stalkerDiag?.ReplicatedState} " +
-                $"special={stalkerDiag?.ReplicatedSpecialPhaseValue} " +
-                $"playerUnsafe={playerUnsafe} " +
-                $"complete={evidence?.TelemetryCompleteness} " +
-                $"fingerprintValid={evidence?.HasValidFingerprint()} " +
-                $"matchOk={evidence?.MatchId == matchId} " +
-                $"rosterOk={evidence?.RosterIdentity == runtime.AEDv2RosterIdentity} " +
-                $"ordinal={evidence?.PhaseOrdinal}/{nextOrdinal} " +
-                $"elapsed={evidence?.ElapsedSeconds:F1} " +
-                $"alive={evidence?.AlivePlayers} " +
-                $"noise={evidence?.AcceptedNoiseCount} " +
-                $"downs={evidence?.DownCount} " +
-                $"eliminated={evidence?.EliminatedCount} " +
-                $"objectives={evidence?.ObjectiveProgress} " +
-                $"bounded={previous.IsBounded()} " +
-                $"reasons={string.Join(",", evidence?.ReasonCodes ?? Array.Empty<string>())}"
-            );
-            var proposed = AEDv2BoundaryPolicy.TryPropose(previous, evidence,
-                matchId, runtime.AEDv2RosterIdentity, nextOrdinal, safe, point,
-                out var nextPlan, out var key, out var reason, rosterSafety,
-                holdContext);
-            if (!proposed || BackendAdaptiveInputSnapshotProvider.Current == null)
-            {
-                _aedv2Boundary.Hold(proposed ? "AED_V2_SNAPSHOT_UNAVAILABLE" : reason);
-                ScenarioConfigAuthorityRuntime.Instance?.AuditV2(matchId, Guid.Empty,
-                    point, "HOLD", proposed ? "AED_V2_SNAPSHOT_UNAVAILABLE" : reason,
-                    proposed ? key : (AEDv2Key?)null,
-                    proposed ? previous.Get(key) : (double?)null,
-                    proposed ? nextPlan.Get(key) : (double?)null,
-                    previous.Fingerprint(), evidence?.EvidenceFingerprint);
-                CompletePhaseTransition(expected, next, runtime, afterTransition);
-                return true;
-            }
-
-            LogAEDv2PolicyMetrics(evidence, key, previous, nextPlan);
-
-            var sourceReason = "SOURCE_SNAPSHOT_UNAVAILABLE";
-            if (!runtime.TryGetAEDPhase8SourceReferences(evidence.PhaseOrdinal, out var sourceReferences) ||
-                !runtime.TryGetAEDPhase8SourceSnapshot(evidence.PhaseOrdinal, out var sourceSnapshot) ||
-                !AEDPhase8SourceUploadBuilderV1.TryBuild(matchId, evidence.PhaseOrdinal,
-                    evidence.EvidenceFingerprint, runtime.AEDv2RosterIdentity,
-                    sourceReferences, sourceSnapshot, out var sourceUpload, out sourceReason))
-            {
-                _aedv2Boundary.Hold(sourceReason);
-                Debug.LogWarning($"[AED_P8][GAMEPLAY_HOLD] reason={sourceReason}");
-                CompletePhaseTransition(expected, next, runtime, afterTransition);
-                return true;
-            }
-
-            var decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(matchId,
-                point, PhaseName(next), nextOrdinal);
-            var values = new double[AEDv2Catalog.All.Count];
-            foreach (var spec in AEDv2Catalog.All)
-                values[(int)spec.Key] = nextPlan.Get(spec.Key);
-            var request = new AEDPlanV2Request
-            {
-                decisionId = decisionId.ToString("D"),
-                phaseOrdinal = (int)nextOrdinal,
-                decisionPoint = point == ScenarioDecisionPoint.FinalHuntSetup
-                    ? "FINAL_HUNT_SETUP" : "ALLOWED_PHASE_BOUNDARY",
-                policyVersion = "AED_V2_POLICY_V2",
-                baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
-                previousPlanFingerprint = previous.Fingerprint(),
-                resultingPlanFingerprint = nextPlan.Fingerprint(),
-                changedKey = key.ToString(),
-                previousValue = previous.Get(key),
-                appliedValue = nextPlan.Get(key),
-                adaptationIntent = nextPlan.Get(key) == AEDv2Catalog.Find(key).Relief
-                    ? "RELIEVE" : "INCREASE_PRESSURE",
-                decisionReason = "CURRENT_MATCH_EVIDENCE",
-                snapshotId = BackendAdaptiveInputSnapshotProvider.Current.SnapshotId.ToString("D"),
-                snapshotFingerprint = BackendAdaptiveInputSnapshotProvider.Current.SnapshotFingerprint,
-                evidenceFingerprint = evidence.EvidenceFingerprint,
-                rosterIdentity = runtime.AEDv2RosterIdentity,
-                commitStatus = "COMMITTED",
-                planValues = values
-            };
-            var transaction = new AEDv2BoundaryTransaction(matchId, decisionId,
-                expected.ToString(), next.ToString(), nextOrdinal,
-                runtime.AEDv2RosterIdentity, evidence.EvidenceFingerprint,
-                previous.Fingerprint(), nextPlan, key, request);
-            AEDv2E2ELog.State("PROPOSAL", decisionId: decisionId);
-            var api = new AEDSnapshotApiService();
-            return _aedv2Boundary.TryBegin(transaction,
-                async token => await UploadPhase8SourcesAsync(matchId, sourceUpload, token)
-                    ? await api.SubmitPlanAsync(matchId, request, token) : null,
-                approval => RevalidateAEDv2Boundary(transaction, approval),
-                approval => CommitAEDv2Boundary(transaction, approval),
-                () => CompletePhaseTransition(expected, next,
-                    MatchAuthorityRuntime.Instance, afterTransition),
-                token => api.ConfirmPlanAppliedAsync(matchId, decisionId,
-                    nextPlan.Fingerprint(), token),
-                () => api.LastPlanSubmitRetryable,
-                () => CompletePhaseTransition(expected, next,
-                    MatchAuthorityRuntime.Instance, afterTransition),
-                token => api.AbortPlanAsync(matchId, decisionId, token));
-        }
-
-        private void RecordCompletedPhase(MatchAuthorityRuntime runtime,
-            string completedPhase, NetworkMatchPhase previousPhase)
-        {
-            if (completedPhase.StartsWith("DEBUG_SKIP_", StringComparison.Ordinal))
-                runtime?.MarkAEDv2EvidenceIncomplete();
             runtime?.RecordPhaseCompleted(
                 BuildKey("phase-completed-" + completedPhase.ToLowerInvariant()),
-                PhaseName(previousPhase),
+                completedPhase,
                 "OBJECTIVE_COMPLETED");
-        }
-
-        private void CompletePhaseTransition(NetworkMatchPhase previousPhase,
-            NetworkMatchPhase next, MatchAuthorityRuntime runtime,
-            Action afterTransition)
-        {
-            if (!Object.HasStateAuthority || Status != NetworkMatchStatus.Running
-                || CurrentPhase != previousPhase) return;
             CurrentPhase = next;
             AdvancePhaseOrdinal();
+
             if (IsZoneBoundary(previousPhase, next))
             {
                 ResetPlayerReviveBudgetsAuthoritative();
-                AEDv2E2ELog.State("REVIVE_RESET");
 
                 // Normal zone progression opens the route; players keep their position.
                 // Debug skips explicitly teleport through their own entry points.
             }
-            afterTransition?.Invoke();
 
             if (next != NetworkMatchPhase.Escape
                 && next != NetworkMatchPhase.MatchEnded)
@@ -2764,321 +2486,8 @@ namespace EchoProtocol.Networking
             HandleReplicatedStateChanged();
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
-                $"[MatchState] Phase {previousPhase} -> {next}.");
-            AEDv2E2ELog.State("PHASE_ADVANCED");
-        }
-
-        private bool RevalidateAEDv2Boundary(AEDv2BoundaryTransaction transaction,
-            AEDPlanV2Data approval)
-        {
-            var runtime = MatchAuthorityRuntime.Instance;
-            var enabled = ScenarioConfigAuthorityRuntime.Instance?
-                .RuntimeSettings?.ExtendedPolicyGameplayEnabled == true;
-
-            return NetworkMatchStateRules.CanApplyAEDv2Gameplay(
-                    enabled,
-                    runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
-                    runtime?.Difficulty ?? MatchDifficulty.Normal)
-                && Object.HasStateAuthority
-                && Status == NetworkMatchStatus.Running
-                && CurrentPhase.ToString() == transaction.ExpectedPhase
-                && PhaseOrdinal + 1 == transaction.PhaseOrdinal
-                && runtime != null && runtime.MatchId == transaction.MatchId
-                && runtime.AEDv2RosterIdentity == transaction.RosterIdentity
-                && runtime.LastFrozenAEDv2Evidence?.EvidenceFingerprint
-                    == transaction.EvidenceFingerprint
-                && approval != null
-                && approval.resultingPlanFingerprint == transaction.Plan.Fingerprint()
-                && IsAEDv2BoundarySafe();
-        }
-
-        private bool CommitAEDv2Boundary(AEDv2BoundaryTransaction transaction,
-            AEDPlanV2Data approval)
-        {
-            var runtime = MatchAuthorityRuntime.Instance;
-            var enabled = ScenarioConfigAuthorityRuntime.Instance?
-                .RuntimeSettings?.ExtendedPolicyGameplayEnabled == true;
-
-            if (!NetworkMatchStateRules.CanApplyAEDv2Gameplay(
-                    enabled,
-                    runtime?.RequestedScenarioResolutionMode ?? ScenarioResolutionMode.Fixed,
-                    runtime?.Difficulty ?? MatchDifficulty.Normal))
-                return false;
-
-            if (!AEDv2Authority.CommitBoundary(transaction.MatchId,
-                    transaction.DecisionId, transaction.PhaseOrdinal,
-                    transaction.RosterIdentity, transaction.EvidenceFingerprint,
-                    transaction.Plan, transaction.ChangedKey, approval,
-                    Object.HasStateAuthority, Status == NetworkMatchStatus.Running,
-                    IsAEDv2BoundarySafe(), out var reason))
-            {
-                ScenarioConfigAuthorityRuntime.Instance?.AuditV2(transaction.MatchId,
-                    transaction.DecisionId, ScenarioDecisionPoint.AllowedPhaseBoundary,
-                    "Reject", reason, transaction.ChangedKey,
-                    null, null, transaction.PreviousPlanFingerprint,
-                    transaction.EvidenceFingerprint);
-                return false;
-            }
-            if (!AEDv2Authority.TryGetApplied(transaction.MatchId,
-                    out var plan, out var revision)) return false;
-            AEDv2PlanRevision = revision;
-            AEDv2PlanFingerprint = plan.Fingerprint();
-            AEDv2E2ELog.State("LOCAL_COMMIT", decisionId: transaction.DecisionId);
-            ScenarioConfigAuthorityRuntime.Instance?.AuditV2(transaction.MatchId,
-                transaction.DecisionId, approval.decisionPoint == "FINAL_HUNT_SETUP"
-                    ? ScenarioDecisionPoint.FinalHuntSetup
-                    : ScenarioDecisionPoint.AllowedPhaseBoundary,
-                "Applied", "AED_V2_BOUNDARY_APPLIED", transaction.ChangedKey,
-                transaction.Request.previousValue, transaction.Request.appliedValue,
-                plan.Fingerprint(), transaction.EvidenceFingerprint);
+                $"[MatchState] Phase {expected} -> {next}.");
             return true;
-        }
-
-        private static bool HasUnsafeAEDMinion()
-        {
-            return FindObjectsByType<
-                    EchoProtocol.AI.Minions.CreepMinionRuntime>()
-                .Any(minion =>
-                    minion != null &&
-                    minion.State is
-                        EchoProtocol.AI.Minions.CreepMinionState.Track or
-                        EchoProtocol.AI.Minions.CreepMinionState.Harass);
-        }
-
-        private bool IsAEDv2BoundarySafe()
-        {
-            var stalker = FindAnyObjectByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
-            if (stalker == null || stalker.ReplicatedSpecialPhaseValue != 0
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER)
-                return false;
-            if (HasUnsafeAEDMinion())
-                return false;
-            foreach (var player in Runner.ActivePlayers)
-                if (Runner.TryGetPlayerObject(player, out var playerObject)
-                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                    && (life.IsDowned || life.IsReviveInProgress)) return false;
-            return true;
-        }
-
-        private void EvaluateAEDv2BoundaryShadow(MatchAuthorityRuntime authority,
-            NetworkMatchPhase next)
-        {
-            var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
-            if (authority == null || settings == null
-                || authority.RequestedScenarioResolutionMode
-                    != ScenarioResolutionMode.Adaptive
-                || authority.Difficulty != MatchDifficulty.Normal
-                || (!settings.ExtendedPolicyShadowEnabled
-                    && !settings.ExtendedPolicyGameplayEnabled)) return;
-
-            var safe = true;
-            var stalkerUnsafe = false;
-            var minionUnsafe = HasUnsafeAEDMinion();
-            if (minionUnsafe)
-                safe = false;
-            var playerUnsafe = false;
-            var stalker = FindAnyObjectByType<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
-            if (stalker == null || stalker.ReplicatedSpecialPhaseValue != 0
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.CHASE
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.ATTACK
-                || stalker.ReplicatedState == EchoProtocol.AI.Stalker.StalkerState.RECOVER)
-            {
-                safe = false;
-                stalkerUnsafe = true;
-            }
-            foreach (var player in Runner.ActivePlayers)
-                if (Runner.TryGetPlayerObject(player, out var playerObject)
-                    && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                    && (life.IsDowned || life.IsReviveInProgress))
-                {
-                    safe = false;
-                    playerUnsafe = true;
-                }
-
-            var previous = AEDv2Authority.TryGetApplied(authority.MatchId,
-                out var applied, out _) ? applied : AEDv2Plan.Normal();
-            var point = next == NetworkMatchPhase.FinalHunt
-                ? ScenarioDecisionPoint.FinalHuntSetup
-                : ScenarioDecisionPoint.AllowedPhaseBoundary;
-            var rosterSafety = AEDv2RosterSafety.FromEvidence(
-                authority.AEDv2BoundUserIds,
-                authority.LastFrozenAEDv2PlayerEvidence);
-            uint ordinalBeforeTransition = PhaseOrdinal == 0 ? uint.MaxValue : PhaseOrdinal - 1u;
-            var phase8Gate = AEDPhase8IntegrationGateV1.Evaluate(
-                authority.MatchId, authority.AEDv2RosterIdentity,
-                ordinalBeforeTransition, authority.LastFrozenAEDv2Evidence,
-                authority.LastFrozenAEDCurrentPressure, rosterSafety,
-                Object.HasStateAuthority,
-                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive && authority.Difficulty == MatchDifficulty.Normal,
-                safe, stalkerUnsafe, playerUnsafe);
-            RuntimeLog.Log(RuntimeLogCategory.Aed,
-                $"[AED_P8][LOCAL_GATE] " +
-                $"eligible={phase8Gate.LocallyEligible} " +
-                $"reason={phase8Gate.ReasonCode} " +
-                $"canApply={phase8Gate.CanApplyGameplay} " +
-                $"minionUnsafe={minionUnsafe}");
-            if (settings.ExtendedPolicyShadowEnabled &&
-                authority.LastFrozenAEDv2Evidence != null)
-            {
-                var frozen = authority.LastFrozenAEDv2Evidence;
-                if (!authority.TryGetAEDPhase8SourceReferences(frozen.PhaseOrdinal, out var sourceReferences) ||
-                    !authority.TryGetAEDPhase8SourceSnapshot(frozen.PhaseOrdinal, out var sourceSnapshot))
-                    Debug.LogWarning("[AED_P8][SOURCE_UPLOAD_HOLD] reason=SOURCE_SNAPSHOT_UNAVAILABLE");
-                else if (!AEDPhase8SourceUploadBuilderV1.TryBuild(authority.MatchId, frozen.PhaseOrdinal, frozen.EvidenceFingerprint,
-                             authority.AEDv2RosterIdentity, sourceReferences, sourceSnapshot, out var sourceUpload, out var buildReason))
-                    Debug.LogWarning($"[AED_P8][SOURCE_UPLOAD_HOLD] reason={buildReason}");
-                else
-                    _ = UploadPhase8SourcesAsync(authority.MatchId, sourceUpload);
-            }
-            if (settings.ExtendedPolicyShadowEnabled && phase8Gate.LocallyEligible)
-            {
-                var frozenEvidence = authority.LastFrozenAEDv2Evidence;
-                _ = ProbePhase8CanonicalEvidenceAsync(authority.MatchId, frozenEvidence.PhaseOrdinal, frozenEvidence.EvidenceFingerprint);
-            }
-            var holdContext = new AEDv2BoundaryHoldContext
-            {
-                StalkerUnsafeState = stalkerUnsafe,
-                PlayerDownedOrReviving = playerUnsafe,
-                ExpectedPhaseName = authority.LastFrozenAEDv2Evidence?.CompletedPhase
-            };
-            var proposed = AEDv2BoundaryPolicy.TryPropose(previous,
-                authority.LastFrozenAEDv2Evidence, authority.MatchId,
-                authority.AEDv2RosterIdentity, PhaseOrdinal, safe,
-                point,
-                out var nextPlan, out var key, out var reason,
-                rosterSafety, holdContext);
-            if (proposed)
-                LogAEDv2PolicyMetrics(authority.LastFrozenAEDv2Evidence, key, previous, nextPlan);
-            RuntimeLog.Log(RuntimeLogCategory.Aed,
-                proposed
-                    ? $"[AED_V2][BOUNDARY_SHADOW] phase={next} key={key} plan={nextPlan.Fingerprint()} evidence={authority.LastFrozenAEDv2Evidence.EvidenceFingerprint}"
-                    : $"[AED_V2][BOUNDARY_HOLD] phase={next} reason={reason}");
-            ScenarioConfigAuthorityRuntime.Instance?.AuditV2(authority.MatchId,
-                ScenarioConfigAuthorityRuntime.CreateDecisionId(authority.MatchId,
-                    point, PhaseName(next), PhaseOrdinal),
-                point,
-                proposed ? "ShadowOnly" : "HOLD",
-                proposed ? settings.ExtendedPolicyGameplayEnabled
-                    ? "AED_V2_BOUNDARY_GAMEPLAY_NOT_APPROVED"
-                    : "AED_V2_BOUNDARY_SHADOW_ONLY" : reason,
-                proposed ? key : (AEDv2Key?)null,
-                proposed ? previous.Get(key) : (double?)null,
-                proposed ? nextPlan.Get(key) : (double?)null,
-                proposed ? nextPlan.Fingerprint() : previous.Fingerprint(),
-                authority.LastFrozenAEDv2Evidence?.EvidenceFingerprint);
-            if (proposed && BackendAdaptiveInputSnapshotProvider.Current != null)
-            {
-                var values = new double[AEDv2Catalog.All.Count];
-                foreach (var spec in AEDv2Catalog.All)
-                    values[(int)spec.Key] = nextPlan.Get(spec.Key);
-                var request = new AEDPlanV2Request
-                {
-                    decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(
-                        authority.MatchId, point, PhaseName(next), PhaseOrdinal).ToString("D"),
-                    phaseOrdinal = (int)PhaseOrdinal,
-                    decisionPoint = point == ScenarioDecisionPoint.FinalHuntSetup
-                        ? "FINAL_HUNT_SETUP" : "ALLOWED_PHASE_BOUNDARY",
-                    policyVersion = "AED_V2_POLICY_V2",
-                    baselineVersion = "AED_DIFFICULTY_V2|NORMAL",
-                    previousPlanFingerprint = previous.Fingerprint(),
-                    resultingPlanFingerprint = nextPlan.Fingerprint(),
-                    changedKey = key.ToString(),
-                    previousValue = previous.Get(key),
-                    appliedValue = nextPlan.Get(key),
-                    adaptationIntent = nextPlan.Get(key) == AEDv2Catalog.Find(key).Relief
-                        ? "RELIEVE" : "INCREASE_PRESSURE",
-                    decisionReason = "CURRENT_MATCH_EVIDENCE",
-                    snapshotId = BackendAdaptiveInputSnapshotProvider.Current.SnapshotId.ToString("D"),
-                    snapshotFingerprint = BackendAdaptiveInputSnapshotProvider.Current.SnapshotFingerprint,
-                    evidenceFingerprint = authority.LastFrozenAEDv2Evidence.EvidenceFingerprint,
-                    rosterIdentity = authority.AEDv2RosterIdentity,
-                    commitStatus = "SHADOW_ONLY",
-                    planValues = values
-                };
-                _ = SubmitAEDv2BoundaryShadowAsync(authority.MatchId, request);
-            }
-        }
-
-        private static async Task ProbePhase8CanonicalEvidenceAsync(Guid matchId, uint completedOrdinal, string fingerprint)
-        {
-            try
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-                var receipt = await new AEDSnapshotApiService().ProbeDirectorEvidenceAsync(matchId, completedOrdinal, fingerprint, timeout.Token);
-                RuntimeLog.Log(RuntimeLogCategory.Aed, $"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} canonicalVerified={receipt?.canonicalEvidenceVerified == true} extendedVerified={receipt?.extendedMetricsVerified == true} ledgerVerified={receipt?.resourceLedgerVerified == true} gameplayApproved={receipt?.gameplayApproved == true} reason={receipt?.reasonCode ?? "UNVERIFIED"}");
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[AED_P8][BACKEND_EVIDENCE] match={matchId:D} phase={completedOrdinal} failure={exception.GetType().Name}");
-            }
-        }
-
-        private static async Task<bool> UploadPhase8SourcesAsync(Guid matchId, AEDPhase8SourceUploadDtoV1 request,
-            CancellationToken cancellationToken = default)
-        {
-            if (matchId == Guid.Empty || request == null) return false;
-            try
-            {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(25));
-                var api = new AEDSnapshotApiService();
-                var probe = await api.ProbeDirectorEvidenceAsync(matchId, (uint)request.completedPhaseOrdinal, request.evidenceFingerprint, timeout.Token);
-                if (probe?.canonicalEvidenceVerified != true)
-                {
-                    Debug.LogWarning("[AED_P8][SOURCE_UPLOAD_HOLD] reason=CANONICAL_EVIDENCE_UNAVAILABLE");
-                    return false;
-                }
-                var result = await api.VerifyDirectorSourcesAsync(matchId, request, timeout.Token);
-                Debug.Log($"[AED_P8][SOURCE_UPLOAD] version={request.sourceVersion} phase={request.completedPhaseOrdinal} references={request.sourceEvents.Length} supply={request.supply.Length} minions={request.minions.Length} canonical={result?.canonicalVerified == true} supplyVerified={result?.supplyLedgerVerified == true} minionVerified={result?.minionPopulationVerified == true} reason={result?.reasonCode ?? "UNVERIFIED"}");
-                return result?.CompleteForGameplay == true;
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[AED_P8][SOURCE_UPLOAD] {exception.GetType().Name}");
-                return false;
-            }
-        }
-
-        private static void LogAEDv2PolicyMetrics(
-            AEDv2CurrentMatchEvidence evidence,
-            AEDv2Key key,
-            AEDv2Plan previous,
-            AEDv2Plan nextPlan)
-        {
-            if (evidence == null || evidence.ElapsedSeconds < 30) return;
-            var minutes = evidence.ElapsedSeconds / 60.0;
-            AEDv2E2ELog.State(
-                "POLICY_METRICS",
-                fields:
-                    $"downs={evidence.DownCount} " +
-                    $"revives={evidence.ReviveCount} " +
-                    $"eliminated={evidence.EliminatedCount} " +
-                    $"noise={evidence.AcceptedNoiseCount} " +
-                    $"tools={evidence.TeamToolUseCount} " +
-                    $"objectives={evidence.ObjectiveProgress} " +
-                    $"downsPerMin={evidence.DownCount / minutes:F3} " +
-                    $"noisePerMin={evidence.AcceptedNoiseCount / minutes:F3} " +
-                    $"objectivesPerMin={evidence.ObjectiveProgress / minutes:F3} " +
-                    $"changedKey={key} " +
-                    $"previous={previous.Get(key):F3} " +
-                    $"proposed={nextPlan.Get(key):F3}");
-        }
-
-        private static async Task SubmitAEDv2BoundaryShadowAsync(Guid matchId,
-            AEDPlanV2Request request)
-        {
-            try
-            {
-                if (await new AEDSnapshotApiService().SubmitPlanAsync(matchId, request,
-                        CancellationToken.None) == null)
-                    Debug.LogWarning("[AED_V2] boundary shadow audit was not confirmed by backend.");
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning("[AED_V2] boundary shadow audit failed: " + exception.GetType().Name);
-            }
         }
 
         private bool TryEndMatch(
@@ -4877,6 +4286,7 @@ namespace EchoProtocol.Networking
                 : ScenarioResolutionMode.Fixed;
             var scenarioRuntime =
                 ScenarioConfigAuthorityRuntime.EnsureExists();
+
             var experimentCondition =
                 authority != null
                     ? authority.ExperimentCondition
@@ -4902,31 +4312,9 @@ namespace EchoProtocol.Networking
 
                 if (result.ShouldApplyConfig)
                 {
-                    if (decisionPoint == ScenarioDecisionPoint.PreMatch &&
-                        mode == ScenarioResolutionMode.Adaptive &&
-                        result.CommitDisposition ==
-                            ScenarioResolutionCommitDisposition.NewDecision &&
-                        scenarioRuntime.TryGetStagedBackendPreMatch(
-                            matchId,
-                            out var backendDecision,
-                            out var backendConfig))
-                    {
-                        ApplyScenarioConfigAuthoritative(backendConfig, matchId);
-
-                        Debug.Log(
-                            $"[AED_P8][PREMATCH_HOST_COMMIT] " +
-                            $"match={matchId:D} " +
-                            $"config={backendDecision.config.scenarioConfigId} " +
-                            $"version={backendConfig.ScenarioConfigVersion} " +
-                            $"budget={ScenarioSupportItemBudget} " +
-                            $"revision={ScenarioConfigRevision}");
-                    }
-                    else
-                    {
-                        ApplyScenarioConfigAuthoritative(
-                            result.Decision.AppliedConfig,
-                            matchId);
-                    }
+                    ApplyScenarioConfigAuthoritative(
+                        result.Decision.AppliedConfig,
+                        matchId);
                 }
                 else if (result.IsPrecommitRejected
                          && decisionPoint
@@ -4957,16 +4345,6 @@ namespace EchoProtocol.Networking
                 result,
                 Object != null
                 && Object.HasStateAuthority);
-
-            if (AEDv2Authority.TryGetApplied(matchId, out var v2Plan, out var v2Revision))
-            {
-                AEDv2PlanRevision = v2Revision;
-                AEDv2PlanFingerprint = v2Plan.Fingerprint();
-                AEDv2E2ELog.State(
-                    "NETWORK_REVISION_PUBLISHED",
-                    fields: $"revision={v2Revision} " +
-                            $"fingerprint={v2Plan.Fingerprint()}");
-            }
 
             if (decisionPoint == ScenarioDecisionPoint.PreMatch)
                 RefreshAEDv2ReviveBonusesAuthoritative();
@@ -5143,52 +4521,6 @@ namespace EchoProtocol.Networking
                     fallbackConfigId);
 
             return true;
-        }
-
-        private void TryLogFusionScenarioConfig()
-        {
-            if (Object == null ||
-                !Object.IsValid ||
-                !HasAppliedScenarioConfig ||
-                ScenarioConfigRevision == 0 ||
-                _lastLoggedFusionScenarioConfigRevision ==
-                    ScenarioConfigRevision)
-            {
-                return;
-            }
-
-            if (!TryBuildReplicatedScenarioConfig(out var config) ||
-                config == null)
-            {
-                return;
-            }
-
-            var role = Object.HasStateAuthority
-                ? "Host"
-                : "Client";
-
-            var matchId = "unknown";
-            var authority = MatchAuthorityRuntime.Instance;
-
-            if (authority != null &&
-                authority.TryGetMatchId(out var resolvedMatchId))
-            {
-                matchId = resolvedMatchId.ToString("D");
-            }
-
-            Debug.Log(
-                $"[AED_P8][FUSION_CONFIG] " +
-                $"role={role} " +
-                $"match={matchId} " +
-                $"object={Object.Id} " +
-                $"source={ScenarioConfigSourceValue} " +
-                $"budget={ScenarioSupportItemBudget} " +
-                $"version={config.ScenarioConfigVersion} " +
-                $"revision={ScenarioConfigRevision} " +
-                $"unityFingerprint={ScenarioConfigFingerprint.Compute(config)}");
-
-            _lastLoggedFusionScenarioConfigRevision =
-                ScenarioConfigRevision;
         }
 
         private bool TryPublishReplicatedScenarioConfigToRegistry()

@@ -50,14 +50,6 @@ namespace EchoProtocol.AI.Listener.Perception
             DateTime heardAtUtc,
             out HearingObservation observation,
             out ListenerHearingRejectReason rejectReason)
-            => Evaluate(noiseEvent, listenerHearingOrigin, heardAtUtc, 1d, out observation, out rejectReason);
-
-        public bool TryEvaluateV02(RuntimeNoiseEvent noiseEvent, Vector3 listenerHearingOrigin, DateTime heardAtUtc, int tier,
-            out HearingObservation observation, out ListenerHearingRejectReason rejectReason) => Evaluate(noiseEvent, listenerHearingOrigin,
-                heardAtUtc, EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.Sensory(tier), out observation, out rejectReason);
-
-        private bool Evaluate(RuntimeNoiseEvent noiseEvent, Vector3 listenerHearingOrigin, DateTime heardAtUtc, double rangeMultiplier,
-            out HearingObservation observation, out ListenerHearingRejectReason rejectReason)
         {
             observation = default;
             rejectReason = ListenerHearingRejectReason.None;
@@ -109,7 +101,7 @@ namespace EchoProtocol.AI.Listener.Perception
                     == RuntimeNoiseType.NOISE_MAKER
                         ? noiseEvent.HearingRadius
                         : noiseEvent.HearingRadius
-                            * _policy.HearingRangeMultiplier * rangeMultiplier;
+                            * _policy.HearingRangeMultiplier;
 
             if (distance > baseHearingRadius)
             {

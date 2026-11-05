@@ -132,10 +132,8 @@ namespace EchoProtocol.Settings
             EnsureLoaded();
             if (IsFixedGameplayKey(key)) return true;
             for (int i = 0; i < Keys.Length; i++)
-            {
-                if (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key))
-                    return true;
-            }
+                if ((GameplayAction)i != GameplayAction.Inventory)
+                if (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)) return true;
             return false;
         }
 
@@ -158,10 +156,8 @@ namespace EchoProtocol.Settings
             }
             for (int i = 0; i < Keys.Length; i++)
             {
-                if (i != (int)action &&
-                    (Keys[i] == key ||
-                     IsDefaultAlternate((GameplayAction)i, key) ||
-                     IsDefaultAlternate(action, key, Keys[i])))
+                if ((GameplayAction)i != GameplayAction.Inventory && i != (int)action && (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)
+                    || IsDefaultAlternate(action, key, Keys[i])))
                 {
                     error = "Phím này đang dùng cho: " + ActionLabels[i] + ".";
                     return false;

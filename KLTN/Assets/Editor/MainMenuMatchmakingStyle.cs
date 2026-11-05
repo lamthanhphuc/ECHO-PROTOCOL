@@ -274,7 +274,7 @@ public static class MainMenuMatchmakingStyle
             0f,
             0f,
             500f,
-            410f);
+            350f);
 
         var title =
             EnsureText(
@@ -393,22 +393,6 @@ public static class MainMenuMatchmakingStyle
             256f,
             42f);
 
-        var resolutionModeRow = EnsurePanel(
-            window, "ResolutionModeRow", Color.clear);
-        PlaceTopLeft(resolutionModeRow, 34f, 248f, 432f, 42f);
-        var resolutionModeLabel = EnsureText(
-            resolutionModeRow, "Label", font);
-        PlaceTopLeft(resolutionModeLabel.rectTransform,
-            0f, 0f, 160f, 42f);
-        resolutionModeLabel.text = "AED MODE";
-        resolutionModeLabel.fontSize = 12;
-        resolutionModeLabel.color = TextSecondary;
-        resolutionModeLabel.alignment = TextAnchor.MiddleLeft;
-        var resolutionModeButton = EnsureTextButton(
-            resolutionModeRow, "ResolutionModeButton", "<  FIXED  >", font);
-        StyleControlButton(resolutionModeButton,
-            176f, 0f, 256f, 42f);
-
         var confirm =
             EnsureTextButton(
                 window,
@@ -419,7 +403,7 @@ public static class MainMenuMatchmakingStyle
         StylePrimaryButton(
             confirm,
             34f,
-            310f,
+            254f,
             278f,
             48f);
 
@@ -433,7 +417,7 @@ public static class MainMenuMatchmakingStyle
         StyleControlButton(
             back,
             324f,
-            310f,
+            254f,
             142f,
             48f);
 
@@ -446,7 +430,7 @@ public static class MainMenuMatchmakingStyle
         PlaceTopLeft(
             status.rectTransform,
             34f,
-            368f,
+            312f,
             432f,
             22f);
 
@@ -486,10 +470,6 @@ public static class MainMenuMatchmakingStyle
         Assign(serialized, "roomCodeInput", roomInput);
         Assign(serialized, "difficultyRow", difficultyRow.gameObject);
         Assign(serialized, "difficultyButton", difficultyButton);
-        Assign(serialized, "resolutionModeRow", resolutionModeRow.gameObject);
-        Assign(serialized, "resolutionModeButton", resolutionModeButton);
-        Assign(serialized, "resolutionModeValueText",
-            resolutionModeButton.GetComponentInChildren<Text>(true));
 
         var difficultyValue =
             difficultyButton.GetComponentInChildren<Text>(

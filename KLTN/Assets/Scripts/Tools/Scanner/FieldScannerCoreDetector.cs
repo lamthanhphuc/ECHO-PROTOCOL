@@ -19,8 +19,7 @@ namespace EchoProtocol.Tools.Scanner
             IEnumerable<ICoreScanCandidate> candidates,
             FieldScannerTuning tuning = null,
             Func<Vector3, Vector3, bool> isOccludedFunc = null,
-            List<Vector3> radarOffsets = null,
-            Action<ICoreScanCandidate, bool> observedCandidate = null)
+            List<Vector3> radarOffsets = null)
         {
             radarOffsets?.Clear();
             tuning = tuning ?? FieldScannerTuning.Default;
@@ -63,7 +62,6 @@ namespace EchoProtocol.Tools.Scanner
                 }
 
                 float occlusionMultiplier = isOccluded ? tuning.OccludedSignalMultiplier : 1.0f;
-                observedCandidate?.Invoke(candidate, isOccluded);
                 float distanceAttenuation = Mathf.Clamp01(1f - (distance / tuning.CoreRange));
                 float score = distanceAttenuation * occlusionMultiplier;
 

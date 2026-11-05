@@ -23,38 +23,23 @@ namespace EchoProtocol.Networking
         private Collider[] _carryColliders;
         private bool[] _carryColliderStates;
         private bool _carryPresentationActive;
-        public string V02SourceMarkerId { get; private set; }
-        public Vector3 V02WorldSourcePosition => !MonsterToolCarrierId.IsValid && HasMonsterDropPose ? MonsterDropPosition : transform.position;
-        public void BindV02SpawnMarker(string markerId)
-        {
-            if (Object != null && Object.IsValid && Object.HasStateAuthority && EchoProtocol.AI.Common.AED.AEDV02WorldSample.Hash(markerId))
-                V02SourceMarkerId = markerId;
-        }
 
         public void BeginMonsterCarryAuthoritative(NetworkId monsterId)
         {
             if (!Object.HasStateAuthority || !monsterId.IsValid) return;
-            var previous = MonsterToolCarrierId;
             MonsterToolCarrierId = monsterId;
             HasMonsterDropPose = false;
             ApplyMonsterCarryPresentation();
-            if (previous != monsterId)
-            {
-                if (previous.IsValid) Authority.MatchAuthorityRuntime.Instance?.RecordV02ToolCarrier(this, previous, false);
-                Authority.MatchAuthorityRuntime.Instance?.RecordV02ToolCarrier(this, monsterId, true);
-            }
         }
 
         public void EndMonsterCarryAuthoritative(Vector3 position)
         {
             if (!Object.HasStateAuthority) return;
-            var previous = MonsterToolCarrierId;
             MonsterDropPosition = position;
             MonsterDropRotation = Quaternion.identity;
             HasMonsterDropPose = true;
             MonsterToolCarrierId = default;
             ApplyMonsterCarryPresentation();
-            if (previous.IsValid) Authority.MatchAuthorityRuntime.Instance?.RecordV02ToolCarrier(this, previous, false);
         }
 
         public override void Render() => ApplyMonsterCarryPresentation();

@@ -45,9 +45,7 @@ namespace EchoProtocol.AI.Common.Profile
             long profileRevision,
             string profileLineageId,
             PlayerDimensionSnapshot survival,
-            PlayerDimensionSnapshot noise,
-            PlayerDimensionSnapshot objective = null,
-            PlayerDimensionSnapshot toolUsage = null)
+            PlayerDimensionSnapshot noise)
         {
             UserId = RequireText(userId, nameof(userId));
             if (profileRevision < 0) throw new ArgumentOutOfRangeException(nameof(profileRevision));
@@ -55,8 +53,6 @@ namespace EchoProtocol.AI.Common.Profile
             ProfileLineageId = RequireText(profileLineageId, nameof(profileLineageId));
             Survival = survival ?? throw new ArgumentNullException(nameof(survival));
             Noise = noise ?? throw new ArgumentNullException(nameof(noise));
-            Objective = objective;
-            ToolUsage = toolUsage;
         }
 
         public string UserId { get; }
@@ -64,8 +60,6 @@ namespace EchoProtocol.AI.Common.Profile
         public string ProfileLineageId { get; }
         public PlayerDimensionSnapshot Survival { get; }
         public PlayerDimensionSnapshot Noise { get; }
-        public PlayerDimensionSnapshot Objective { get; }
-        public PlayerDimensionSnapshot ToolUsage { get; }
 
         internal static string RequireText(string value, string name)
         {
@@ -129,25 +123,19 @@ namespace EchoProtocol.AI.Common.Profile
             string rosterIdentity,
             int teamSize,
             RosterDimensionSummary survival,
-            RosterDimensionSummary noise,
-            RosterDimensionSummary objective = null,
-            RosterDimensionSummary toolUsage = null)
+            RosterDimensionSummary noise)
         {
             RosterIdentity = PlayerProfileSnapshot.RequireText(rosterIdentity, nameof(rosterIdentity));
             if (teamSize < 1) throw new ArgumentOutOfRangeException(nameof(teamSize));
             TeamSize = teamSize;
             Survival = survival ?? throw new ArgumentNullException(nameof(survival));
             Noise = noise ?? throw new ArgumentNullException(nameof(noise));
-            Objective = objective;
-            ToolUsage = toolUsage;
         }
 
         public string RosterIdentity { get; }
         public int TeamSize { get; }
         public RosterDimensionSummary Survival { get; }
         public RosterDimensionSummary Noise { get; }
-        public RosterDimensionSummary Objective { get; }
-        public RosterDimensionSummary ToolUsage { get; }
     }
 
     public sealed class ProfileRevisionRef
@@ -173,9 +161,9 @@ namespace EchoProtocol.AI.Common.Profile
             IReadOnlyList<ProfileRevisionRef> sourceProfileRevisions,
             string currentMatchTelemetrySchemaVersion)
         {
-            ProfileFormulaSemanticId = profileFormulaSemanticId ?? string.Empty;
-            SurvivalComparisonKey = survivalComparisonKey ?? string.Empty;
-            NoiseComparisonKey = noiseComparisonKey ?? string.Empty;
+            ProfileFormulaSemanticId = PlayerProfileSnapshot.RequireText(profileFormulaSemanticId, nameof(profileFormulaSemanticId));
+            SurvivalComparisonKey = PlayerProfileSnapshot.RequireText(survivalComparisonKey, nameof(survivalComparisonKey));
+            NoiseComparisonKey = PlayerProfileSnapshot.RequireText(noiseComparisonKey, nameof(noiseComparisonKey));
             TeamPerformanceFormulaVersion = teamPerformanceFormulaVersion ?? string.Empty;
             SourceProfileRevisions = Copy(sourceProfileRevisions);
             CurrentMatchTelemetrySchemaVersion = currentMatchTelemetrySchemaVersion ?? string.Empty;
@@ -215,8 +203,7 @@ namespace EchoProtocol.AI.Common.Profile
             RosterProfileSummary rosterProfileSummary,
             SnapshotValidity snapshotValidity,
             IReadOnlyList<string> reasonCodes,
-            AdaptiveInputProvenance provenance,
-            IReadOnlyList<string> missingProfileUserIds = null)
+            AdaptiveInputProvenance provenance)
         {
             if (snapshotId == Guid.Empty) throw new ArgumentException("Snapshot id is required.", nameof(snapshotId));
             if (targetMatchId == Guid.Empty) throw new ArgumentException("Target match id is required.", nameof(targetMatchId));
@@ -236,7 +223,6 @@ namespace EchoProtocol.AI.Common.Profile
             SnapshotValidity = snapshotValidity;
             ReasonCodes = CopyStrings(reasonCodes);
             Provenance = provenance ?? throw new ArgumentNullException(nameof(provenance));
-            MissingProfileUserIds = CopyStrings(missingProfileUserIds);
         }
 
         public Guid SnapshotId { get; }
@@ -252,8 +238,6 @@ namespace EchoProtocol.AI.Common.Profile
         public SnapshotValidity SnapshotValidity { get; }
         public IReadOnlyList<string> ReasonCodes { get; }
         public AdaptiveInputProvenance Provenance { get; }
-        public IReadOnlyList<string> MissingProfileUserIds { get; }
-        public bool HasMissingProfiles => MissingProfileUserIds.Count > 0;
 
         private static IReadOnlyList<PlayerProfileSnapshot> CopySnapshots(IReadOnlyList<PlayerProfileSnapshot> values)
         {

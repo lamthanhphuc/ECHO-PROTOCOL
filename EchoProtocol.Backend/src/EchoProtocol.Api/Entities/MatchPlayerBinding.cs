@@ -10,7 +10,6 @@ public sealed class MatchPlayerBinding
     public DateTime BoundAtUtc { get; set; }
     public DateTime LastSeenAtUtc { get; set; }
     public DateTime? DisconnectedAtUtc { get; set; }
-    public bool HadGameplayDisconnect { get; set; }
     public bool Participated { get; set; }
 
     public MatchAuthorityBinding? Match { get; set; }

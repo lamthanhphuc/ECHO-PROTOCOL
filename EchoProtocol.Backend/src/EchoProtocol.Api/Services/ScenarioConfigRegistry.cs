@@ -87,60 +87,6 @@ public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigReg
                 string.Join(",", validation.ReasonCodes), ErrorCodes.ScenarioFixedFallbackInvalid);
     }
 
-    public async Task<ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>>
-        GetProductionAdaptiveCandidatesAsync(
-            string unityCompatibilityVersion,
-            CancellationToken cancellationToken = default)
-    {
-        var candidates = await db.ScenarioConfigs.AsNoTracking()
-            .Where(x =>
-                x.ConfigSource == ScenarioConfigSource.Adaptive &&
-                x.IsActive &&
-                x.IsProductionApproved &&
-                !x.IsFixedFallback &&
-                x.UnityCompatibilityVersion == unityCompatibilityVersion)
-            .OrderBy(x => x.ScenarioConfigId)
-            .ThenBy(x => x.ScenarioConfigVersion)
-            .ToArrayAsync(cancellationToken);
-
-        if (candidates.Length == 0)
-        {
-            return ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>
-                .Failure(
-                    "No approved Adaptive config is registered",
-                    ErrorCodes.ScenarioConfigNotFound);
-        }
-
-        var fallback = await GetProductionFixedFallbackAsync(
-            unityCompatibilityVersion, cancellationToken);
-
-        if (!fallback.IsSuccess)
-        {
-            return ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>
-                .Failure(fallback.Message, fallback.ErrorCode!);
-        }
-
-        foreach (var candidate in candidates)
-        {
-            var validation = await ValidateAsync(
-                candidate, unityCompatibilityVersion, cancellationToken);
-
-            if (!validation.IsValid ||
-                candidate.FallbackConfigId != fallback.Data!.ScenarioConfigId ||
-                candidate.FallbackConfigVersion != fallback.Data.ScenarioConfigVersion)
-            {
-                return ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>
-                    .Failure(
-                        $"Invalid Adaptive config: {candidate.ScenarioConfigId} " +
-                        string.Join(",", validation.ReasonCodes),
-                        ErrorCodes.ScenarioConfigInvalid);
-            }
-        }
-
-        return ServiceResult<IReadOnlyList<ScenarioConfigDefinition>>
-            .Success(candidates);
-    }
-
     private async Task<ScenarioConfigValidationResult> ValidateAsync(
         ScenarioConfigDefinition? config,
         string unityCompatibilityVersion,

@@ -169,7 +169,6 @@ namespace EchoProtocol.AI.Stalker.Tests
             _createdObjects.Add(agentRoot);
 
             var agent = agentRoot.AddComponent<NavMeshAgent>();
-            agent.agentTypeID = 0;
             agent.radius = 0.25f;
             agent.height = 1.8f;
             agent.speed = 1f;

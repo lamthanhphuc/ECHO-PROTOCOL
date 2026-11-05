@@ -44,7 +44,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
         [Test]
         public void DynamicCountersTranslateInBothDirectionsWithoutChangingNumbers()
         {
-            const string vietnamese = "Lắp lõi năng lượng vào trạm cấp điện    2/4";
+            const string vietnamese = "Lắp Energy Core vào Sector Box    2/4";
             GameLanguage.Set(GameLocale.English);
             string english = GameLanguage.Translate(vietnamese);
             Assert.That(english, Is.EqualTo("Insert Energy Cores into the Sector Box    2/4"));

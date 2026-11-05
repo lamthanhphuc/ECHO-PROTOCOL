@@ -330,9 +330,6 @@ namespace EchoProtocol.AI.Stalker
         private float _previousChaseObservationTimeSeconds;
         private double _lastChaseRetargetTimeSeconds = double.NegativeInfinity;
         private bool _hideSpotRevealGraceActive;
-        private bool _v02HideRevealCaptured;
-        private float _v02HideRevealTrack;
-        private float _v02HideRevealGrace;
         private float _hideSpotRevealGraceElapsed;
         private PlayerId _hideSpotRevealPlayerId = PlayerId.Invalid;
         private bool _hideSpotInspectionLogged;
@@ -402,7 +399,6 @@ namespace EchoProtocol.AI.Stalker
         public float DetectionMeter => detectionMeter;
         public Transform DetectionTarget => detectionTarget;
         public Transform CurrentTarget => currentTarget;
-        public bool HasActiveHideSpotInvestigation => _hidingInvestigation?.HasActiveCandidate == true;
         public Vector3 LastKnownPosition => lastKnownPosition;
         public float SearchElapsedTime => searchElapsedTime;
         public float AttackElapsedTime => attackElapsedTime;
@@ -439,31 +435,8 @@ namespace EchoProtocol.AI.Stalker
         public StalkerWorldInteractionKind CurrentWorldInteractionKind => _worldInteractionDriver.CurrentKind;
         public float WorldInteractionProgress01 => _worldInteractionDriver.InteractionProgress01;
         public Component CurrentWorldInteractionBlocker => _worldInteractionDriver.CurrentBlocker;
-        public bool TryReadV02NoiseDiversion(out string noiseId, out Vector3 destination)
-        {
-            noiseId = string.Empty; destination = default;
-            if (currentState != StalkerState.SEARCH || !_hasActiveHeardNoiseType || _activeHeardNoiseType != RuntimeNoiseType.NOISE_MAKER ||
-                !_hearingMemory.HasActiveNoiseInvestigation || _searchContext == null || _searchContext.Source != StalkerSearchSource.HeardNoise ||
-                _navigation == null || !_navigation.TryGetActiveDestination(out destination) ||
-                Vector3.Distance(destination, _hearingMemory.InvestigationPosition) > AEDV02PilotOpportunities.NoiseProjectionRadius) return false;
-            noiseId = _hearingMemory.ActiveNoiseEventId;
-            return !string.IsNullOrWhiteSpace(noiseId);
-        }
         public IPlayerAttackConsequenceSink AttackConsequenceSink { get; set; }
         public bool SuppressLegacyUpdateSimulation { get; set; }
-        public IReadOnlyDictionary<PlayerId, int> V02TargetTiers { get; set; }
-        public float AppliedHideRevealTrackSeconds => _v02HideRevealCaptured ? _v02HideRevealTrack : hideSpotRevealTrackSeconds;
-        public float AppliedHideRevealGraceSeconds => _v02HideRevealCaptured ? _v02HideRevealGrace : hideSpotRevealGraceSeconds;
-        public StalkerHideSpotInspectionConfig V02CabinetInspectionConfig => GetHideSpotInspectionConfig();
-        private readonly Dictionary<ulong, PlayerId> _v02KnownHidePlayers = new Dictionary<ulong, PlayerId>();
-        public double V02ProactiveSeekPausedUntil { get; set; }
-        public void ResetV02PlayerFairness() { V02TargetTiers = null; _v02KnownHidePlayers.Clear(); V02ProactiveSeekPausedUntil = 0; }
-        public void RecordV02SeenHideEntry(ulong spot, PlayerId player)
-        {
-            if (spot != 0 && player.IsValid) _v02KnownHidePlayers[spot] = player;
-        }
-        private int V02KnownHideTier(ulong spot) => _v02KnownHidePlayers.TryGetValue(spot, out var player) &&
-            V02TargetTiers != null && V02TargetTiers.TryGetValue(player, out var tier) ? tier : -1;
         public bool HasScenarioMonsterParameters => _hasScenarioMonsterParameters;
         public bool UsesScenarioMonsterOverrides =>
             ShouldUseScenarioMonsterParameters();
@@ -471,8 +444,6 @@ namespace EchoProtocol.AI.Stalker
         public double AppliedDetectionDecayRate => GetDetectionDecayRate();
         public double AppliedChaseSpeed => GetChaseSpeed();
         public double AppliedSearchDuration => GetSearchDuration();
-        public float AppliedDetectionAcquireSeconds => detectionDurationSeconds;
-        public float AppliedPostChaseCooldownSeconds => smartPatrolSettings?.PostChaseCooldownSeconds ?? 18f;
         public bool SmartPatrolEnabled => useSmartPatrolDirector;
         public float SmartPatrolOccupancySampleIntervalSeconds =>
             smartPatrolSettings != null
@@ -1005,7 +976,6 @@ namespace EchoProtocol.AI.Stalker
             InitializeHidingInvestigation();
             _hearingMemory.Reset();
             _hideSpotMemory.Reset();
-            _v02KnownHidePlayers.Clear();
             _targetHistoryMemory.Reset();
             ResetHideSpotRevealGrace();
             _vehicleInvestigationLocked = false;
@@ -1335,9 +1305,8 @@ namespace EchoProtocol.AI.Stalker
                      && candidate.PlayerId == excludedPlayerId)
                     || IsPlayerPressureBlocked(candidate.PlayerId, simulationTime));
 
-            return AdaptiveStalkerTargetPolicy.TrySelectV02Target(
+            return AdaptiveStalkerTargetPolicy.TrySelectTarget(
                 _targetPolicyCandidates,
-                V02TargetTiers,
                 out selectedObservation);
         }
 
@@ -2260,8 +2229,7 @@ namespace EchoProtocol.AI.Stalker
 
             foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
             {
-                if (clue.HasHideSpot && !_hideSpotAdapter.SuppressProtectedFlashlight(clue.HideSpotId)
-                    && TryBeginKnownHideSpotFlashlightInvestigation(clue))
+                if (clue.HasHideSpot && TryBeginKnownHideSpotFlashlightInvestigation(clue))
                 {
                     return;
                 }
@@ -2272,7 +2240,7 @@ namespace EchoProtocol.AI.Stalker
             float bestDistance = float.PositiveInfinity;
             foreach (StalkerFlashlightObservation clue in _currentFlashlightObservations)
             {
-                if (clue.IsHidden || clue.HasHideSpot && _hideSpotAdapter.SuppressProtectedFlashlight(clue.HideSpotId))
+                if (clue.IsHidden)
                 {
                     continue;
                 }
@@ -2308,8 +2276,7 @@ namespace EchoProtocol.AI.Stalker
 
             foreach (StalkerHideSpotCandidate candidate in _hideSpotCandidates)
             {
-                if (!candidate.IsValid || candidate.StableId != clue.HideSpotId
-                    || !_hideSpotMemory.CanInspect(candidate.StableId, CurrentSimulationTimeSeconds))
+                if (!candidate.IsValid || candidate.StableId != clue.HideSpotId)
                 {
                     continue;
                 }
@@ -3611,13 +3578,12 @@ namespace EchoProtocol.AI.Stalker
                 var selectorConfig =
                     GetHideSpotSelectorConfig();
 
-                if (!_hideSpotSelector.TrySelectV02(
+                if (!_hideSpotSelector.TrySelect(
                         _searchContext.SearchOriginPosition,
                         _hideSpotCandidates,
                         _hideSpotMemory,
                         CurrentSimulationTimeSeconds,
                         selectorConfig,
-                        V02KnownHideTier,
                         out var selection))
                 {
                     RuntimeLog.Log(
@@ -3634,8 +3600,6 @@ namespace EchoProtocol.AI.Stalker
                 selectedCandidate =
                     selection.Candidate;
             }
-
-            if (!_hideSpotMemory.CanInspect(selectedCandidate.StableId, CurrentSimulationTimeSeconds)) return false;
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
@@ -3795,12 +3759,6 @@ namespace EchoProtocol.AI.Stalker
                     HandleOccupiedHideSpotInspection(result);
                     _hideSpotInspectionLogged = false;
                     return true;
-                case StalkerHidingInvestigationTickStatus.Protected:
-                    _navigation?.Stop();
-                    ClearNavigationObjective();
-                    _searchCandidatePlanningExhausted = true;
-                    _hideSpotInspectionLogged = false;
-                    return false;
                 case StalkerHidingInvestigationTickStatus.Invalid:
                     RuntimeLog.Log(
                         RuntimeLogCategory.StalkerHideFlow,
@@ -3822,8 +3780,6 @@ namespace EchoProtocol.AI.Stalker
             StalkerHidingInvestigationTickResult result)
         {
             var inspection = result.InspectionResult;
-            if (inspection.Occupied && inspection.ConfirmedPlayerId.IsValid)
-                RecordV02SeenHideEntry(result.Candidate.StableId, inspection.ConfirmedPlayerId);
             if (!inspection.Occupied
                 || !inspection.ConfirmedPlayerId.IsValid)
             {
@@ -3891,27 +3847,20 @@ namespace EchoProtocol.AI.Stalker
             _hideSpotRevealGraceElapsed = 0f;
             _hideSpotRevealPlayerId =
                 observation.PlayerId;
-            _v02HideRevealCaptured = V02TargetTiers != null;
-            if (_v02HideRevealCaptured)
-            {
-                int tier = V02TargetTiers.TryGetValue(observation.PlayerId, out int observedTier) ? observedTier : -1;
-                _v02HideRevealTrack = (float)EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.RevealTrackSeconds(tier);
-                _v02HideRevealGrace = (float)EchoProtocol.AI.Common.AED.AEDV02PilotPolicy.RevealGraceSeconds(tier);
-            }
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][FORCED_DETECT_START] " +
                 $"player={observation.PlayerId} " +
-                $"grace={AppliedHideRevealGraceSeconds:F2} " +
-                $"track={AppliedHideRevealTrackSeconds:F2}",
+                $"grace={hideSpotRevealGraceSeconds:F2} " +
+                $"track={hideSpotRevealTrackSeconds:F2}",
                 this);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.StalkerHideFlow,
                 $"[STK_HIDE_FLOW][GRACE_START] " +
                 $"player={observation.PlayerId} " +
-                $"duration={AppliedHideRevealGraceSeconds:F2} " +
+                $"duration={hideSpotRevealGraceSeconds:F2} " +
                 $"stalker={transform.position}",
                 this);
         }
@@ -4153,9 +4102,8 @@ namespace EchoProtocol.AI.Stalker
                     candidate);
             }
 
-            if (!AdaptiveStalkerTargetPolicy.TrySelectV02Target(
+            if (!AdaptiveStalkerTargetPolicy.TrySelectTarget(
                     _searchTargetPolicyCandidates,
-                    V02TargetTiers,
                     out var selectedObservation))
             {
                 return false;
@@ -4581,7 +4529,7 @@ namespace EchoProtocol.AI.Stalker
                 return false;
             }
 
-            if (!_strategicPatrolRuntime.ShouldSeekPlayers || _currentSimulationStep.Time.Seconds < V02ProactiveSeekPausedUntil)
+            if (!_strategicPatrolRuntime.ShouldSeekPlayers)
             {
                 var previousTarget = _crowdedPatrolTargetRegion;
                 _crowdedPatrolTargetRegion = RegionId.Invalid;
@@ -5574,8 +5522,8 @@ namespace EchoProtocol.AI.Stalker
 
             var trackDuration =
                 Mathf.Min(
-                    Mathf.Max(0f, AppliedHideRevealTrackSeconds),
-                    Mathf.Max(0f, AppliedHideRevealGraceSeconds));
+                    Mathf.Max(0f, hideSpotRevealTrackSeconds),
+                    Mathf.Max(0f, hideSpotRevealGraceSeconds));
 
             if (_hideSpotRevealGraceElapsed < trackDuration
                 && TryGetRevealPlayerObservation(
@@ -5598,7 +5546,7 @@ namespace EchoProtocol.AI.Stalker
             if (_hideSpotRevealGraceElapsed
                 < Mathf.Max(
                     0f,
-                    AppliedHideRevealGraceSeconds))
+                    hideSpotRevealGraceSeconds))
             {
                 return true;
             }
@@ -5751,7 +5699,6 @@ namespace EchoProtocol.AI.Stalker
 
         private void ResetHideSpotRevealGrace()
         {
-            _v02HideRevealCaptured = false;
             _hideSpotRevealGraceActive = false;
             _hideSpotRevealGraceElapsed = 0f;
             _hideSpotRevealPlayerId = PlayerId.Invalid;
@@ -6978,12 +6925,6 @@ namespace EchoProtocol.AI.Stalker
             {
                 _navigation = new StalkerNavigationController(GetComponent<NavMeshAgent>());
             }
-        }
-
-        public void SetNavigationPathSafetyValidator(Func<Vector3[], bool> validator)
-        {
-            InitializeNavigation();
-            _navigation.SetPathSafetyValidator(validator);
         }
 
         public void SetAuthoritativeLocomotion(bool enabled)

@@ -29,15 +29,10 @@ namespace EchoProtocol.RelayB.Tests
         [Test] public void ProxiesApplyDecoderStateWithoutTickingAuthoritySimulation()
         {
             string director = Read("Scripts/MatchFlow/Zone2MissionDirector.cs");
-            StringAssert.Contains("(restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority) && matchState.RelayB1Decoder.Round > 0", director);
-            StringAssert.Contains("(restoreAuthoritativeRuntime || !matchState.Object.HasStateAuthority) && matchState.RelayB2Decoder.Round > 0", director);
+            StringAssert.Contains("!matchState.Object.HasStateAuthority && matchState.RelayB1Decoder.Round > 0", director);
+            StringAssert.Contains("!matchState.Object.HasStateAuthority && matchState.RelayB2Decoder.Round > 0", director);
             string controller = Read("Scripts/RelayB/RelayBController.cs");
-            StringAssert.Contains(
-                "if (matchState != null && matchState.Object != null && matchState.Object.IsValid) return;",
-                controller);
-            StringAssert.Contains(
-                "public void TickAuthoritative(float dt)",
-                controller);
+            StringAssert.Contains("&& !matchState.Object.HasStateAuthority) return;", controller);
         }
         [Test] public void RetiredDspCommandsAreRejectedInsteadOfUnlockingDecoder()
         {

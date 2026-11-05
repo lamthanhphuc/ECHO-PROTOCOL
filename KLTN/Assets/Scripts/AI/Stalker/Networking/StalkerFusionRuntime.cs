@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
@@ -27,7 +26,7 @@ namespace EchoProtocol.AI.Stalker.Networking
     [RequireComponent(typeof(StalkerController))]
     [RequireComponent(typeof(StalkerVisionSensor))]
     [RequireComponent(typeof(StalkerSpecialEncounterRuntime))]
-    public sealed partial class StalkerFusionRuntime : NetworkBehaviour
+    public sealed class StalkerFusionRuntime : NetworkBehaviour
     {
         [SerializeField] private StalkerController controller;
         [SerializeField] private StalkerVisionSensor visionSensor;
@@ -52,59 +51,6 @@ namespace EchoProtocol.AI.Stalker.Networking
         private bool _objectiveInvestigationEnabled = true;
         private bool _flashlightReactionEnabled = true;
         private uint _aedv2AppliedRevision;
-        public int V02AppliedRevision { get; private set; }
-        [Networked] public int V02ConsumerRevision { get; private set; }
-        [Networked] public NetworkString<_64> V02ConsumerFingerprint { get; private set; }
-        [Networked] public NetworkString<_64> V02ConsumerMatchId { get; private set; }
-        [Networked, Capacity(6)] private NetworkArray<double> V02ConsumerValues => default;
-        public bool TryReadReplicatedV02ConsumerValue(AEDV02Key key, out double value)
-        {
-            value = 0;
-            if (Object == null || !Object.IsValid || V02ConsumerRevision <= 0 || (int)key < 0 || (int)key >= 6) return false;
-            value = V02ConsumerValues[(int)key];
-            return AEDV02PilotPolicy.Finite(value);
-        }
-        public bool HasActiveSpecialEncounter => specialEncounterRuntime != null && specialEncounterRuntime.IsActive;
-        public bool TryReadV02JammerBlock(out string id, out double progress)
-        {
-            id = string.Empty; progress = 0;
-            if (controller == null || Object == null || !Object.IsValid || !Object.HasStateAuthority ||
-                controller.CurrentWorldInteractionKind != StalkerWorldInteractionKind.BreakingJammer ||
-                !(controller.CurrentWorldInteractionBlocker is NetworkDoorJammer jammer) || !jammer.IsActive ||
-                jammer.Object == null || !jammer.Object.IsValid) return false;
-            id = jammer.Object.Id.ToString(); progress = controller.WorldInteractionProgress01; return true;
-        }
-        public bool TryReadV02NoiseDiversion(out string noiseId, out Vector3 destination)
-        {
-            noiseId = string.Empty; destination = default;
-            return controller != null && Object != null && Object.IsValid && Object.HasStateAuthority &&
-                controller.TryReadV02NoiseDiversion(out noiseId, out destination);
-        }
-        public bool IsV02SafeForApply => controller != null && controller.CurrentState is StalkerState.PATROL or StalkerState.SEARCH
-            && !controller.SpecialEncounterOverrideActive && !controller.HasActiveHideSpotInvestigation;
-        public bool TryReadV02ConsumerValue(AEDV02Key key, out double value)
-        {
-            value = 0;
-            if (controller == null) return false;
-            switch (key)
-            {
-                case AEDV02Key.DetectionAcquireSeconds: value = controller.AppliedDetectionAcquireSeconds; return true;
-                case AEDV02Key.PostChaseCooldownSeconds: value = controller.AppliedPostChaseCooldownSeconds; return true;
-                case AEDV02Key.HearingMultiplier: value = hearingRangeMultiplier; return true;
-                case AEDV02Key.SearchSeconds: value = controller.AppliedSearchDuration; return true;
-                case AEDV02Key.ChaseSpeed: value = controller.AppliedChaseSpeed; return true;
-                case AEDV02Key.SpecialCooldownSeconds:
-                    if (specialEncounterRuntime == null) return false;
-                    value = specialEncounterRuntime.AppliedCooldownSeconds; return true;
-                default: return false;
-            }
-        }
-        public bool ApplyV02AtSafeWindow(Guid matchId)
-        {
-            if (Object == null || !Object.IsValid || !Object.HasStateAuthority || !IsV02SafeForApply ||
-                MatchAuthorityRuntime.Instance?.MatchId != matchId || !AEDv2Authority.TryGetV02(matchId, out _, out var revision)) return false;
-            ApplyMatchDifficulty(); return V02AppliedRevision == revision;
-        }
         private bool _aedv2Applied;
         private bool _aedv2CorePressureEnabled = true;
 
@@ -164,12 +110,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             new List<StalkerTargetStatus>();
         private readonly List<StalkerTargetCandidate> _visibleCandidates =
             new List<StalkerTargetCandidate>();
-        private readonly Dictionary<PlayerId, int> _v02PerceptionTiers = new Dictionary<PlayerId, int>();
-        private readonly Dictionary<PlayerId, int> _v02ScoringTiers = new Dictionary<PlayerId, int>();
-        private Guid _v02PerceptionMatch;
-        private double _v02NextPerceptionRefresh;
-        private PlayerId _v02EncounterPlayer;
-        private int _v02EncounterTier = -1;
         private readonly List<StalkerFlashlightObservation> _flashlightObservations =
             new List<StalkerFlashlightObservation>();
         private readonly List<PlayerId> _visibleObjectiveCarrierIds =
@@ -236,7 +176,6 @@ namespace EchoProtocol.AI.Stalker.Networking
         private float _moveDiagDistance;
         private Vector3 _moveDiagLastPosition;
 #endif
-        private long _aedPursuitHitOrdinal;
 
         private struct StrategicOccupancyAccumulator
         {
@@ -285,7 +224,6 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Spawned()
         {
-            ResetCabinetNetwork();
             _coreCarryStartedAt.Clear();
             _networkSimulationOwned = true;
             ResolveLocalDependencies();
@@ -349,12 +287,6 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
-            ResetCabinetNetwork();
-            ResetV02Perception();
-            if (hasState && runner != null && runner.IsServer
-                && Object != null && Object.HasStateAuthority)
-                MatchAuthorityRuntime.Instance?.RecordStalkerDespawn(
-                    Object.Id.ToString(), runner.Tick.Raw);
             controller?.SetAuthoritativeLocomotion(false);
             _coreCarryStartedAt.Clear();
             specialEncounterRuntime?.ResetForMatch();
@@ -443,19 +375,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                         $"[HM_AI_STALKER_STATE_CHANGED]|id={Object.Id}|from={stateBeforeFirstSimulation}|to={ReplicatedState}|targetFrom={targetBeforeFirstSimulation}|targetTo={TargetPlayer}|note=inspect whether transition used restored or fresh AI memory");
                 }
             }
-            if (Runner.IsServer && Object.HasStateAuthority)
-            {
-                MatchAuthorityRuntime.Instance?.RecordStalkerPursuitSnapshot(
-                    Object.Id.ToString(), controller.CurrentState.ToString(),
-                    ResolveCurrentControllerTarget(), Runner.Tick.Raw,
-                    Runner.TickRate);
-            }
             ResolveAuthoritativeAttack();
         }
 
         public override void Render()
         {
-            if (Object != null && Object.IsValid) RenderCabinetWarning();
             if (Object != null && !Object.HasStateAuthority)
             {
                 ConsumeReplicatedPresentationState();
@@ -640,78 +564,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 null;
         }
 
-        private void ResetV02Perception()
-        {
-            _v02PerceptionMatch = Guid.Empty; _v02PerceptionTiers.Clear(); _v02ScoringTiers.Clear();
-            _v02NextPerceptionRefresh = 0; _v02EncounterPlayer = PlayerId.Invalid; _v02EncounterTier = -1;
-            _v02LongChaseRecovery.Reset();
-            controller?.SetNavigationPathSafetyValidator(null);
-            controller?.ResetV02PlayerFairness();
-        }
-        private readonly AEDV02LongChaseRecovery _v02LongChaseRecovery = new AEDV02LongChaseRecovery();
-        private void RefreshV02Perception(double seconds)
-        {
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority == null || !authority.HasStateAuthority || Object == null || !Object.HasStateAuthority ||
-                authority.Difficulty != MatchDifficulty.Normal || authority.RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
-                ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
-                !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) { ResetV02Perception(); return; }
-            if (_v02PerceptionMatch != authority.MatchId) { ResetV02Perception(); _v02PerceptionMatch = authority.MatchId; }
-            controller.SetNavigationPathSafetyValidator(IsV02SafeRoomClearPath);
-            _v02LongChaseRecovery.Observe(controller.CurrentState == StalkerState.CHASE, seconds);
-            controller.V02ProactiveSeekPausedUntil = _v02LongChaseRecovery.SeekPausedUntil;
-            var locked = controller.CurrentState is StalkerState.DETECT or StalkerState.CHASE or StalkerState.ATTACK or StalkerState.RECOVER
-                ? (controller.CurrentTargetId.IsValid ? controller.CurrentTargetId : controller.DetectionTargetId) : PlayerId.Invalid;
-            if (locked != _v02EncounterPlayer)
-            {
-                _v02EncounterPlayer = locked;
-                _v02EncounterTier = locked.IsValid && _v02ScoringTiers.TryGetValue(locked, out int captured) ? captured : -1;
-            }
-            if (IsV02SafeForApply && seconds >= _v02NextPerceptionRefresh)
-            {
-                _v02NextPerceptionRefresh = seconds + AEDV02PilotPolicy.SensoryRefreshSeconds;
-                _v02PerceptionTiers.Clear();
-                foreach (var target in _perceptionSnapshots)
-                    if (lifecycle.IdentityRegistry.TryGetPlayerRef(target.PlayerId, out var player) &&
-                        authority.TryResolveVerifiedBackendUserId(player, out var identity) && Guid.TryParse(identity, out var user))
-                        _v02PerceptionTiers[target.PlayerId] = AEDv2Authority.V02StableTier(authority.MatchId, user, DateTime.UtcNow, seconds);
-            }
-            _v02ScoringTiers.Clear();
-            foreach (var target in _perceptionSnapshots) _v02ScoringTiers[target.PlayerId] = ResolveV02PerceptionTier(target.PlayerId);
-            controller.V02TargetTiers = _v02ScoringTiers;
-        }
-        private static bool IsV02SafeRoomClearPath(Vector3[] corners)
-        {
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority == null || authority.RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive ||
-                !AEDv2Authority.TryGetV02(authority.MatchId, out _, out _)) return true;
-            if (corners == null || corners.Length == 0 || !AEDV02SceneSource.TryLoad(out var manifest, out _) ||
-                !manifest.TryPathIntersectsSafeRoom(corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(),
-                    out var intersects)) return false;
-            return !intersects;
-        }
-        private int ResolveV02PerceptionTier(PlayerId id)
-        {
-            if (_v02PerceptionMatch == Guid.Empty) return -1;
-            if (id == _v02EncounterPlayer && id.IsValid) return _v02EncounterTier;
-            var authority = MatchAuthorityRuntime.Instance;
-            if (authority == null || authority.MatchId != _v02PerceptionMatch || lifecycle?.IdentityRegistry == null ||
-                !lifecycle.IdentityRegistry.TryGetPlayerRef(id, out var player) ||
-                !authority.TryResolveVerifiedBackendUserId(player, out var identity) || !Guid.TryParse(identity, out var user) ||
-                !AEDv2Authority.TryGetV02Pressure(authority.MatchId, user, DateTime.UtcNow, out _)) return -1;
-            return _v02PerceptionTiers.TryGetValue(id, out int tier) ? tier : -1;
-        }
-        private int ResolveV02NoiseTier(RuntimeNoiseEvent noise)
-        {
-            if (string.IsNullOrEmpty(noise.SourcePlayerId) || lifecycle?.IdentityRegistry == null) return -1;
-            foreach (var target in _perceptionSnapshots)
-                if (lifecycle.IdentityRegistry.TryGetPlayerRef(target.PlayerId, out var player) && player.ToString() == noise.SourcePlayerId)
-                    return ResolveV02PerceptionTier(target.PlayerId);
-            return -1;
-        }
-
         private int _lastPurgeRitualVersion;
-
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
             if (!step.IsValid || controller == null || visionSensor == null)
@@ -734,13 +587,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
             }
 
-            RefreshV02Perception(step.Time.Seconds);
-            StalkerPerceptionEvaluator.CollectV02VisibleTargetCandidates(
+            StalkerPerceptionEvaluator.CollectVisibleTargetCandidates(
                 visionSensor,
                 _perceptionSnapshots,
                 step.Time,
-                _visibleCandidates,
-                ResolveV02PerceptionTier);
+                _visibleCandidates);
             BuildAuthoritativeFlashlightFrame(step.Time);
 
             StalkerPerceptionTargetSnapshot? sustainedCoreCarrier = null;
@@ -786,13 +637,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             // Perception frames have already been built above, so Vision,
             // Hearing and target-status information remain fresh.
             //
-            if (!AlienHuntMission.Instance) TickCabinetCandidate(step);
             if (AlienHuntMission.Instance) specialEncounterRuntime?.SuppressForPurge();
             else specialEncounterRuntime?.TickAuthoritative(
                 Runner,
                 lifecycle,
                 step);
-            PublishCabinetState();
 
             if (specialEncounterRuntime != null
                 && specialEncounterRuntime.IsActive)
@@ -897,18 +746,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 if (CreateRunnerPlayerId(player) == playerId) return player;
             }
-            return PlayerRef.None;
-        }
-
-        private PlayerRef ResolveCurrentControllerTarget()
-        {
-            var playerId = controller != null ? controller.CurrentTargetId : PlayerId.Invalid;
-            if (!playerId.IsValid || Runner == null) return PlayerRef.None;
-            if (lifecycle != null && lifecycle.IdentityRegistry != null
-                && lifecycle.IdentityRegistry.TryGetPlayerRef(playerId, out var registered))
-                return registered;
-            foreach (var player in Runner.ActivePlayers)
-                if (CreateRunnerPlayerId(player) == playerId) return player;
             return PlayerRef.None;
         }
 
@@ -1098,11 +935,10 @@ namespace EchoProtocol.AI.Stalker.Networking
                 }
 
                 var heard =
-                    _hearingSensor.TryEvaluateV02(
+                    _hearingSensor.TryEvaluate(
                         noiseEvent,
                         origin,
                         heardAtUtc,
-                        ResolveV02NoiseTier(noiseEvent),
                         out var observation,
                         out var rejectReason);
 
@@ -1395,17 +1231,11 @@ namespace EchoProtocol.AI.Stalker.Networking
             var authority = MatchAuthorityRuntime.Instance;
             if (authority == null || !authority.TryGetMatchId(out var matchId))
                 return;
-            if (authority.Difficulty == MatchDifficulty.Normal && AEDv2Authority.TryGetV02(matchId, out _, out var v02Revision))
-            {
-                if ((V02AppliedRevision != v02Revision || V02ConsumerMatchId.ToString() != matchId.ToString("D")) && IsV02SafeForApply)
-                    ApplyMatchDifficulty();
-                return;
-            }
             uint revision = 0;
             bool active = authority.Difficulty == MatchDifficulty.Normal &&
                 AEDv2Authority.TryGetApplied(matchId, out _, out revision);
             if ((active && (!_aedv2Applied || revision != _aedv2AppliedRevision)) ||
-                (!active && (_aedv2Applied || V02AppliedRevision > 0)))
+                (!active && _aedv2Applied))
             {
                 if (controller == null ||
                     controller.CurrentState == StalkerState.ATTACK ||
@@ -1426,15 +1256,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             bool useAEDv2 = difficulty == MatchDifficulty.Normal &&
                 authority != null && authority.TryGetMatchId(out var matchId) &&
                 AEDv2Authority.TryGetApplied(matchId, out tuning, out revision);
-            AEDV02Plan v02 = null;
-            int v02Revision = 0;
-            bool useV02 = difficulty == MatchDifficulty.Normal && authority != null && authority.TryGetMatchId(out var v02Match)
-                && AEDv2Authority.TryGetV02(v02Match, out v02, out v02Revision);
-            if (useV02) useAEDv2 = false;
             if (useAEDv2) profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(tuning);
-            if (useV02) profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
 
-            controller?.SetAEDv2ProfileOwnership(useAEDv2 || useV02);
+            controller?.SetAEDv2ProfileOwnership(useAEDv2);
             controller?.ApplyMatchDifficulty(profile);
             coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
             hearingRangeMultiplier = profile.HearingRangeMultiplier;
@@ -1447,7 +1271,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
 
             controller?.ApplyAEDv2Pacing(
-                useV02 ? (float)v02.Get(AEDV02Key.PostChaseCooldownSeconds) : useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
+                useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostAttackCooldownSeconds) : 22f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.SameRoomCooldownSeconds) : 15f);
             specialEncounterRuntime?.SetAEDv2Pacing(
@@ -1455,24 +1279,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostSpecialCooldownSeconds) : 20f);
             _aedv2Applied = useAEDv2;
             _aedv2AppliedRevision = useAEDv2 ? revision : 0;
-            V02AppliedRevision = useV02 ? v02Revision : 0;
-            if (Object != null && Object.IsValid && Object.HasStateAuthority)
-            {
-                V02ConsumerRevision = 0; V02ConsumerFingerprint = default; V02ConsumerMatchId = default;
-                if (useV02)
-                {
-                    bool observed = true;
-                    for (int index = 0; index < 6; index++)
-                    {
-                        if (!TryReadV02ConsumerValue((AEDV02Key)index, out var actual) || Math.Abs(actual - v02.Get((AEDV02Key)index)) >= .000001)
-                        { observed = false; break; }
-                        V02ConsumerValues.Set(index, actual);
-                    }
-                    if (observed) { V02ConsumerMatchId = authority.MatchId.ToString("D"); V02ConsumerFingerprint = v02.Fingerprint(); V02ConsumerRevision = v02Revision; }
-                }
-            }
-            if (useAEDv2)
-                AEDv2E2ELog.State("STALKER_TUNING_APPLIED");
             _hearingSensor = null;
             ResolveLocalDependencies();
         }
@@ -1624,21 +1430,6 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return;
             }
 
-            var authority = MatchAuthorityRuntime.Instance;
-            var occurrence = $"stalker-hit:{Object.Id}:{++_aedPursuitHitOrdinal}";
-            var tick = Runner != null ? Runner.Tick.Raw : 0L;
-            authority?.RecordStalkerPursuitFact(Object.Id.ToString(), targetPlayer,
-                AEDPursuitFactKindV1.Hit, occurrence, tick,
-                "STALKER_HIT_COMMITTED");
-            if (Runner != null
-                && Runner.TryGetPlayerObject(targetPlayer, out var playerObject)
-                && playerObject != null
-                && playerObject.TryGetComponent<NetworkPlayerLifeState>(out var life)
-                && life.IsEliminated)
-                authority?.RecordStalkerPursuitFact(Object.Id.ToString(), targetPlayer,
-                    AEDPursuitFactKindV1.Eliminated, occurrence + ":eliminated",
-                    tick, "STALKER_DIRECT_HIT", true);
-
             RPC_PlayStalkerBite(
                 targetPlayer);
         }
@@ -1688,14 +1479,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             {
                 return;
             }
-
-            if (lifecycle != null && lifecycle.IdentityRegistry != null
-                && lifecycle.IdentityRegistry.TryGetPlayerRef(fact.PlayerId, out var downedPlayer))
-                MatchAuthorityRuntime.Instance?.RecordStalkerPursuitFact(
-                    Object.Id.ToString(), downedPlayer, AEDPursuitFactKindV1.Downed,
-                    $"stalker-down:{Object.Id}:{fact.AttackEpisodeId.Value}",
-                    Runner != null ? Runner.Tick.Raw : 0L,
-                    "STALKER_ATTACK");
 
             if (specialEncounterRuntime == null)
             {

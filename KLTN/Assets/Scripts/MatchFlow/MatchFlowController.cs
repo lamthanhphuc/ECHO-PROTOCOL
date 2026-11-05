@@ -107,20 +107,14 @@ public class MatchFlowController : MonoBehaviour
         SetPhase(MatchPhase.SecurityHold);
     }
 
-    public void NotifySecurityHoldComplete() => NotifySecurityHoldComplete(null);
-
-    public void NotifySecurityHoldComplete(string authorizationCode)
+    public void NotifySecurityHoldComplete()
     {
         if (_networkAuthorityPresentationOnly) return;
 
         _securityHoldCompleted = true;
 
         var zone2Director = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
-        if (!string.IsNullOrEmpty(authorizationCode))
-        {
-            _powerAuthorizationCode = authorizationCode;
-        }
-        else if (zone2Director != null &&
+        if (zone2Director != null &&
             !string.IsNullOrEmpty(zone2Director.AuthorizationCode))
         {
             _powerAuthorizationCode = zone2Director.AuthorizationCode;

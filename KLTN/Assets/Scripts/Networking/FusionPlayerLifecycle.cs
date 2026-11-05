@@ -314,7 +314,6 @@ namespace EchoProtocol.Networking
                     }
                     state.SetDisconnectedAuthoritative(true);
                     NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(state);
-                    state.ClearVerifiedBackendIdentityAuthoritative();
                 }
                 playerObject.RemoveInputAuthority();
                 if (_graceTimers.Remove(player, out var oldTimer)) StopCoroutine(oldTimer);

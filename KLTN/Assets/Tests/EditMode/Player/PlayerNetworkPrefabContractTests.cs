@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -136,25 +136,7 @@ namespace EchoProtocol.Player.Tests
                 "Assets/Scripts/TeamTools/TeamToolPickupCatalog.cs");
 
             StringAssert.Contains("RpcSources.InputAuthority, RpcTargets.StateAuthority", source);
-            StringAssert.Contains(
-                "Runner.Spawn(prefab, dropPosition, dropRotation,",
-                source);
-            StringAssert.Contains(
-                "onBeforeSpawned: (_, spawned) =>",
-                source);
-            StringAssert.Contains(
-                "pickupId = pickupObject.Id;",
-                source);
-            StringAssert.Contains(
-                "RecordPhase8ToolDrop(",
-                source);
-            StringAssert.Contains(
-                "preserveCooldown: toolId == LobbyPlayerState.CoreStabilizerToolId",
-                source);
-            StringAssert.Contains(
-                "if (!preserveCooldown)",
-                source);
-
+            StringAssert.Contains("Runner.Spawn(prefab, dropPosition, dropRotation,", source);
             StringAssert.Contains("_teamToolPickupCatalog.GetPrefab(toolId)", source);
             StringAssert.Contains("LobbyPlayerState.FieldScannerToolId => fieldScannerPrefab", catalog);
             StringAssert.Contains("LobbyPlayerState.NoiseMakerToolId => noiseMakerPrefab", catalog);
@@ -164,36 +146,6 @@ namespace EchoProtocol.Player.Tests
             Assert.That(
                 source.IndexOf("TrySpawnDroppedTeamToolAuthoritative", StringComparison.Ordinal),
                 Is.LessThan(source.IndexOf("state.SetGameplayToolId(0)", StringComparison.Ordinal)));
-        }
-
-        [Test]
-        public void TEAM_TOOL_DroppedNetworkToolPreservesRemainingUses()
-        {
-            var pickup = File.ReadAllText(
-                "Assets/Scripts/Tools/Scanner/NetworkToolPickup.cs");
-
-            var interactor = File.ReadAllText(
-                "Assets/_Project/Scripts/Networking/Interaction/NetworkPlayerInteractor.cs");
-
-            StringAssert.Contains(
-                "public int RemainingUses { get; private set; }",
-                pickup);
-
-            StringAssert.Contains(
-                "public void SetRemainingUsesAuthoritative(int remainingUses)",
-                pickup);
-
-            StringAssert.Contains(
-                "context.PlayerState.SetGameplayToolId(",
-                pickup);
-
-            StringAssert.Contains(
-                "RemainingUses);",
-                pickup);
-
-            StringAssert.Contains(
-                "scannerPickup.SetRemainingUsesAuthoritative(remainingUses);",
-                interactor);
         }
 
         [Test]
