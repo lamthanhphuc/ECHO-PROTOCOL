@@ -263,6 +263,105 @@ public sealed class RewardServiceTests
             Assert.Equal(0, profile.TotalMatches));
     }
 
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyProcessesZeroRewardAndCompletes()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MatchRewardStatus.Completed, result.Data!.RewardStatus);
+        Assert.All(result.Data.Grants, grant => Assert.Equal(0, grant.CurrencyAmount));
+        Assert.All(await harness.Db.MatchRewardGrants.AsNoTracking().ToListAsync(), grant =>
+            Assert.Equal(0, grant.ExperiencePointsAwarded));
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyDoesNotChangeWalletOrProgression()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+
+        await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.All(await harness.Db.Wallets.AsNoTracking().ToListAsync(), wallet => Assert.Equal(100, wallet.Balance));
+        Assert.All(await harness.Db.PlayerProfiles.AsNoTracking().ToListAsync(), profile =>
+        {
+            Assert.Equal(0, profile.TotalMatches);
+            Assert.Equal(0, profile.TotalWins);
+            Assert.Equal(0, profile.ExperiencePoints);
+            Assert.Equal(1, profile.Level);
+        });
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyPreservesWalletAndProfileTimestamps()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+
+        await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.All(await harness.Db.Wallets.AsNoTracking().ToListAsync(), wallet => Assert.Equal(Now.UtcDateTime, wallet.UpdatedAt));
+        Assert.All(await harness.Db.PlayerProfiles.AsNoTracking().ToListAsync(), profile => Assert.Equal(Now.UtcDateTime, profile.UpdatedAt));
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyWritesCorrectPolicyVersions()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.Equal("TEST_ONLY_ZERO_V1", result.Data!.PolicyVersion);
+        Assert.All(await harness.Db.MatchRewardGrants.AsNoTracking().ToListAsync(), grant =>
+        {
+            Assert.Equal("TEST_ONLY_ZERO_V1", grant.PolicyVersion);
+            Assert.Equal("TEST_ONLY_NO_PROGRESS_V1", grant.ProgressionPolicyVersion);
+        });
+        Assert.All(await harness.Db.WalletTransactions.AsNoTracking().ToListAsync(), ledger =>
+            Assert.Equal("Match reward (TEST_ONLY_ZERO_V1)", ledger.Description));
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyReplayDoesNotDuplicateLedger()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+        await harness.Service.ProcessAsync(harness.MatchId);
+
+        var replay = await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(2, await harness.Db.MatchRewardGrants.CountAsync());
+        Assert.Equal(2, await harness.Db.WalletTransactions.CountAsync());
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyRewardMeReturnsZeroAmounts()
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: true);
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+
+        var result = await harness.Service.GetForUserAsync(harness.MatchId, processed.Data!.Grants[0].UserId);
+
+        Assert.Equal(0, result.Data!.CurrencyAmount);
+        Assert.Equal(0, result.Data.ExperiencePointsAwarded);
+        Assert.Equal("TEST_ONLY_ZERO_V1", result.Data.PolicyVersion);
+        Assert.Equal("TEST_ONLY_NO_PROGRESS_V1", result.Data.ProgressionPolicyVersion);
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task StandardRewardBehaviorRemainsUnchanged()
+    {
+        await using var harness = await RewardHarness.CreateAsync(
+            policy: new RewardPolicyV1(), progressionPolicy: new ProgressionPolicyV1());
+
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+
+        Assert.Equal(RewardPolicyV1.PolicyVersion, result.Data!.PolicyVersion);
+        Assert.All(await harness.Db.MatchRewardGrants.ToListAsync(), grant =>
+            Assert.Equal(ProgressionPolicyV1.PolicyVersion, grant.ProgressionPolicyVersion));
+    }
+
     private sealed class RewardHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -286,7 +385,8 @@ public sealed class RewardServiceTests
         public static async Task<RewardHarness> CreateAsync(
             bool removePlayerWallet = false,
             IRewardPolicy? policy = null,
-            IProgressionPolicy? progressionPolicy = null)
+            IProgressionPolicy? progressionPolicy = null,
+            bool testOnly = false)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -299,6 +399,15 @@ public sealed class RewardServiceTests
             var hostId = Guid.NewGuid();
             var playerId = Guid.NewGuid();
             var matchId = Guid.NewGuid();
+            if (testOnly)
+            {
+                db.RemoteFixedBalanceVersions.Add(new RemoteFixedBalanceVersion
+                {
+                    Version = "TEST-RFB-1", MapId = "SciFi", Difficulty = "NORMAL",
+                    SnapshotJson = "{}", ContentHash = new string('A', 64), IsActive = true,
+                    CreatedAtUtc = Now.UtcDateTime
+                });
+            }
             db.Users.AddRange(CreateUser(hostId, "host"), CreateUser(playerId, "player"));
             db.PlayerProfiles.AddRange(
                 CreateProfile(hostId, "Host"),
@@ -321,6 +430,14 @@ public sealed class RewardServiceTests
                 FusionSessionName = $"reward-{matchId:N}",
                 HostUserId = hostId,
                 MaxPlayers = 4,
+                MapId = testOnly ? "SciFi" : null,
+                Difficulty = testOnly ? "NORMAL" : null,
+                ResolutionMode = testOnly ? "FIXED" : null,
+                BalanceSource = testOnly ? "REMOTE_FIXED" : null,
+                BalanceProtocolVersion = testOnly ? "RFB-1" : null,
+                BalanceVersion = testOnly ? "TEST-RFB-1" : null,
+                BalanceHash = testOnly ? new string('A', 64) : null,
+                MatchDataPolicy = testOnly ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard,
                 Status = MatchAuthorityStatus.Ended,
                 LeaseExpiresAtUtc = Now.UtcDateTime,
                 CreatedAtUtc = Now.AddMinutes(-3).UtcDateTime,

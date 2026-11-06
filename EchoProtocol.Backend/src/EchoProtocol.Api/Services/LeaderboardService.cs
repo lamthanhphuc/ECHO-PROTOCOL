@@ -31,7 +31,8 @@ public sealed class LeaderboardService : ILeaderboardService
             result.Outcome == MatchOutcome.WIN
             && result.ObjectiveCompletion == 1m
             && result.Match.MapId == mapId
-            && result.Match.Difficulty == difficulty);
+            && result.Match.Difficulty == difficulty
+            && result.Match.MatchDataPolicy == RemoteFixedBalanceContract.Standard);
 
         var candidates = eligible.Where(result =>
             result.RosterKey != null

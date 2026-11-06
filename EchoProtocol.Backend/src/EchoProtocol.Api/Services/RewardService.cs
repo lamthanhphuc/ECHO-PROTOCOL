@@ -12,6 +12,8 @@ namespace EchoProtocol.Api.Services;
 public sealed class RewardService : IRewardService
 {
     private const int MaximumPolicyVersionLength = 50;
+    private const string TestOnlyRewardVersion = "TEST_ONLY_ZERO_V1";
+    private const string TestOnlyProgressionVersion = "TEST_ONLY_NO_PROGRESS_V1";
 
     private readonly AppDbContext _db;
     private readonly IRewardPolicy _policy;
@@ -34,26 +36,6 @@ public sealed class RewardService : IRewardService
         Guid matchId,
         CancellationToken cancellationToken = default)
     {
-        if (!_policy.IsConfigured)
-        {
-            return Failure(
-                "No approved reward policy is configured",
-                ErrorCodes.RewardPolicyNotConfigured);
-        }
-
-        if (string.IsNullOrWhiteSpace(_policy.Version) ||
-            _policy.Version.Length > MaximumPolicyVersionLength)
-        {
-            return Failure("Reward policy version is invalid", ErrorCodes.RewardPolicyInvalid);
-        }
-
-        if (!_progressionService.IsConfigured)
-        {
-            return Failure(
-                "No approved progression policy is configured",
-                ErrorCodes.ProgressionPolicyNotConfigured);
-        }
-
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -83,10 +65,41 @@ public sealed class RewardService : IRewardService
                     ErrorCodes.RewardInvalidResult);
             }
 
+            var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly;
+            var rewardVersion = testOnly ? TestOnlyRewardVersion : _policy.Version;
+            var progressionVersion = testOnly
+                ? TestOnlyProgressionVersion
+                : _progressionService.PolicyVersion;
+
+            if (!testOnly)
+            {
+                if (!_policy.IsConfigured)
+                {
+                    return Failure(
+                        "No approved reward policy is configured",
+                        ErrorCodes.RewardPolicyNotConfigured);
+                }
+
+                if (string.IsNullOrWhiteSpace(_policy.Version) ||
+                    _policy.Version.Length > MaximumPolicyVersionLength)
+                {
+                    return Failure("Reward policy version is invalid", ErrorCodes.RewardPolicyInvalid);
+                }
+
+                if (!_progressionService.IsConfigured)
+                {
+                    return Failure(
+                        "No approved progression policy is configured",
+                        ErrorCodes.ProgressionPolicyNotConfigured);
+                }
+            }
+
             IReadOnlyList<RewardAllocation> allocations;
             try
             {
-                allocations = _policy.Calculate(CreateSnapshot(result));
+                allocations = testOnly
+                    ? result.Players.Select(player => new RewardAllocation(player.UserId, 0)).ToArray()
+                    : _policy.Calculate(CreateSnapshot(result));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {
@@ -130,14 +143,17 @@ public sealed class RewardService : IRewardService
                 profiles.Add(userId, profile);
             }
 
-            var snapshot = CreateSnapshot(result);
-            var progressionResult = _progressionService.Calculate(snapshot, profiles);
-            if (!progressionResult.IsSuccess)
+            Dictionary<Guid, ProgressionUpdate>? progressionByUser = null;
+            if (!testOnly)
             {
-                return Failure(progressionResult.Message, progressionResult.ErrorCode!);
-            }
+                var progressionResult = _progressionService.Calculate(CreateSnapshot(result), profiles);
+                if (!progressionResult.IsSuccess)
+                {
+                    return Failure(progressionResult.Message, progressionResult.ErrorCode!);
+                }
 
-            var progressionByUser = progressionResult.Data!.ToDictionary(item => item.UserId);
+                progressionByUser = progressionResult.Data!.ToDictionary(item => item.UserId);
+            }
 
             var balancesAfter = new Dictionary<Guid, int>();
             try
@@ -161,7 +177,7 @@ public sealed class RewardService : IRewardService
                 var amount = allocationsByUser[userId].CurrencyAmount;
                 var balanceBefore = wallet.Balance;
                 var balanceAfter = balancesAfter[userId];
-                var progression = progressionByUser[userId];
+                var progression = testOnly ? null : progressionByUser![userId];
 
                 _db.MatchRewardGrants.Add(new MatchRewardGrant
                 {
@@ -170,9 +186,9 @@ public sealed class RewardService : IRewardService
                     UserId = userId,
                     WalletId = wallet.Id,
                     CurrencyAmount = amount,
-                    PolicyVersion = _policy.Version,
-                    ExperiencePointsAwarded = progression.ExperiencePointsAwarded,
-                    ProgressionPolicyVersion = _progressionService.PolicyVersion,
+                    PolicyVersion = rewardVersion,
+                    ExperiencePointsAwarded = progression?.ExperiencePointsAwarded ?? 0L,
+                    ProgressionPolicyVersion = progressionVersion,
                     ProcessedAtUtc = now
                 });
                 _db.WalletTransactions.Add(new WalletTransaction
@@ -184,18 +200,21 @@ public sealed class RewardService : IRewardService
                     BalanceBefore = balanceBefore,
                     BalanceAfter = balanceAfter,
                     ReferenceId = matchId,
-                    Description = $"Match reward ({_policy.Version})",
+                    Description = $"Match reward ({rewardVersion})",
                     CreatedAtUtc = now
                 });
 
-                wallet.Balance = balanceAfter;
-                wallet.UpdatedAt = now;
-                var profile = profiles[userId];
-                profile.TotalMatches = progression.TotalMatches;
-                profile.TotalWins = progression.TotalWins;
-                profile.ExperiencePoints = progression.ExperiencePoints;
-                profile.Level = progression.Level;
-                profile.UpdatedAt = now;
+                if (!testOnly)
+                {
+                    wallet.Balance = balanceAfter;
+                    wallet.UpdatedAt = now;
+                    var profile = profiles[userId];
+                    profile.TotalMatches = progression!.TotalMatches;
+                    profile.TotalWins = progression.TotalWins;
+                    profile.ExperiencePoints = progression.ExperiencePoints;
+                    profile.Level = progression.Level;
+                    profile.UpdatedAt = now;
+                }
                 responseGrants.Add(new RewardGrantResponse
                 {
                     UserId = userId,
@@ -213,7 +232,7 @@ public sealed class RewardService : IRewardService
             {
                 MatchId = matchId,
                 RewardStatus = MatchRewardStatus.Completed,
-                PolicyVersion = _policy.Version,
+                PolicyVersion = rewardVersion,
                 IsReplay = false,
                 ProcessedAtUtc = now,
                 Grants = responseGrants

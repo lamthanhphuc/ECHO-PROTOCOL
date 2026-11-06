@@ -79,6 +79,58 @@ public sealed class LeaderboardServiceTests
         Assert.Contains("NORMAL", page.Difficulties);
     }
 
+    [Fact]
+    public async Task TestOnlyFastWinIsExcludedFromSoloLeaderboard()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var alice = await harness.AddUserAsync("Alice");
+        await harness.AddResultAsync(90, MatchOutcome.WIN, "SciFi", "NORMAL", 1m, alice);
+        await harness.AddTestOnlyResultAsync(60, alice);
+
+        var page = await harness.Service.GetAsync(LeaderboardMode.SOLO, "SciFi", "NORMAL", 1, 10, default);
+
+        Assert.Equal(9000, Assert.Single(page.Items).DurationCentiseconds);
+    }
+
+    [Fact]
+    public async Task TestOnlyFastWinDoesNotReplaceStandardTeamBest()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var alice = await harness.AddUserAsync("Alice");
+        var bob = await harness.AddUserAsync("Bob");
+        await harness.AddResultAsync(120, MatchOutcome.WIN, "SciFi", "NORMAL", 1m, alice, bob);
+        await harness.AddTestOnlyResultAsync(60, alice, bob);
+
+        var page = await harness.Service.GetAsync(LeaderboardMode.TEAM, "SciFi", "NORMAL", 1, 10, default);
+
+        Assert.Equal(12000, Assert.Single(page.Items).DurationCentiseconds);
+    }
+
+    [Fact]
+    public async Task OnlyTestOnlyResultsProducesEmptyRanking()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var alice = await harness.AddUserAsync("Alice");
+        await harness.AddTestOnlyResultAsync(60, alice);
+
+        var page = await harness.Service.GetAsync(LeaderboardMode.SOLO, "SciFi", "NORMAL", 1, 10, default);
+
+        Assert.Empty(page.Items);
+        Assert.Equal(0, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task LegacyStandardResultsRemainEligible()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var alice = await harness.AddUserAsync("Alice");
+        await harness.AddResultAsync(90, MatchOutcome.WIN, "SciFi", "NORMAL", 1m, alice);
+
+        var page = await harness.Service.GetAsync(LeaderboardMode.SOLO, "SciFi", "NORMAL", 1, 10, default);
+
+        Assert.Single(page.Items);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -127,11 +179,33 @@ public sealed class LeaderboardServiceTests
             string? mapId,
             string? difficulty,
             decimal objectiveCompletion,
+            params Guid[] players) =>
+            await AddResultAsync(duration, outcome, mapId, difficulty, objectiveCompletion, false, players);
+
+        public async Task AddTestOnlyResultAsync(int duration, params Guid[] players) =>
+            await AddResultAsync(duration, MatchOutcome.WIN, "SciFi", "NORMAL", 1m, true, players);
+
+        private async Task AddResultAsync(
+            int duration,
+            MatchOutcome outcome,
+            string? mapId,
+            string? difficulty,
+            decimal objectiveCompletion,
+            bool testOnly,
             params Guid[] players)
         {
             var matchId = Guid.NewGuid();
             var endedAt = new DateTime(2026, 10, 19, 0, 0, 0, DateTimeKind.Utc)
                 .AddMinutes(_sequence++);
+            if (testOnly && !await Db.RemoteFixedBalanceVersions.AnyAsync(item => item.Version == "TEST-RFB-1"))
+            {
+                Db.RemoteFixedBalanceVersions.Add(new RemoteFixedBalanceVersion
+                {
+                    Version = "TEST-RFB-1", MapId = "SciFi", Difficulty = "NORMAL",
+                    SnapshotJson = "{}", ContentHash = new string('A', 64), IsActive = true,
+                    CreatedAtUtc = endedAt
+                });
+            }
             Db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
             {
                 MatchId = matchId,
@@ -141,6 +215,12 @@ public sealed class LeaderboardServiceTests
                 Status = MatchAuthorityStatus.Ended,
                 MapId = mapId,
                 Difficulty = difficulty,
+                ResolutionMode = testOnly ? "FIXED" : null,
+                BalanceSource = testOnly ? "REMOTE_FIXED" : null,
+                BalanceProtocolVersion = testOnly ? "RFB-1" : null,
+                BalanceVersion = testOnly ? "TEST-RFB-1" : null,
+                BalanceHash = testOnly ? new string('A', 64) : null,
+                MatchDataPolicy = testOnly ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard,
                 CreatedAtUtc = endedAt.AddSeconds(-duration),
                 UpdatedAtUtc = endedAt,
                 StartedAtUtc = endedAt.AddSeconds(-duration),

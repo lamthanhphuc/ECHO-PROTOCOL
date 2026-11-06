@@ -149,6 +149,9 @@ InventoryItem and ShopItem records.
 | Description | VARCHAR(255) | Audit description |
 | CreatedAtUtc | TIMESTAMPTZ | UTC |
 
+TEST_ONLY reward processing writes a `MATCH_REWARD` ledger with amount 0 and
+description policy `TEST_ONLY_ZERO_V1`; Wallet value and `UpdatedAt` remain unchanged.
+
 ---
 
 ## MatchRewardGrants
@@ -163,6 +166,10 @@ InventoryItem and ShopItem records.
 | ExperiencePointsAwarded | BIGINT | Calculated by `PROGRESSION_V1` |
 | ProgressionPolicyVersion | VARCHAR(50) | `PROGRESSION_V1` |
 | ProcessedAtUtc | TIMESTAMPTZ | UTC |
+
+TEST_ONLY matches create zero-value grants with reward policy `TEST_ONLY_ZERO_V1`
+and progression policy `TEST_ONLY_NO_PROGRESS_V1`. Processing still transitions
+`RewardStatus` to `Completed`; PlayerProfile values and `UpdatedAt` remain unchanged.
 
 Reward and progression are processed in the existing idempotent reward transaction. A completed
 match cannot receive a second grant for the same player.
@@ -248,6 +255,10 @@ milestone decision and is not implied by the ingestion-age validation.
 | BalanceVersion | VARCHAR(80) NULL FK | Immutable published version; null for local/legacy |
 | BalanceHash | VARCHAR(64) NULL | Hash of locked snapshot; null for local/legacy |
 | MatchDataPolicy | VARCHAR(20) NOT NULL DEFAULT STANDARD | TEST_ONLY for Remote Fixed V1 |
+
+`MatchDataPolicy` is immutable after match start. TEST_ONLY matches do not contribute
+production MatchScore/PlayerAIProfile data; their match-scoped TeamProfile provenance
+may be retained for analysis.
 
 ## RemoteFixedBalanceVersions (Remote Fixed Balance V1)
 
