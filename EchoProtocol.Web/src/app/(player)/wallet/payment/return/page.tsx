@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui/panel";
 import { PaymentStatusMonitor } from "@/components/payments/payment-status-monitor";
 
-export const metadata = { title: "Payment Status" };
+export const metadata = { title: "Trạng thái thanh toán" };
 export default function PaymentReturnPage() {
-  return <><PageHeader eyebrow="Payment verification" title="Trạng thái thanh toán" description="Trang này không tin query từ payOS; trạng thái chỉ đến từ Backend." /><PaymentStatusMonitor /></>;
+  return <><PageHeader eyebrow="Ví của tôi" title="Trạng thái thanh toán" description="Đang kiểm tra kết quả thanh toán của bạn." /><PaymentStatusMonitor /></>;
 }

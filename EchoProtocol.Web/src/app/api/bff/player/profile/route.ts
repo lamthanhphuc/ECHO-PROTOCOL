@@ -2,6 +2,6 @@ import { routeErrorResponse, routeSuccessResponse } from "@/lib/api/route-respon
 import { playerApi } from "@/lib/api/server-api";
 
 export async function GET() {
-  try { return routeSuccessResponse(await playerApi.profile(), "Player profile retrieved"); }
+  try { return routeSuccessResponse(await playerApi.profile(), "Đã tải hồ sơ"); }
   catch (error) { return routeErrorResponse(error); }
 }

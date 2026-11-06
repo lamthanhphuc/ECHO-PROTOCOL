@@ -9,20 +9,20 @@ import { StatusBadge } from "@/components/ui/status-badge";
 
 const messages: Record<PaymentStatus, string> = {
   CREATED: "Đơn thanh toán đã được tạo.", PENDING_PAYMENT: "Đang xác nhận thanh toán.",
-  PAID: "Thanh toán đã được xác nhận. Đang cập nhật Wallet.", FULFILLED: "Wallet đã được cập nhật thành công.",
+  PAID: "Thanh toán đã được xác nhận. Đang cập nhật số dư.", FULFILLED: "Số dư đã được cập nhật thành công.",
   FAILED: "Thanh toán thất bại.", CANCELLED: "Thanh toán đã bị hủy.", EXPIRED: "Đơn thanh toán đã hết hạn.",
 };
 
 export function PaymentStatusMonitor() {
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
-  const [message, setMessage] = useState("Đang tìm payment order…");
+  const [message, setMessage] = useState("Đang tìm đơn thanh toán…");
   const [error, setError] = useState("");
   useEffect(() => {
     const orderId = sessionStorage.getItem("echo.pendingPaymentOrderId");
     if (!orderId) {
       const missingOrderTimer = setTimeout(
-        () => setError("Không tìm thấy paymentOrderId trong phiên trình duyệt."),
+        () => setError("Không tìm thấy đơn thanh toán trong phiên trình duyệt."),
         0,
       );
       return () => clearTimeout(missingOrderTimer);
@@ -53,8 +53,8 @@ export function PaymentStatusMonitor() {
   return <div className="panel rounded-lg p-6">
     {order && <StatusBadge status={order.status} />}
     <p className="mt-4 text-lg text-white">{message}</p>
-    {balance !== null && <p className="mt-3 text-emerald-300">Wallet balance mới: {balance} Coins</p>}
+    {balance !== null && <p className="mt-3 text-emerald-300">Số dư mới: {balance.toLocaleString("vi-VN")} xu</p>}
     {error && <p role="alert" className="mt-4 rounded border border-amber-800 bg-amber-950/20 p-3 text-amber-200">{error}</p>}
-    <div className="mt-6 flex flex-wrap gap-3"><Link className="button" href="/wallet">Quay lại Wallet</Link><Link className="button button-secondary" href="/wallet/history">Lịch sử giao dịch</Link></div>
+    <div className="mt-6 flex flex-wrap gap-3"><Link className="button" href="/wallet">Quay lại ví</Link><Link className="button button-secondary" href="/wallet/history">Lịch sử thanh toán</Link></div>
   </div>;
 }

@@ -39,71 +39,6 @@ button, input, select { font: inherit; }
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
 ::selection { color: #fff; background: #8e1019; }
 
-.blood-edge {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 50;
-  height: 150px;
-  overflow: visible;
-  pointer-events: none;
-  filter: drop-shadow(0 4px 8px rgba(44, 0, 4, .6));
-}
-.blood-edge::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 13px;
-  background: linear-gradient(#330207, #8e1019 68%, #5e0910);
-  box-shadow: 0 2px 18px rgba(126, 10, 18, .55);
-}
-.blood-stream {
-  position: absolute;
-  top: 8px;
-  display: block;
-  width: 12px;
-  height: 86px;
-  border-radius: 0 0 60% 60%;
-  background: linear-gradient(90deg, #48050b, #a4141e 60%, #5b070d);
-  transform-origin: top;
-  animation: blood-pulse 7s ease-in-out infinite alternate;
-}
-.blood-stream::before {
-  content: "";
-  position: absolute;
-  inset: auto -3px -5px;
-  height: 15px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 65% 30%, #c92a30, #770912 72%);
-}
-.blood-stream::after {
-  content: "";
-  position: absolute;
-  bottom: -12px;
-  left: 3px;
-  width: 6px;
-  height: 10px;
-  border-radius: 60% 60% 70% 70%;
-  background: #a4141e;
-  opacity: 0;
-  animation: blood-fall 7s ease-in infinite;
-}
-.blood-stream:nth-child(1) { left: 2%; height: 42px; width: 9px; animation-delay: -2s; }
-.blood-stream:nth-child(2) { left: 13%; height: 104px; width: 15px; animation-delay: -5s; }
-.blood-stream:nth-child(3) { left: 28%; height: 61px; width: 8px; animation-delay: -1s; }
-.blood-stream:nth-child(4) { left: 42%; height: 128px; width: 17px; animation-delay: -3s; }
-.blood-stream:nth-child(5) { left: 57%; height: 52px; width: 10px; animation-delay: -6s; }
-.blood-stream:nth-child(6) { left: 72%; height: 95px; width: 13px; animation-delay: -4s; }
-.blood-stream:nth-child(7) { left: 86%; height: 46px; width: 9px; animation-delay: -2.5s; }
-.blood-stream:nth-child(8) { left: 97%; height: 110px; width: 15px; animation-delay: -.5s; }
-.blood-stream:nth-child(2n)::after { animation-delay: -3s; }
-.blood-stream:nth-child(3n)::after { animation-delay: -5s; }
-@keyframes blood-pulse { from { transform: scaleY(.88); } to { transform: scaleY(1.08); } }
-@keyframes blood-fall {
-  0%, 68% { opacity: 0; transform: translateY(0) scale(.6); }
-  70% { opacity: .9; }
-  100% { opacity: 0; transform: translateY(85vh) scale(1); }
-}
-
 .panel {
   border: 1px solid var(--line);
   background: linear-gradient(145deg, rgba(34, 23, 23, .96), rgba(15, 12, 13, .97));
@@ -149,6 +84,16 @@ tbody tr:hover { background: rgba(173, 44, 45, .08); }
   background: rgba(135, 30, 35, .16);
   color: #fff;
 }
+.portal-nav-link[aria-current="page"] { border-color: #6b3939; background: #382023; color: #fff; font-weight: 700; }
+.button[aria-current="page"] { border-color: #d1544f; background: #4a2527; }
+.admin-section-title { color: var(--text); font-size: 1.125rem; font-weight: 700; }
+.admin-field { display: grid; min-width: 0; gap: .4rem; color: var(--text); font-size: .875rem; }
+.admin-field > .input { min-width: 0; }
+.admin-hint { color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.admin-shell .page-title { font-family: Arial, Helvetica, sans-serif; font-size: 1.875rem; letter-spacing: -.02em; }
+.admin-shell .panel { box-shadow: none; }
+.admin-shell th { letter-spacing: .04em; text-transform: none; font-size: .8125rem; }
+.admin-shell td { font-size: .875rem; }
 .brand-mark { color: #f3e9dd; font-family: Georgia, "Times New Roman", serif; font-weight: 700; letter-spacing: .15em; }
 .page-title { font-family: Georgia, "Times New Roman", serif; }
 
@@ -185,8 +130,6 @@ tbody tr:hover { background: rgba(173, 44, 45, .08); }
 @media (max-width: 760px) {
   .desktop-nav { display: none; }
   table { min-width: 660px; }
-  .blood-stream:nth-child(2n) { display: none; }
-  .blood-stream { opacity: .72; }
   .login-emblem { width: 82px; height: 82px; font-size: 3.2rem; }
   .login-title { font-size: clamp(2.8rem, 11vw, 4rem); }
 }
@@ -194,7 +137,5 @@ tbody tr:hover { background: rgba(173, 44, 45, .08); }
   .login-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 460px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .blood-stream, .blood-stream::after { animation: none; }
-  .blood-stream::after { display: none; }
   .button { transition: none; }
 }

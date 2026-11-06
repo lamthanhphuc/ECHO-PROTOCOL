@@ -27,7 +27,6 @@ export function LoginForm() {
           ? next
           : null;
       router.replace(payload.data.user.role === "ADMIN" ? "/admin" : paymentReturnPath ?? "/dashboard");
-      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại.");
     } finally { setLoading(false); }

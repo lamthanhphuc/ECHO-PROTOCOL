@@ -7,11 +7,18 @@ import type { PlayerProfile } from "@/lib/types/player";
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
+  AdminMatchesPage,
+  AdminMatchDetail,
+  AdminModerationAction,
   AdminPaymentsPage,
   AdminPurchasesPage,
   AdminUser,
   AdminUsersPage,
   AdminWalletTransactionsPage,
+  RemoteFixedHistoryPage,
+  RemoteFixedStatus,
+  RemoteFixedVersionDetail,
+  RemoteFixedVersionsPage,
 } from "@/lib/types/admin";
 
 async function authorized<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
@@ -20,7 +27,7 @@ async function authorized<T>(path: string, init?: { method?: string; body?: unkn
   try {
     return await backendRequest<T>(path, { ...init, token });
   } catch (error) {
-    if (error instanceof BackendApiError && error.status === 401) redirect("/login");
+    if (error instanceof BackendApiError && error.status === 401) redirect("/login?expired=1");
     throw error;
   }
 }
@@ -37,6 +44,9 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  matches: (query: string) => authorized<AdminMatchesPage>(`/api/admin/matches/logs${query}`),
+  match: (id: string) => authorized<AdminMatchDetail>(`/api/admin/matches/${encodeURIComponent(id)}`),
+  moderationHistory: (id: string) => authorized<AdminModerationAction[]>(`/api/admin/moderation/${encodeURIComponent(id)}`),
   users: (query: string) => authorized<AdminUsersPage>(`/api/admin/users${query}`),
   user: (id: string) => authorized<AdminUser>(`/api/admin/users/${encodeURIComponent(id)}`),
   payments: (query: string) => authorized<AdminPaymentsPage>(`/api/admin/payments${query}`),
@@ -45,4 +55,11 @@ export const adminApi = {
   walletTransactions: (query: string) =>
     authorized<AdminWalletTransactionsPage>(`/api/admin/wallet-transactions${query}`),
   purchases: (query: string) => authorized<AdminPurchasesPage>(`/api/admin/purchases${query}`),
+  remoteFixedStatus: () => authorized<RemoteFixedStatus>("/api/admin/remote-fixed/status"),
+  remoteFixedVersions: (query: string) =>
+    authorized<RemoteFixedVersionsPage>(`/api/admin/remote-fixed/versions${query}`),
+  remoteFixedVersion: (version: string) =>
+    authorized<RemoteFixedVersionDetail>(`/api/admin/remote-fixed/versions/${encodeURIComponent(version)}`),
+  remoteFixedHistory: (query: string) =>
+    authorized<RemoteFixedHistoryPage>(`/api/admin/remote-fixed/history${query}`),
 };

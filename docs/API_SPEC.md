@@ -708,6 +708,31 @@ Validation rules:
 - Invalid or unavailable snapshots must not trigger
   automatic fallback to local balance.
 
+### Admin Version Management (PR5)
+
+All routes require an authenticated `ADMIN` role and return the standard API envelope.
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/admin/remote-fixed/status` | Current flag, `TEST_ONLY` policy, protocol and supported maps |
+| GET | `/api/admin/remote-fixed/versions` | Paged versions; optional `mapId`, `difficulty`, `page`, `pageSize` |
+| GET | `/api/admin/remote-fixed/versions/{version}` | Version detail including exact `snapshotJson` |
+| POST | `/api/admin/remote-fixed/versions` | Create an immutable, inactive version |
+| POST | `/api/admin/remote-fixed/versions/{version}/activate` | Publish or roll back by reactivating a version |
+| POST | `/api/admin/remote-fixed/versions/{version}/deactivate` | Leave the scope with no active Remote Fixed version |
+| GET | `/api/admin/remote-fixed/history` | Paged immutable audit history |
+
+Create accepts `version`, `mapId`, `difficulty`, and `snapshotJson`. The server validates RFB-1,
+preserves the JSON bytes, computes the content hash, and never accepts active/hash/protocol values
+from the client. Activation requests contain `expectedActiveVersion` and a required `reason`;
+stale expectations return 409 and are never retried automatically. There is no payload update or
+delete operation. Publishing is transactional per map/difficulty/protocol scope and does not alter
+the version/hash already locked by a started match. `TEST_ONLY` is the current gameplay policy, not
+a version property.
+
+Errors: 400 invalid request/snapshot, 401 unauthenticated, 403 non-admin, 404 unknown version,
+and 409 duplicate version, stale expectation, or activation conflict.
+
 ### Unity Remote Fixed Integration (PR 2)
 
 - Remote Fixed is opt-in for isolated testing.
@@ -815,7 +840,10 @@ to the approved deterministic fixed baseline with `FIXED_FALLBACK`, `NOT_EVALUAT
 | GET | `/api/admin/shop/items` | List all shop items (including disabled/archived) |
 | POST | `/api/admin/shop/items` | Create shop item |
 | PUT | `/api/admin/shop/items/{id}` | Update shop item, including `isEnabled` and `isArchived` status |
-| GET | `/api/admin/matches/logs` | Match logs |
+| GET | `/api/admin/matches/logs` | Danh sách phòng và trận đấu; lọc theo `matchId`, `userId`, `status`, `flaggedOnly`; phân trang bằng `page`, `pageSize` (tối đa 100) |
+| GET | `/api/admin/matches/{matchId}` | Chi tiết phòng, trạng thái người chơi, thời điểm rời và quyền host |
+| GET | `/api/admin/moderation/{targetId}` | 50 thao tác kiểm tra gần nhất của phòng hoặc người chơi |
+| POST | `/api/admin/moderation/{targetId}` | Admin ghi lý do (10–500 ký tự) và thực hiện `FLAG_MATCH`, `CLEAR_MATCH`, `STOP_MATCH`, `FLAG_USER`, `CLEAR_USER`, `LOCK_USER` hoặc `UNLOCK_USER`; thao tác tài khoản chỉ áp dụng cho người chơi |
 | GET | `/api/admin/ai/logs` | AI behavior logs |
 
 All list routes accept `page` (default `1`) and `pageSize` (default `20`, maximum `100`).

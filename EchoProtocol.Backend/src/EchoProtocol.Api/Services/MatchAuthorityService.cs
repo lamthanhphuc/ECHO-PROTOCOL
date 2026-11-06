@@ -425,10 +425,13 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             hostPlayer.LastSeenAtUtc = now;
         }
 
-        // Preserve Lobby/InMatch status. Expiring only the Host lease
-        // lets a Fusion-promoted connected roster member take over.
         match.LeaseExpiresAtUtc = now;
         match.UpdatedAtUtc = now;
+        if (match.Players.All(item => item.DisconnectedAtUtc.HasValue))
+        {
+            match.Status = MatchAuthorityStatus.Ended;
+            match.EndedAtUtc = now;
+        }
 
         try
         {
@@ -784,6 +787,15 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             await _db.SaveChangesAsync(cancellationToken);
         }
 
+
+        if (match.Players.All(item => item.DisconnectedAtUtc.HasValue))
+        {
+            match.Status = MatchAuthorityStatus.Ended;
+            match.EndedAtUtc = now;
+            match.UpdatedAtUtc = now;
+            match.LeaseExpiresAtUtc = now;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
 
         return ServiceResult<MatchPlayerBindingResponse>.Success(Map(player), "Player marked disconnected");
     }
