@@ -35,6 +35,44 @@ public sealed class PlayerAIProfileTests
         Assert.Null(result.ResearchEligible); // owned by the approved research/experiment protocol
     }
 
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyValidTelemetryIsProfileIneligible()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync(testOnly: true);
+        var result = await new MatchTelemetryAggregator(fixture.Db,
+                new FakeTelemetryRepository(CreateCompleteEvents(fixture.MatchId, fixture.UserId)), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(MatchProfileEligibilityStatus.Ineligible, result.Eligibility);
+        Assert.Contains("TEST_ONLY_MATCH", result.Reasons);
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyPreservesAggregatedMetrics()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync(testOnly: true);
+        var result = await new MatchTelemetryAggregator(fixture.Db,
+                new FakeTelemetryRepository(CreateCompleteEvents(fixture.MatchId, fixture.UserId)), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(100m, result.Metrics[PlayerAIDimension.Survival].RawValue);
+        Assert.Equal(1m, result.Metrics[PlayerAIDimension.Noise].RawValue);
+        Assert.NotNull(result.BehaviorSignals);
+    }
+
+    [Fact, Trait("Category", "PR4MatchDataIsolation")]
+    public async Task TestOnlyPreservesCompletenessAndFingerprint()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync(testOnly: true);
+        var result = await new MatchTelemetryAggregator(fixture.Db,
+                new FakeTelemetryRepository(CreateCompleteEvents(fixture.MatchId, fixture.UserId)), TestPolicy())
+            .AggregateAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.Equal(TelemetryCompleteness.Complete, result.Completeness);
+        Assert.Equal(EndedAt, result.MatchEndTs);
+        Assert.Equal(64, result.SourceFingerprint.Length);
+    }
+
     [Fact, Trait("Category", "M4PlayerAIProfile")]
     public async Task Aggregator_BehaviorEvents_ProduceObjectiveAndToolUsageSignals()
     {
@@ -695,7 +733,7 @@ public sealed class PlayerAIProfileTests
             _connection = connection; _options = options; Db = db; UserId = userId; MatchId = matchId;
         }
 
-        public static async Task<ProfileFixture> CreateAsync(DateTime? endedAt = null)
+        public static async Task<ProfileFixture> CreateAsync(DateTime? endedAt = null, bool testOnly = false)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync();
@@ -704,8 +742,17 @@ public sealed class PlayerAIProfileTests
             await db.Database.EnsureCreatedAsync();
             var userId = Guid.NewGuid();
             var matchId = Guid.NewGuid();
+            if (testOnly)
+            {
+                db.RemoteFixedBalanceVersions.Add(new RemoteFixedBalanceVersion
+                {
+                    Version = "TEST-RFB-1", MapId = "SciFi", Difficulty = "NORMAL",
+                    SnapshotJson = "{}", ContentHash = new string('A', 64), IsActive = true,
+                    CreatedAtUtc = EndedAt
+                });
+            }
             db.Users.Add(User(userId));
-            AddCompletedMatch(db, matchId, userId, endedAt ?? EndedAt);
+            AddCompletedMatch(db, matchId, userId, endedAt ?? EndedAt, testOnly);
             await db.SaveChangesAsync();
             return new ProfileFixture(connection, options, db, userId, matchId);
         }
@@ -713,7 +760,7 @@ public sealed class PlayerAIProfileTests
         public async Task<Guid> AddMatchAsync(DateTime endedAt)
         {
             var id = Guid.NewGuid();
-            AddCompletedMatch(Db, id, UserId, endedAt);
+            AddCompletedMatch(Db, id, UserId, endedAt, false);
             await Db.SaveChangesAsync();
             return id;
         }
@@ -741,7 +788,7 @@ public sealed class PlayerAIProfileTests
             Role = UserRole.PLAYER, Status = UserStatus.ACTIVE, CreatedAt = EndedAt, UpdatedAt = EndedAt
         };
 
-        private static void AddCompletedMatch(AppDbContext db, Guid matchId, Guid userId, DateTime endedAt)
+        private static void AddCompletedMatch(AppDbContext db, Guid matchId, Guid userId, DateTime endedAt, bool testOnly)
         {
             var binding = new MatchPlayerBinding
             {
@@ -752,6 +799,11 @@ public sealed class PlayerAIProfileTests
             {
                 MatchId = matchId, FusionSessionName = $"test-{matchId:N}", HostUserId = userId,
                 MaxPlayers = 4, Status = MatchAuthorityStatus.Ended, LeaseExpiresAtUtc = endedAt,
+                MapId = testOnly ? "SciFi" : null, Difficulty = testOnly ? "NORMAL" : null,
+                ResolutionMode = testOnly ? "FIXED" : null, BalanceSource = testOnly ? "REMOTE_FIXED" : null,
+                BalanceProtocolVersion = testOnly ? "RFB-1" : null, BalanceVersion = testOnly ? "TEST-RFB-1" : null,
+                BalanceHash = testOnly ? new string('A', 64) : null,
+                MatchDataPolicy = testOnly ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard,
                 CreatedAtUtc = endedAt.AddMinutes(-2), UpdatedAtUtc = endedAt, StartedAtUtc = endedAt.AddMinutes(-2),
                 EndedAtUtc = endedAt, Players = [binding]
             });

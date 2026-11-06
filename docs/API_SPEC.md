@@ -749,6 +749,26 @@ Validation rules:
   PlayerSpawner authoritative-world restoration contract.
 - TEST_ONLY data isolation remains required before production rollout.
 
+### PR4 — Match Data Isolation
+
+For Remote Fixed V1, the Backend locks `matchDataPolicy = TEST_ONLY` at match start.
+
+TEST_ONLY:
+
+- Excluded from SOLO and TEAM leaderboards.
+- Currency reward = 0.
+- Experience reward = 0.
+- TotalMatches, TotalWins, ExperiencePoints and Level remain unchanged.
+- RewardStatus becomes Completed with zero-value grants and ledgers.
+- Reward policy version = `TEST_ONLY_ZERO_V1`.
+- Progression policy version = `TEST_ONLY_NO_PROGRESS_V1`.
+- Does not contribute to production PlayerAIProfile / MatchScore.
+- Operational telemetry remains subject to existing validation.
+- Research telemetry remains subject to existing capture restrictions.
+- Match-scoped TeamProfile may be retained for analysis.
+
+STANDARD retains existing reward, progression, leaderboard and AI profile behavior.
+
 ---
 
 ## Scenario resolution and decision logging (M4-051/M4-049)

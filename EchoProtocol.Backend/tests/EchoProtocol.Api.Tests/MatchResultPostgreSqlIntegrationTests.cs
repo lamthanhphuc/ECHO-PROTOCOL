@@ -806,6 +806,63 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             (await verify.MatchResults.AsNoTracking().SingleAsync()).RewardStatus);
     }
 
+    [Fact, Trait("Category", "PR4PostgreSqlIntegration")]
+    public async Task TestOnlyRewardAtomicCompletion()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedRewardMatchAsync(testOnly: true);
+
+        var result = await ProcessRewardAsync(scope, seed.MatchId);
+
+        Assert.True(result.IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        Assert.All(await verify.MatchRewardGrants.ToListAsync(), grant => Assert.Equal(0, grant.CurrencyAmount));
+        Assert.All(await verify.WalletTransactions.ToListAsync(), ledger => Assert.Equal(0, ledger.Amount));
+        Assert.Equal(MatchRewardStatus.Completed, (await verify.MatchResults.SingleAsync()).RewardStatus);
+        Assert.All(await verify.Wallets.ToListAsync(), wallet => Assert.Equal(100, wallet.Balance));
+    }
+
+    [Fact, Trait("Category", "PR4PostgreSqlIntegration")]
+    public async Task TestOnlyConcurrentRewardIsIdempotent()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedRewardMatchAsync(testOnly: true);
+
+        var results = await Task.WhenAll(
+            ProcessRewardAsync(scope, seed.MatchId), ProcessRewardAsync(scope, seed.MatchId));
+
+        Assert.All(results, result => Assert.True(result.IsSuccess));
+        Assert.Single(results, result => !result.Data!.IsReplay);
+        await using var verify = scope.CreateDbContext();
+        Assert.Equal(2, await verify.MatchRewardGrants.CountAsync());
+        Assert.Equal(2, await verify.WalletTransactions.CountAsync());
+    }
+
+    [Fact, Trait("Category", "PR4PostgreSqlIntegration")]
+    public async Task TestOnlyRewardFailureRollsBack()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedRewardMatchAsync(testOnly: true);
+        await using (var arrange = scope.CreateDbContext())
+        {
+            var wallet = await arrange.Wallets.SingleAsync(item => item.UserId == seed.HostId);
+            arrange.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(), WalletId = wallet.Id, Type = WalletTransactionType.MATCH_REWARD,
+                Amount = 0, BalanceBefore = 100, BalanceAfter = 100, ReferenceId = seed.MatchId,
+                Description = "pre-existing conflict", CreatedAtUtc = Now.UtcDateTime
+            });
+            await arrange.SaveChangesAsync();
+        }
+
+        var result = await ProcessRewardAsync(scope, seed.MatchId);
+
+        Assert.False(result.IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        Assert.Empty(await verify.MatchRewardGrants.ToListAsync());
+        Assert.Equal(MatchRewardStatus.Pending, (await verify.MatchResults.SingleAsync()).RewardStatus);
+    }
+
     [Fact, Trait("Category", "M4RewardPostgreSqlIntegration")]
     public async Task ConcurrentDifferentMatchesDoNotLoseWalletUpdates()
     {
@@ -2289,13 +2346,15 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
         public AppDbContext CreateDbContext() => new(_options);
 
-        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false)
+        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false, bool testOnly = false)
         {
             var hostId = Guid.NewGuid();
             var playerId = Guid.NewGuid();
             var matchId = Guid.NewGuid();
             await using var db = CreateDbContext();
             db.Users.AddRange(CreateUser(hostId, "host"), CreateUser(playerId, "player"));
+            if (testOnly)
+                db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("TEST-RFB-1"));
             if (legacyBindings)
             {
                 await db.SaveChangesAsync();
@@ -2322,6 +2381,16 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                 FusionSessionName = $"integration-{matchId:N}",
                 HostUserId = hostId,
                 MaxPlayers = 4,
+                MapId = testOnly ? "SciFi" : null,
+                Difficulty = testOnly ? "NORMAL" : null,
+                ResolutionMode = testOnly ? "FIXED" : null,
+                BalanceSource = testOnly ? "REMOTE_FIXED" : null,
+                BalanceProtocolVersion = testOnly ? "RFB-1" : null,
+                BalanceVersion = testOnly ? "TEST-RFB-1" : null,
+                BalanceHash = testOnly
+                    ? RemoteFixedBalanceContract.ComputeHash(RemoteFixedBalanceTests.ValidSnapshot)
+                    : null,
+                MatchDataPolicy = testOnly ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard,
                 Status = MatchAuthorityStatus.InMatch,
                 LeaseExpiresAtUtc = Now.AddMinutes(1).UtcDateTime,
                 CreatedAtUtc = Now.AddMinutes(-3).UtcDateTime,
@@ -2337,9 +2406,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             return new MatchSeed(matchId, hostId, playerId);
         }
 
-        public async Task<MatchSeed> SeedRewardMatchAsync()
+        public async Task<MatchSeed> SeedRewardMatchAsync(bool testOnly = false)
         {
-            var seed = await SeedMatchAsync();
+            var seed = await SeedMatchAsync(testOnly: testOnly);
             await using var db = CreateDbContext();
             var match = await db.MatchAuthorityBindings.SingleAsync(
                 item => item.MatchId == seed.MatchId);
