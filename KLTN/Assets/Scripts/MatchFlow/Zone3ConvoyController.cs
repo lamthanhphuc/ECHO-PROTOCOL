@@ -36,7 +36,8 @@ namespace EchoProtocol.Networking
         private Zone3ConvoyRoutePoint _targetPoint = Zone3ConvoyRoutePoint.Point01;
         private float _currentSpeed;
         public bool DebugFastConvoy { get; private set; }
-        public const float DebugSpeedMultiplier = 5f;
+        private const float NormalSpeedMultiplier = 5f;
+        public const float DebugSpeedMultiplier = 20f;
 
         public bool ToggleDebugFastConvoy()
         {
@@ -46,8 +47,8 @@ namespace EchoProtocol.Networking
                 return false;
             DebugFastConvoy = !DebugFastConvoy;
             EchoProtocol.UI.GameUIFeedback.Instance.Toast(EchoProtocol.Settings.GameLanguage.Choose(
-                DebugFastConvoy ? "Tốc độ tàu demo ×5" : "Tốc độ tàu bình thường",
-                DebugFastConvoy ? "Demo convoy speed ×5" : "Normal convoy speed"));
+                DebugFastConvoy ? $"Tốc độ tàu demo ×{DebugSpeedMultiplier}" : $"Tốc độ tàu bình thường ×{NormalSpeedMultiplier}",
+                DebugFastConvoy ? $"Demo convoy speed ×{DebugSpeedMultiplier}" : $"Normal convoy speed ×{NormalSpeedMultiplier}"));
             return true;
         }
         private float _cruiseHeight;
@@ -265,10 +266,10 @@ namespace EchoProtocol.Networking
             int escortCount = CountNearbyAlivePlayers();
             float targetSpeed = escortCount <= 0 ? 0f
                 : normalSpeed * (escortCount == 1 ? soloEscortSpeedMultiplier : 1f);
-            float demoMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : 1f;
-            targetSpeed *= demoMultiplier;
+            float speedMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : NormalSpeedMultiplier;
+            targetSpeed *= speedMultiplier;
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, targetSpeed,
-                (targetSpeed > _currentSpeed ? acceleration : deceleration) * demoMultiplier * deltaTime);
+                (targetSpeed > _currentSpeed ? acceleration : deceleration) * speedMultiplier * deltaTime);
             MoveTowardTarget(deltaTime);
         }
 

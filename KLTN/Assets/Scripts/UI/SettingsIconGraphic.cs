@@ -224,7 +224,6 @@ namespace EchoProtocol.UI
         private static readonly Color Border = new(0.22f, 0.26f, 0.27f, 0.92f);
         private static readonly Color IconColor = new(0.835f, 0.839f, 0.82f, 1f);
         private static readonly Color CreditsColor = IndustrialUiStyle.Text;
-        private static Font _creditsFont;
 
         public static void MainMenu(RectTransform root)
         {
@@ -439,16 +438,13 @@ namespace EchoProtocol.UI
             markImage.color = CreditsColor;
             markImage.raycastTarget = false;
             mark.SetAsFirstSibling();
-            var sharedFont = Resources.Load<TMP_FontAsset>("UI/LobbyReference/LobbySerif");
-            // TMP's sourceFontFile is an import source, not a reliable UGUI runtime
-            // font in builds. Use one dynamic serif for both UGUI credit labels.
-            _creditsFont ??= Font.CreateDynamicFontFromOSFont(
-                new[] { "Georgia", "Times New Roman", "Liberation Serif", "DejaVu Serif" }, 18);
+            var sharedFont = UiTypographyTheme.BodyTmp;
+            var legacyFont = UiTypographyTheme.BodyLegacy;
             foreach (var text in rect.GetComponentsInChildren<Text>(true))
             {
                 bool label = IsCreditLabel(text.name);
                 PositionCreditText(text.rectTransform, label);
-                if (_creditsFont != null) text.font = _creditsFont;
+                if (legacyFont != null) text.font = legacyFont;
                 text.fontSize = label ? 11 : 18;
                 text.fontStyle = label ? FontStyle.Normal : FontStyle.Bold;
                 text.resizeTextForBestFit = false;

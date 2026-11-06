@@ -46,26 +46,50 @@ namespace EchoProtocol.AI.AED
             return roots.Length == 1 ? roots[0].GetComponentsInChildren<Transform>(true).Where(x => x.name == "LP_Bay_Door_snaps").Take(2).ToArray() : Array.Empty<Transform>();
         }
         public static bool TryGetDoorSources(NetworkRunner runner, NetworkMatchState matchState, out AEDV02DoorSource[] sources)
+            => TryGetDoorSources(runner, matchState, out sources, out _);
+
+        public static bool TryGetDoorSources(NetworkRunner runner, NetworkMatchState matchState,
+            out AEDV02DoorSource[] sources, out string reason)
         {
             sources = Array.Empty<AEDV02DoorSource>();
+            reason = "HOLD_DOOR_SOURCE_AUTHORITY_OR_MANIFEST";
             if (runner == null || !runner.IsServer || matchState == null || matchState.Runner != runner ||
                 matchState.Object == null || !matchState.Object.IsValid || !matchState.Object.HasStateAuthority || !TryLoad(out var manifest, out _)) return false;
             var doors = new List<AEDV02DoorSource>();
-            foreach (var door in UnityEngine.Object.FindObjectsByType<NetworkBehaviour>(FindObjectsInactive.Exclude).Where(x => x is INetworkDoorStateProvider && x.Runner == runner))
+            var expected = manifest.DoorIds.ToHashSet();
+            foreach (var door in UnityEngine.Object.FindObjectsByType<NetworkBehaviour>(FindObjectsInactive.Include).Where(x => x is INetworkDoorStateProvider && x.Runner == runner))
             {
-                if (door.Object == null || !door.Object.IsValid || !door.Object.HasStateAuthority) return false;
+                var id = MarkerId(door.transform);
+                if (!expected.Contains(id)) continue;
+                if (door.Object == null || !door.Object.IsValid || !door.Object.HasStateAuthority)
+                {
+                    reason = $"HOLD_DOOR_SOURCE_NO_AUTHORITY:{door.name}:{id}";
+                    return false;
+                }
                 bool broken = door is NetworkSlidingDoor sliding && sliding.IsBroken || door is NetworkDoor normal && normal.IsBroken;
                 bool jammed = door is NetworkSlidingDoor slidingDoor && slidingDoor.HasActiveJammer;
                 var state = ((INetworkDoorStateProvider)door).State;
-                doors.Add(new AEDV02DoorSource { DoorId = MarkerId(door.transform), State = jammed ? "LOCKED" : broken ? "BROKEN" :
+                doors.Add(new AEDV02DoorSource { DoorId = id, State = jammed ? "LOCKED" : broken ? "BROKEN" :
                     state == NetworkDoorState.Open ? "OPEN" : state == NetworkDoorState.Locked ? "LOCKED" : "CLOSED_UNLOCKED" });
             }
             var zone2 = EchoProtocol.MatchFlow.Zone2MissionDirector.Instance;
             var gates = Zone2ExitGates(SceneManager.GetSceneByPath(manifest.ScenePath));
-            if (zone2 == null || gates.Length != 2 || gates[0].gameObject != zone2.DoorBlocker1 || gates[1].gameObject != zone2.DoorBlocker2) return false;
+            if (zone2 == null || gates.Length != 2 || zone2.DoorBlocker1 == zone2.DoorBlocker2 ||
+                gates.Any(gate => gate.gameObject != zone2.DoorBlocker1 && gate.gameObject != zone2.DoorBlocker2))
+            {
+                reason = $"HOLD_DOOR_SOURCE_ZONE2_BINDING:gates={gates.Length},director={zone2 != null}";
+                return false;
+            }
             foreach (var gate in gates) doors.Add(new AEDV02DoorSource { DoorId = MarkerId(gate), State = matchState.ZoneDoorsUnlocked ? "OPEN" : "LOCKED" });
-            if (manifest.DoorIds.Any(x => doors.All(d => d.DoorId != x))) return false;
-            sources = doors.ToArray(); return true;
+            var missing = expected.Except(doors.Select(door => door.DoorId)).ToArray();
+            if (missing.Length != 0)
+            {
+                reason = "HOLD_DOOR_SOURCE_MISSING:" + string.Join(",", missing);
+                return false;
+            }
+            sources = doors.ToArray();
+            reason = string.Empty;
+            return true;
         }
     }
 

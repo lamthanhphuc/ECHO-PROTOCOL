@@ -77,7 +77,10 @@ namespace EchoProtocol.UI
             bool isButton = label.GetComponentInParent<Button>() != null;
             bool cinematic = label.GetComponentInParent<EchoProtocol.UI.Loading.CinematicMatchLoadingScreen>() != null
                 || label.GetComponentInParent<CinematicResultSceneController>() != null;
-            if (!isMainMenuTypography && !cinematic)
+            var parent = label.transform.parent;
+            bool credits = parent != null &&
+                (parent.name == "CoinContainer" || parent.name == "CreditsBox" || parent.name == "CreditsButton");
+            if (!isMainMenuTypography && !cinematic && !credits)
             {
                 if (label is TMP_Text tmp) UiTypographyTheme.Apply(tmp, isButton);
                 else if (label is Text legacy) UiTypographyTheme.Apply(legacy, isButton);

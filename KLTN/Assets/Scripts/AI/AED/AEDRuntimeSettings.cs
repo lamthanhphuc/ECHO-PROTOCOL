@@ -39,6 +39,13 @@ namespace EchoProtocol.AI.AED
         public bool PacingV02ShadowEnabled => pacingV02ShadowEnabled;
         public bool PacingV02GameplayEnabled => pacingV02GameplayEnabled;
         public bool CabinetAmbushEnabled => cabinetAmbushEnabled;
+
+        public void ConfigureLobbyTest(bool adaptive)
+        {
+            if (Debug.isDebugBuild)
+                pacingV02GameplayEnabled = adaptive;
+        }
+
 #if AED_V02_PILOT_HARNESS
         public void ConfigurePilotHarness(bool gameplay, bool cabinet)
         {

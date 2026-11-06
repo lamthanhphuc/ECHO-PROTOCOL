@@ -1,4 +1,6 @@
 using System;
+using EchoProtocol.AI.AED;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking;
@@ -23,6 +25,9 @@ namespace EchoProtocol.UI
         [SerializeField] private Button leaveButton;
         [SerializeField] private Button readyButton;
         [SerializeField] private Button startButton;
+        private Button _adaptiveTestButton;
+        private bool _adaptiveTestSelected;
+        private float _nextAdaptiveTestRefresh;
         [SerializeField] private TMP_Dropdown difficultyDropdown;
 
         [Header("Character")]
@@ -345,6 +350,7 @@ namespace EchoProtocol.UI
                     inRoom
                     && _room.IsHost
                     && _room.CanStartMatch;
+                RefreshAdaptiveTestButton(startRect, inRoom && _room.IsHost);
             }
 
             if (leaveButton != null)
@@ -469,6 +475,55 @@ namespace EchoProtocol.UI
         }
 
 
+        private bool CanTestAdaptive =>
+            MatchAuthorityRuntime.Instance?.Difficulty == MatchDifficulty.Normal
+            && bootstrap?.Runner != null
+            && LobbyMapCatalog.Selected(bootstrap.Runner) == 0;
+
+        private void LateUpdate()
+        {
+            if (_adaptiveTestButton == null || !_adaptiveTestButton.gameObject.activeSelf
+                || Time.unscaledTime < _nextAdaptiveTestRefresh) return;
+            _nextAdaptiveTestRefresh = Time.unscaledTime + 0.15f;
+            RefreshAdaptiveTestButton((RectTransform)startButton.transform,
+                lobbyManager != null && lobbyManager.IsInRoom && _room.IsHost);
+        }
+
+        private void RefreshAdaptiveTestButton(RectTransform startRect, bool visible)
+        {
+            if (!Debug.isDebugBuild) return;
+            if (!visible) _adaptiveTestSelected = false;
+            if (_adaptiveTestButton == null)
+            {
+                if (!visible) return;
+                _adaptiveTestButton = Instantiate(startButton, startRect.parent);
+                _adaptiveTestButton.name = "AdaptiveTestButton";
+                _adaptiveTestButton.onClick = new Button.ButtonClickedEvent();
+                _adaptiveTestButton.onClick.AddListener(() =>
+                {
+                    if (!_room.IsHost || lobbyManager.IsStartingMatch || !CanTestAdaptive) return;
+                    _adaptiveTestSelected = !_adaptiveTestSelected;
+                    Refresh();
+                });
+            }
+
+            var rect = (RectTransform)_adaptiveTestButton.transform;
+            rect.anchoredPosition = startRect.anchoredPosition - new Vector2(0f, startRect.rect.height + 8f);
+            rect.sizeDelta = new Vector2(startRect.sizeDelta.x, 36f);
+            bool available = visible && CanTestAdaptive;
+            if (!available) _adaptiveTestSelected = false;
+            _adaptiveTestButton.gameObject.SetActive(visible);
+            _adaptiveTestButton.interactable = available && !lobbyManager.IsStartingMatch;
+            var label = _adaptiveTestButton.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+            {
+                label.fontSize = 22f;
+                label.text = available
+                    ? (_adaptiveTestSelected ? "AI TEST: ADAPTIVE" : "AI TEST: FIXED")
+                    : EchoProtocol.Settings.GameLanguage.Choose("AI TEST: Cần map SciFi và độ khó Thường", "AI TEST: Requires SciFi and Normal");
+            }
+        }
+
         private void OnStart()
         {
             if (lobbyManager == null
@@ -478,6 +533,21 @@ namespace EchoProtocol.UI
                 return;
             }
 
+            if (Debug.isDebugBuild && !lobbyManager.IsStartingMatch)
+            {
+                if (_adaptiveTestSelected && !CanTestAdaptive)
+                {
+                    Refresh();
+                    return;
+                }
+                var runtime = _adaptiveTestSelected
+                    ? ScenarioConfigAuthorityRuntime.EnsureExists()
+                    : ScenarioConfigAuthorityRuntime.Instance;
+                var authority = MatchAuthorityRuntime.Instance;
+                authority?.RequestScenarioResolutionMode(
+                    _adaptiveTestSelected ? ScenarioResolutionMode.Adaptive : ScenarioResolutionMode.Fixed);
+                runtime?.RuntimeSettings?.ConfigureLobbyTest(_adaptiveTestSelected);
+            }
             lobbyManager.TryStartMatch();
         }
 
