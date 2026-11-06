@@ -4,9 +4,10 @@ import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata = { title: "Đăng nhập" };
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
+  const { expired } = await searchParams;
   const session = await getSession();
-  if (session) redirect(session.role === "ADMIN" ? "/admin" : "/dashboard");
+  if (session && expired !== "1") redirect(session.role === "ADMIN" ? "/admin" : "/dashboard");
 
   return (
     <main className="login-stage mx-auto grid min-h-screen w-full max-w-[1480px] items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-16">

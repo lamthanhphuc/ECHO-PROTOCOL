@@ -104,3 +104,81 @@ export type AdminUsersPage = PagedResponse<AdminUser>;
 export type AdminPaymentsPage = PagedResponse<AdminPayment>;
 export type AdminWalletTransactionsPage = PagedResponse<AdminWalletTransaction>;
 export type AdminPurchasesPage = PagedResponse<AdminPurchase>;
+
+export interface AdminMatch {
+  matchId: string;
+  hostUserId: string;
+  hostUsername: string;
+  mapId: string | null;
+  difficulty: string | null;
+  status: "Lobby" | "InMatch" | "Ended";
+  outcome: "WIN" | "LOSE" | null;
+  playerCount: number;
+  connectedCount: number;
+  isFlagged: boolean;
+  leaseExpiresAtUtc: string;
+  startedAtUtc: string | null;
+  endedAtUtc: string | null;
+}
+export type AdminMatchesPage = PagedResponse<AdminMatch>;
+export interface AdminMatchDetail {
+  match: AdminMatch;
+  players: Array<{
+    userId: string;
+    username: string;
+    displayName: string | null;
+    fusionActorNumber: number;
+    participated: boolean;
+    hadGameplayDisconnect: boolean;
+    boundAtUtc: string;
+    lastSeenAtUtc: string;
+    disconnectedAtUtc: string | null;
+  }>;
+}
+export interface AdminModerationAction {
+  id: string;
+  targetId: string;
+  action: "FLAG_MATCH" | "CLEAR_MATCH" | "STOP_MATCH" | "FLAG_USER" | "CLEAR_USER" | "LOCK_USER" | "UNLOCK_USER";
+  adminUserId: string;
+  reason: string;
+  createdAtUtc: string;
+}
+
+export interface RemoteFixedVersion {
+  version: string;
+  mapId: "SciFi" | "Scene_A";
+  difficulty: "EASY" | "NORMAL" | "HARD";
+  protocolVersion: "RFB-1";
+  contentHash: string;
+  isActive: boolean;
+  createdAtUtc: string;
+}
+
+export interface RemoteFixedVersionDetail extends RemoteFixedVersion {
+  snapshotJson: string;
+  activeVersion: string | null;
+}
+export interface CreateRemoteFixedVersionRequest {
+  version: string;
+  mapId: "SciFi" | "Scene_A";
+  difficulty: "EASY" | "NORMAL" | "HARD";
+  snapshotJson: string;
+}
+export interface RemoteFixedActivationRequest { expectedActiveVersion: string; reason: string; }
+export interface RemoteFixedActivationResponse {
+  previousActiveVersion: string | null;
+  activeVersion: string | null;
+  changed: boolean;
+}
+export interface RemoteFixedAudit {
+  id: string; action: "CREATE" | "ACTIVATE" | "DEACTIVATE"; mapId: string; difficulty: string;
+  previousVersion: string | null; targetVersion: string | null; adminUserId: string; reason: string; createdAtUtc: string;
+}
+export interface RemoteFixedStatus {
+  remoteFixedEnabled: boolean;
+  matchDataPolicy: "TEST_ONLY";
+  protocolVersion: "RFB-1";
+  supportedMaps: Array<"SciFi" | "Scene_A">;
+}
+export type RemoteFixedVersionsPage = PagedResponse<RemoteFixedVersion>;
+export type RemoteFixedHistoryPage = PagedResponse<RemoteFixedAudit>;

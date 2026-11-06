@@ -4,7 +4,7 @@ import { PortalShell } from "@/components/layout/portal-shell";
 
 const items = [
   { href: "/dashboard", label: "Tổng quan" },
-  { href: "/wallet", label: "Wallet" },
+  { href: "/wallet", label: "Ví của tôi" },
   { href: "/wallet/history", label: "Lịch sử thanh toán" },
   { href: "/profile", label: "Hồ sơ" },
 ];

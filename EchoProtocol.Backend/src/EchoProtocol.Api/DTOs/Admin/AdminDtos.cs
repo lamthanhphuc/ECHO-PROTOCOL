@@ -40,6 +40,50 @@ public sealed class AdminPurchasesQuery : AdminPagedQuery
     public DateTime? ToUtc { get; set; }
 }
 
+public sealed class AdminMatchesQuery : AdminPagedQuery
+{
+    public Guid? MatchId { get; set; }
+    public Guid? UserId { get; set; }
+    public MatchAuthorityStatus? Status { get; set; }
+    public bool FlaggedOnly { get; set; }
+}
+
+public sealed class AdminMatchResponse
+{
+    public Guid MatchId { get; init; }
+    public Guid HostUserId { get; init; }
+    public string HostUsername { get; init; } = string.Empty;
+    public string? MapId { get; init; }
+    public string? Difficulty { get; init; }
+    public MatchAuthorityStatus Status { get; init; }
+    public MatchOutcome? Outcome { get; init; }
+    public int PlayerCount { get; init; }
+    public int ConnectedCount { get; init; }
+    public bool IsFlagged { get; init; }
+    public DateTime LeaseExpiresAtUtc { get; init; }
+    public DateTime? StartedAtUtc { get; init; }
+    public DateTime? EndedAtUtc { get; init; }
+}
+
+public sealed class AdminMatchDetailResponse
+{
+    public AdminMatchResponse Match { get; init; } = null!;
+    public IReadOnlyList<AdminMatchPlayerResponse> Players { get; init; } = [];
+}
+
+public sealed class AdminMatchPlayerResponse
+{
+    public Guid UserId { get; init; }
+    public string Username { get; init; } = string.Empty;
+    public string? DisplayName { get; init; }
+    public int FusionActorNumber { get; init; }
+    public bool Participated { get; init; }
+    public bool HadGameplayDisconnect { get; init; }
+    public DateTime BoundAtUtc { get; init; }
+    public DateTime LastSeenAtUtc { get; init; }
+    public DateTime? DisconnectedAtUtc { get; init; }
+}
+
 public sealed class AdminGrantCreditsRequest
 {
     public int Amount { get; init; }

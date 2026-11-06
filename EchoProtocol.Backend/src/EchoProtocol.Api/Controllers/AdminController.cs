@@ -19,6 +19,40 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("remote-fixed/status")]
+    public Task<IActionResult> RemoteFixedStatus([FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        Execute(() => Task.FromResult(remoteFixed.GetStatus()), ct);
+
+    [HttpGet("remote-fixed/versions")]
+    public Task<IActionResult> RemoteFixedVersions([FromQuery] RemoteFixedVersionsQuery query,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        Execute(() => remoteFixed.GetVersionsAsync(query, ct), ct);
+
+    [HttpGet("remote-fixed/versions/{version}")]
+    public Task<IActionResult> RemoteFixedVersion(string version,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        Execute(() => remoteFixed.GetVersionAsync(version, ct), ct);
+
+    [HttpPost("remote-fixed/versions")]
+    public Task<IActionResult> CreateRemoteFixedVersion([FromBody] CreateRemoteFixedVersionRequest request,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        WithAdmin(adminId => remoteFixed.CreateVersionAsync(adminId, request, ct), ct);
+
+    [HttpPost("remote-fixed/versions/{version}/activate")]
+    public Task<IActionResult> ActivateRemoteFixedVersion(string version, [FromBody] ChangeRemoteFixedActivationRequest request,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        WithAdmin(adminId => remoteFixed.ActivateVersionAsync(adminId, version, request, ct), ct);
+
+    [HttpPost("remote-fixed/versions/{version}/deactivate")]
+    public Task<IActionResult> DeactivateRemoteFixedVersion(string version, [FromBody] ChangeRemoteFixedActivationRequest request,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        WithAdmin(adminId => remoteFixed.DeactivateVersionAsync(adminId, version, request, ct), ct);
+
+    [HttpGet("remote-fixed/history")]
+    public Task<IActionResult> RemoteFixedHistory([FromQuery] RemoteFixedVersionsQuery query,
+        [FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
+        Execute(() => remoteFixed.GetHistoryAsync(query, ct), ct);
+
     [HttpGet("matches/{matchId:guid}/recovery")]
     public async Task<IActionResult> InspectRecovery(Guid matchId, [FromServices] AppDbContext db, CancellationToken ct)
     {
@@ -34,6 +68,108 @@ public sealed class AdminController(
                 { match.Result.Outcome, match.Result.RewardStatus, match.Result.RecoveryAudit, match.Result.EndedAtUtc }
         }, "Recovery review context"));
     }
+    [HttpGet("matches/logs")]
+    public async Task<IActionResult> MatchLogs([FromQuery] AdminMatchesQuery query,
+        [FromServices] AppDbContext db, CancellationToken ct)
+    {
+        if (query.Page < 1 || query.PageSize is < 1 or > 100 ||
+            (long)(query.Page - 1) * query.PageSize > int.MaxValue)
+            return BadRequest(ApiResponse<object>.Fail("Invalid pagination", ErrorCodes.ValidationError));
+
+        var matches = db.MatchAuthorityBindings.AsNoTracking();
+        if (query.MatchId is { } matchId)
+            matches = matches.Where(item => item.MatchId == matchId);
+        if (query.UserId is { } userId)
+            matches = matches.Where(item => item.Players.Any(player => player.UserId == userId));
+        if (query.Status is { } status)
+            matches = matches.Where(item => item.Status == status);
+        if (query.FlaggedOnly)
+            matches = matches.Where(item => db.AdminModerationActions
+                .Where(entry => entry.TargetId == item.MatchId && (entry.Action == "FLAG_MATCH" || entry.Action == "CLEAR_MATCH"))
+                .OrderByDescending(entry => entry.CreatedAtUtc).ThenByDescending(entry => entry.Id)
+                .Select(entry => entry.Action).FirstOrDefault() == "FLAG_MATCH");
+
+        var totalItems = await matches.CountAsync(ct);
+        var items = await matches.OrderByDescending(item => item.CreatedAtUtc)
+            .ThenByDescending(item => item.MatchId)
+            .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
+            .Select(item => new AdminMatchResponse
+            {
+                MatchId = item.MatchId,
+                HostUserId = item.HostUserId,
+                HostUsername = item.HostUser == null ? "" : item.HostUser.Username,
+                MapId = item.MapId,
+                Difficulty = item.Difficulty,
+                Status = item.Status,
+                Outcome = item.Result == null ? null : item.Result.Outcome,
+                PlayerCount = item.Result == null ? item.Players.Count() : item.Result.PlayerCount,
+                ConnectedCount = item.Players.Count(player => player.DisconnectedAtUtc == null),
+                IsFlagged = db.AdminModerationActions
+                    .Where(entry => entry.TargetId == item.MatchId && (entry.Action == "FLAG_MATCH" || entry.Action == "CLEAR_MATCH"))
+                    .OrderByDescending(entry => entry.CreatedAtUtc).ThenByDescending(entry => entry.Id)
+                    .Select(entry => entry.Action).FirstOrDefault() == "FLAG_MATCH",
+                LeaseExpiresAtUtc = item.LeaseExpiresAtUtc,
+                StartedAtUtc = item.StartedAtUtc,
+                EndedAtUtc = item.EndedAtUtc
+            }).ToArrayAsync(ct);
+        return Ok(ApiResponse<AdminPagedResponse<AdminMatchResponse>>.Ok(new()
+        {
+            Items = items, Page = query.Page, PageSize = query.PageSize,
+            TotalItems = totalItems,
+            TotalPages = (int)Math.Ceiling(totalItems / (double)query.PageSize)
+        }));
+    }
+    [HttpGet("matches/{matchId:guid}")]
+    public async Task<IActionResult> MatchDetail(Guid matchId, [FromServices] AppDbContext db, CancellationToken ct)
+    {
+        var match = await db.MatchAuthorityBindings.AsNoTracking()
+            .Where(item => item.MatchId == matchId)
+            .Select(item => new AdminMatchResponse
+            {
+                MatchId = item.MatchId,
+                HostUserId = item.HostUserId,
+                HostUsername = item.HostUser == null ? "" : item.HostUser.Username,
+                MapId = item.MapId,
+                Difficulty = item.Difficulty,
+                Status = item.Status,
+                Outcome = item.Result == null ? null : item.Result.Outcome,
+                PlayerCount = item.Result == null ? item.Players.Count() : item.Result.PlayerCount,
+                ConnectedCount = item.Players.Count(player => player.DisconnectedAtUtc == null),
+                IsFlagged = db.AdminModerationActions
+                    .Where(entry => entry.TargetId == item.MatchId && (entry.Action == "FLAG_MATCH" || entry.Action == "CLEAR_MATCH"))
+                    .OrderByDescending(entry => entry.CreatedAtUtc).ThenByDescending(entry => entry.Id)
+                    .Select(entry => entry.Action).FirstOrDefault() == "FLAG_MATCH",
+                LeaseExpiresAtUtc = item.LeaseExpiresAtUtc,
+                StartedAtUtc = item.StartedAtUtc,
+                EndedAtUtc = item.EndedAtUtc
+            }).SingleOrDefaultAsync(ct);
+        if (match is null) return NotFound(ApiResponse<object>.Fail("Match not found", ErrorCodes.MatchNotFound));
+        var players = await db.MatchPlayerBindings.AsNoTracking()
+            .Where(item => item.MatchId == matchId)
+            .OrderBy(item => item.BoundAtUtc)
+            .Select(item => new AdminMatchPlayerResponse
+            {
+                UserId = item.UserId,
+                Username = item.User == null ? "" : item.User.Username,
+                DisplayName = item.User == null || item.User.PlayerProfile == null ? null : item.User.PlayerProfile.DisplayName,
+                FusionActorNumber = item.FusionActorNumber,
+                Participated = item.Participated,
+                HadGameplayDisconnect = item.HadGameplayDisconnect,
+                BoundAtUtc = item.BoundAtUtc,
+                LastSeenAtUtc = item.LastSeenAtUtc,
+                DisconnectedAtUtc = item.DisconnectedAtUtc
+            }).ToArrayAsync(ct);
+        return Ok(ApiResponse<AdminMatchDetailResponse>.Ok(new() { Match = match, Players = players }));
+    }
+    [HttpGet("moderation/{targetId:guid}")]
+    public Task<IActionResult> ModerationHistory(Guid targetId,
+        [FromServices] AdminModerationService moderation, CancellationToken ct) =>
+        Execute(() => moderation.HistoryAsync(targetId, ct), ct);
+
+    [HttpPost("moderation/{targetId:guid}")]
+    public Task<IActionResult> Moderate(Guid targetId, [FromBody] AdminModerationRequest request,
+        [FromServices] AdminModerationService moderation, CancellationToken ct) =>
+        WithAdmin(adminId => moderation.ApplyAsync(adminId, targetId, request.Action, request.Reason, ct), ct);
     [HttpPost("matches/{matchId:guid}/recover-result")]
     public async Task<IActionResult> RecoverResult(Guid matchId, [FromBody] RecoverMatchResultRequest request,
         [FromServices] MatchResultService results, [FromServices] IRewardService rewards,
@@ -120,7 +256,9 @@ public sealed class AdminController(
                 : StatusCode(
                     result.ErrorCode is ErrorCodes.NotFound or ErrorCodes.PaymentOrderNotFound
                         ? StatusCodes.Status404NotFound
-                        : StatusCodes.Status400BadRequest,
+                        : result.ErrorCode == ErrorCodes.Conflict
+                            ? StatusCodes.Status409Conflict
+                            : StatusCodes.Status400BadRequest,
                     ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -136,6 +274,11 @@ public sealed class AdminController(
                     "Internal server error", ErrorCodes.InternalServerError));
         }
     }
+
+    private Task<IActionResult> WithAdmin<T>(Func<Guid, Task<ServiceResult<T>>> action, CancellationToken ct) =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var adminId)
+            ? Execute(() => action(adminId), ct)
+            : Task.FromResult<IActionResult>(Unauthorized());
 }
 
 public sealed class RecoverMatchResultRequest
@@ -145,4 +288,10 @@ public sealed class RecoverMatchResultRequest
     public DateTime EndedAtUtc { get; set; }
     [System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(1000, MinimumLength = 10)]
     public string Reason { get; set; } = string.Empty;
+}
+
+public sealed class AdminModerationRequest
+{
+    public string Action { get; set; } = "";
+    public string Reason { get; set; } = "";
 }

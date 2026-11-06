@@ -234,6 +234,10 @@ milestone decision and is not implied by the ingestion-age validation.
 
 ---
 
+## AdminModerationActions
+
+Lưu `TargetId`, `Action`, `AdminUserId`, `Reason`, `CreatedAtUtc` cho thao tác kiểm tra phòng và tài khoản. Khóa tài khoản cập nhật `Users.Status`, thu hồi phiên làm mới và chặn JWT đang dùng tại backend. Dừng phòng chỉ kết thúc quyền trận trên backend; client Fusion cần tự ngắt khi nhận lỗi quyền.
+
 ## MatchAuthorityBindings (M2 implemented)
 
 | Column | Type | Notes |
@@ -271,11 +275,30 @@ may be retained for analysis.
 | SnapshotJson | TEXT | Exact bytes hashed and returned to clients |
 | ContentHash | VARCHAR(64) | Lowercase SHA-256 of SnapshotJson UTF-8 bytes |
 | IsActive | BOOLEAN | Only one active version per map/difficulty/protocol |
-| CreatedAtUtc | TIMESTAMPTZ | Publication timestamp |
+| CreatedAtUtc | TIMESTAMPTZ | Version creation timestamp |
 
 The unique filtered index UX_RemoteFixedBalance_Active enforces one active
 version per scope. PostgreSQL triggers make published version content immutable
 (only IsActive can change) and freeze match balance context after start.
+Activation/deactivation is a transaction-scoped publish operation; versions are never edited or deleted.
+
+## RemoteFixedBalanceAuditEntries (PR5)
+
+| Column | Type | Notes |
+|---|---|---|
+| Id | UUID PK | Audit identity |
+| Action | VARCHAR(16) | CREATE, ACTIVATE, or DEACTIVATE |
+| MapId | VARCHAR(64) | Published scope |
+| Difficulty | VARCHAR(16) | Published scope |
+| ProtocolVersion | VARCHAR(20) | RFB-1 |
+| PreviousVersion | VARCHAR(80) NULL | Active version before the action |
+| TargetVersion | VARCHAR(80) NULL | Created/activated target; null after deactivate |
+| AdminUserId | UUID | Authenticated admin identity |
+| Reason | VARCHAR(500) | Required action reason |
+| CreatedAtUtc | TIMESTAMPTZ | Action time |
+
+The `(MapId, Difficulty, CreatedAtUtc)` index supports history. A PostgreSQL trigger rejects
+updates and deletes, and version mutation plus its audit entry commit atomically.
 
 ## MatchPlayerBindings (M2 implemented)
 

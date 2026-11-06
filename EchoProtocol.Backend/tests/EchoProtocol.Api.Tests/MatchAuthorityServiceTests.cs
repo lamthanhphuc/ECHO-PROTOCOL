@@ -14,6 +14,46 @@ namespace EchoProtocol.Api.Tests;
 public sealed class MatchAuthorityServiceTests
 {
     [Fact]
+    public async Task LastPlayerDisconnectStopsRoomWithoutResult()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var created = await service.CreateAsync(host,
+            new CreateMatchAuthorityRequest { FusionSessionName = "last-disconnect", MaxPlayers = 4 },
+            CancellationToken.None);
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, host, host, matchId, "last-disconnect", 1);
+        Assert.True((await service.StartAsync(host, matchId, CancellationToken.None)).IsSuccess);
+
+        Assert.True((await service.MarkPlayerDisconnectedAsync(host, matchId, 1, host, CancellationToken.None)).IsSuccess);
+        var match = await db.MatchAuthorityBindings.SingleAsync(item => item.MatchId == matchId);
+        Assert.Equal(MatchAuthorityStatus.Ended, match.Status);
+        Assert.Equal(Now.UtcDateTime, match.EndedAtUtc);
+        Assert.False(await db.MatchResults.AnyAsync(item => item.MatchId == matchId));
+    }
+
+    [Fact]
+    public async Task LastHostRelinquishStopsRoomWithoutResult()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+        var host = Guid.NewGuid();
+        var created = await service.CreateAsync(host,
+            new CreateMatchAuthorityRequest { FusionSessionName = "last-relinquish", MaxPlayers = 4 },
+            CancellationToken.None);
+        var matchId = created.Data!.MatchId;
+        await BindAsync(service, host, host, matchId, "last-relinquish", 1);
+        Assert.True((await service.StartAsync(host, matchId, CancellationToken.None)).IsSuccess);
+
+        var result = await service.RelinquishAsync(host, matchId, CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(MatchAuthorityStatus.Ended, result.Data!.Status);
+        Assert.Equal(Now.UtcDateTime, (await db.MatchAuthorityBindings.SingleAsync(item => item.MatchId == matchId)).EndedAtUtc);
+        Assert.False(await db.MatchResults.AnyAsync(item => item.MatchId == matchId));
+    }
+
+    [Fact]
     public async Task LobbyReturnCannotExceedCapacityAndStartFreezesConnectedRoster()
     {
         await using var db = CreateDb();

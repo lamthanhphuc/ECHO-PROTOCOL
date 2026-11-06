@@ -16,6 +16,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using EchoProtocol.Api.Configurations;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
@@ -24,6 +26,32 @@ public sealed class AdminApiTests
 {
     private static readonly DateTimeOffset Now =
         new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact] public async Task AdminCanAccessRemoteFixedEndpoints() =>
+        Assert.True((await EvaluateAdminPolicy(Principal(UserRole.ADMIN))).Succeeded);
+
+    [Fact] public async Task PlayerCannotAccessRemoteFixedEndpoints() =>
+        Assert.True((await EvaluateAdminPolicy(Principal(UserRole.PLAYER))).Forbidden);
+
+    [Fact] public async Task UnauthenticatedCannotAccessRemoteFixedEndpoints() =>
+        Assert.True((await EvaluateAdminPolicy(new ClaimsPrincipal())).Challenged);
+
+    [Fact]
+    public async Task ConflictingActivationReturns409()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var remote = new RemoteFixedBalanceAdminService(db, TimeProvider.System, Options.Create(new MatchAuthoritySettings()));
+        var adminId = Guid.NewGuid();
+        await remote.CreateVersionAsync(adminId, new CreateRemoteFixedVersionRequest
+        { Version = "RFB-001", MapId = "SciFi", Difficulty = "NORMAL", SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot }, default);
+        var controller = new AdminController(new AdminQueryService(db), NullLogger<AdminController>.Instance)
+        { ControllerContext = new() { HttpContext = new DefaultHttpContext { User = Principal(UserRole.ADMIN) } } };
+        var result = await controller.ActivateRemoteFixedVersion("RFB-001", new()
+        { ExpectedActiveVersion = "stale", Reason = "test conflict" }, remote, default);
+        Assert.Equal(StatusCodes.Status409Conflict, Assert.IsType<ObjectResult>(result).StatusCode);
+    }
 
     [Fact, Trait("Category", "AdminApiUnit")]
     public async Task UnauthenticatedPrincipalIsRejectedByAdminPolicy()
@@ -74,6 +102,69 @@ public sealed class AdminApiTests
         Assert.Single(result.Data!.Items);
         Assert.Equal(2, result.Data.TotalItems);
         Assert.Equal(2, result.Data.TotalPages);
+    }
+
+    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task MatchLogsOnlyIncludeStartedMatchesAndFilterParticipant()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var startedId = Guid.NewGuid();
+        var lobbyId = Guid.NewGuid();
+        harness.Db.MatchAuthorityBindings.AddRange(
+            new MatchAuthorityBinding
+            {
+                MatchId = startedId, HostUserId = harness.AdminUserId,
+                FusionSessionName = "started-match", MaxPlayers = 4,
+                Status = MatchAuthorityStatus.Ended,
+                CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime,
+                StartedAtUtc = Now.UtcDateTime, EndedAtUtc = Now.AddMinutes(5).UtcDateTime,
+                Players = [new MatchPlayerBinding
+                {
+                    Id = Guid.NewGuid(), UserId = harness.AdminUserId,
+                    Participated = true, BoundAtUtc = Now.UtcDateTime, LastSeenAtUtc = Now.UtcDateTime
+                }]
+            },
+            new MatchAuthorityBinding
+            {
+                MatchId = lobbyId, HostUserId = harness.AdminUserId,
+                FusionSessionName = "lobby-match", MaxPlayers = 4,
+                Status = MatchAuthorityStatus.Lobby,
+                CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime
+            });
+        await harness.Db.SaveChangesAsync();
+        var controller = new AdminController(harness.Service, NullLogger<AdminController>.Instance);
+        var response = Assert.IsType<OkObjectResult>(await controller.MatchLogs(
+            new AdminMatchesQuery { UserId = harness.AdminUserId }, harness.Db, default));
+        var page = Assert.IsType<ApiResponse<AdminPagedResponse<AdminMatchResponse>>>(response.Value);
+        Assert.Equal(startedId, Assert.Single(page.Data!.Items).MatchId);
+        Assert.Equal(1, page.Data.TotalItems);
+
+        var lobby = await harness.Db.MatchAuthorityBindings.SingleAsync(item => item.MatchId == lobbyId);
+        lobby.Status = MatchAuthorityStatus.Ended;
+        lobby.EndedAtUtc = Now.UtcDateTime;
+        await harness.Db.SaveChangesAsync();
+        var all = Assert.IsType<OkObjectResult>(await controller.MatchLogs(new AdminMatchesQuery(), harness.Db, default));
+        var allPage = Assert.IsType<ApiResponse<AdminPagedResponse<AdminMatchResponse>>>(all.Value);
+        Assert.Equal(2, allPage.Data!.TotalItems);
+        Assert.Null(allPage.Data.Items.Single(item => item.MatchId == lobbyId).StartedAtUtc);
+        var active = Assert.IsType<OkObjectResult>(await controller.MatchLogs(
+            new AdminMatchesQuery { Status = MatchAuthorityStatus.InMatch }, harness.Db, default));
+        Assert.Empty(Assert.IsType<ApiResponse<AdminPagedResponse<AdminMatchResponse>>>(active.Value).Data!.Items);
+        var detail = Assert.IsType<OkObjectResult>(await controller.MatchDetail(startedId, harness.Db, default));
+        var roster = Assert.IsType<ApiResponse<AdminMatchDetailResponse>>(detail.Value).Data!;
+        Assert.Equal(1, roster.Match.ConnectedCount);
+        Assert.Equal(harness.AdminUserId, Assert.Single(roster.Players).UserId);
+        harness.Db.AdminModerationActions.Add(new AdminModerationAction
+        {
+            Id = Guid.NewGuid(), TargetId = startedId, Action = "FLAG_MATCH",
+            AdminUserId = harness.AdminUserId, Reason = "Review this match", CreatedAtUtc = Now.UtcDateTime
+        });
+        await harness.Db.SaveChangesAsync();
+        var flagged = Assert.IsType<OkObjectResult>(await controller.MatchLogs(
+            new AdminMatchesQuery { FlaggedOnly = true }, harness.Db, default));
+        var flaggedPage = Assert.IsType<ApiResponse<AdminPagedResponse<AdminMatchResponse>>>(flagged.Value);
+        Assert.Equal(startedId, Assert.Single(flaggedPage.Data!.Items).MatchId);
+        Assert.True(flaggedPage.Data.Items[0].IsFlagged);
     }
 
     [Theory, Trait("Category", "AdminApiUnit")]

@@ -19,6 +19,8 @@ public class AppDbContext : DbContext
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
     public DbSet<RemoteFixedBalanceVersion> RemoteFixedBalanceVersions => Set<RemoteFixedBalanceVersion>();
+    public DbSet<RemoteFixedBalanceAuditEntry> RemoteFixedBalanceAuditEntries => Set<RemoteFixedBalanceAuditEntry>();
+    public DbSet<AdminModerationAction> AdminModerationActions => Set<AdminModerationAction>();
     public DbSet<MatchPlayerBinding> MatchPlayerBindings => Set<MatchPlayerBinding>();
     public DbSet<MatchResult> MatchResults => Set<MatchResult>();
     public DbSet<MatchResultPlayer> MatchResultPlayers => Set<MatchResultPlayer>();
@@ -262,6 +264,31 @@ public class AppDbContext : DbContext
                 .IsUnique()
                 .HasFilter("\"IsActive\"")
                 .HasDatabaseName("UX_RemoteFixedBalance_Active");
+        });
+
+        modelBuilder.Entity<RemoteFixedBalanceAuditEntry>(entity =>
+        {
+            entity.ToTable("RemoteFixedBalanceAuditEntries");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(16);
+            entity.Property(e => e.MapId).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Difficulty).IsRequired().HasMaxLength(16);
+            entity.Property(e => e.ProtocolVersion).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.PreviousVersion).HasMaxLength(80);
+            entity.Property(e => e.TargetVersion).HasMaxLength(80);
+            entity.Property(e => e.AdminUserId).IsRequired();
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.CreatedAtUtc).IsRequired();
+            entity.HasIndex(e => new { e.MapId, e.Difficulty, e.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<AdminModerationAction>(entity =>
+        {
+            entity.ToTable("AdminModerationActions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
+            entity.HasIndex(e => new { e.TargetId, e.CreatedAtUtc });
         });
 
         modelBuilder.Entity<MatchAuthorityBinding>(entity =>

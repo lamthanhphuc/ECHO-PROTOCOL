@@ -24,6 +24,20 @@ export async function POST(
   context: { params: Promise<{ path: string[] }> },
 ): Promise<NextResponse> {
   try {
+    const origin = request.headers.get("origin");
+
+    if (origin !== new URL(request.url).origin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Nguồn yêu cầu không hợp lệ.",
+          data: null,
+          errorCode: "FORBIDDEN",
+        },
+        { status: 403 },
+      );
+    }
+
     const session = await getSession();
     const token = await getAccessToken();
 

@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Security.Claims;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
+using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Health;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.Services;
@@ -163,6 +165,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = async context =>
+            {
+                if (!Guid.TryParse(context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+                {
+                    context.Fail("Invalid account");
+                    return;
+                }
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                if (!await db.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.Status == UserStatus.ACTIVE))
+                    context.Fail("Account is locked or unavailable");
+            },
             OnChallenge = async context =>
             {
                 context.HandleResponse();
@@ -226,6 +239,8 @@ builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILoadoutService, LoadoutService>();
 builder.Services.AddScoped<IAdminQueryService, AdminQueryService>();
+builder.Services.AddScoped<RemoteFixedBalanceAdminService>();
+builder.Services.AddScoped<AdminModerationService>();
 builder.Services.AddScoped<IMatchTelemetryAggregator, MatchTelemetryAggregator>();
 builder.Services.AddScoped<IPlayerAIProfileUpdater, PlayerAIProfileUpdater>();
 builder.Services.AddSingleton<IPlayerAIProfilePolicy, ConfiguredPlayerAIProfilePolicy>();
