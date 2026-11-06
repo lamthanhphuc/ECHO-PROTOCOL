@@ -34,7 +34,7 @@ export function AdminCreditGrant({
     useState("1000");
 
   const [reason, setReason] =
-    useState("Shop testing");
+    useState("");
 
   const [balance, setBalance] =
     useState(currentBalance);
@@ -66,7 +66,7 @@ export function AdminCreditGrant({
     ) {
       setSuccess(false);
       setMessage(
-        "Credit phải từ 1 đến 100,000.",
+        "Số xu phải từ 1 đến 100.000.",
       );
       return;
     }
@@ -74,7 +74,7 @@ export function AdminCreditGrant({
     if (reason.length > 200) {
       setSuccess(false);
       setMessage(
-        "Reason tối đa 200 ký tự.",
+        "Lý do tối đa 200 ký tự.",
       );
       return;
     }
@@ -111,7 +111,7 @@ export function AdminCreditGrant({
         setSuccess(false);
         setMessage(
           payload.message ||
-            "Không thể cộng credit.",
+            "Không thể cộng xu.",
         );
         return;
       }
@@ -123,14 +123,14 @@ export function AdminCreditGrant({
       setSuccess(true);
 
       setMessage(
-        `Đã cộng ${payload.data.amount.toLocaleString()} CR. Balance mới: ${payload.data.balanceAfter.toLocaleString()} CR.`,
+        `Đã cộng ${payload.data.amount.toLocaleString("vi-VN")} xu. Số dư mới: ${payload.data.balanceAfter.toLocaleString("vi-VN")} xu.`,
       );
 
       router.refresh();
     } catch {
       setSuccess(false);
       setMessage(
-        "Không thể kết nối Backend.",
+        "Không thể kết nối máy chủ.",
       );
     } finally {
       setSubmitting(false);
@@ -141,26 +141,16 @@ export function AdminCreditGrant({
     <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="eyebrow">
-            Admin wallet control
-          </p>
-
           <h2 className="mt-1 text-lg font-semibold">
-            Grant Credits
+            Cộng xu cho người dùng
           </h2>
-
-          <p className="muted mt-1 text-sm">
-            Dùng cho test Shop và kiểm tra purchase flow.
-          </p>
         </div>
 
         <div className="text-right">
-          <p className="eyebrow">
-            Current balance
-          </p>
+          <p className="muted text-sm">Số dư hiện tại</p>
 
           <p className="mt-1 text-xl font-semibold text-emerald-300">
-            {balance.toLocaleString()} CR
+            {balance.toLocaleString("vi-VN")} xu
           </p>
         </div>
       </div>
@@ -170,9 +160,7 @@ export function AdminCreditGrant({
         onSubmit={handleSubmit}
       >
         <div>
-          <p className="eyebrow mb-2">
-            Quick grant
-          </p>
+          <p className="mb-2 text-sm">Chọn nhanh số xu</p>
 
           <div className="flex flex-wrap gap-2">
             {presets.map((preset) => (
@@ -186,7 +174,7 @@ export function AdminCreditGrant({
                 }
                 type="button"
               >
-                +{preset.toLocaleString()} CR
+                +{preset.toLocaleString("vi-VN")} xu
               </button>
             ))}
           </div>
@@ -194,9 +182,7 @@ export function AdminCreditGrant({
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2">
-            <span className="eyebrow">
-              Custom amount
-            </span>
+            <span>Số xu</span>
 
             <input
               className="input"
@@ -215,9 +201,7 @@ export function AdminCreditGrant({
           </label>
 
           <label className="grid gap-2">
-            <span className="eyebrow">
-              Reason
-            </span>
+            <span>Lý do</span>
 
             <input
               className="input"
@@ -227,7 +211,7 @@ export function AdminCreditGrant({
                   event.target.value,
                 )
               }
-              placeholder="Shop testing"
+              placeholder="Nhập lý do cộng xu"
               value={reason}
             />
           </label>
@@ -240,13 +224,9 @@ export function AdminCreditGrant({
             type="submit"
           >
             {submitting
-              ? "ĐANG CỘNG..."
-              : "GRANT CREDITS"}
+              ? "Đang cộng…"
+              : "Cộng xu"}
           </button>
-
-          <span className="code text-xs">
-            ADMIN_GRANT
-          </span>
         </div>
 
         {message && (

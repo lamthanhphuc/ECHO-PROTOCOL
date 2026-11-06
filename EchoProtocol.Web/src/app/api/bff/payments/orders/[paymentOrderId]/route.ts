@@ -9,7 +9,7 @@ export async function GET(
     const { paymentOrderId } = await context.params;
     return routeSuccessResponse(
       await playerApi.paymentOrder(paymentOrderId),
-      "Payment order retrieved",
+      "Đã tải đơn thanh toán",
     );
   } catch (error) {
     return routeErrorResponse(error);

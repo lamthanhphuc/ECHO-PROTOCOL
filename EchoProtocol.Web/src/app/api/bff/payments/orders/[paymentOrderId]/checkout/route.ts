@@ -7,6 +7,6 @@ export async function POST(
 ) {
   try {
     const { paymentOrderId } = await context.params;
-    return routeSuccessResponse(await playerApi.checkout(paymentOrderId), "Checkout created");
+    return routeSuccessResponse(await playerApi.checkout(paymentOrderId), "Đã tạo liên kết thanh toán");
   } catch (error) { return routeErrorResponse(error); }
 }

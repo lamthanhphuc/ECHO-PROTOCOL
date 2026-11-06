@@ -5,10 +5,10 @@ export function Panel({ children, className = "" }: { children: ReactNode; class
 }
 
 export function PageHeader({ eyebrow, title, description }: {
-  eyebrow: string; title: string; description?: string;
+  eyebrow?: string; title: string; description?: string;
 }) {
   return <header className="mb-6">
-    <p className="eyebrow mb-2">{eyebrow}</p>
+    {eyebrow && <p className="eyebrow mb-2">{eyebrow}</p>}
     <h1 className="page-title text-3xl font-semibold tracking-wide text-white md:text-4xl">{title}</h1>
     {description && <p className="muted mt-2 max-w-3xl text-sm">{description}</p>}
   </header>;

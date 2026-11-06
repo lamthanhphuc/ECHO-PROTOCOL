@@ -1582,13 +1582,29 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         await using var db = scope.CreateDbContext();
         var applied = await db.Database.GetAppliedMigrationsAsync();
         Assert.Contains("20260922110000_AddAdminQueryIndexes", applied);
-        var indexCount = await db.Database.SqlQueryRaw<int>("""
-            SELECT CAST(count(*) AS integer) AS "Value"
+        var indexNames = await db.Database.SqlQueryRaw<string>("""
+            SELECT indexname AS "Value"
             FROM pg_indexes
             WHERE schemaname = current_schema()
               AND indexname LIKE 'IX_Admin_%'
-            """).SingleAsync();
-        Assert.Equal(10, indexCount);
+            """).ToListAsync();
+
+        string[] requiredIndexes =
+        [
+            "IX_Admin_PaymentOrders_Created",
+            "IX_Admin_PaymentOrders_Status_Created",
+            "IX_Admin_PaymentOrders_Provider_Created",
+            "IX_Admin_PaymentOrders_Product_Created",
+            "IX_Admin_WalletTransactions_Created",
+            "IX_Admin_WalletTransactions_Wallet_Created",
+            "IX_Admin_WalletTransactions_Type_Created",
+            "IX_Admin_Purchases_Created",
+            "IX_Admin_Purchases_User_Created",
+            "IX_Admin_Purchases_Item_Created"
+        ];
+
+        foreach (var index in requiredIndexes)
+            Assert.Contains(index, indexNames);
     }
 
     private static async Task<AdminQuerySeed> SeedAdminQueryAsync(PostgresScope scope)
@@ -2218,6 +2234,186 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime
     };
 
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task ActivateReplacesCurrentVersionAtomically()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await SeedAdminVersions(scope, true, "OLD", "NEW");
+        await using var db = scope.CreateDbContext(); var service = CreateRemoteAdminService(db);
+        var result = await service.ActivateVersionAsync(Guid.NewGuid(), "NEW", Change("OLD"), default);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("NEW", (await db.RemoteFixedBalanceVersions.SingleAsync(x => x.IsActive)).Version);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task DeactivateLeavesNoActiveVersion()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, true, "OLD");
+        await using var db = scope.CreateDbContext(); var result = await CreateRemoteAdminService(db)
+            .DeactivateVersionAsync(Guid.NewGuid(), "OLD", Change("OLD"), default);
+        Assert.True(result.IsSuccess); Assert.False(await db.RemoteFixedBalanceVersions.AnyAsync(x => x.IsActive));
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task RollbackReactivatesOldImmutableVersion()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, true, "OLD", "NEW");
+        await using var db = scope.CreateDbContext(); var service = CreateRemoteAdminService(db);
+        await service.ActivateVersionAsync(Guid.NewGuid(), "NEW", Change("OLD"), default); db.ChangeTracker.Clear();
+        await service.ActivateVersionAsync(Guid.NewGuid(), "OLD", Change("NEW"), default); db.ChangeTracker.Clear();
+        var old = await db.RemoteFixedBalanceVersions.SingleAsync(x => x.Version == "OLD");
+        Assert.True(old.IsActive); Assert.Equal(RemoteFixedBalanceTests.ValidSnapshot, old.SnapshotJson);
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(old.SnapshotJson), old.ContentHash);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task ConcurrentActivationCannotLeaveTwoActiveVersions()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, false, "A", "B");
+        async Task<ServiceResult<RemoteFixedActivationResponse>> Activate(string version)
+        { await using var db = scope.CreateDbContext(); return await CreateRemoteAdminService(db).ActivateVersionAsync(Guid.NewGuid(), version, Change(null), default); }
+        var results = await Task.WhenAll(Activate("A"), Activate("B"));
+        await using var verify = scope.CreateDbContext(); Assert.Single(await verify.RemoteFixedBalanceVersions.Where(x => x.IsActive).ToListAsync());
+        Assert.Single(results, x => x.IsSuccess); Assert.Single(results, x => x.ErrorCode == ErrorCodes.Conflict);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task StaleActivationExpectationIsRejected()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, true, "OLD", "NEW");
+        await using var db = scope.CreateDbContext(); var result = await CreateRemoteAdminService(db)
+            .ActivateVersionAsync(Guid.NewGuid(), "NEW", Change("STALE"), default);
+        Assert.Equal(ErrorCodes.Conflict, result.ErrorCode); Assert.Equal("OLD", (await db.RemoteFixedBalanceVersions.SingleAsync(x => x.IsActive)).Version);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task AdminAuditIsPersistedAtomically()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext(); var service = CreateRemoteAdminService(db);
+        var result = await service.CreateVersionAsync(Guid.NewGuid(), new() { Version = "CREATE", MapId = "SciFi", Difficulty = "NORMAL", SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot }, default);
+        Assert.True(result.IsSuccess); Assert.Equal("CREATE", (await db.RemoteFixedBalanceAuditEntries.SingleAsync()).Action);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task AdminAuditCannotBeUpdatedOrDeleted()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext(); var service = CreateRemoteAdminService(db);
+        await service.CreateVersionAsync(Guid.NewGuid(), new() { Version = "CREATE", MapId = "SciFi", Difficulty = "NORMAL", SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot }, default);
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("UPDATE \"RemoteFixedBalanceAuditEntries\" SET \"Reason\" = 'changed'"));
+        db.ChangeTracker.Clear();
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("DELETE FROM \"RemoteFixedBalanceAuditEntries\""));
+    }
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task AdminModerationActionsCannotBeUpdatedOrDeleted()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await using var db = scope.CreateDbContext();
+        var entry = new AdminModerationAction
+        {
+            Id = Guid.NewGuid(),
+            TargetId = Guid.NewGuid(),
+            Action = "FLAG_MATCH",
+            AdminUserId = Guid.NewGuid(),
+            Reason = "Initial review note",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        db.AdminModerationActions.Add(entry);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("UPDATE \"AdminModerationActions\" SET \"Reason\" = 'tampered'"));
+        db.ChangeTracker.Clear();
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlRawAsync("DELETE FROM \"AdminModerationActions\""));
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task PublishingDoesNotAlterOtherScopes()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, true, "OLD", "NEW");
+        await using (var seed = scope.CreateDbContext()) { var other = CreateRemoteBalance("OTHER"); other.MapId = "Scene_A"; seed.Add(other); await seed.SaveChangesAsync(); }
+        await using var db = scope.CreateDbContext(); await CreateRemoteAdminService(db).ActivateVersionAsync(Guid.NewGuid(), "NEW", Change("OLD"), default);
+        Assert.True((await db.RemoteFixedBalanceVersions.SingleAsync(x => x.Version == "OTHER")).IsActive);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task ActivationFailureRollsBackAndPreservesPreviousVersion()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); await SeedAdminVersions(scope, true, "OLD", "NEW");
+        await using (var setup = scope.CreateDbContext()) await setup.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION fail_pr5_audit() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'test failure'; END; $$ LANGUAGE plpgsql;
+            CREATE TRIGGER trg_fail_pr5_audit BEFORE INSERT ON "RemoteFixedBalanceAuditEntries" FOR EACH ROW EXECUTE FUNCTION fail_pr5_audit();
+            """);
+        await using (var db = scope.CreateDbContext())
+            await Assert.ThrowsAsync<DbUpdateException>(() => CreateRemoteAdminService(db).ActivateVersionAsync(Guid.NewGuid(), "NEW", Change("OLD"), default));
+        await using var verify = scope.CreateDbContext(); Assert.Equal("OLD", (await verify.RemoteFixedBalanceVersions.SingleAsync(x => x.IsActive)).Version);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task StartedMatchKeepsLockedVersionAfterPublish()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); var seed = await SeedRemoteStartMatchAsync(scope);
+        await using (var add = scope.CreateDbContext()) { var next = CreateRemoteBalance("RFB-NEXT"); next.IsActive = false; add.Add(next); await add.SaveChangesAsync(); }
+        await using (var start = scope.CreateDbContext()) Assert.True((await CreateRemoteMatchService(start).StartV2Async(seed.HostId, seed.MatchId, RemoteStartRequest(), default)).IsSuccess);
+        await using (var publish = scope.CreateDbContext()) Assert.True((await CreateRemoteAdminService(publish).ActivateVersionAsync(Guid.NewGuid(), "RFB-NEXT", Change("RFB-START-1"), default)).IsSuccess);
+        await using var verify = scope.CreateDbContext(); var match = await verify.MatchAuthorityBindings.SingleAsync(x => x.MatchId == seed.MatchId);
+        Assert.Equal("RFB-START-1", match.BalanceVersion);
+    }
+
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task InactiveVersionCannotBeSelectedByNewMatch()
+    {
+        await using var scope = await PostgresScope.CreateAsync(); var seed = await SeedRemoteStartMatchAsync(scope);
+        await using (var db = scope.CreateDbContext()) { var active = await db.RemoteFixedBalanceVersions.SingleAsync(); active.IsActive = false; await db.SaveChangesAsync(); }
+        await using var start = scope.CreateDbContext(); var result = await CreateRemoteMatchService(start).StartV2Async(seed.HostId, seed.MatchId, RemoteStartRequest(), default);
+        Assert.False(result.IsSuccess); Assert.Equal(ErrorCodes.BalanceVersionUnavailable, result.ErrorCode);
+    }
+    [Fact, Trait("Category", "PR5PostgreSqlIntegration")]
+    public async Task TrackedOldVersionCanBeReactivatedAfterPublish()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        await SeedAdminVersions(scope, true, "OLD", "NEW");
+
+        await using var staleDb = scope.CreateDbContext();
+
+        var old = await staleDb.RemoteFixedBalanceVersions
+            .SingleAsync(x => x.Version == "OLD");
+
+        Assert.True(old.IsActive);
+
+        await using (var publishDb = scope.CreateDbContext())
+        {
+            var published = await CreateRemoteAdminService(publishDb)
+                .ActivateVersionAsync(
+                    Guid.NewGuid(), "NEW", Change("OLD"), default);
+
+            Assert.True(published.IsSuccess);
+        }
+
+        var rollback = await CreateRemoteAdminService(staleDb)
+            .ActivateVersionAsync(
+                Guid.NewGuid(), "OLD", Change("NEW"), default);
+
+        Assert.True(rollback.IsSuccess);
+
+        await using var verifyDb = scope.CreateDbContext();
+        var active = await verifyDb.RemoteFixedBalanceVersions
+            .Where(x => x.IsActive)
+            .ToListAsync();
+
+        Assert.Equal("OLD", Assert.Single(active).Version);
+    }
+
+    private static ChangeRemoteFixedActivationRequest Change(string? expected) => new() { ExpectedActiveVersion = expected ?? "", Reason = "PR5 integration test" };
+    private static RemoteFixedBalanceAdminService CreateRemoteAdminService(AppDbContext db) =>
+        new(db, new FixedTimeProvider(Now), Options.Create(new MatchAuthoritySettings { EnableRemoteFixedTest = true }));
+    private static async Task SeedAdminVersions(PostgresScope scope, bool firstActive, params string[] versions)
+    {
+        await using var db = scope.CreateDbContext();
+        for (var i = 0; i < versions.Length; i++) { var item = CreateRemoteBalance(versions[i]); item.IsActive = firstActive && i == 0; db.Add(item); }
+        await db.SaveChangesAsync();
+    }
+
     private static async Task AssertRemoteVersionUpdateRejected(string column, string value)
     {
         await using var scope = await PostgresScope.CreateAsync();
@@ -2332,7 +2528,8 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
             var scopedConnection = new NpgsqlConnectionStringBuilder(connectionString)
             {
-                SearchPath = schema
+                SearchPath = schema,
+                Pooling = false
             }.ConnectionString;
             var options = new DbContextOptionsBuilder<AppDbContext>()
                 .UseNpgsql(scopedConnection, postgres =>

@@ -25,7 +25,7 @@ export function PaymentFlowButton({ productReference, provider = "PAYOS" }: {
       const checkoutPayload = await checkoutResponse.json() as ApiResponse<PaymentCheckout>;
       if (!checkoutResponse.ok || !checkoutPayload.data) throw new Error(checkoutPayload.message);
       const checkout = new URL(checkoutPayload.data.checkoutUrl);
-      if (checkout.protocol !== "https:") throw new Error("Backend trả checkout URL không an toàn.");
+      if (checkout.protocol !== "https:") throw new Error("Liên kết thanh toán không an toàn.");
       sessionStorage.setItem("echo.pendingPaymentOrderId", orderId);
       window.location.assign(checkout.toString());
     } catch (reason) {
@@ -34,7 +34,7 @@ export function PaymentFlowButton({ productReference, provider = "PAYOS" }: {
     }
   }
   return <div>
-    <button type="button" className="button" onClick={start} disabled={loading}>{loading ? "Đang tạo checkout…" : "Nạp tiền"}</button>
+    <button type="button" className="button" onClick={start} disabled={loading}>{loading ? "Đang tạo liên kết…" : "Nạp xu"}</button>
     {error && <p className="mt-2 text-sm text-rose-300" role="alert">{error}</p>}
   </div>;
 }

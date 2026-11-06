@@ -11,6 +11,6 @@ export function routeErrorResponse(error: unknown): NextResponse {
   );
 }
 
-export function routeSuccessResponse<T>(data: T, message = "Success"): NextResponse {
+export function routeSuccessResponse<T>(data: T, message = "Thành công"): NextResponse {
   return NextResponse.json({ success: true, message, data, errorCode: null });
 }

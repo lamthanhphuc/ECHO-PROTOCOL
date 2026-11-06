@@ -19,12 +19,12 @@ export default function Acceptance({ version, hash }: { version: string; hash: s
     } catch (error) { setMessage(error instanceof Error ? error.message : "Không thể kết nối. Thử lại."); }
     finally { setBusy(false); }
   }
-  return <section aria-label="Policy acceptance" style={{ marginTop: 32, padding: 20, border: "1px solid #78353b" }}>
-    <h2>Xác nhận / Acceptance</h2>
-    <p>Trò chơi có nội dung kinh dị, âm thanh lớn và hiệu ứng ánh sáng nhấp nháy. / Contains horror themes, loud audio and flashing effects.</p>
+  return <section aria-label="Xác nhận chính sách" style={{ marginTop: 32, padding: 20, border: "1px solid #78353b" }}>
+    <h2>Xác nhận</h2>
+    <p>Trò chơi có nội dung kinh dị, âm thanh lớn và hiệu ứng ánh sáng nhấp nháy.</p>
 
-    <label style={{ display: "block", marginBottom: 16 }}><input type="checkbox" checked={agreement} onChange={e => setAgreement(e.target.checked)} /> Tôi xác nhận đủ 18 tuổi, đã xem cảnh báo, đồng ý Điều khoản, Quy tắc cộng đồng và Chính sách giao dịch, xác nhận được cung cấp Chính sách quyền riêng tư. / I confirm I am at least 18, acknowledge the warning and Privacy Notice and accept the Terms, Community Rules and Transaction Policy.</label>
-    <button onClick={accept} disabled={!agreement || busy} style={{ border: "1px solid #a34b53", padding: 12, background: agreement && !busy ? "#6e161f" : "#33383b", color: "#eee9df", cursor: agreement && !busy ? "pointer" : "not-allowed" }}>{busy ? "Đang lưu… / Saving…" : "Đồng ý & tiếp tục / Agree & continue"}</button>
+    <label style={{ display: "block", marginBottom: 16 }}><input type="checkbox" checked={agreement} onChange={e => setAgreement(e.target.checked)} /> Tôi xác nhận đủ 18 tuổi, đã xem cảnh báo, đồng ý Điều khoản, Quy tắc cộng đồng và Chính sách giao dịch, xác nhận được cung cấp Chính sách quyền riêng tư.</label>
+    <button onClick={accept} disabled={!agreement || busy} style={{ border: "1px solid #a34b53", padding: 12, background: agreement && !busy ? "#6e161f" : "#33383b", color: "#eee9df", cursor: agreement && !busy ? "pointer" : "not-allowed" }}>{busy ? "Đang lưu…" : "Đồng ý và tiếp tục"}</button>
     <p role="status">{message}</p>
   </section>;
 }
