@@ -414,12 +414,21 @@ namespace EchoProtocol.UI.HUD
             {
                 if (icon != null)
                 {
-                    var vector = icon.GetComponent<HUDPurgeIcon>();
-                    if (vector == null) vector = icon.gameObject.AddComponent<HUDPurgeIcon>();
                     bool fallback = item != null && item.Icon == null;
-                    vector.enabled = fallback;
-                    vector.raycastTarget = false;
-                    vector.color = HUDPresentationStyle.Ink;
+                    var vector = icon.GetComponentInChildren<HUDPurgeIcon>(true);
+                    if (fallback && vector == null)
+                    {
+                        var graphic = new GameObject("Fallback Icon", typeof(RectTransform), typeof(HUDPurgeIcon));
+                        var rect = (RectTransform)graphic.transform;
+                        rect.SetParent(icon.rectTransform, false);
+                        rect.anchorMin = Vector2.zero;
+                        rect.anchorMax = Vector2.one;
+                        rect.offsetMin = rect.offsetMax = Vector2.zero;
+                        vector = graphic.GetComponent<HUDPurgeIcon>();
+                        vector.raycastTarget = false;
+                        vector.color = HUDPresentationStyle.Ink;
+                    }
+                    if (vector != null) vector.enabled = fallback;
                     if (fallback)
                     {
                         string id = item.ItemId.ToLowerInvariant();

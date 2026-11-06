@@ -205,7 +205,7 @@ namespace EchoProtocol.AI.AED
             }
         }
 
-        public async Task<AEDResolvePreMatchData> ResolvePreMatchAsync(
+        public async Task<(AEDResolvePreMatchData Decision, string Error)> ResolvePreMatchAsync(
             Guid matchId, Guid decisionId, string experimentCondition,
             CancellationToken cancellationToken)
         {
@@ -225,13 +225,19 @@ namespace EchoProtocol.AI.AED
                 try
                 {
                     var result = await completion.Task;
+                    var error = !result.IsSuccess
+                        ? $"HTTP {result.StatusCode} {result.ErrorCode}: {result.Message}"
+                        : result.Data?.success != true
+                            ? $"{result.Data?.errorCode}: {result.Data?.message}"
+                            : null;
+                    if (error == null && (!Guid.TryParse(result.Data.data?.decisionId, out var returnedId)
+                        || returnedId != decisionId))
+                        error = "Backend response did not identify the requested decision.";
                     AEDv2E2ELog.Write("PREMATCH_RESULT", matchId, decisionId,
-                        fields: $"success={result.IsSuccess} http={result.StatusCode} apiSuccess={result.Data?.success} error={result.Data?.errorCode}");
-                    return result.IsSuccess && result.Data?.success == true
-                        && Guid.TryParse(result.Data.data?.decisionId, out var returnedId)
-                        && returnedId == decisionId ? result.Data.data : null;
+                        fields: $"http={result.StatusCode} version={Application.version} error={error}");
+                    return error == null ? (result.Data.data, null) : (null, error);
                 }
-                catch (TaskCanceledException) { return null; }
+                catch (TaskCanceledException) { return (null, "Pre-match request cancelled."); }
             }
         }
 

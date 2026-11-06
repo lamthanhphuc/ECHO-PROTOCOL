@@ -241,7 +241,9 @@ public sealed class MatchTelemetryAggregator : IMatchTelemetryAggregator
         var reasons = new List<string>();
         if (documents.Any(item => item.MatchId != matchId)) reasons.Add("IDENTITY_CONFLICT");
         if (documents.Any(item => item.UserId.HasValue && !boundUsers.Contains(item.UserId.Value))) reasons.Add("IDENTITY_CONFLICT");
-        if (documents.Any(item => item.SchemaVersion != SupportedSchemaVersion)) reasons.Add("UNSUPPORTED_SCHEMA_VERSION");
+        // Accepted lifecycle and AED events share the match sequence with 1.1 events.
+        if (documents.Any(item => item.SchemaVersion is not (SupportedSchemaVersion or "1.2" or "1.3")))
+            reasons.Add("UNSUPPORTED_SCHEMA_VERSION");
         if (documents.GroupBy(item => item.Id).Any(group => group.Count() > 1)) reasons.Add("IDENTITY_CONFLICT");
         if (documents.GroupBy(item => item.EventSequence).Any(group => group.Count() > 1) ||
             documents.Any(item => item.EventSequence <= 0)) reasons.Add("SEQUENCE_CONFLICT");
