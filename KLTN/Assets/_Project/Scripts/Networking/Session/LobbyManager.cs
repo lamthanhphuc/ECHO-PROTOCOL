@@ -285,11 +285,9 @@ namespace EchoProtocol.Networking
                         ReportError("AED pre-match rejected: AEDRuntimeSettings is missing.");
                         return;
                     }
-                    if (authority.MatchId == Guid.Empty || !authority.IsHostBinding
-                        || !BuildStateFromRunner().CanStartMatch
-                        || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
+                    if (authority.MatchId == Guid.Empty)
                     {
-                        ReportError("AED pre-match rejected: host, ready room or bound roster changed.");
+                        ReportError("AED pre-match rejected: backend match ID is missing.");
                         return;
                     }
                     _preMatchCancellation = new CancellationTokenSource();
@@ -297,12 +295,12 @@ namespace EchoProtocol.Networking
                     var decisionId = ScenarioConfigAuthorityRuntime.CreateDecisionId(
                         matchId, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", 0);
                     var api = new AEDSnapshotApiService();
-                    var decision = await api.ResolvePreMatchAsync(matchId, decisionId,
+                    var (decision, resolveError) = await api.ResolvePreMatchAsync(matchId, decisionId,
                         authority.ExperimentCondition, _preMatchCancellation.Token);
                     if (decision == null || !Guid.TryParse(decision.snapshotId, out var snapshotId)
                         || snapshotId == Guid.Empty || decision.matchId != matchId.ToString("D"))
                     {
-                        ReportError("AED pre-match resolve failed; match remains in lobby.");
+                        ReportError("AED pre-match: " + (resolveError ?? "Backend returned an invalid match or snapshot ID."));
                         return;
                     }
                     Debug.Log(
@@ -339,8 +337,9 @@ namespace EchoProtocol.Networking
                         || snapshot.SnapshotContentFingerprint != decision.snapshotContentFingerprint
                         || snapshot.RosterIdentity != decision.rosterIdentity
                         || !currency.IsCurrent || _preMatchCancellation.IsCancellationRequested
-                        || authority.MatchId != matchId || !BuildStateFromRunner().CanStartMatch
-                        || authority.BoundPlayerCount != BuildStateFromRunner().CurrentPlayers)
+                        || authority.MatchId != matchId || !loading.IsCurrent(runner, loadingAttempt)
+                        || !_bootstrap.IsMatchStartPending
+                        || !TryValidateCommittedRoster(runner, authority, out _))
                     {
                         ReportError("AED pre-match snapshot changed before match start.");
                         return;

@@ -345,8 +345,8 @@ namespace EchoProtocol.Networking.Authority
             }
             if (!tools.Select(x => x.InstanceId).ToHashSet().SetEquals(_aedPhase8Source.CurrentLiveTools.Select(x => x.InstanceId))) return false;
             var minions = FindObjectsByType<CreepMinionRuntime>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid).ToArray();
-            if (!AEDV02SceneSource.TryGetDoorSources(runner, matchState, out var doors))
-            { reason = "HOLD_DOOR_SOURCE_REQUIRED"; return false; }
+            if (!AEDV02SceneSource.TryGetDoorSources(runner, matchState, out var doors, out reason))
+                return false;
             var jammers = new List<AEDV02JammerSource>();
             foreach (var jammer in FindObjectsByType<NetworkDoorJammer>(FindObjectsInactive.Exclude)
                 .Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && x.V02Occurrence.Length != 0 && x.V02DeploymentMatch == MatchId))

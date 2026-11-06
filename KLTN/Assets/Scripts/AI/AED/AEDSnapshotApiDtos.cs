@@ -175,6 +175,7 @@ namespace EchoProtocol.AI.AED
     {
         public bool success;
         public string errorCode;
+        public string message;
         public AEDResolvePreMatchData data;
     }
 

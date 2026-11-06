@@ -144,6 +144,16 @@ namespace EchoProtocol.AI.Common.AED
 
         private static (double Start, double End)? SegmentInterval(AEDV02NavCell cell, double[] from, double[] to)
         {
+            // A segment outside the triangle bounds plus clipping tolerance cannot intersect this cell.
+            for (int axis = 0; axis < 3; axis++)
+            {
+                double aCoord = cell.A[axis], bCoord = cell.B[axis], cCoord = cell.C[axis];
+                double margin = 1.000001 + .000002 * (Math.Abs(bCoord - aCoord) + Math.Abs(cCoord - aCoord));
+                double min = Math.Min(aCoord, Math.Min(bCoord, cCoord)) - margin;
+                double max = Math.Max(aCoord, Math.Max(bCoord, cCoord)) + margin;
+                if (Math.Max(from[axis], to[axis]) < min || Math.Min(from[axis], to[axis]) > max)
+                    return null;
+            }
             var u = Enumerable.Range(0, 3).Select(i => cell.B[i] - cell.A[i]).ToArray();
             var v = Enumerable.Range(0, 3).Select(i => cell.C[i] - cell.A[i]).ToArray();
             double Dot(double[] a, double[] b) => Enumerable.Range(0, 3).Sum(i => a[i] * b[i]);
