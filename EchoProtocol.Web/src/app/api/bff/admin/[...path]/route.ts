@@ -25,8 +25,9 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const origin = request.headers.get("origin");
+    const expectedOrigin = process.env.WEB_PUBLIC_ORIGIN;
 
-    if (origin !== new URL(request.url).origin) {
+    if (!expectedOrigin || origin !== expectedOrigin) {
       return NextResponse.json(
         {
           success: false,
