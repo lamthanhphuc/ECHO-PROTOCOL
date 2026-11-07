@@ -1,5 +1,6 @@
 ﻿using Fusion;
 using UnityEngine;
+using EchoProtocol.Networking.Authority;
 
 namespace EchoProtocol.Networking
 {
@@ -36,7 +37,7 @@ namespace EchoProtocol.Networking
             ? State == NetworkDoorJammerState.Active
             : _offlineState == NetworkDoorJammerState.Active;
         public bool BlocksTraversal => IsActive;
-        public float BreakDurationSeconds => _breakDurationSeconds;
+        public float BreakDurationSeconds => RemoteFixedBalanceSnapshot.GameplayValue("doorJammerBreakSeconds", _breakDurationSeconds);
         public bool IsFreeStanding =>
             IsActive && !DoorId.IsValid;
 

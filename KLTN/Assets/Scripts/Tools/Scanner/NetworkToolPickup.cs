@@ -17,6 +17,8 @@ namespace EchoProtocol.Tools.Scanner
     [RequireComponent(typeof(Collider))]
     public class NetworkToolPickup : NetworkInteractable, IInteractable, IAfterHostMigration
     {
+        public override float InteractionDistance => NetworkMatchState.RemoteGameplayValue(
+            NetworkMatchState.RemoteGameplayPresentation.ToolPickupDistance, base.InteractionDistance);
         private const float MaxOutlineVisibleDistance = 20f;
 
         public static event Action<NetworkToolPickup, PlayerRef> ToolPickedUp;
@@ -112,7 +114,7 @@ namespace EchoProtocol.Tools.Scanner
                 if (RemainingUses <= 0 &&
                     (_toolId == LobbyPlayerState.NoiseMakerToolId ||
                      _toolId == LobbyPlayerState.DoorJammerToolId))
-                    RemainingUses = LobbyPlayerState.MultiUseTeamToolUses;
+                    RemainingUses = LobbyPlayerState.ConfiguredMultiUseTeamToolUses;
             }
             else
             {

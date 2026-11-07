@@ -169,7 +169,8 @@ namespace EchoProtocol.TeamTools
             int zone2Count,
             int zone3Count,
             float minimumSpacing,
-            bool useAEDSupportPool = false)
+            bool useAEDSupportPool = false,
+            bool allowOptionalShortfall = false)
         {
             if (runner == null
                 || catalog == null
@@ -205,7 +206,8 @@ namespace EchoProtocol.TeamTools
                     resolvedZone1Count,
                     minimumSpacing,
                     useAEDSupportPool,
-                    out var zone1Plans))
+                    out var zone1Plans,
+                    allowOptionalShortfall))
             {
                 Debug.LogError(
                     "[TeamToolWorldSpawn] " +
@@ -222,7 +224,8 @@ namespace EchoProtocol.TeamTools
                     resolvedZone2Count,
                     minimumSpacing,
                     useAEDSupportPool,
-                    out var zone2Plans))
+                    out var zone2Plans,
+                    allowOptionalShortfall))
             {
                 Debug.LogError(
                     "[TeamToolWorldSpawn] " +
@@ -239,7 +242,8 @@ namespace EchoProtocol.TeamTools
                     resolvedZone3Count,
                     minimumSpacing,
                     useAEDSupportPool,
-                    out var zone3Plans))
+                    out var zone3Plans,
+                    allowOptionalShortfall))
             {
                 Debug.LogError(
                     "[TeamToolWorldSpawn] " +
@@ -322,7 +326,8 @@ namespace EchoProtocol.TeamTools
             int targetCount,
             float spacing,
             bool useAEDSupportPool,
-            out List<SpawnPlan> plans)
+            out List<SpawnPlan> plans,
+            bool allowOptionalShortfall = false)
         {
             plans =
                 new List<SpawnPlan>(
@@ -422,9 +427,9 @@ namespace EchoProtocol.TeamTools
 
                 // An optional AED support item must never invalidate the
                 // guaranteed five tools or roll back a whole zone spawn.
-                if (useAEDSupportPool)
+                if (useAEDSupportPool || allowOptionalShortfall)
                 {
-                    Debug.LogWarning("[TeamToolWorldSpawn] Optional AED support slots unavailable; retaining guaranteed tools.");
+                    Debug.LogWarning("[TeamToolWorldSpawn] Optional slots unavailable; retaining required tools.");
                     return plans.Count >= RequiredToolCountPerZone;
                 }
 

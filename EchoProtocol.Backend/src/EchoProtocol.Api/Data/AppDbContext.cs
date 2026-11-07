@@ -56,6 +56,12 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ShopPriceProposal>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Status, x.ProposedAtUtc });
+            entity.HasOne<ShopItem>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<ProfileTuningVersion>(entity =>
         {
             entity.HasKey(x => x.Version);
@@ -355,7 +361,7 @@ public class AppDbContext : DbContext
                         AND "MatchDataPolicy" = 'TEST_ONLY'
                         AND "MapId" IS NOT NULL
                         AND "Difficulty" IS NOT NULL
-                        AND "MapId" IN ('SciFi', 'Scene_A')
+                        AND "MapId" IN ('SciFi', 'Scene_A', 'Scene_B')
                         AND "Difficulty" IN ('EASY', 'NORMAL', 'HARD')
                     ), FALSE)
                     """);

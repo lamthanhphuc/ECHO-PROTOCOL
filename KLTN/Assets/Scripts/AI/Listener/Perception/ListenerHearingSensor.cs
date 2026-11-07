@@ -50,7 +50,9 @@ namespace EchoProtocol.AI.Listener.Perception
             DateTime heardAtUtc,
             out HearingObservation observation,
             out ListenerHearingRejectReason rejectReason)
-            => Evaluate(noiseEvent, listenerHearingOrigin, heardAtUtc, 1d, out observation, out rejectReason);
+            => Evaluate(noiseEvent, listenerHearingOrigin, heardAtUtc,
+                EchoProtocol.Networking.Authority.RemoteFixedBalanceSnapshot.GameplayValue("listenerHearing", 1f),
+                out observation, out rejectReason);
 
         public bool TryEvaluateV02(RuntimeNoiseEvent noiseEvent, Vector3 listenerHearingOrigin, DateTime heardAtUtc, int tier,
             out HearingObservation observation, out ListenerHearingRejectReason rejectReason) => Evaluate(noiseEvent, listenerHearingOrigin,

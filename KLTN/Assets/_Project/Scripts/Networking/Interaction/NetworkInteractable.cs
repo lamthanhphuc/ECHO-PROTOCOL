@@ -101,7 +101,7 @@ namespace EchoProtocol.Networking
             }
         }
 
-        public float InteractionDistance => _interactionDistance;
+        public virtual float InteractionDistance => _interactionDistance;
         public virtual string InteractionPrompt => _interactionPrompt;
         public Transform InteractionOrigin => _interactionOrigin != null ? _interactionOrigin : transform;
         public virtual bool EmitsRuntimeInteractionNoise => _emitsRuntimeInteractionNoise;
@@ -120,7 +120,7 @@ namespace EchoProtocol.Networking
             var requesterPosition = context.Requester.transform.position;
             var targetPosition = GetClosestInteractionPoint(requesterPosition);
             var sqrDistance = (requesterPosition - targetPosition).sqrMagnitude;
-            if (sqrDistance > _interactionDistance * _interactionDistance)
+            if (sqrDistance > InteractionDistance * InteractionDistance)
             {
                 return InteractionValidationResult.OutOfRange;
             }

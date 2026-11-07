@@ -19,6 +19,17 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("economy")]
+    public Task<IActionResult> Economy([FromServices] EconomyAdminService economy, CancellationToken ct) =>
+        WithAdmin(id => economy.GetAsync(id, ct), ct);
+
+    [HttpPost("economy/prices")]
+    public Task<IActionResult> ProposePrice(ProposeShopPrice request, [FromServices] EconomyAdminService economy, CancellationToken ct) =>
+        WithAdmin(id => economy.ProposeAsync(id, request, ct), ct);
+
+    [HttpPost("economy/prices/{proposalId:guid}/review")]
+    public Task<IActionResult> ReviewPrice(Guid proposalId, ReviewShopPrice request, [FromServices] EconomyAdminService economy, CancellationToken ct) =>
+        WithAdmin(id => economy.ReviewAsync(id, proposalId, request, ct), ct);
     [HttpGet("adaptive")]
     public Task<IActionResult> AdaptiveConfiguration([FromQuery] string? compatibility,
         [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
@@ -59,6 +70,13 @@ public sealed class AdminController(
     [HttpGet("remote-fixed/status")]
     public Task<IActionResult> RemoteFixedStatus([FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
         Execute(() => Task.FromResult(remoteFixed.GetStatus()), ct);
+
+    [HttpGet("remote-fixed/gameplay-fields")]
+    public IActionResult RemoteGameplayFields() => Ok(ApiResponse<RemoteGameplayTuning.Field[]>.Ok(RemoteGameplayTuning.Fields));
+
+    [HttpGet("match-content")]
+    public IActionResult MatchContent([FromServices] Microsoft.Extensions.Options.IOptions<EchoProtocol.Api.Configurations.MatchAuthoritySettings> settings) =>
+        Ok(ApiResponse<object>.Ok(new { MatchContentCatalog.Entries, MatchContentCatalog.Difficulties, GameVersions = settings.Value.RemoteFixedGameVersions }));
 
     [HttpGet("remote-fixed/versions")]
     public Task<IActionResult> RemoteFixedVersions([FromQuery] RemoteFixedVersionsQuery query,
@@ -293,6 +311,7 @@ public sealed class AdminController(
                 : StatusCode(
                     result.ErrorCode is ErrorCodes.NotFound or ErrorCodes.PaymentOrderNotFound
                         ? StatusCodes.Status404NotFound
+                        : result.ErrorCode == "FORBIDDEN" ? StatusCodes.Status403Forbidden
                         : result.ErrorCode == ErrorCodes.Conflict
                             ? StatusCodes.Status409Conflict
                             : StatusCodes.Status400BadRequest,

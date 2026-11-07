@@ -129,7 +129,7 @@ namespace EchoProtocol.Networking.Tests
                 match);
 
             StringAssert.Contains(
-                "baselinePerZone + extraZone1",
+                "GameplayValue(\"zone1ToolBudget\", baselinePerZone) + extraZone1",
                 match);
 
             StringAssert.Contains(

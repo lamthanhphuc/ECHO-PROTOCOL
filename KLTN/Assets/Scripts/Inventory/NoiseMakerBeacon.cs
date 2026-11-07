@@ -87,8 +87,10 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
     private IEnumerator BeaconRoutine()
     {
         yield return new WaitForSeconds(activationDelay);
+        float activeSeconds = RemoteFixedBalanceSnapshot.GameplayValue("noiseMakerSeconds", 0f);
+        int pulses = activeSeconds > 0f ? Mathf.Max(1, Mathf.CeilToInt(activeSeconds / pulseInterval)) : totalPulses;
 
-        for (int i = 0; i < totalPulses; i++)
+        for (int i = 0; i < pulses; i++)
         {
             var authority =
                 MatchAuthorityRuntime.Instance;
@@ -115,14 +117,15 @@ public sealed class NoiseMakerBeacon : MonoBehaviour
                     out _);
             }
 
-            if (i < totalPulses - 1)
+            if (i < pulses - 1)
             {
                 yield return new WaitForSeconds(
                     pulseInterval);
             }
         }
 
-        yield return new WaitForSeconds(despawnDelayAfterLastPulse);
+        yield return new WaitForSeconds(activeSeconds > 0f
+            ? activeSeconds - (pulses - 1) * pulseInterval : despawnDelayAfterLastPulse);
         if (_networkObject != null
             && _networkObject.IsValid
             && _networkObject.HasStateAuthority

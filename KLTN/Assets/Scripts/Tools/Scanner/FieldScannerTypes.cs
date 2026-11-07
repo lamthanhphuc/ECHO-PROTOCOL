@@ -124,6 +124,16 @@ namespace EchoProtocol.Tools.Scanner
     {
         // Upgraded gameplay detection ranges: 100m for Core and Motion
         public float CoreRange = 100f;
+
+        public FieldScannerTuning WithRemoteValues(float active, float cooldown, float coreRange, float motionRange)
+        {
+            var result = (FieldScannerTuning)MemberwiseClone();
+            result.ActiveDuration = active;
+            result.ScanCooldown = cooldown;
+            result.CoreRange = coreRange;
+            result.MotionRange = motionRange;
+            return result;
+        }
         public float MotionRange = 100f;
         public float ActiveDuration = 20.0f; // 20s active realtime scan upon activation
         public float ScanCooldown = 30.0f; // 30-second reactivation cooldown

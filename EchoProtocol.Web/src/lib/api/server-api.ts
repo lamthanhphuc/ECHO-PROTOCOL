@@ -5,7 +5,8 @@ import { backendRequest } from "./backend-client";
 import { BackendApiError } from "@/lib/errors";
 import type { PlayerProfile } from "@/lib/types/player";
 import type { AdaptiveAdminData, AdaptiveMatchAudit } from "@/lib/types/adaptive";
-import type { ProfileTuningData } from "@/lib/types/profile-tuning";
+import type { ProfileTuningData, RemoteGameplayField } from "@/lib/types/profile-tuning";
+import type { EconomyData, MatchContent } from "@/lib/types/operations";
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
@@ -46,7 +47,10 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  matchContent: () => authorized<MatchContent>("/api/admin/match-content"),
+  economy: () => authorized<EconomyData>("/api/admin/economy"),
   profileTuning: () => authorized<ProfileTuningData>("/api/admin/ai-profile"),
+  remoteGameplayFields: () => authorized<RemoteGameplayField[]>("/api/admin/remote-fixed/gameplay-fields"),
   adaptive: (compatibility?: string) => authorized<AdaptiveAdminData>(
     `/api/admin/adaptive${compatibility ? `?compatibility=${encodeURIComponent(compatibility)}` : ""}`),
   matchAdaptive: (id: string) => authorized<AdaptiveMatchAudit>(`/api/admin/matches/${encodeURIComponent(id)}/adaptive`),

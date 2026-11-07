@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Gameplay;
+using EchoProtocol.Networking.Authority;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -42,7 +43,8 @@ namespace EchoProtocol.Networking
         public bool ToggleDebugFastConvoy()
         {
             var runner = NetworkBootstrap.Instance != null ? NetworkBootstrap.Instance.Runner : null;
-            if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority
+            if (!Debug.isDebugBuild || runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority
+                || MatchAuthorityRuntime.Instance?.TryGetRemoteFixedBalance(out _) != true
                 || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
                 return false;
             DebugFastConvoy = !DebugFastConvoy;
@@ -74,11 +76,12 @@ namespace EchoProtocol.Networking
         private float _fuelRestoredUntil;
         public int FuelPointsRemaining => _fuelPointsRemaining;
         public bool IsFuelEmpty => _initialized && _fuelPointsRemaining == 0;
-        public float Fuel01 => _fuelPointsRemaining / (float)Zone3FuelRules.Capacity;
+        public float Fuel01 => _fuelPointsRemaining / (float)Zone3FuelRules.EffectiveCapacity;
         public float LowFuelThreshold01 => 0.5f;
         public bool RouteLocked => _routeLocked;
         public bool WasFuelRestoredRecently => Time.unscaledTime < _fuelRestoredUntil;
-        public string FuelDisplay => EchoProtocol.Settings.GameLanguage.Choose("Nhiên liệu ", "Fuel ") + (_fuelPointsRemaining > 0 ? "■" : "□") + " " + (_fuelPointsRemaining > 1 ? "■" : "□");
+        public string FuelDisplay => EchoProtocol.Settings.GameLanguage.Choose("Nhiên liệu ", "Fuel ") +
+            new string('■', _fuelPointsRemaining) + new string('□', Mathf.Max(0, Zone3FuelRules.EffectiveCapacity - _fuelPointsRemaining));
         public Zone3ConvoyRoutePoint CurrentPoint => _currentPoint;
         public Zone3ConvoyRoutePoint TargetPoint => _targetPoint;
 
@@ -148,7 +151,7 @@ namespace EchoProtocol.Networking
             if (_initialized) return;
             ResolveRoutePoints();
             _initialized = true;
-            _fuelPointsRemaining = Zone3FuelRules.Capacity;
+            _fuelPointsRemaining = Zone3FuelRules.EffectiveCapacity;
             _currentPoint = FindNearestPoint();
             TryAutoSelectNextPoint();
             RefreshRouteChoiceMarkers();
@@ -230,7 +233,7 @@ namespace EchoProtocol.Networking
         public void Refuel()
         {
             if (!_initialized || !IsFuelEmpty || _currentPoint == Zone3ConvoyRoutePoint.Final) return;
-            _fuelPointsRemaining = Zone3FuelRules.Capacity;
+            _fuelPointsRemaining = Zone3FuelRules.EffectiveCapacity;
             _fuelRestoredUntil = Time.unscaledTime + 3f;
             if (!_routeLocked) TryAutoSelectNextPoint();
             RefreshRouteChoiceMarkers();
@@ -245,7 +248,7 @@ namespace EchoProtocol.Networking
                 || _currentPoint != current || _targetPoint != target || _routeLocked != routeLocked
                 || _waitingForRouteChoice != waiting;
             _initialized = initialized;
-            _fuelPointsRemaining = Mathf.Clamp(fuel, 0, Zone3FuelRules.Capacity);
+            _fuelPointsRemaining = Mathf.Clamp(fuel, 0, Zone3FuelRules.EffectiveCapacity);
             _currentPoint = current;
             _targetPoint = target;
             _routeLocked = routeLocked;
@@ -264,12 +267,18 @@ namespace EchoProtocol.Networking
             }
 
             int escortCount = CountNearbyAlivePlayers();
-            float targetSpeed = escortCount <= 0 ? 0f
-                : normalSpeed * (escortCount == 1 ? soloEscortSpeedMultiplier : 1f);
-            float speedMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : NormalSpeedMultiplier;
-            targetSpeed *= speedMultiplier;
+            float defaultMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : NormalSpeedMultiplier;
+            float speed = DebugFastConvoy ? normalSpeed * defaultMultiplier
+                : RemoteFixedBalanceSnapshot.GameplayValue("convoySpeed", normalSpeed * defaultMultiplier);
+            float solo = RemoteFixedBalanceSnapshot.GameplayValue("convoySoloMultiplier", soloEscortSpeedMultiplier);
+            float targetSpeed = escortCount <= 0 ? 0f : speed * (escortCount == 1 ? solo : 1f);
+            float rate = targetSpeed > _currentSpeed
+                ? (DebugFastConvoy ? acceleration * defaultMultiplier
+                    : RemoteFixedBalanceSnapshot.GameplayValue("convoyAcceleration", acceleration * defaultMultiplier))
+                : (DebugFastConvoy ? deceleration * defaultMultiplier
+                    : RemoteFixedBalanceSnapshot.GameplayValue("convoyDeceleration", deceleration * defaultMultiplier));
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, targetSpeed,
-                (targetSpeed > _currentSpeed ? acceleration : deceleration) * speedMultiplier * deltaTime);
+                rate * deltaTime);
             MoveTowardTarget(deltaTime);
         }
 
@@ -492,7 +501,8 @@ namespace EchoProtocol.Networking
             var runner = match != null ? match.Runner : null;
             if (runner != null && runner.IsRunning)
             {
-                float onlineRadiusSqr = escortRadius * escortRadius;
+                float radius = RemoteFixedBalanceSnapshot.GameplayValue("convoyEscortRadius", escortRadius);
+                float onlineRadiusSqr = radius * radius;
                 foreach (var actor in runner.ActivePlayers)
                 {
                     if (!runner.TryGetPlayerObject(actor, out var player) || player == null) continue;
@@ -534,7 +544,8 @@ namespace EchoProtocol.Networking
         }
 
         private void Decelerate(float deltaTime) =>
-            _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0f, deceleration * deltaTime);
+            _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0f,
+                RemoteFixedBalanceSnapshot.GameplayValue("convoyDeceleration", deceleration) * deltaTime);
 
         private void ResolveRoutePoints()
         {

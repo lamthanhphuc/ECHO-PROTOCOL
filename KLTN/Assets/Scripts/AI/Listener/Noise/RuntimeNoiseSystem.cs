@@ -43,7 +43,8 @@ namespace EchoProtocol.AI.Listener.Noise
         public RuntimeNoiseAcceptStatus TryAccept(
             Guid matchId,
             RuntimeNoiseEmissionRequest request,
-            out RuntimeNoiseEvent noiseEvent)
+            out RuntimeNoiseEvent noiseEvent,
+            double loudnessMultiplier = 1)
         {
             noiseEvent = default;
             LastRejectReason = NoiseValidationRejectReason.None;
@@ -61,7 +62,8 @@ namespace EchoProtocol.AI.Listener.Noise
                 return RuntimeNoiseAcceptStatus.Rejected;
             }
 
-            if (!RuntimeNoiseDefinition.IsFinite(definition.BaseLoudness) || definition.BaseLoudness < 0d)
+            if (!RuntimeNoiseDefinition.IsFinite(definition.BaseLoudness * loudnessMultiplier) ||
+                definition.BaseLoudness < 0d || loudnessMultiplier <= 0)
             {
                 LastRejectReason = NoiseValidationRejectReason.InvalidLoudness;
                 return RuntimeNoiseAcceptStatus.Rejected;
@@ -122,7 +124,7 @@ namespace EchoProtocol.AI.Listener.Noise
                 request.NoiseType,
                 request.WorldPosition,
                 request.EmittedAtUtc,
-                definition.BaseLoudness,
+                definition.BaseLoudness * loudnessMultiplier,
                 definition.HearingRadius,
                 request.EmittedAtUtc + definition.Lifetime,
                 request.SourceOccurrenceKey,

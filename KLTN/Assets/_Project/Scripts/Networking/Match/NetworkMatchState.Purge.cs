@@ -76,10 +76,11 @@ namespace EchoProtocol.Networking
         private StalkerFusionRuntime _purgeBoss;
         public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned >= 6 ? 2 : HuntBurned >= 2 ? 1 : 0;
         [Networked] public int PurgePartySize { get; private set; }
-        public int PurgeMinionCap => PurgeFishcatBalance.Cap(HuntBurned,
+        public int PurgeMinionCap => (int)Authority.RemoteFixedBalanceSnapshot.GameplayValue("purgeMinionCap", PurgeFishcatBalance.Cap(HuntBurned,
             Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
-            Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal);
-        public float PurgeMinionSpawnCooldown => PurgeFishcatBalance.SpawnCooldown(HuntBurned);
+            Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal));
+        public float PurgeMinionSpawnCooldown => EchoProtocol.Networking.Authority.RemoteFixedBalanceSnapshot.GameplayValue(
+            "purgeSpawnCooldown", PurgeFishcatBalance.SpawnCooldown(HuntBurned));
         public float PurgeFishcatUvDeathSeconds => PurgeFishcatBalance.UvDeathSeconds(
             Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
             Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal);
@@ -95,7 +96,8 @@ namespace EchoProtocol.Networking
         }
         public int PurgeStaggersRequired => PurgeRageTier + 1;
         public float PurgeCalmSeconds => new[] { 20f, 14f, 9f, 5f }[PurgeRageTier];
-        public float PurgeHuntSeconds => 90f + Mathf.Max(0, HuntBurned - 1) * 15f;
+        public float PurgeHuntSeconds => Authority.RemoteFixedBalanceSnapshot.GameplayValue("purgeHuntSeconds", 90f)
+            + Mathf.Max(0, HuntBurned - 1) * 15f;
         public float PurgeChaseSpeed
         {
             get
@@ -131,7 +133,7 @@ namespace EchoProtocol.Networking
         {
             if (IsEnded) return;
             PurgeRitualPosition=position;PurgeRitualVersion++;
-            PurgeLastRitualElapsedSeconds = Mathf.Clamp(_matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
+            PurgeLastRitualElapsedSeconds = Mathf.Clamp(EffectiveMatchDurationSeconds - Remaining(MatchTimer), 0f, EffectiveMatchDurationSeconds);
             Debug.Log($"[PURGE_BALANCE] Ritual {HuntBurned}/{AlienHuntMission.AlienCount} at {PurgeLastRitualElapsedSeconds:F1}s; hunts={PurgeHuntsStarted}, uvEnds={PurgeHuntsEndedByUv}, timeouts={PurgeHuntsEndedByTimeout}, uvStaggers={PurgeUvStaggersTotal}");
             if (PurgeRageTier == 0) return;
             if (PurgeMood == PurgeBossMood.Calm) BeginPurgeHunt();

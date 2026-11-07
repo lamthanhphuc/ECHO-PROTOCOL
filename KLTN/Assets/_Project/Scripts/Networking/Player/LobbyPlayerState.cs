@@ -202,6 +202,8 @@ namespace EchoProtocol.Networking
         public const int DoorJammerToolId = 4;
         public const int CoreStabilizerToolId = 6;
         public const int MultiUseTeamToolUses = 3;
+        public static int ConfiguredMultiUseTeamToolUses => (int)EchoProtocol.Networking.Authority.RemoteFixedBalanceSnapshot.GameplayValue(
+            "multiUseToolCharges", MultiUseTeamToolUses);
 
         [Networked]
         public NetworkString<_64> BackendUserId { get; private set; }
@@ -415,7 +417,7 @@ namespace EchoProtocol.Networking
         private static int UsesForTool(int toolId) =>
             toolId == NoiseMakerToolId
                 || toolId == DoorJammerToolId
-                ? MultiUseTeamToolUses
+                ? ConfiguredMultiUseTeamToolUses
                 : 0;
 
         [Networked] public Vector2 LobbyLookAngles { get; private set; }

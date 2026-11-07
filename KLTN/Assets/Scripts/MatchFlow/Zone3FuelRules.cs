@@ -32,7 +32,10 @@ namespace EchoProtocol.MatchFlow
             return longest;
         }
 
-        public static int RequiredCells(int segments) =>
-            Math.Max(0, (segments - Capacity + Capacity - 1) / Capacity) + 1;
+        public static int EffectiveCapacity => (int)NetworkMatchState.RemoteGameplayValue(
+            NetworkMatchState.RemoteGameplayPresentation.FuelCapacity, Capacity);
+
+        public static int RequiredCells(int segments, int capacity = Capacity) =>
+            Math.Max(0, (segments - 1) / capacity) + 1;
     }
 }

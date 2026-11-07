@@ -32,3 +32,13 @@ export interface ProfileTuningProjection {
   historyHalfLifeDays: number;
   thirtyDayHistoryWeight: number;
 }
+
+export interface RemoteGameplayField {
+  key: string;
+  group: string;
+  label: string;
+  min: number;
+  max: number;
+  integral: boolean;
+  map: string | null;
+}

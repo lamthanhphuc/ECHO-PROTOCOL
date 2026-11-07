@@ -270,7 +270,9 @@ namespace EchoProtocol.UI.HUD
             bool isCarrying = IsCarryingMissionItem();
 
             if (slot1LockOverlay != null) slot1LockOverlay.SetActive(isCarrying);
-            if (slot2LockOverlay != null) slot2LockOverlay.SetActive(isCarrying);
+            bool secondSlotDisabled = inventory != null && inventory.ActiveNormalSlotCount < 2;
+            if (slot2LockOverlay != null) slot2LockOverlay.SetActive(isCarrying || secondSlotDisabled);
+            if (secondSlotDisabled && slot2LockText != null) slot2LockText.text = "×";
 
             if (isCarrying)
             {

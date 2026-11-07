@@ -8,6 +8,8 @@ namespace EchoProtocol.RelayB
     {
         private readonly List<string> _systemLog = new List<string>();
         public RelayBDecoder Decoder { get; } = new RelayBDecoder();
+        private static float SyncDuration(float fallback) => EchoProtocol.Networking.NetworkMatchState.RemoteGameplayValue(
+            EchoProtocol.Networking.NetworkMatchState.RemoteGameplayPresentation.RelaySyncSeconds, fallback);
         public RelayBSurgeSimulation Surge { get; } = new RelayBSurgeSimulation();
         private RelayBConfig _config;
         private int _presetIndex;
@@ -95,7 +97,7 @@ namespace EchoProtocol.RelayB
                     _attemptDriftPhaseOffset = 0f;
                     _attemptDriftFrequencyPercent = Range(attemptRandom, 3.5f, 6f) * (attemptRandom.Next(2) == 0 ? -1f : 1f);
                 }
-                float hold = config != null ? config.HoldRequiredSeconds : 8f;
+                float hold = SyncDuration(config != null ? config.HoldRequiredSeconds : 8f);
                 float warning = config != null ? config.DriftWarningSeconds : 3f;
                 _attemptDriftTriggerSeconds = Range(attemptRandom, Mathf.Min(warning + 0.5f, hold * 0.5f), Mathf.Max(warning + 0.5f, hold * 0.65f));
                 _attemptDriftTriggerSeconds = Mathf.Min(_attemptDriftTriggerSeconds, hold - 0.5f);
@@ -417,7 +419,7 @@ namespace EchoProtocol.RelayB
         {
             _isOnline = true;
             _isSyncing = false;
-            _syncTimer = _config != null ? _config.HoldRequiredSeconds : 8f;
+            _syncTimer = SyncDuration(_config != null ? _config.HoldRequiredSeconds : 8f);
             AddSystemLog("AUTHORITATIVE OVERRIDE: RELAY B ONLINE");
             NotifyChanged();
             Completed?.Invoke();
@@ -426,7 +428,7 @@ namespace EchoProtocol.RelayB
         public void ApplyAuthoritativeSyncTelemetry(float progressSeconds, bool driftActive, bool driftWarning)
         {
             if (_isOnline) return;
-            float progress = Mathf.Clamp(progressSeconds, 0f, _config != null ? _config.HoldRequiredSeconds : 8f);
+            float progress = Mathf.Clamp(progressSeconds, 0f, SyncDuration(_config != null ? _config.HoldRequiredSeconds : 8f));
             if (Mathf.Approximately(_syncTimer, progress) && _driftTriggered == driftActive
                 && _driftWarningTriggered == driftWarning) return;
             _syncTimer = progress;
@@ -493,7 +495,7 @@ namespace EchoProtocol.RelayB
                 _mismatchPenaltyNotified = false;
                 _syncTimer += deltaTime;
 
-                float required = _config != null ? _config.HoldRequiredSeconds : 8f;
+                float required = SyncDuration(_config != null ? _config.HoldRequiredSeconds : 8f);
                 if (_syncTimer >= required)
                 {
                     _syncTimer = required;
@@ -699,7 +701,7 @@ namespace EchoProtocol.RelayB
                 pErr,
                 match,
                 _syncTimer,
-                _config != null ? _config.HoldRequiredSeconds : 8f,
+                SyncDuration(_config != null ? _config.HoldRequiredSeconds : 8f),
                 _instabilityGraceTimer,
                 isSync,
                 _driftTriggered,
