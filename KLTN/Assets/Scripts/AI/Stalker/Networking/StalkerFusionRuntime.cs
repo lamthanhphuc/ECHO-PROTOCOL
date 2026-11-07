@@ -1462,14 +1462,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             controller?.SetAEDv2ProfileOwnership(useAEDv2 || useV02);
             controller?.ApplyMatchDifficulty(profile);
             coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
-            hearingRangeMultiplier = profile.HearingRangeMultiplier;
+            hearingRangeMultiplier = RemoteFixedBalanceSnapshot.GameplayValue("stalkerHearing", profile.HearingRangeMultiplier);
             _objectiveInvestigationEnabled = profile.ObjectiveInvestigationEnabled;
             _aedv2CorePressureEnabled = useAEDv2
                 ? tuning.Get(AEDv2Key.CoreCarrierPressureEnabled) != 0
                 : profile.ObjectiveInvestigationEnabled;
             // Flashlight exposure is a fixed player-learnable rule, not an AED knob.
             _flashlightReactionEnabled = difficulty != MatchDifficulty.Easy;
-            specialEncounterRuntime?.SetCooldownSeconds(profile.SpecialEncounterCooldownSeconds);
+            specialEncounterRuntime?.SetCooldownSeconds(RemoteFixedBalanceSnapshot.GameplayValue(
+                "stalkerSpecialCooldown", profile.SpecialEncounterCooldownSeconds));
 
             controller?.ApplyAEDv2Pacing(
                 useV02 ? (float)v02.Get(AEDV02Key.PostChaseCooldownSeconds) : useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,

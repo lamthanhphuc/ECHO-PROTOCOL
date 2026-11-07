@@ -169,13 +169,17 @@ namespace EchoProtocol.Networking
         private bool _characterVisualRootDefaultActive;
         private bool _hasCharacterVisualRootDefault;
 
-        private int MaximumRevivesPerZone =>
-            AlienHuntMission.Instance != null ? int.MaxValue :
-            MatchDifficultyProfiles.Get(
-                MatchAuthorityRuntime.Instance != null
-                    ? MatchAuthorityRuntime.Instance.Difficulty
-                    : MatchDifficulty.Normal)
-                .MaximumRevivesPerZone + AEDv2ReviveBonus;
+        private int MaximumRevivesPerZone
+        {
+            get
+            {
+                var configured = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ReviveCap, -1f);
+                if (configured >= 0f) return (int)configured;
+                return AlienHuntMission.Instance != null ? int.MaxValue :
+                    MatchDifficultyProfiles.Get(MatchAuthorityRuntime.Instance?.Difficulty ?? MatchDifficulty.Normal)
+                        .MaximumRevivesPerZone + AEDv2ReviveBonus;
+            }
+        }
 
         public bool CanBeRevived => (Object != null && Object.IsValid) && NetworkPlayerLifeStateRules.CanRevive(
             Status,
@@ -490,7 +494,7 @@ namespace EchoProtocol.Networking
 
             Reviver = reviver;
             ActiveReviveUsedFirstAidKit = true;
-            ActiveReviveDurationSeconds = _reviveDurationSeconds;
+            ActiveReviveDurationSeconds = RemoteFixedBalanceSnapshot.GameplayValue("reviveSeconds", _reviveDurationSeconds);
             PausedBleedoutRemainingSeconds = BleedoutRemaining;
             BleedoutTimer = TickTimer.None;
             ReviveTimer = TickTimer.CreateFromSeconds(Runner, ActiveReviveDurationSeconds);

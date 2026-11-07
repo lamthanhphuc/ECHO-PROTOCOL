@@ -115,7 +115,8 @@ namespace EchoProtocol.Networking.Authority
                     emittedAtUtc,
                     _authority.AuthorityTick ?? 0L,
                     actor.ToString()),
-                out noiseEvent);
+                out noiseEvent, noiseType == RuntimeNoiseType.NOISE_MAKER
+                    ? RemoteFixedBalanceSnapshot.GameplayValue("noiseMakerLoudness", 1f) : 1f);
             LastRejectReason = _noiseSystem.LastRejectReason;
             LastDiagnosticReason = _noiseSystem.LastDiagnosticReason;
             if (status != RuntimeNoiseAcceptStatus.Accepted)

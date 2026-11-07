@@ -9,7 +9,8 @@ const items = [
   { href: "/admin/payments", label: "Thanh toán" },
   { href: "/admin/wallet-transactions", label: "Lịch sử số dư" },
   { href: "/admin/purchases", label: "Giao dịch mua" },
-  { href: "/admin/remote-fixed", label: "Cân bằng cố định" },
+  { href: "/admin/remote-fixed", label: "Nội dung và cân bằng" },
+  { href: "/admin/economy", label: "Kinh tế" },
   { href: "/admin/adaptive", label: "Adaptive" },
   { href: "/admin/ai-profile", label: "Hồ sơ AI" },
 ];

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
@@ -12,6 +13,55 @@ namespace EchoProtocol.Networking.Authority
         public PlayerStats player;
         public StalkerStats stalker;
         public MinionStats minion;
+        public GameplayEntry[] gameplay;
+        public ContentVariant content;
+        private Dictionary<string, float> _gameplay;
+
+        [Serializable]
+        public sealed class ContentVariant
+        {
+            public string gameVersion;
+            public string mode;
+            public string monster;
+            public string route;
+        }
+
+        private bool MatchesContent(string map)
+        {
+            if (content == null) return map != "Scene_B";
+            if (content.gameVersion != Application.version) return false;
+            return map switch
+            {
+                "SciFi" => content.mode == "EXPEDITION" && content.monster == "STALKER" && content.route == "DEFAULT_ROUTE",
+                "Scene_A" => content.mode == "EXPEDITION" && content.monster == "LIZARD" && content.route == "SCENE_A_AUTHORED",
+                "Scene_B" => content.mode == "PURGE" && content.monster == "LIZARD" && content.route == "SCENE_B_AUTHORED",
+                _ => false
+            };
+        }
+
+        [Serializable]
+        public sealed class GameplayEntry
+        {
+            public string key;
+            public float value;
+        }
+
+        public float Get(string key, float fallback) =>
+            _gameplay != null && _gameplay.TryGetValue(key, out var value) ? value : fallback;
+
+        public static float GameplayValue(string key, float fallback)
+        {
+            return Current?.Get(key, fallback) ?? fallback;
+        }
+
+        public static RemoteFixedBalanceSnapshot Current
+        {
+            get
+            {
+                var authority = MatchAuthorityRuntime.Instance;
+                return authority != null && authority.TryGetRemoteFixedBalance(out var snapshot) ? snapshot : null;
+            }
+        }
 
         [Serializable]
         public sealed class PlayerStats
@@ -47,7 +97,7 @@ namespace EchoProtocol.Networking.Authority
         {
             snapshot = null;
 
-            return context != null
+            if (!(context != null
                 && locked != null
                 && Guid.TryParse(context.matchId, out var contextId)
                 && contextId == expectedMatchId
@@ -67,7 +117,11 @@ namespace EchoProtocol.Networking.Authority
                 && TryDecode(
                     locked.snapshotPayloadBase64,
                     context.balanceHash,
-                    out snapshot);
+                    out var decoded) && decoded.MatchesContent(expectedMap)))
+                return false;
+
+            snapshot = decoded;
+            return true;
         }
 
         public static bool TryDecode(
@@ -96,7 +150,7 @@ namespace EchoProtocol.Networking.Authority
 
                 var json = new UTF8Encoding(false, true).GetString(bytes);
                 var value = JsonUtility.FromJson<RemoteFixedBalanceSnapshot>(json);
-                if (value == null || value.schemaVersion != "RFB-1" ||
+                if (value == null || value.schemaVersion is not ("RFB-1" or "RFB-2") ||
                     value.player == null || value.stalker == null || value.minion == null)
                     return false;
 
@@ -115,6 +169,17 @@ namespace EchoProtocol.Networking.Authority
                     p.sprintSpeed < p.walkSpeed || s.chaseSpeed < s.patrolSpeed)
                     return false;
 
+                if (value.schemaVersion == "RFB-2")
+                {
+                    if (value.gameplay == null || (value.gameplay.Length == 0 && value.content == null) || value.gameplay.Length > 64) return false;
+                    value._gameplay = new Dictionary<string, float>(StringComparer.Ordinal);
+                    foreach (var entry in value.gameplay)
+                    {
+                        if (entry == null || string.IsNullOrWhiteSpace(entry.key) || !InRange(entry.value, 0, 10000) ||
+                            !value._gameplay.TryAdd(entry.key, entry.value)) return false;
+                    }
+                }
+                else if (value.gameplay?.Length > 0 || value.content != null) return false;
                 snapshot = value;
                 return true;
             }

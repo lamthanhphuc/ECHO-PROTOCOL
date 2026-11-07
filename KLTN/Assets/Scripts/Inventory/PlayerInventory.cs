@@ -6,6 +6,8 @@ using UnityEngine;
 public class PlayerInventory : MonoBehaviour
 {
     public const int NormalSlotCount = 2;
+    public int ActiveNormalSlotCount => (int)NetworkMatchState.RemoteGameplayValue(
+        NetworkMatchState.RemoteGameplayPresentation.InventorySlots, NormalSlotCount);
 
     [SerializeField] private InventoryItemDefinition[] normalSlots = new InventoryItemDefinition[NormalSlotCount];
     [SerializeField] private InventoryItemDefinition teamToolSlot;
@@ -245,7 +247,7 @@ public class PlayerInventory : MonoBehaviour
 
     private int GetFirstEmptyNormalSlotIndex()
     {
-        for (int i = 0; i < normalSlots.Length; i++)
+        for (int i = 0; i < Mathf.Min(normalSlots.Length, ActiveNormalSlotCount); i++)
         {
             if (normalSlots[i] == null)
             {
@@ -294,7 +296,7 @@ public class PlayerInventory : MonoBehaviour
 
     private bool IsNormalSlotIndexValid(int index)
     {
-        return normalSlots != null && index >= 0 && index < normalSlots.Length;
+        return normalSlots != null && index >= 0 && index < normalSlots.Length && index < ActiveNormalSlotCount;
     }
 
     private static bool SpawnWorldItem(InventoryItemDefinition item, Vector3 position, Quaternion rotation)

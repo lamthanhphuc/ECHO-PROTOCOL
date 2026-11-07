@@ -231,7 +231,7 @@ namespace EchoProtocol.RelayB
                 : state.Phase == RelayBDecodePhase.Solved || state.IsComplete ? "Đã giải mã"
                 : state.Phase == RelayBDecodePhase.Transmitting ? "Đang truyền mã"
                 : state.Phase == RelayBDecodePhase.Revealing || state.Phase == RelayBDecodePhase.Holding ? "Đang đọc tín hiệu"
-                : $"6 chữ số khác nhau · Còn {RelayBDecoder.MaxAttempts - state.Attempts} lượt";
+                : $"6 chữ số khác nhau · Còn {Mathf.Max(0, RelayBDecoder.AttemptLimit - state.Attempts)} lượt";
             SetText(decodeNotice, notice);
             if (decodeNotice != null) { decodeNotice.enableAutoSizing = true; decodeNotice.fontSizeMin = 12f; }
             if (processingTabPanel != null)

@@ -24,8 +24,10 @@ namespace EchoProtocol.Networking
         [Networked] public uint ObjectiveOrdinal { get; private set; }
         [Networked] public NetworkId MatchStateId { get; private set; }
 
-        public int RequiredCoreCount => _requiredCoreCount;
-        public bool IsCoreObjectiveComplete => PlacedCoreCount >= _requiredCoreCount;
+        [Networked] private int RemoteRequiredCoreCount { get; set; }
+        public int RequiredCoreCount => Object != null && Object.IsValid && RemoteRequiredCoreCount > 0
+            ? RemoteRequiredCoreCount : _requiredCoreCount;
+        public bool IsCoreObjectiveComplete => PlacedCoreCount >= RequiredCoreCount;
         public NetworkMatchPhase Phase => TryGetMatchState(out var matchState)
             ? matchState.CurrentPhase
             : NetworkMatchPhase.CoreObjective;
@@ -41,6 +43,8 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority && !global::EchoProtocol.Networking.NetworkBootstrap.IsHostMigrationResumeActive)
             {
                 PlacedCoreCount = 0;
+                RemoteRequiredCoreCount = Mathf.Min(_requiredCoreCount,
+                    (int)RemoteFixedBalanceSnapshot.GameplayValue("coresPerSectorBox", _requiredCoreCount));
                 SecurityHoldWasInterrupted = false;
                 ObjectiveOrdinal = 0;
                 MatchStateId = default;
@@ -64,7 +68,7 @@ namespace EchoProtocol.Networking
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || !matchStateId.IsValid || placedCount < 0
-                || placedCount > _requiredCoreCount
+                || placedCount > RequiredCoreCount
                 || (PlacedCoreCount != 0 && PlacedCoreCount != placedCount))
             {
                 return false;
@@ -85,7 +89,7 @@ namespace EchoProtocol.Networking
         {
             position = default;
             if (Object == null || !Object.IsValid || slotIndex < 0
-                || slotIndex >= _requiredCoreCount)
+                || slotIndex >= RequiredCoreCount)
             {
                 return false;
             }
@@ -111,9 +115,9 @@ namespace EchoProtocol.Networking
             switch (matchState.CurrentPhase)
             {
                 case NetworkMatchPhase.CoreObjective:
-                    if (!EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount))
+                    if (!EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, RequiredCoreCount))
                     {
-                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: capacity full/invalid. box={Object.Id}, placed={PlacedCoreCount}, required={_requiredCoreCount}");
+                        Debug.LogWarning($"[NetworkSectorBox] Reject placement: capacity full/invalid. box={Object.Id}, placed={PlacedCoreCount}, required={RequiredCoreCount}");
                         return InteractionValidationResult.InvalidTargetState;
                     }
 
@@ -173,7 +177,7 @@ namespace EchoProtocol.Networking
                     matchState.Status,
                     matchState.CurrentPhase,
                     NetworkMatchPhase.CoreObjective)
-                || !EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, _requiredCoreCount))
+                || !EnergyCoreObjectiveRules.CanRegisterPlacement(PlacedCoreCount, RequiredCoreCount))
             {
                 return;
             }
@@ -189,7 +193,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            PlacedCoreCount = Mathf.Min(PlacedCoreCount + 1, _requiredCoreCount);
+            PlacedCoreCount = Mathf.Min(PlacedCoreCount + 1, RequiredCoreCount);
             MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(context.Player);
             AdvanceObjectiveOrdinal();
             HandleObjectiveChanged();
@@ -316,7 +320,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            var centeredIndex = slotIndex - (_requiredCoreCount - 1) * 0.5f;
+            var centeredIndex = slotIndex - (RequiredCoreCount - 1) * 0.5f;
             position = transform.TransformPoint(new Vector3(centeredIndex * _fallbackSlotSpacing, 0.75f, 0f));
             rotation = transform.rotation;
         }
@@ -344,7 +348,7 @@ namespace EchoProtocol.Networking
             if (totalRequired == 0)
             {
                 totalPlaced = PlacedCoreCount;
-                totalRequired = _requiredCoreCount;
+                totalRequired = RequiredCoreCount;
             }
 
             foreach (var legacyProgress in FindObjectsByType<EnergyCoreObjectiveProgress>(FindObjectsInactive.Include))
@@ -358,7 +362,7 @@ namespace EchoProtocol.Networking
 
         private void UpdateCoreVisuals(int placedCount)
         {
-            int clampedPlaced = Mathf.Clamp(placedCount, 0, _requiredCoreCount);
+            int clampedPlaced = Mathf.Clamp(placedCount, 0, RequiredCoreCount);
             if (_coreVisuals == null) return;
 
             for (int i = 0; i < _coreVisuals.Length; i++)

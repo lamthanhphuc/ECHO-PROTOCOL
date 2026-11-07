@@ -242,6 +242,7 @@ builder.Services.AddScoped<IAdminQueryService, AdminQueryService>();
 builder.Services.AddScoped<RemoteFixedBalanceAdminService>();
 builder.Services.AddScoped<AdaptiveConfigurationService>();
 builder.Services.AddScoped<ProfileTuningService>();
+builder.Services.AddScoped<EconomyAdminService>();
 builder.Services.AddScoped<AdaptiveMatchAuditService>();
 builder.Services.AddScoped<AdminModerationService>();
 builder.Services.AddScoped<IMatchTelemetryAggregator, MatchTelemetryAggregator>();

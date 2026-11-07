@@ -58,7 +58,12 @@ namespace EchoProtocol.Networking
             && Mathf.Approximately(
                 RemoteFixedSprintSpeed, snapshot.player.sprintSpeed)
             && Mathf.Approximately(
-                RemoteFixedMaxStamina, snapshot.player.maxStamina);
+                RemoteFixedMaxStamina, snapshot.player.maxStamina)
+            && Mathf.Approximately(RemoteFixedStaminaDrain, snapshot.Get("staminaDrain", 0f))
+            && Mathf.Approximately(RemoteFixedStaminaRecovery, snapshot.Get("staminaRecovery", 0f));
+
+        [Networked] private float RemoteFixedStaminaDrain { get; set; }
+        [Networked] private float RemoteFixedStaminaRecovery { get; set; }
 
         private float StaminaResumeThreshold =>
             Mathf.Max(
@@ -131,8 +136,10 @@ namespace EchoProtocol.Networking
             ? 250f
             : Object != null && Object.IsValid && RemoteFixedMaxStamina > 0f
                 ? RemoteFixedMaxStamina : _maxStamina;
-        private float SprintStaminaDrain => UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
-        private float StaminaRegen => UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
+        private float SprintStaminaDrain => HasRemoteFixedBalance && RemoteFixedStaminaDrain > 0f
+            ? RemoteFixedStaminaDrain : UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
+        private float StaminaRegen => HasRemoteFixedBalance && RemoteFixedStaminaRecovery > 0f
+            ? RemoteFixedStaminaRecovery : UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
         public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
             ? _controller != null && _controller.Grounded
             : _unityCharacterController != null && _unityCharacterController.isGrounded;
@@ -474,6 +481,8 @@ namespace EchoProtocol.Networking
             RemoteFixedWalkSpeed = snapshot != null ? snapshot.player.walkSpeed : 0f;
             RemoteFixedSprintSpeed = snapshot != null ? snapshot.player.sprintSpeed : 0f;
             RemoteFixedMaxStamina = snapshot != null ? snapshot.player.maxStamina : 0f;
+            RemoteFixedStaminaDrain = snapshot?.Get("staminaDrain", 0f) ?? 0f;
+            RemoteFixedStaminaRecovery = snapshot?.Get("staminaRecovery", 0f) ?? 0f;
             NetworkCurrentStamina = MaxStamina;
             StaminaExhausted = false;
 

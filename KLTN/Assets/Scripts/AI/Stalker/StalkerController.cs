@@ -3925,7 +3925,7 @@ namespace EchoProtocol.AI.Stalker
                 hideSpotSearchRadius,
                 hideSpotConfirmedUseBias,
                 hideSpotEmptyInspectionPenalty,
-                hideSpotReinspectCooldown,
+                RemoteFixedBalanceSnapshot.GameplayValue("hideReinspectCooldown", hideSpotReinspectCooldown),
                 TargetSelectionTieEpsilon);
         }
 
@@ -3933,7 +3933,7 @@ namespace EchoProtocol.AI.Stalker
         {
             return new StalkerHideSpotInspectionConfig(
                 hideSpotInspectDistance,
-                hideSpotInspectDuration);
+                RemoteFixedBalanceSnapshot.GameplayValue("hideInspectSeconds", hideSpotInspectDuration));
         }
 
         private AiSimulationTime GetCurrentSimulationTime()
@@ -4653,6 +4653,8 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionFillRate()
         {
+            float secondsOverride = RemoteFixedBalanceSnapshot.GameplayValue("stalkerDetectSeconds", 0f);
+            if (secondsOverride > 0f) return GetDetectionMeterFull() / secondsOverride;
             if (PurgeTier >= 0) return GetDetectionMeterFull() / PurgeDetectSeconds;
             var value =
                 ShouldUseScenarioMonsterParameters()
@@ -4664,6 +4666,8 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionDecayRate()
         {
+            float secondsOverride = RemoteFixedBalanceSnapshot.GameplayValue("stalkerForgetSeconds", 0f);
+            if (secondsOverride > 0f) return GetDetectionMeterFull() / secondsOverride;
             if (PurgeTier >= 1) { float seconds = PurgeTier switch { 1 => 1f, 2 => 1.5f, _ => 3f }; return GetDetectionMeterFull() / seconds; }
             var value =
                 ShouldUseScenarioMonsterParameters()
@@ -4675,6 +4679,8 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetSearchDuration()
         {
+            float secondsOverride = RemoteFixedBalanceSnapshot.GameplayValue("stalkerSearchSeconds", 0f);
+            if (secondsOverride > 0f) return secondsOverride;
             if(_purgeControlled && _purgeHunting) return 75f;
             var value =
                 ShouldUseScenarioMonsterParameters()
@@ -4725,7 +4731,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetAttackDamage()
         {
-            return Mathf.Max(0f, attackDamage);
+            return Mathf.Max(0f, RemoteFixedBalanceSnapshot.GameplayValue("stalkerDamage", attackDamage));
         }
 
         private float CurrentSimulationDeltaSeconds => _currentSimulationDeltaSeconds;
@@ -7134,7 +7140,7 @@ namespace EchoProtocol.AI.Stalker
                 _navigationObjectiveKey,
                 currentState,
                 true,
-                stalkerDoorBreakDurationSeconds);
+                RemoteFixedBalanceSnapshot.GameplayValue("stalkerDoorBreakSeconds", stalkerDoorBreakDurationSeconds));
 
             if (result == StalkerWorldInteractionStartResult.NotHandled
                 || result == StalkerWorldInteractionStartResult.AuthorityRejected)

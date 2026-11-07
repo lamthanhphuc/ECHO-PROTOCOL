@@ -15,8 +15,8 @@ public sealed partial class RemoteFixedBalanceAdminService(
     TimeProvider timeProvider,
     IOptions<MatchAuthoritySettings> settings)
 {
-    private static readonly string[] Maps = ["SciFi", "Scene_A"];
-    private static readonly string[] Difficulties = ["EASY", "NORMAL", "HARD"];
+    private static readonly string[] Maps = MatchContentCatalog.Entries.Select(x => x.Map).ToArray();
+    private static readonly string[] Difficulties = MatchContentCatalog.Difficulties;
 
     public async Task<ServiceResult<AdminPagedResponse<RemoteFixedVersionResponse>>> GetVersionsAsync(
         RemoteFixedVersionsQuery query, CancellationToken ct)
@@ -50,8 +50,10 @@ public sealed partial class RemoteFixedBalanceAdminService(
             return Invalid<RemoteFixedVersionDetailResponse>("Version must start with a letter or digit and contain only letters, digits, '.', '_' or '-'.");
         if (!Maps.Contains(map)) return Invalid<RemoteFixedVersionDetailResponse>("Unsupported map.");
         if (!Difficulties.Contains(difficulty)) return Invalid<RemoteFixedVersionDetailResponse>("Unsupported difficulty.");
-        if (!RemoteFixedBalanceContract.IsValidSnapshot(request.SnapshotJson))
-            return Invalid<RemoteFixedVersionDetailResponse>("Invalid RFB-1 snapshot.");
+        if (!RemoteFixedBalanceContract.IsValidSnapshot(request.SnapshotJson, map))
+            return Invalid<RemoteFixedVersionDetailResponse>("Invalid gameplay balance snapshot for this map.");
+        if (RemoteFixedBalanceContract.GameVersion(request.SnapshotJson) is { } build && !settings.Value.RemoteFixedGameVersions.Contains(build))
+            return Invalid<RemoteFixedVersionDetailResponse>("Unity build is outside the registered compatibility list.");
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         if (await db.RemoteFixedBalanceVersions.AnyAsync(x => x.Version == version, ct))
@@ -124,9 +126,12 @@ public sealed partial class RemoteFixedBalanceAdminService(
         if (reason.Length is < 1 or > 500) return Invalid<RemoteFixedActivationResponse>("Reason is required and must not exceed 500 characters.");
         var target = await db.RemoteFixedBalanceVersions.SingleOrDefaultAsync(x => x.Version == version, ct);
         if (target == null) return ServiceResult<RemoteFixedActivationResponse>.Failure("Remote Fixed version not found.", ErrorCodes.NotFound);
-        if (!RemoteFixedBalanceContract.IsValidSnapshot(target.SnapshotJson) ||
+        if (!RemoteFixedBalanceContract.IsValidSnapshot(target.SnapshotJson, target.MapId) ||
             !string.Equals(RemoteFixedBalanceContract.ComputeHash(target.SnapshotJson), target.ContentHash, StringComparison.Ordinal))
             return Invalid<RemoteFixedActivationResponse>("Stored snapshot or hash is invalid.");
+        if (activate && RemoteFixedBalanceContract.GameVersion(target.SnapshotJson) is { } build &&
+            !settings.Value.RemoteFixedGameVersions.Contains(build))
+            return Invalid<RemoteFixedActivationResponse>("Unity build is outside the registered compatibility list.");
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         if (db.Database.IsNpgsql())

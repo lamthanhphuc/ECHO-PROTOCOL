@@ -160,7 +160,7 @@ namespace EchoProtocol.Networking
 
             var phase = matchState.CurrentPhase;
             if (((phase == NetworkMatchPhase.Zone3FindFrigate || phase == NetworkMatchPhase.Zone3PushFrigate)
-                 && !HasAdaptiveV02Plan())
+                 && !HasAdaptiveV02Plan() && RemoteFixedBalanceSnapshot.GameplayValue("minionCapZone3", -1f) < 0f)
                 || phase == NetworkMatchPhase.FinalHunt
                 || phase == NetworkMatchPhase.Escape)
             {
@@ -1451,8 +1451,13 @@ namespace EchoProtocol.Networking
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
             bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
-            var zone = _zone3MonsterSpawned && HasAdaptiveV02Plan() ? RegionSemanticZone.Zone03 : (_zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01);
+            float zone3Cap = RemoteFixedBalanceSnapshot.GameplayValue("minionCapZone3", -1);
+            var zone = _zone3MonsterSpawned && (HasAdaptiveV02Plan() || zone3Cap >= 0)
+                ? RegionSemanticZone.Zone03 : (_zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01);
             int cap = zone == RegionSemanticZone.Zone01 ? profile.Zone1MinionCap : zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone3MinionCap;
+            if (zone == RegionSemanticZone.Zone03 && zone3Cap >= 0) cap = (int)zone3Cap;
+            else if (zone != RegionSemanticZone.Zone03)
+                cap = (int)RemoteFixedBalanceSnapshot.GameplayValue(zone == RegionSemanticZone.Zone01 ? "minionCapZone1" : "minionCapZone2", cap);
             _v02ObservedMinionZone = (int)zone;
             _v02ObservedMinionCap = cap;
             _v02ObservedMinionRevision = authority != null && AEDv2Authority.TryGetV02(authority.MatchId, out _, out var observedRevision) ? observedRevision : 0;

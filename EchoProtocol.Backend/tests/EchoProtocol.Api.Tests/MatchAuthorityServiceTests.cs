@@ -324,7 +324,29 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
-    public Task V2RemoteOnSceneBIsRejected() => AssertV2InvalidContext("Scene_B", "FIXED", "REMOTE_FIXED");
+    public Task V2LegacyRemoteOnSceneBIsRejected() => AssertV2InvalidContext("Scene_B", "FIXED", "REMOTE_FIXED");
+
+    [Fact]
+    public async Task V2SceneBRequiresMatchingUnityBuildBeforeLockingContent()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        version.MapId = "Scene_B";
+        version.SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
+            ""","gameplay":[],"content":{"gameVersion":"0.1.0","mode":"PURGE","monster":"LIZARD","route":"SCENE_B_AUTHORED"}}""";
+        version.ContentHash = RemoteFixedBalanceContract.ComputeHash(version.SnapshotJson);
+        await db.SaveChangesAsync();
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "purge-content");
+        var request = V2Request("REMOTE_FIXED", map: "Scene_B");
+        request.SupportsGameplayTuning = true;
+        request.GameVersion = "wrong-build";
+        Assert.False((await service.StartV2Async(host, matchId, request, CancellationToken.None)).IsSuccess);
+        request.GameVersion = "0.1.0";
+        var accepted = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(accepted.IsSuccess, accepted.Message);
+    }
 
     [Fact]
     public Task V2AdaptiveRemoteCombinationIsRejected() => AssertV2InvalidContext("SciFi", "ADAPTIVE", "REMOTE_FIXED");

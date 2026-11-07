@@ -9,6 +9,8 @@ namespace EchoProtocol.Networking
     [DisallowMultipleComponent]
     public sealed class NetworkTeamToolPickup : NetworkInteractable
     {
+        public override float InteractionDistance => NetworkMatchState.RemoteGameplayValue(
+            NetworkMatchState.RemoteGameplayPresentation.ToolPickupDistance, base.InteractionDistance);
         private const float MaxOutlineVisibleDistance = 20f;
 
         [SerializeField, Range(1, 6)] private int _toolId = 2;
@@ -50,7 +52,7 @@ namespace EchoProtocol.Networking
                         || _toolId == LobbyPlayerState.DoorJammerToolId))
                 {
                     RemainingUses =
-                        LobbyPlayerState.MultiUseTeamToolUses;
+                        LobbyPlayerState.ConfiguredMultiUseTeamToolUses;
                 }
             }
 

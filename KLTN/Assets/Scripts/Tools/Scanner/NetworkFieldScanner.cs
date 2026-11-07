@@ -94,7 +94,23 @@ namespace EchoProtocol.Tools.Scanner
         public System.Collections.Generic.IReadOnlyList<Vector3> RadarOffsets => _radarOffsets;
         public float LastRadarSampleTime { get; private set; }
 
-        public FieldScannerTuning Tuning => _tuning;
+        private FieldScannerTuning _remoteTuning;
+        public FieldScannerTuning Tuning
+        {
+            get
+            {
+                var active = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerDuration, _tuning.ActiveDuration);
+                var cooldown = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerCooldown, _tuning.ScanCooldown);
+                var coreRange = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerRange, _tuning.CoreRange);
+                var motionRange = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerRange, _tuning.MotionRange);
+                if (active == _tuning.ActiveDuration && cooldown == _tuning.ScanCooldown &&
+                    coreRange == _tuning.CoreRange && motionRange == _tuning.MotionRange) return _tuning;
+                if (_remoteTuning == null || _remoteTuning.ActiveDuration != active || _remoteTuning.ScanCooldown != cooldown ||
+                    _remoteTuning.CoreRange != coreRange || _remoteTuning.MotionRange != motionRange)
+                    _remoteTuning = _tuning.WithRemoteValues(active, cooldown, coreRange, motionRange);
+                return _remoteTuning;
+            }
+        }
         public bool HasActiveResult => _hasLocalActiveResult && _localResultTimer > 0f;
         public float ResultRemainingTime => Mathf.Max(0f, _localResultTimer);
         public CoreScanResult CurrentCoreResult => HasActiveResult ? _lastLocalCoreResult : CoreScanResult.Empty;
@@ -181,7 +197,7 @@ namespace EchoProtocol.Tools.Scanner
                         0f,
                         rem - (IsDebugGodModeActive
                             ? 0f
-                            : _tuning.ScanCooldown));
+                            : Tuning.ScanCooldown));
                 }
                 return Mathf.Max(0f, _localActiveScanTimer);
             }
@@ -204,7 +220,7 @@ namespace EchoProtocol.Tools.Scanner
                 if (Runner != null && Runner.IsRunning && Object != null && Object.IsValid)
                 {
                     float rem = ScanCooldownTimer.RemainingTime(Runner) ?? 0f;
-                    return Mathf.Min(rem, _tuning.ScanCooldown);
+                    return Mathf.Min(rem, Tuning.ScanCooldown);
                 }
                 return Mathf.Max(0f, _localCooldownTimer);
             }
@@ -424,7 +440,7 @@ namespace EchoProtocol.Tools.Scanner
                     origin,
                     forward,
                     coreCandidates,
-                    _tuning, radarOffsets: _radarOffsets);
+                    Tuning, radarOffsets: _radarOffsets);
 
                 _lastLocalCoreResult = result;
                 _lastLocalMotionResult = MotionScanResult.Empty;
@@ -438,7 +454,7 @@ namespace EchoProtocol.Tools.Scanner
                     origin,
                     forward,
                     motionTargets,
-                    _tuning, _radarOffsets);
+                    Tuning, _radarOffsets);
 
                 _lastLocalMotionResult = result;
                 _lastLocalCoreResult = CoreScanResult.Empty;
@@ -660,8 +676,8 @@ namespace EchoProtocol.Tools.Scanner
             CurrentMode = requestedMode;
             // Active time and cooldown are accepted only by State Authority.
             float totalDuration = IsDebugGodModeActive
-                ? _tuning.ActiveDuration
-                : _tuning.ActiveDuration + _tuning.ScanCooldown;
+                ? Tuning.ActiveDuration
+                : Tuning.ActiveDuration + Tuning.ScanCooldown;
             ScanCooldownTimer = TickTimer.CreateFromSeconds(Runner, totalDuration);
             ScanPulseOrdinal++;
             AnyScanPulseTriggered?.Invoke(this);
@@ -692,7 +708,7 @@ namespace EchoProtocol.Tools.Scanner
                     transform.position,
                     transform.forward,
                     coreCandidates,
-                    _tuning, observedCandidate: (candidate, blocked) => occlusion[candidate.TargetId] = blocked);
+                    Tuning, observedCandidate: (candidate, blocked) => occlusion[candidate.TargetId] = blocked);
                 V02LastScan = CaptureV02Scan(sequence, requestedMode, coreCandidates.Select(c =>
                     ScanCandidate(c.TargetId, SourceComponent(c), c.WorldPosition, c.IsAvailableInWorld, false, 0,
                         occlusion.TryGetValue(c.TargetId, out var blocked) && blocked)).ToArray(),
@@ -715,7 +731,7 @@ namespace EchoProtocol.Tools.Scanner
                     transform.position,
                     transform.forward,
                     motionTargets,
-                    _tuning);
+                    Tuning);
 
                 var b0 = result.GetBlip(0);
                 var b1 = result.GetBlip(1);
@@ -800,7 +816,7 @@ namespace EchoProtocol.Tools.Scanner
             if (!TryResolveRequester(info.Source, out _) || V02LastScan == null || V02LastScan.Sequence != sequence ||
                 MatchAuthorityRuntime.Instance == null || !MatchAuthorityRuntime.Instance.V02CollectToolOutcomes ||
                 MatchAuthorityRuntime.Instance.MatchId != V02LastScan.MatchId || MatchAuthorityRuntime.Instance.V02CurrentSourcePhase != V02LastScan.PhaseName ||
-                Runner.Tick.Raw - V02LastScan.Tick > Runner.TickRate * _tuning.ActiveDuration) return;
+                Runner.Tick.Raw - V02LastScan.Tick > Runner.TickRate * Tuning.ActiveDuration) return;
             if (!V02LastScan.Presented) { V02LastScan.Presented = true; V02LastScan.PresentedTick = Runner.Tick.Raw; }
         }
 
@@ -811,7 +827,7 @@ namespace EchoProtocol.Tools.Scanner
             return new AEDV02ScanSource { MatchId = authority != null ? authority.MatchId : Guid.Empty,
                 Sequence = sequence, Occurrence = $"player:{Object.Id}:tool:FIELD_SCANNER:{sequence}",
                 Tick = Runner.Tick.Raw, PhaseName = authority != null ? authority.V02CurrentSourcePhase : string.Empty, Mode = mode.ToString(),
-                Range = mode == FieldScannerMode.Core ? _tuning.CoreRange : _tuning.MotionRange, MaxTargets = mode == FieldScannerMode.Core ? 1 : _tuning.MaxMotionTargets,
+                Range = mode == FieldScannerMode.Core ? Tuning.CoreRange : Tuning.MotionRange, MaxTargets = mode == FieldScannerMode.Core ? 1 : _tuning.MaxMotionTargets,
                 MovingThreshold = _tuning.MovingSpeedThreshold, OcclusionMultiplier = _tuning.OccludedSignalMultiplier,
                 X = transform.position.x, Y = transform.position.y, Z = transform.position.z, Candidates = candidates, ResultIds = results };
         }

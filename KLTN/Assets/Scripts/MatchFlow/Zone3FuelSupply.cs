@@ -18,7 +18,7 @@ namespace EchoProtocol.MatchFlow
                 foreach (var cell in cells)
                     if (cell.Object == null || !cell.Object.IsValid || !cell.Object.HasStateAuthority) return false;
             Array.Sort(cells, (a, b) => string.CompareOrdinal(a.name, b.name));
-            int required = Zone3FuelRules.RequiredCells(Zone3FuelRules.LongestSimpleRouteSegments());
+            int required = Zone3FuelRules.RequiredCells(Zone3FuelRules.LongestSimpleRouteSegments(), Zone3FuelRules.EffectiveCapacity);
             if (cells.Length < required)
             {
                 Debug.LogError($"[Zone3Fuel] Need {required} candidates; scene has {cells.Length}.");

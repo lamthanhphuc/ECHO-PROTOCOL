@@ -97,7 +97,9 @@ namespace EchoProtocol.Networking.Authority
                     difficulty = difficulty,
                     resolutionMode = "FIXED",
                     balanceSource = "REMOTE_FIXED",
-                    balanceProtocolVersion = "RFB-1"
+                    balanceProtocolVersion = "RFB-1",
+                    supportsGameplayTuning = true,
+                    gameVersion = UnityEngine.Application.version
                 });
 
         public Task<ApiResult<ApiResponse<LockedBalanceDto>>> GetLockedBalanceAsync(

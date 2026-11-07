@@ -37,6 +37,8 @@ namespace EchoProtocol.RelayB
     {
         public const int CodeLength = 6;
         public const int MaxAttempts = 5;
+        public static int AttemptLimit => (int)EchoProtocol.Networking.NetworkMatchState.RemoteGameplayValue(
+            EchoProtocol.Networking.NetworkMatchState.RemoteGameplayPresentation.RelayCodeAttempts, MaxAttempts);
         private Random _random;
         private int _secret;
         private int _round;
@@ -82,7 +84,7 @@ namespace EchoProtocol.RelayB
 
         public bool Transmit(int packed)
         {
-            if (_random == null || _phase != RelayBDecodePhase.Editing || !IsValidCode(packed) || _attempts >= MaxAttempts) return false;
+            if (_random == null || _phase != RelayBDecodePhase.Editing || !IsValidCode(packed) || _attempts >= AttemptLimit) return false;
             _current = packed;
             _feedback = Evaluate(_secret, packed);
             _attempts++;
@@ -111,7 +113,7 @@ namespace EchoProtocol.RelayB
                     case RelayBDecodePhase.Holding:
                         _codes[_attempts - 1] = _current; _results[_attempts - 1] = _feedback;
                         if (_current == _secret) _phase = RelayBDecodePhase.Solved;
-                        else if (_attempts == MaxAttempts) { _phase = RelayBDecodePhase.Failed; Failed?.Invoke(); }
+                        else if (_attempts >= AttemptLimit) { _phase = RelayBDecodePhase.Failed; Failed?.Invoke(); }
                         else { _phase = RelayBDecodePhase.Editing; _current = _feedback = 0; }
                         break;
                     case RelayBDecodePhase.Failed: NewRound(); break;

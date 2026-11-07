@@ -48,6 +48,8 @@ public sealed class StartMatchAuthorityRequest
 
 public sealed class StartMatchV2Request
 {
+    [StringLength(80)] public string? GameVersion { get; set; }
+    public bool SupportsGameplayTuning { get; set; }
     [Required, StringLength(64, MinimumLength = 1)]
     public string MapId { get; set; } = string.Empty;
 

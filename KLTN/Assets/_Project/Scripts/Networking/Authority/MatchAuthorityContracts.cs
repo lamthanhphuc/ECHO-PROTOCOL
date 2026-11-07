@@ -95,6 +95,8 @@ namespace EchoProtocol.Networking.Authority
     [Serializable]
     public sealed class StartMatchV2Request
     {
+        public string gameVersion;
+        public bool supportsGameplayTuning;
         public string mapId;
         public string difficulty;
         public string resolutionMode;

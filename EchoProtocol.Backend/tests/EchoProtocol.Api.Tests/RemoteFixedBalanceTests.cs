@@ -52,6 +52,34 @@ public sealed class RemoteFixedBalanceTests
     public void WrongSchema_IsRejected() => Assert.False(RemoteFixedBalanceContract.IsValidSnapshot(
         ValidSnapshot.Replace("RFB-1", "RFB-2")));
 
+    [Theory]
+    [InlineData("SciFi", "[{\"key\":\"convoySpeed\",\"value\":9},{\"key\":\"staminaDrain\",\"value\":22}]", true)]
+    [InlineData("Scene_A", "[{\"key\":\"convoySpeed\",\"value\":9}]", false)]
+    [InlineData("Scene_A", "[{\"key\":\"purgeSpawnCooldown\",\"value\":22}]", true)]
+    [InlineData("SciFi", "[{\"key\":\"convoySpeed\",\"value\":20}]", false)]
+    [InlineData("SciFi", "[{\"key\":\"convoyFuelCapacity\",\"value\":2.5}]", false)]
+    [InlineData("SciFi", "[{\"key\":\"inventorySlots\",\"value\":2},{\"key\":\"inventorySlots\",\"value\":1}]", false)]
+    [InlineData("SciFi", "[{\"key\":\"relayRepairWindowSeconds\",\"value\":75},{\"key\":\"terminalHoldSeconds\",\"value\":90}]", false)]
+    public void GameplaySchema_ValidatesMapRangesAndCrossFieldSafety(string map, string gameplay, bool valid)
+    {
+        var json = ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd();
+        json = json[..^1] + ",\"gameplay\":" + gameplay + "}";
+        Assert.Equal(valid, RemoteFixedBalanceContract.IsValidSnapshot(json, map));
+    }
+
+    [Theory]
+    [InlineData("Scene_B", "PURGE", "LIZARD", "SCENE_B_AUTHORED", true)]
+    [InlineData("Scene_B", "EXPEDITION", "LIZARD", "SCENE_B_AUTHORED", false)]
+    [InlineData("SciFi", "EXPEDITION", "LIZARD", "DEFAULT_ROUTE", false)]
+    [InlineData("SciFi", "EXPEDITION", "STALKER", "DEFAULT_ROUTE", true)]
+    public void ContentVariant_RequiresRegisteredMapModeMonsterAndRoute(string map, string mode, string monster, string route, bool valid)
+    {
+        var json = ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
+            $",\"gameplay\":[],\"content\":{{\"gameVersion\":\"0.1.0\",\"mode\":\"{mode}\",\"monster\":\"{monster}\",\"route\":\"{route}\"}}}}";
+        Assert.Equal(valid, RemoteFixedBalanceContract.IsValidSnapshot(json, map));
+        if (valid) Assert.Equal("0.1.0", RemoteFixedBalanceContract.GameVersion(json));
+    }
+
     [Fact]
     public void OversizedSnapshot_IsRejected() => Assert.False(RemoteFixedBalanceContract.IsValidSnapshot(
         ValidSnapshot + new string(' ', 8193)));

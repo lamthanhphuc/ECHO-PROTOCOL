@@ -577,7 +577,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             || mode is not ("FIXED" or "ADAPTIVE")
             || source is not ("LOCAL" or "REMOTE_FIXED")
             || (source == "REMOTE_FIXED" && mode != "FIXED")
-            || (source == "REMOTE_FIXED" && mapId is not ("SciFi" or "Scene_A"))))
+            || (source == "REMOTE_FIXED" && (!MatchContentCatalog.Entries.Any(x => x.Map == mapId) ||
+                (mapId == "Scene_B" && (v2Request?.SupportsGameplayTuning != true || string.IsNullOrWhiteSpace(v2Request.GameVersion)))))))
         {
             return Failure<MatchAuthorityResponse>(
                 "Invalid Remote Fixed start context", ErrorCodes.ValidationError);
@@ -630,10 +631,15 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             if (selected is null)
                 return Failure<MatchAuthorityResponse>("No active Remote Fixed Balance version", ErrorCodes.BalanceVersionUnavailable);
 
-            if (!RemoteFixedBalanceContract.IsValidSnapshot(selected.SnapshotJson) ||
+            if (!RemoteFixedBalanceContract.IsValidSnapshot(selected.SnapshotJson, mapId) ||
                 !string.Equals(RemoteFixedBalanceContract.ComputeHash(selected.SnapshotJson),
                     selected.ContentHash, StringComparison.Ordinal))
                 return Failure<MatchAuthorityResponse>("Remote Fixed Balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
+            if (RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson) && v2Request?.SupportsGameplayTuning != true)
+                return Failure<MatchAuthorityResponse>("This balance version requires a build with RFB-2 gameplay tuning", ErrorCodes.BalanceSnapshotInvalid);
+            if (RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson) is { } build &&
+                (build != v2Request?.GameVersion || !_settings.RemoteFixedGameVersions.Contains(build)))
+                return Failure<MatchAuthorityResponse>("Unity build does not match the selected content version", ErrorCodes.BalanceSnapshotInvalid);
         }
 
         var now = UtcNow();
@@ -682,7 +688,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             .SingleOrDefaultAsync(item => item.Version == match.BalanceVersion, cancellationToken);
         if (version is null || version.MapId != match.MapId || version.Difficulty != match.Difficulty ||
             version.ProtocolVersion != match.BalanceProtocolVersion ||
-            !RemoteFixedBalanceContract.IsValidSnapshot(version.SnapshotJson) ||
+            !RemoteFixedBalanceContract.IsValidSnapshot(version.SnapshotJson, version.MapId) ||
             !string.Equals(RemoteFixedBalanceContract.ComputeHash(version.SnapshotJson), match.BalanceHash, StringComparison.Ordinal) ||
             !string.Equals(version.ContentHash, match.BalanceHash, StringComparison.Ordinal))
             return Failure<LockedBalanceResponse>("Locked balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);

@@ -138,6 +138,8 @@ namespace EchoProtocol.Networking
 
         [SerializeField, Min(1f)] private float _escapeDurationSeconds = DefaultEscapeDurationSeconds;
         [SerializeField, Min(1f)] private float _matchDurationSeconds = DefaultMatchDurationSeconds;
+        private float EffectiveMatchDurationSeconds =>
+            RemoteFixedBalanceSnapshot.GameplayValue("missionDurationSeconds", _matchDurationSeconds);
         [SerializeField, Min(0.1f)] private float _resultTransitionDelaySeconds = 1f;
         [SerializeField, Min(0.1f)] private float _zone2InteractionDistance = 3f;
         [SerializeField, Min(0.1f)] private float _zoneAccessCooldownSeconds = 5f;
@@ -301,7 +303,8 @@ namespace EchoProtocol.Networking
         private TickTimer _zone3RefuelLease;
         private long _zone3RefuelNoiseSequence;
         public float Zone3RefuelProgress01 => Zone3RefuelOperator.IsRealPlayer && Runner != null
-            ? Mathf.Clamp01(1f - (Zone3RefuelTimer.RemainingTime(Runner) ?? 0f) / Zone3FuelRules.InsertDurationSeconds) : 0f;
+            ? Mathf.Clamp01(1f - (Zone3RefuelTimer.RemainingTime(Runner) ?? 0f) /
+                RemoteGameplayValue(RemoteGameplayPresentation.RefuelSeconds, Zone3FuelRules.InsertDurationSeconds)) : 0f;
         [Networked] public PlayerRef Zone3ChargeOperator { get; private set; }
         [Networked] public float Zone3ChargeDurationSeconds { get; private set; }
         [Networked] public float Zone3ChargeAccumulatedSeconds { get; private set; }
@@ -418,10 +421,10 @@ namespace EchoProtocol.Networking
         public float CurrentScenarioEscapeDoorTimerSeconds =>
             Mathf.Max(
                 0.1f,
-                (float)(
+                RemoteFixedBalanceSnapshot.GameplayValue("escapeSeconds", (float)(
                     ScenarioEscapeDoorTimerSeconds > 0d
                         ? ScenarioEscapeDoorTimerSeconds
-                        : _escapeDurationSeconds));
+                        : _escapeDurationSeconds)));
         public ScenarioConfig CurrentAppliedScenarioConfig
         {
             get
@@ -440,6 +443,34 @@ namespace EchoProtocol.Networking
                 out config);
         }
 
+        public enum RemoteGameplayPresentation
+        {
+            InventorySlots, ReviveCap, ToolPickupDistance, ScannerDuration, ScannerCooldown,
+            ScannerRange, RelaySyncSeconds, RelayCodeAttempts, FuelCapacity, RefuelSeconds
+        }
+
+        private static readonly string[] RemoteGameplayKeys =
+        {
+            "inventorySlots", "revivesPerZone", "toolPickupDistance", "scannerDuration", "scannerCooldown",
+            "scannerRange", "relaySyncSeconds", "relayCodeAttempts", "convoyFuelCapacity", "convoyRefuelSeconds"
+        };
+
+        [Networked, Capacity(10)] private NetworkArray<float> RemoteGameplayValues => default;
+
+        public static float RemoteGameplayValue(RemoteGameplayPresentation key, float fallback)
+        {
+            var state = Instance;
+            if (state == null || state.Object == null || !state.Object.IsValid) return fallback;
+            float encoded = state.RemoteGameplayValues.Get((int)key);
+            return encoded > 0f ? encoded - 1f : fallback;
+        }
+
+        private void InitializeRemoteGameplayPresentation()
+        {
+            for (int i = 0; i < RemoteGameplayKeys.Length; i++)
+                RemoteGameplayValues.Set(i, 1f + RemoteFixedBalanceSnapshot.GameplayValue(RemoteGameplayKeys[i], -1f));
+        }
+
         public override void Spawned()
         {
             EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
@@ -451,6 +482,7 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority
                 && !NetworkBootstrap.IsHostMigrationResumeActive)
             {
+                InitializeRemoteGameplayPresentation();
                 CurrentPhase = NetworkMatchPhase.CoreObjective;
                 Zone2Stage = Zone2MissionStage.Zone1CoreObjective;
                 RelayCompletionMask = 0;
@@ -478,7 +510,7 @@ namespace EchoProtocol.Networking
                 ResultRoster3 = default;
                 EscapeTimer = TickTimer.None;
                 EscapeDurationSeconds = 0f;
-                MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDurationSeconds);
+                MatchTimer = TickTimer.CreateFromSeconds(Runner, EffectiveMatchDurationSeconds);
                 ReturnToResultTimer = TickTimer.None;
                 ReturnToResultRequested = false;
                 _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
@@ -527,7 +559,8 @@ namespace EchoProtocol.Networking
                 {
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
-                    var toolsPerZone = MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone;
+                    var toolsPerZone = (int)RemoteFixedBalanceSnapshot.GameplayValue(
+                        "toolsPerZone", MatchDifficultyProfiles.Get(difficulty).TeamToolsPerZone);
                     var baselinePerZone = Mathf.Max(
                         TeamToolWorldSpawn.RequiredToolCountPerZone,
                         toolsPerZone);
@@ -553,11 +586,11 @@ namespace EchoProtocol.Networking
                             v02Plan, 1, _teamToolSpawnMinimumSpacing)
                         : TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog,
-                        baselinePerZone + extraZone1,
-                        baselinePerZone + extraZone2,
-                        baselinePerZone + extraZone3,
-                        _teamToolSpawnMinimumSpacing,
-                        supportBonus > 0);
+                        (int)RemoteFixedBalanceSnapshot.GameplayValue("zone1ToolBudget", baselinePerZone) + extraZone1,
+                        (int)RemoteFixedBalanceSnapshot.GameplayValue("zone2ToolBudget", baselinePerZone) + extraZone2,
+                        (int)RemoteFixedBalanceSnapshot.GameplayValue("zone3ToolBudget", baselinePerZone) + extraZone3,
+                        RemoteFixedBalanceSnapshot.GameplayValue("toolSpawnSpacing", _teamToolSpawnMinimumSpacing),
+                        supportBonus > 0, allowOptionalShortfall: RemoteFixedBalanceSnapshot.Current?.schemaVersion == "RFB-2");
 
                     if (TeamToolWorldSpawnInitialized &&
                         MatchAuthorityRuntime.Instance != null &&
@@ -979,7 +1012,7 @@ namespace EchoProtocol.Networking
                 Zone2Stage = Zone2MissionStage.SecurityHoldReady;
                 RelayRepairWindowTimer = TickTimer.CreateFromSeconds(
                     Runner,
-                    Mathf.Max(1f, _securityHoldRelayRetryWindowSeconds));
+                    Mathf.Max(1f, RemoteFixedBalanceSnapshot.GameplayValue("relayRepairWindowSeconds", _securityHoldRelayRetryWindowSeconds)));
                 Debug.Log("[MatchState] All 4 relays online. Stage -> SecurityHoldReady.");
             }
 
@@ -1546,7 +1579,7 @@ namespace EchoProtocol.Networking
             if (HasSecurityHoldParticipant(requester)) return true;
             if (SecurityHoldParticipantCount >= 4) return false;
 
-            SecurityHoldDurationSeconds = director.SecurityTerminal.DownloadDurationSeconds;
+            SecurityHoldDurationSeconds = RemoteFixedBalanceSnapshot.GameplayValue("terminalHoldSeconds", director.SecurityTerminal.DownloadDurationSeconds);
             SecurityHoldAccumulatedSeconds = Mathf.Clamp(SecurityHoldAccumulatedSeconds, 0f, SecurityHoldDurationSeconds);
             for (int index = 0; index < 4; index++)
             {
@@ -2036,7 +2069,8 @@ namespace EchoProtocol.Networking
 
             if (Zone3RefuelOperator == actor) return true;
             Zone3RefuelOperator = actor;
-            Zone3RefuelTimer = TickTimer.CreateFromSeconds(Runner, Zone3FuelRules.InsertDurationSeconds);
+            Zone3RefuelTimer = TickTimer.CreateFromSeconds(Runner,
+                RemoteGameplayValue(RemoteGameplayPresentation.RefuelSeconds, Zone3FuelRules.InsertDurationSeconds));
             _zone3RefuelLease = TickTimer.CreateFromSeconds(Runner, 0.75f);
             HandleReplicatedStateChanged();
             return true;
@@ -3105,7 +3139,7 @@ namespace EchoProtocol.Networking
             if (isPurge)
                 objectiveCompletion = AlienHuntMission.Instance.Burned / 9f;
             FinalDurationSeconds = Mathf.Clamp(
-                _matchDurationSeconds - Remaining(MatchTimer), 0f, _matchDurationSeconds);
+                EffectiveMatchDurationSeconds - Remaining(MatchTimer), 0f, EffectiveMatchDurationSeconds);
             FinalObjectiveCompletion = objectiveCompletion;
             if (result == NetworkMatchResult.Win
                 && CurrentPhase == NetworkMatchPhase.FinalHunt

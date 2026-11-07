@@ -23,6 +23,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private Vector3 _leftOpenOffset = new Vector3(0f, 0f, 1.2f);
         [SerializeField] private Vector3 _rightOpenOffset = new Vector3(0f, 0f, -1.2f);
         [SerializeField, Min(0.01f)] private float _animationDuration = 0.85f;
+        [Networked] private float RemoteTravelDuration { get; set; }
 
         [Header("Collision")]
         [SerializeField] private Collider _blockingCollider;
@@ -353,6 +354,7 @@ namespace EchoProtocol.Networking
                     : (_startsLocked ? NetworkDoorState.Locked : NetworkDoorState.Closed);
                 Broken = _startsBroken;
                 ActiveJammerId = default;
+                RemoteTravelDuration = EchoProtocol.Networking.Authority.RemoteFixedBalanceSnapshot.GameplayValue("doorTravelSeconds", 0f);
             }
 
             _offlineState = State;
@@ -380,7 +382,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            var duration = Mathf.Max(0.01f, _animationDuration);
+            var duration = Mathf.Max(0.01f, RemoteTravelDuration > 0f ? RemoteTravelDuration : _animationDuration);
             _visualOpenAmount = Mathf.MoveTowards(
                 _visualOpenAmount,
                 _targetOpenAmount,
