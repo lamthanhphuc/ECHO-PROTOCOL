@@ -207,7 +207,7 @@ namespace EchoProtocol.AI.AED
 
         public async Task<(AEDResolvePreMatchData Decision, string Error)> ResolvePreMatchAsync(
             Guid matchId, Guid decisionId, string experimentCondition,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, Guid? fallbackFromDecisionId = null)
         {
             var completion = new TaskCompletionSource<ApiResult<AEDResolvePreMatchResponse>>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
@@ -220,7 +220,8 @@ namespace EchoProtocol.AI.AED
                         decisionId = decisionId.ToString("D"),
                         resolutionMode = "Adaptive",
                         unityCompatibilityVersion = Application.version,
-                        experimentCondition = experimentCondition ?? string.Empty
+                        experimentCondition = experimentCondition ?? string.Empty,
+                        fallbackFromDecisionId = fallbackFromDecisionId?.ToString("D")
                     }, true, result => completion.TrySetResult(result));
                 try
                 {
@@ -231,7 +232,8 @@ namespace EchoProtocol.AI.AED
                             ? $"{result.Data?.errorCode}: {result.Data?.message}"
                             : null;
                     if (error == null && (!Guid.TryParse(result.Data.data?.decisionId, out var returnedId)
-                        || returnedId != decisionId))
+                        || (returnedId != decisionId && !(result.Data.data.IsManaged && result.Data.data.usedFixedFallback &&
+                            returnedId == AEDV02Plan.FixedFallbackDecisionId(decisionId)))))
                         error = "Backend response did not identify the requested decision.";
                     AEDv2E2ELog.Write("PREMATCH_RESULT", matchId, decisionId,
                         fields: $"http={result.StatusCode} version={Application.version} error={error}");

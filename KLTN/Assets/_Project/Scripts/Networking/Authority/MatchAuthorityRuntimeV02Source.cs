@@ -153,6 +153,7 @@ namespace EchoProtocol.Networking.Authority
             var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
             var runner = _bootstrap?.Runner;
             if (!_telemetryMatchActive || !HasStateAuthority || matchState == null || matchState.IsEnded || runner == null ||
+                matchState.IsManagedFixedScenario(MatchId) ||
                 RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive || Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal ||
                 settings == null || !settings.PacingV02GameplayEnabled && !settings.PacingV02ShadowEnabled) return;
             long tick = runner.Tick.Raw;
@@ -180,12 +181,14 @@ namespace EchoProtocol.Networking.Authority
             if (!_telemetry.Phase8LifecycleAdapter.EmitAEDV02World("v02:world:" + tick, DateTime.UtcNow, sample.PhaseName,
                 AEDV02SourceJson.World(sample), out _, out _)) { HoldV02Source("HOLD_WORLD_SOURCE_ENQUEUE_FAILED"); return; }
             _v02WorldTicks.Enqueue(tick);
-            while (_v02WorldTicks.Count != 0 && tick - _v02WorldTicks.Peek() > runner.TickRate * AEDV02PilotPolicy.WindowSeconds) _v02WorldTicks.Dequeue();
+            while (_v02WorldTicks.Count != 0 && tick - _v02WorldTicks.Peek() >
+                runner.TickRate * (_v02Configuration?.windowSeconds ?? AEDV02PilotPolicy.WindowSeconds)) _v02WorldTicks.Dequeue();
             _telemetry.TryFlushNow();
             if (_v02SourcePolling || tick < _v02NextSourcePollTick) return;
             var end = _v02WorldTicks.Where(x => tick - x >= 2 * runner.TickRate).DefaultIfEmpty(-1).Max();
             bool emergency = sample.Players.Any(x => x.LifeState == "DOWNED");
-            if (end < 0 || end - _v02WorldTicks.Peek() < runner.TickRate * (emergency ? AEDV02PilotOpportunities.ScarcityMinimumSeconds : AEDV02PilotPolicy.ObservationSeconds)) return;
+            if (end < 0 || end - _v02WorldTicks.Peek() < runner.TickRate * (emergency ? AEDV02PilotOpportunities.ScarcityMinimumSeconds
+                : (_v02Configuration?.observationSeconds ?? AEDV02PilotPolicy.ObservationSeconds))) return;
             _v02NextSourcePollTick = tick + 5 * runner.TickRate;
             PollV02Source(MatchId, context, new AEDV02SourceRequestDto { phaseOrdinal = sample.PhaseOrdinal, startTick = _v02WorldTicks.Peek(),
                 endTick = end, sceneManifestFingerprint = sample.SceneManifestFingerprint, allowEmergencyWindow = emergency });

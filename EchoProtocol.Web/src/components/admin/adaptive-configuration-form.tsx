@@ -1,0 +1,225 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Panel } from "@/components/ui/panel";
+import { adaptiveParameterLabels, adaptiveReasons } from "@/lib/types/adaptive";
+import type { AdaptiveAdminData, AdaptiveConfigRef, AdaptiveConfiguration, AdaptivePreview } from "@/lib/types/adaptive";
+
+const preMatchFields = [
+  ["survivalLow", "Ngưỡng sinh tồn thấp", 0.01, 99.99, .01],
+  ["survivalHigh", "Ngưỡng sinh tồn cao", 0.01, 99.99, .01],
+  ["noiseLow", "Ngưỡng tiếng ồn thấp", 0.01, 99.99, .01],
+  ["noiseHigh", "Ngưỡng tiếng ồn cao", 0.01, 99.99, .01],
+  ["minimumSurvivalSamples", "Mẫu sinh tồn tối thiểu / người", 1, 1000, 1],
+  ["minimumNoiseSamples", "Mẫu tiếng ồn tối thiểu / người", 1, 1000, 1],
+] as const;
+
+const pilotFields = [
+  ["observationSeconds", "Quan sát tối thiểu (giây)", 30, 115, 1],
+  ["windowSeconds", "Cửa sổ áp lực (giây)", 35, 120, 1],
+  ["evidenceMaxAgeSeconds", "Tuổi dữ liệu tối đa (giây)", 5, 10, 1],
+  ["reliefThreshold", "Ngưỡng giảm áp lực", .45, .65, .01],
+  ["increasePressureCeiling", "Trần áp lực để được tăng", .10, .25, .01],
+  ["downRecoverySeconds", "Bảo vệ sau khi gục hoặc được cứu (giây)", 20, 60, 1],
+  ["reliefCooldownSeconds", "Giữ mức trước khi giảm tiếp (giây)", 90, 600, 1],
+  ["increaseCooldownSeconds", "Giữ mức trước khi tăng tiếp (giây)", 180, 900, 1],
+  ["ordinarySupportQuota", "Quota hỗ trợ thường", 0, 2, 1],
+  ["emergencySupportQuota", "Quota hỗ trợ khẩn cấp", 0, 1, 1],
+  ["supportCooldownSeconds", "Hồi hỗ trợ thường (giây)", 90, 600, 1],
+  ["tierDwellSeconds", "Thời gian chờ hạ tier cảm nhận (giây)", 12, 30, 1],
+  ["protectionSeconds", "Bảo vệ trong tủ (giây)", 10, 15, 1],
+  ["protectionCooldownSeconds", "Hồi bảo vệ tủ (giây)", 120, 300, 1],
+  ["protectionQuota", "Quota bảo vệ tủ / người", 0, 2, 1],
+] as const;
+
+const safetyLabels: Record<string, string> = {
+  tierHysteresis: "Biên chuyển tier cảm nhận",
+  protectionGraceSeconds: "Bảo vệ khi ra tủ (giây)",
+  seekRecoverySeconds: "Phục hồi trước khi Stalker tìm lại (giây)",
+  ambushCooldownSeconds: "Hồi phục kích tủ (giây)",
+  sharedSpecialSeparationSeconds: "Khoảng cách giữa các chiêu đặc biệt (giây)",
+};
+
+const sample = { survival: 25 as number | null, noise: 50 as number | null, survivalSamples: 3, noiseSamples: 3 };
+const sampleFields = [["survival", "Sinh tồn"], ["noise", "Tiếng ồn"],
+  ["survivalSamples", "Mẫu sinh tồn"], ["noiseSamples", "Mẫu tiếng ồn"]] as const;
+
+function optionKey(reference: AdaptiveConfigRef | null) {
+  return reference ? JSON.stringify([reference.id, reference.version]) : "";
+}
+
+export function AdaptiveConfigurationForm({ data, compatibility }: { data: AdaptiveAdminData; compatibility: string }) {
+  const router = useRouter();
+  const [configuration, setConfiguration] = useState(data.configuration);
+  const [players, setPlayers] = useState([{ ...sample }]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [preview, setPreview] = useState<AdaptivePreview | null>(null);
+  const fixed = data.options.find((option) => optionKey(option) === optionKey(configuration.fixed));
+
+  function update(next: AdaptiveConfiguration) {
+    setConfiguration(next);
+    setPreview(null);
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const publish = submitter?.getAttribute("value") === "publish";
+    setBusy(true);
+    setMessage("");
+    setPreview(null);
+    try {
+      const response = await fetch(publish ? "/api/bff/admin/adaptive" : "/api/bff/admin/adaptive/preview", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ compatibility, configuration, ...(publish ? { expectedVersion: data.version } : { players }) }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || "Không lưu được kết quả.");
+      if (publish) router.refresh();
+      else setPreview(payload.data);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Không kết nối được máy chủ.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function options(field: "fixed" | "relief" | "increase") {
+    if (field === "fixed") return data.options.filter((option) => option.source === "Fixed");
+    if (!fixed) return [];
+    return data.options.filter((option) => option.source === "Adaptive" && option.fallbackConfigId === fixed.id &&
+      option.fallbackConfigVersion === fixed.version && (field === "relief"
+        ? option.supportItemBudget === fixed.supportItemBudget + 1 && option.chaseSpeed === fixed.chaseSpeed
+        : option.supportItemBudget === fixed.supportItemBudget &&
+          (fixed.chaseSpeed === 9 && option.chaseSpeed === 10 || fixed.chaseSpeed === 7.5 && option.chaseSpeed === 8)));
+  }
+
+  return <form className="grid gap-5" onSubmit={submit}>
+    <Panel>
+      <h2 className="text-lg font-semibold">Adaptive trước trận</h2>
+      <p className="muted my-3 break-all text-sm">{data.version ? `Bản đang dùng · ${data.version}` : "Đang dùng cấu hình mặc định."}</p>
+      <fieldset disabled={busy} className="grid gap-4">
+        <label className="flex items-center gap-2"><input type="checkbox" checked={configuration.enabled} onChange={(e) => update({ ...configuration, enabled: e.target.checked })} /> Bật policy trước trận</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={configuration.requireFullRoster} onChange={(e) => update({ ...configuration, requireFullRoster: e.target.checked })} /> Yêu cầu hồ sơ đủ điều kiện của toàn đội</label>
+        <p className="muted text-sm">Khi thiếu hồ sơ, chỉ được xét giảm áp lực nếu tắt yêu cầu đủ đội. Tăng áp lực luôn cần đủ đội.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {preMatchFields.map(([key, label, min, max, step]) => <label className="admin-field" key={key}>{label}
+            <input className="input" type="number" required min={min} max={max} step={step} value={configuration[key]}
+              onChange={(e) => update({ ...configuration, [key]: e.target.valueAsNumber })} />
+          </label>)}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([["fixed", "Fixed dự phòng"], ["relief", "Ứng viên giảm áp lực"], ["increase", "Ứng viên tăng áp lực"]] as const).map(([field, label]) =>
+            <label className="admin-field" key={field}>{label}
+              <select className="input" required={field === "fixed"} value={optionKey(configuration[field])} onChange={(e) => {
+                const selected = data.options.find((option) => optionKey(option) === e.target.value);
+                const reference = selected ? { id: selected.id, version: selected.version } : null;
+                update(field === "fixed" ? { ...configuration, fixed: reference, relief: null, increase: null }
+                  : { ...configuration, [field]: reference });
+              }}>
+                <option value="">{field === "fixed" ? "Chọn cấu hình đã duyệt" : "Dùng Fixed"}</option>
+                {options(field).map((option) => <option key={optionKey(option)} value={optionKey(option)}>{option.id} · {option.version}</option>)}
+              </select>
+            </label>)}
+        </div>
+      </fieldset>
+    </Panel>
+    <Panel>
+      <h2 className="mb-3 text-lg font-semibold">Adaptive v0.2 giữa trận</h2>
+      <p className="muted mb-2 text-sm">Pilot trên backend · {data.pilotEnabled ? "Đang bật" : "Đang tắt"}</p>
+      <p className="muted mb-4 text-sm">Chọn giá trị gốc và dải nấc liền kề trong catalog. Nấc mặc định luôn được giữ để có đường hoàn tác.</p>
+      <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Object.entries(data.catalog).map(([key, approved]) => {
+          const value = configuration.parameters[key];
+          const speedLocked = key === "ChaseSpeed" && !data.chaseSpeedAdminVerified;
+          const setParameter = (next: typeof value) => update({ ...configuration, parameters: { ...configuration.parameters, [key]: next } });
+          return <fieldset key={key} className="rounded border border-[var(--line)] px-3 pb-3">
+            <legend className="px-1 text-sm font-medium">{adaptiveParameterLabels[key] ?? key}</legend>
+            <label className="admin-field">Giá trị gốc
+              <select className="input" disabled={approved.baselineLocked} value={value.baseline}
+                onChange={(e) => setParameter({ ...value, baseline: Number(e.target.value) })}>
+                {value.tiers.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+              </select>
+            </label>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {approved.tiers.map((tier) => <label className="flex items-center gap-1 text-sm" key={tier}>
+                <input type="checkbox" checked={value.tiers.includes(tier)} disabled={speedLocked || tier === approved.baseline || tier === value.baseline}
+                  onChange={(e) => setParameter({ ...value, tiers: approved.tiers.filter((item) =>
+                    item === tier ? e.target.checked : value.tiers.includes(item)) })} /> {tier}
+              </label>)}
+            </div>
+            {approved.baselineLocked && <p className="muted mt-2 text-xs">{speedLocked
+              ? "Chờ bản build xác nhận Stalker dùng tốc độ đã duyệt."
+              : "Giá trị gốc do quy tắc khởi tạo hoặc bằng chứng trong trận quyết định."}</p>}
+          </fieldset>;
+        })}
+      </fieldset>
+    </Panel>
+    <Panel>
+      <h2 className="mb-3 text-lg font-semibold">Policy và chốt an toàn</h2>
+      <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {pilotFields.map(([key, label, min, max, step]) => <label className="admin-field" key={key}>{label}
+          <input className="input" type="number" required min={min} max={max} step={step} value={configuration.pilot[key]}
+            onChange={(e) => update({ ...configuration, pilot: { ...configuration.pilot, [key]: e.target.valueAsNumber } })} />
+        </label>)}
+      </fieldset>
+      <fieldset disabled={busy} className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <legend className="mb-2 text-sm">Trọng số áp lực · tổng bằng 1</legend>
+        {["Stalker", "Minion", "Gục", "Tài nguyên", "Mục tiêu"].map((label, index) => <label className="admin-field" key={label}>{label}
+          <input className="input" type="number" required min={.05} max={.5} step={.01} value={configuration.pilot.pressureWeights[index]}
+            onChange={(e) => update({ ...configuration, pilot: { ...configuration.pilot,
+              pressureWeights: configuration.pilot.pressureWeights.map((value, i) => i === index ? e.target.valueAsNumber : value) } })} />
+        </label>)}
+      </fieldset>
+      <details className="mt-5 text-sm">
+        <summary className="cursor-pointer font-semibold">Chốt chỉ xem và lý do Hold</summary>
+        <dl className="my-3 grid gap-2 sm:grid-cols-2">
+          {Object.entries(data.safety).map(([key, value]) => <div key={key}><dt className="muted">{safetyLabels[key] ?? key}</dt><dd>{value}</dd></div>)}
+        </dl>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Final Phase khóa mọi thay đổi tăng áp lực. Một lần đổi giữa trận chỉ được đổi một thông số và đi một nấc.</li>
+          <li>Mỗi kế hoạch có tối đa một thay đổi tăng áp lực. Khi chuyển nguồn gây áp lực, hệ thống kiểm tra hiệu ứng cũ đã được gỡ.</li>
+          <li>Quyết định chờ áp dụng có thể hủy. Nếu Host đã commit nhưng hiệu ứng lỗi, hệ thống giữ revision để đối soát và chỉ hoàn tác qua cửa sổ an toàn.</li>
+          {Object.entries(adaptiveReasons).filter(([code]) => code.startsWith("HOLD_")).map(([code, label]) =>
+            <li key={code}><code>{code}</code> · {label}</li>)}
+        </ul>
+      </details>
+    </Panel>
+    <Panel>
+      <h2 className="mb-3 text-lg font-semibold">Chạy thử với hồ sơ mẫu</h2>
+      <p className="muted mb-3 text-sm">Bỏ trống điểm để mô phỏng thiếu hồ sơ. Chạy thử dùng nội dung đang nhập và không lưu trận. Các chốt v0.2 được kiểm tra khi Host bắt đầu trận.</p>
+      <fieldset disabled={busy} className="grid gap-3">
+        {players.map((player, index) => <div key={index} className="grid gap-2 rounded border border-[var(--line)] p-3 sm:grid-cols-4">
+          <p className="sm:col-span-4">Người chơi {index + 1}</p>
+          {sampleFields.map(([key, label]) => <label className="admin-field" key={key}>{label}
+            <input className="input" type="number" min={0} max={key.endsWith("Samples") ? 2147483647 : 100}
+              required={key.endsWith("Samples")} step={key.endsWith("Samples") ? 1 : .01} value={player[key] ?? ""}
+              onChange={(e) => {
+                const value = e.target.value === "" ? null : e.target.valueAsNumber;
+                setPlayers(players.map((item, i) => i === index ? { ...item, [key]: value } : item));
+                setPreview(null);
+              }} />
+          </label>)}
+        </div>)}
+        <div className="flex flex-wrap gap-3">
+          <button className="button button-secondary" type="button" disabled={players.length === 4}
+            onClick={() => { setPlayers([...players, { ...sample }]); setPreview(null); }}>Thêm người</button>
+          <button className="button button-secondary" type="button" disabled={players.length === 1}
+            onClick={() => { setPlayers(players.slice(0, -1)); setPreview(null); }}>Bớt người</button>
+          <button className="button button-secondary" type="submit" value="preview">Chạy thử</button>
+        </div>
+      </fieldset>
+      {preview && <div role="status" className="mt-4 space-y-1 text-sm">
+        <p>{preview.usedFixedFallback ? "Fixed dự phòng" : "Ứng viên được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
+        {preview.rule && <p className="muted">{preview.rule}</p>}
+        {preview.reason && <p>{adaptiveReasons[preview.reason] ?? preview.reason}</p>}
+      </div>}
+    </Panel>
+    <div>
+      <button className="button" type="submit" value="publish" disabled={busy}>{busy ? "Đang xử lý…" : "Xuất bản cho trận mới"}</button>
+      {message && <p role="alert" className="mt-3 text-sm text-red-300">{message}</p>}
+    </div>
+  </form>;
+}

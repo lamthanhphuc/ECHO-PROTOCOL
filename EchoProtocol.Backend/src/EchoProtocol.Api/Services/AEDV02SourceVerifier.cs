@@ -17,6 +17,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
     {
         if (request == null || matchId == Guid.Empty || request.PhaseOrdinal < 1 || request.StartTick < 0 ||
             request.EndTick <= request.StartTick || !AEDV02WorldSample.Hash(request.SceneManifestFingerprint)) return Hold("AED_V02_SOURCE_INVALID");
+        var managed = await AdaptiveConfigurationService.ForMatchAsync(db, matchId, ct);
+        var policy = managed?.Pilot ?? AdaptiveConfigurationService.DefaultPilot;
         var content = await db.AEDV02SceneContents.AsNoTracking().SingleOrDefaultAsync(x => x.Fingerprint == request.SceneManifestFingerprint, ct);
         if (content == null || AEDV02Plan.Hash(content.ManifestJson) != content.Fingerprint) return Hold("HOLD_UNTRUSTED_SCENE_MANIFEST");
         AEDV02SceneManifest? manifest;
@@ -75,9 +77,9 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
             x.EventSequence <= last.Event.EventSequence).OrderBy(x => x.EventSequence).ToArray();
         if (sourceRange.Length != last.Event.EventSequence - frames[0].Event.EventSequence + 1 ||
             sourceRange.Select(x => x.EventSequence).Distinct().Count() != sourceRange.Length) return Hold("HOLD_SOURCE_SEQUENCE_GAP");
-        if (request.EndTick - request.StartTick < tickRate * (request.AllowEmergencyWindow ? AEDV02PilotOpportunities.ScarcityMinimumSeconds : AEDV02PilotPolicy.ObservationSeconds) ||
-            request.EndTick - request.StartTick > tickRate * AEDV02PilotPolicy.WindowSeconds ||
-            clock.GetUtcNow().UtcDateTime - last.Event.Ts > TimeSpan.FromSeconds(AEDV02PilotPolicy.EvidenceMaxAgeSeconds) ||
+        if (request.EndTick - request.StartTick < tickRate * (request.AllowEmergencyWindow ? AEDV02PilotOpportunities.ScarcityMinimumSeconds : policy.ObservationSeconds) ||
+            request.EndTick - request.StartTick > tickRate * policy.WindowSeconds ||
+            clock.GetUtcNow().UtcDateTime - last.Event.Ts > TimeSpan.FromSeconds(policy.EvidenceMaxAgeSeconds) ||
             last.Event.Ts > clock.GetUtcNow().UtcDateTime.AddSeconds(2)) return Hold("HOLD_STALE_SOURCE");
         var facts = users.ToDictionary(x => x, _ => new List<AEDV02PressureFact>());
         var supportInstances = await AcceptedSupportInstances(matchId, accepted, ct);
@@ -305,7 +307,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                 list.RemoveAll(x => x.Channel == AEDV02PressureChannel.Resource && shortScarcity.Contains(x.EpisodeId));
             }
         var pressure = facts.ToDictionary(x => x.Key, x => AEDV02PressureNormalizer.Project(matchId, x.Key, now,
-            request.StartTick / (double)tickRate, Enumerable.Repeat(now, 5).ToArray(), x.Value));
+            request.StartTick / (double)tickRate, Enumerable.Repeat(now, 5).ToArray(), x.Value,
+            policy.ObservationSeconds, policy.WindowSeconds, policy.EvidenceMaxAgeSeconds, policy.PressureWeights));
         if (pressure.Values.Any(x => !x.Complete && (!request.AllowEmergencyWindow || x.Reason != "HOLD_INSUFFICIENT_EVIDENCE"))) return Hold("HOLD_INSUFFICIENT_EVIDENCE");
         bool fullPressure = pilotOpportunities && pressure.Values.All(x => x.Complete);
         var team = AEDV02PilotOpportunities.TeamPressure(pressure.Values.ToArray(), last.Sample.Players.Count(x => x.LifeState != "ALIVE"),
@@ -340,7 +343,7 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
             facts.ToDictionary(x => x.Key, x => x.Value.Where(f => f.Channel == AEDV02PressureChannel.Stalker)
                 .OrderByDescending(f => f.EndedSeconds).Select(f => f.EpisodeId).FirstOrDefault() ?? string.Empty),
             accepted.Where(x => x.MatchId == matchId && x.UserId.HasValue && x.EventType is "PLAYER_DOWNED" or "PLAYER_REVIVED" &&
-                x.Ts >= last.Event.Ts.AddSeconds(-AEDV02PilotPolicy.DownRecoverySeconds) && x.EventSequence <= last.Event.EventSequence)
+                x.Ts >= last.Event.Ts.AddSeconds(-policy.DownRecoverySeconds) && x.EventSequence <= last.Event.EventSequence)
                 .Select(x => x.UserId!.Value).Distinct().ToArray(), safe, last.Sample.LogicalPhase, last.Sample.Zone, last.Sample.PhaseName,
             last.Sample.PlanRevision, last.Sample.PlanFingerprint, last.Event.Ts, fullPressure,
             fullPressure ? [] : pilotOpportunities ? ["MinimumObservation"] : ["ResourceNeedOutsideRevive", "ObjectiveThreatInterruption"], cabinetClues.ToArray(),

@@ -4,6 +4,8 @@ import { getAccessToken } from "@/lib/auth/session";
 import { backendRequest } from "./backend-client";
 import { BackendApiError } from "@/lib/errors";
 import type { PlayerProfile } from "@/lib/types/player";
+import type { AdaptiveAdminData, AdaptiveMatchAudit } from "@/lib/types/adaptive";
+import type { ProfileTuningData } from "@/lib/types/profile-tuning";
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
@@ -44,6 +46,10 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  profileTuning: () => authorized<ProfileTuningData>("/api/admin/ai-profile"),
+  adaptive: (compatibility?: string) => authorized<AdaptiveAdminData>(
+    `/api/admin/adaptive${compatibility ? `?compatibility=${encodeURIComponent(compatibility)}` : ""}`),
+  matchAdaptive: (id: string) => authorized<AdaptiveMatchAudit>(`/api/admin/matches/${encodeURIComponent(id)}/adaptive`),
   matches: (query: string) => authorized<AdminMatchesPage>(`/api/admin/matches/logs${query}`),
   match: (id: string) => authorized<AdminMatchDetail>(`/api/admin/matches/${encodeURIComponent(id)}`),
   moderationHistory: (id: string) => authorized<AdminModerationAction[]>(`/api/admin/moderation/${encodeURIComponent(id)}`),

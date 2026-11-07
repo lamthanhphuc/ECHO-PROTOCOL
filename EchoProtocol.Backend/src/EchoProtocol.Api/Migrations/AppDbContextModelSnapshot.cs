@@ -205,6 +205,22 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("AEDV02Cancellations", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02ClientObservation", b =>
+                {
+                    b.Property<Guid>("DecisionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ObservedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DecisionId", "UserId");
+
+                    b.ToTable("AEDV02ClientObservations", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02Decision", b =>
                 {
                     b.Property<Guid>("DecisionId")
@@ -464,6 +480,38 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("MatchId", "PhaseOrdinal", "EndTick");
 
                     b.ToTable("AEDV02VerifiedSources");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveConfigurationVersion", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Compatibility")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ConfigurationJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Version");
+
+                    b.HasIndex("Compatibility", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("AdaptiveConfigurationVersions");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdaptiveInputSnapshot", b =>
@@ -921,6 +969,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<DateTime>("NextAttemptAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProfileTuningVersion")
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1750,6 +1801,33 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ProfileTuningVersion", b =>
+                {
+                    b.Property<string>("Version")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Version");
+
+                    b.HasIndex("Revision")
+                        .IsUnique();
+
+                    b.ToTable("ProfileTuningVersions");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>
                 {
                     b.Property<Guid>("PurchaseId")
@@ -2371,6 +2449,12 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<string>("PreMatchRule")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileTuningVersion")
+                        .HasColumnType("text");
+
                     b.Property<string>("RequestFingerprint")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2864,6 +2948,15 @@ namespace EchoProtocol.Api.Migrations
                     b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
                         .WithMany()
                         .HasForeignKey("MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AEDV02ClientObservation", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.AEDV02Decision", null)
+                        .WithMany()
+                        .HasForeignKey("DecisionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -5,6 +5,11 @@ namespace EchoProtocol.Api.Services;
 
 public static class AEDPreMatchPolicyV1
 {
+    public const string SurvivalRelief = "AED-PRE-010-SURVIVAL-LOW-RELIEVE";
+    public const string NoiseRelief = "AED-PRE-020-NOISE-LOW-RELIEVE";
+    public const string Increase = "AED-PRE-030-BOTH-HIGH-INCREASE";
+    public const string Hold = "AED-PRE-040-MIXED-HOLD";
+
     public static string? SelectRule(
         AdaptiveInputSnapshot snapshot,
         decimal survivalLow,
@@ -33,15 +38,10 @@ public static class AEDPreMatchPolicyV1
             return null;
         }
 
-        if (survival < survivalLow)
-            return "AED-PRE-010-SURVIVAL-LOW-RELIEVE";
-
-        if (noise < noiseLow)
-            return "AED-PRE-020-NOISE-LOW-RELIEVE";
-
-        if (survival >= survivalHigh && noise >= noiseHigh)
-            return "AED-PRE-030-BOTH-HIGH-INCREASE";
-
-        return "AED-PRE-040-MIXED-HOLD";
+        return SelectRule(survival, noise, survivalLow, survivalHigh, noiseLow, noiseHigh);
     }
+
+    public static string SelectRule(decimal survival, decimal noise, decimal survivalLow, decimal survivalHigh,
+        decimal noiseLow, decimal noiseHigh) => survival < survivalLow ? SurvivalRelief
+        : noise < noiseLow ? NoiseRelief : survival >= survivalHigh && noise >= noiseHigh ? Increase : Hold;
 }

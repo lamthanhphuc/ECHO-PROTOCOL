@@ -25,6 +25,8 @@ public sealed class ScenarioDecision
     public string FallbackConfigVersion { get; set; } = string.Empty;
     public bool UsedFixedFallback { get; set; }
     public string? FallbackReasonCode { get; set; }
+    public string? PreMatchRule { get; set; }
+    public string? ProfileTuningVersion { get; set; }
     public ScenarioCandidateValidationStatus? CandidateValidationStatus { get; set; }
     public string ResolutionResult { get; set; } = string.Empty;
     public ScenarioDecisionStatus Status { get; set; }

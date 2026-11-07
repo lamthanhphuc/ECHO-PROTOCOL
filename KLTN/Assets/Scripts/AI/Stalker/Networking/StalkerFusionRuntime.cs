@@ -628,7 +628,7 @@ namespace EchoProtocol.AI.Stalker.Networking
             }
 
             controller.ApplyScenarioMonsterParameters(
-                config.MonsterParameters);
+                config.MonsterParameters, NetworkMatchState.Instance?.IsManagedFixedScenario(matchId) == true);
 
             _boundScenarioMatchId =
                 matchId;

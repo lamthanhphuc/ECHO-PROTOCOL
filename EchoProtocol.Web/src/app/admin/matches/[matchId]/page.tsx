@@ -3,14 +3,17 @@ import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
+import { AdaptiveMatchPanel } from "@/components/admin/adaptive-match-panel";
 import { formatDate } from "@/lib/utils/format";
 
 const outcomes: Record<string, string> = { WIN: "Thắng", LOSE: "Thua" };
 
 export default async function MatchDetailPage({ params }: { params: Promise<{ matchId: string }> }) {
   const { matchId } = await params;
-  const [{ match, players }, history] = await Promise.all([adminApi.match(matchId), adminApi.moderationHistory(matchId)]);
-    const stoppedByAdmin = history.some(
+  const [{ match, players }, history, adaptive] = await Promise.all([
+    adminApi.match(matchId), adminApi.moderationHistory(matchId), adminApi.matchAdaptive(matchId),
+  ]);
+  const stoppedByAdmin = history.some(
     (item) => item.action === "STOP_MATCH",
   );
 
@@ -47,6 +50,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
         </tr>)}
       </tbody></table></div>}
     </Panel>
+    <AdaptiveMatchPanel audit={adaptive} matchId={matchId} />
     <ModerationPanel key={actions.join()} targetId={matchId} actions={actions} history={history} />
   </>;
 }

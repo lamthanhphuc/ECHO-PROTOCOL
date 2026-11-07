@@ -8,4 +8,5 @@ public sealed class MatchProfileProcessingJob
     public DateTime NextAttemptAtUtc { get; set; }
     public DateTime? LeaseExpiresAtUtc { get; set; }
     public string LastError { get; set; } = string.Empty;
+    public string? ProfileTuningVersion { get; set; }
 }

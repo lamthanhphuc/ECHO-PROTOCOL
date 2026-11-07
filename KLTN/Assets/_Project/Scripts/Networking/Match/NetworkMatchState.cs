@@ -332,6 +332,7 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkString<_64> AppliedScenarioFallbackConfigId { get; private set; }
         [Networked] public int ScenarioConfigSourceValue { get; private set; }
         [Networked] public int ScenarioSupportItemBudget { get; private set; }
+        [Networked] private NetworkBool ScenarioConfigManaged { get; set; }
         [Networked] public double ScenarioDetectionFillRate { get; private set; }
         [Networked] public double ScenarioDetectionDecayRate { get; private set; }
         [Networked] public double ScenarioChaseSpeed { get; private set; }
@@ -500,6 +501,7 @@ namespace EchoProtocol.Networking
                 AppliedScenarioRouteModifier = default;
                 AppliedScenarioFallbackConfigId = default;
                 ScenarioSupportItemBudget = 0;
+                ScenarioConfigManaged = false;
                 ScenarioDetectionFillRate = 0d;
                 ScenarioDetectionDecayRate = 0d;
                 ScenarioChaseSpeed = 0d;
@@ -4704,7 +4706,6 @@ namespace EchoProtocol.Networking
 
             var scenarioRuntime =
                 ScenarioConfigAuthorityRuntime.EnsureExists();
-
             var currentBase =
                 decisionPoint == ScenarioDecisionPoint.PreMatch
                     ? FixedDirector.CreateFixedBaseline(LobbyMapCatalog.TelemetryMapId(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name))
@@ -4856,6 +4857,10 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        public bool IsManagedFixedScenario(Guid matchId) =>
+            Object != null && Object.IsValid && matchId != Guid.Empty && MatchAuthorityRuntime.Instance?.MatchId == matchId &&
+            ScenarioConfigManaged && ScenarioConfigSourceValue == 0;
+
         private void ResolveScenarioConfigAuthoritative(
             ScenarioDecisionPoint decisionPoint,
             string phaseContext)
@@ -4874,6 +4879,15 @@ namespace EchoProtocol.Networking
                 : ScenarioResolutionMode.Fixed;
             var scenarioRuntime =
                 ScenarioConfigAuthorityRuntime.EnsureExists();
+            if (decisionPoint == ScenarioDecisionPoint.PreMatch && mode == ScenarioResolutionMode.Adaptive &&
+                scenarioRuntime.TryGetStagedBackendPreMatch(matchId, out var stagedDecision, out var stagedConfig) &&
+                stagedDecision.IsManaged && IsScenarioDecisionWindowOpen(decisionPoint, phaseContext))
+            {
+                ScenarioConfigManaged = true;
+                ApplyScenarioConfigAuthoritative(stagedConfig, matchId);
+                return;
+            }
+            if (decisionPoint != ScenarioDecisionPoint.PreMatch && ScenarioConfigManaged) return;
             var experimentCondition =
                 authority != null
                     ? authority.ExperimentCondition

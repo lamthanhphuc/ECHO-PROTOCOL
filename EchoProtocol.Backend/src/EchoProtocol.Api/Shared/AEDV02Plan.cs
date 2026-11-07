@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Globalization;
 using System.Linq;
@@ -38,13 +39,31 @@ namespace EchoProtocol.AI.Common.AED
             _values = (double[])values.Clone();
         }
         public static AEDV02Plan Normal() => new AEDV02Plan(NormalValues);
-        public bool TryProposeRelief(double[][] components, double[] scores, bool recentDown, int zone, out AEDV02Plan next)
+        public static Guid FixedFallbackDecisionId(Guid candidateDecisionId)
+        {
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes("AED_V02_FIXED_FALLBACK|" + candidateDecisionId.ToString("D"))).Take(16).ToArray();
+            bytes[7] = (byte)((bytes[7] & 0x0f) | 0x50);
+            bytes[8] = (byte)((bytes[8] & 0x3f) | 0x80);
+            return new Guid(bytes);
+        }
+        // The legacy scenario registry used a separate Stalker tuning scale.
+        // This bridge maps only the approved next legacy tier to v0.2 world units per second.
+        public static bool TryMapPreMatchChaseIncrease(double legacyBaseline, double legacyCandidate, out double speed)
+        {
+            speed = 8d;
+            return (legacyBaseline == 9d && legacyCandidate == 10d) ||
+                (legacyBaseline == 7.5d && legacyCandidate == 8d);
+        }
+
+        public bool TryProposeRelief(double[][] components, double[] scores, bool recentDown, int zone, out AEDV02Plan next,
+            double reliefThreshold = .65, Func<AEDV02Key, double, bool>? allowed = null)
         {
             next = null!;
             if (components == null || scores == null || components.Length == 0 || components.Length != scores.Length ||
                 scores.Any(x => !AEDV02PilotPolicy.Finite(x) || x < 0 || x > 1) ||
                 components.Any(x => x == null || x.Length != 5 || x.Any(y => !AEDV02PilotPolicy.Finite(y) || y < 0 || y > 1)) ||
-                !recentDown && scores.All(x => x < .65)) return false;
+                !recentDown && scores.All(x => x < reliefThreshold)) return false;
             if (components.Any(x => x[0] > 0))
             {
                 foreach (var key in new[] { AEDV02Key.ChaseSpeed, AEDV02Key.DetectionAcquireSeconds, AEDV02Key.PostChaseCooldownSeconds,
@@ -55,14 +74,17 @@ namespace EchoProtocol.AI.Common.AED
                     if (Get(key) != value)
                     {
                         int index = Array.IndexOf(Values[(int)key], Get(key));
-                        next = With(key, Values[(int)key][index + Math.Sign(Array.IndexOf(Values[(int)key], value) - index)]); return true;
+                        var tier = Values[(int)key][index + Math.Sign(Array.IndexOf(Values[(int)key], value) - index)];
+                        if (allowed?.Invoke(key, tier) == false) continue;
+                        next = With(key, tier); return true;
                     }
                 }
             }
             if (zone >= 1 && zone <= 3 && components.Any(x => x[1] > 0))
             {
                 var key = zone == 1 ? AEDV02Key.Zone1MinionCap : zone == 2 ? AEDV02Key.Zone2MinionCap : AEDV02Key.Zone3AdaptiveMinionCap;
-                if (Get(key) != Values[(int)key][0]) { next = With(key, Values[(int)key][0]); return true; }
+                if (Get(key) != Values[(int)key][0] && allowed?.Invoke(key, Values[(int)key][0]) != false)
+                { next = With(key, Values[(int)key][0]); return true; }
             }
             return false;
         }

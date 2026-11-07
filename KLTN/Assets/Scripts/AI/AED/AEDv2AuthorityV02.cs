@@ -16,6 +16,8 @@ namespace EchoProtocol.AI.AED
         private static string _v02Roster;
         private static string _v02Scene;
         private static DateTime _v02SourceEndedUtc;
+        private static AEDV02ConfigurationDto _v02Configuration;
+        private static double V02EvidenceMaxAge => _v02Configuration?.evidenceMaxAgeSeconds ?? AEDV02PilotPolicy.EvidenceMaxAgeSeconds;
         private static readonly Dictionary<Guid, AEDV02PressureSnapshot> V02Pressure = new Dictionary<Guid, AEDV02PressureSnapshot>();
         private static readonly Dictionary<Guid, AEDV02PressureTierMemory> V02Tiers = new Dictionary<Guid, AEDV02PressureTierMemory>();
         private static readonly Dictionary<Guid, string> V02Episodes = new Dictionary<Guid, string>();
@@ -23,7 +25,7 @@ namespace EchoProtocol.AI.AED
 
         public static bool CommitV02(Guid matchId, AEDV02DecisionRequestDto request, AEDV02DecisionResultDto approval,
             string currentRoster, bool hasStateAuthority, bool adaptiveNormal, bool gameplayEnabled, bool safeWindow,
-            DateTime nowUtc, out string reason)
+            DateTime nowUtc, out string reason, AEDV02ConfigurationDto configuration = null)
         {
             reason = "ABORT_AMBUSH_REVALIDATION";
             if (!hasStateAuthority || !adaptiveNormal || !gameplayEnabled || request == null || approval == null || matchId == Guid.Empty ||
@@ -61,7 +63,11 @@ namespace EchoProtocol.AI.AED
                 (!next.TryValidateChange(previous, point, AEDV02PhaseMap.LogicalPhase(request.targetPhaseName) == 4,
                     optional, out _, out reason) && !(request.support != null && next.ToArray().SequenceEqual(previous.ToArray()) && reason == "HOLD_SINGLE_DELTA_REQUIRED"))) return false;
             if (request.proposedReservations != null && next.Get(AEDV02Key.ResourceGrade) == previous.Get(AEDV02Key.ResourceGrade)) return false;
-            if (_v02Match == Guid.Empty) V02Hide.Reset(matchId);
+            if (_v02Match == Guid.Empty)
+            {
+                V02Hide.Reset(matchId);
+                _v02Configuration = configuration;
+            }
             _v02Match = matchId; _v02Decision = decisionId; _v02Plan = next; _v02Revision = approval.planRevision;
             _v02InitialOptional = optional; _v02Roster = currentRoster; _v02Scene = approval.sceneManifestFingerprint;
             InvalidateV02Source(); reason = string.Empty; return true;
@@ -89,7 +95,7 @@ namespace EchoProtocol.AI.AED
                 source.planFingerprint != _v02Plan.Fingerprint() || source.sceneManifestFingerprint != _v02Scene ||
                 !AEDV02WorldSample.Hash(source.fingerprint) || source.startTick < 0 || source.endTick <= source.startTick ||
                 !DateTime.TryParse(source.sourceEndedAtUtc, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ended) ||
-                nowUtc - ended.ToUniversalTime() > TimeSpan.FromSeconds(AEDV02PilotPolicy.EvidenceMaxAgeSeconds) || ended.ToUniversalTime() > nowUtc.AddSeconds(2)) return false;
+                nowUtc - ended.ToUniversalTime() > TimeSpan.FromSeconds(V02EvidenceMaxAge) || ended.ToUniversalTime() > nowUtc.AddSeconds(2)) return false;
             var roster = users.ToHashSet();
             var resolved = new Dictionary<Guid, AEDV02PressureSnapshot>();
             foreach (var player in source.players)
@@ -97,7 +103,7 @@ namespace EchoProtocol.AI.AED
                 if (player == null || !Guid.TryParse(player.userId, out var user) || !roster.Contains(user) || resolved.ContainsKey(user) ||
                     player.components == null || player.components.Length != 5 || player.components.Any(x => !AEDV02PilotPolicy.Finite(x) || x < 0 || x > 1) ||
                     !AEDV02PilotPolicy.Finite(player.score) || player.score < 0 || player.score > 1 || player.tier != AEDV02PilotPolicy.Tier(player.score)) return false;
-                var weights = new[] { .30, .20, .25, .15, .10 };
+                var weights = _v02Configuration?.pressureWeights ?? AEDV02PressureNormalizer.DefaultWeights;
                 if (Math.Abs(player.components.Select((x, i) => x * weights[i]).Sum() - player.score) > .000001) return false;
                 resolved.Add(user, new AEDV02PressureSnapshot(player.components, player.score, true, "BACKEND_SOURCE_VERIFIED"));
             }
@@ -115,14 +121,14 @@ namespace EchoProtocol.AI.AED
         public static bool TryGetV02Pressure(Guid matchId, Guid user, DateTime nowUtc, out AEDV02PressureSnapshot pressure)
         {
             pressure = default;
-            return _v02Match == matchId && nowUtc - _v02SourceEndedUtc <= TimeSpan.FromSeconds(AEDV02PilotPolicy.EvidenceMaxAgeSeconds) && V02Pressure.TryGetValue(user, out pressure);
+            return _v02Match == matchId && nowUtc - _v02SourceEndedUtc <= TimeSpan.FromSeconds(V02EvidenceMaxAge) && V02Pressure.TryGetValue(user, out pressure);
         }
         public static int V02StableTier(Guid matchId, Guid user, DateTime nowUtc, double simulationSeconds)
         {
             if (!TryGetV02Pressure(matchId, user, nowUtc, out var pressure))
             { if (V02Tiers.TryGetValue(user, out var unknown)) unknown.InvalidateObservation(); return -1; }
             if (!V02Tiers.TryGetValue(user, out var memory)) V02Tiers.Add(user, memory = new AEDV02PressureTierMemory());
-            return memory.Update(pressure, simulationSeconds);
+            return memory.Update(pressure, simulationSeconds, _v02Configuration?.tierDwellSeconds ?? AEDV02PilotPolicy.TierDwellSeconds, V02EvidenceMaxAge);
         }
         public static bool TryGrantV02Hide(Guid matchId, Guid user, ulong spot, double simulationSeconds,
             DateTime nowUtc, out AEDV02HideProtectionToken token)
@@ -131,7 +137,10 @@ namespace EchoProtocol.AI.AED
             if (V02Hide.TryGetCurrentToken(matchId, user, spot, simulationSeconds, out token)) return true;
             if (!TryGetV02Pressure(matchId, user, nowUtc, out var pressure)) return false;
             if (!V02Episodes.TryGetValue(user, out var episode) || string.IsNullOrWhiteSpace(episode)) return false;
-            return V02Hide.TryGrant(matchId, user, spot, episode, _v02Revision, simulationSeconds, _v02Plan != null, pressure, out token);
+            return V02Hide.TryGrant(matchId, user, spot, episode, _v02Revision, simulationSeconds, _v02Plan != null, pressure, out token,
+                _v02Configuration?.protectionSeconds ?? AEDV02PilotPolicy.ProtectionSeconds,
+                _v02Configuration?.protectionCooldownSeconds ?? AEDV02PilotPolicy.ProtectionCooldownSeconds,
+                _v02Configuration?.protectionQuota ?? AEDV02PilotPolicy.ProtectionQuota);
         }
         public static bool BlocksV02Hide(Guid matchId, Guid user, ulong spot, double seconds, out string reason) =>
             V02Hide.BlocksForceExit(matchId, user, spot, seconds, out reason);
@@ -143,6 +152,7 @@ namespace EchoProtocol.AI.AED
         {
             if (matchId != Guid.Empty && matchId != _v02Match) return;
             _v02Match = Guid.Empty; _v02Decision = Guid.Empty; _v02Plan = null; _v02Revision = 0; _v02InitialOptional = 0;
+            _v02Configuration = null;
             _v02Roster = null; _v02Scene = null; V02Pressure.Clear(); V02Episodes.Clear(); V02Tiers.Clear(); V02Hide.Reset(Guid.Empty);
         }
     }
