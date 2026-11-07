@@ -122,7 +122,7 @@ public sealed class MatchAuthorityController : ControllerBase
     {
         ErrorCodes.MatchNotFound or ErrorCodes.NotFound => StatusCodes.Status404NotFound,
         ErrorCodes.MatchAuthorityForbidden => StatusCodes.Status403Forbidden,
-        ErrorCodes.BalanceTestDisabled => StatusCodes.Status403Forbidden,
+        ErrorCodes.BalanceDisabled => StatusCodes.Status403Forbidden,
         ErrorCodes.BalanceVersionUnavailable or ErrorCodes.BalanceNotRemoteFixed => StatusCodes.Status404NotFound,
         ErrorCodes.BalanceSnapshotInvalid => StatusCodes.Status409Conflict,
         ErrorCodes.MatchSessionConflict or ErrorCodes.MatchPlayerBindingConflict => StatusCodes.Status409Conflict,

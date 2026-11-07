@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
@@ -111,8 +111,8 @@ public sealed partial class RemoteFixedBalanceAdminService(
     public ServiceResult<RemoteFixedStatusResponse> GetStatus() =>
         ServiceResult<RemoteFixedStatusResponse>.Success(new()
         {
-            RemoteFixedEnabled = settings.Value.EnableRemoteFixedTest,
-            MatchDataPolicy = RemoteFixedBalanceContract.TestOnly,
+            RemoteFixedEnabled = settings.Value.EnableRemoteFixed,
+            MatchDataPolicy = RemoteFixedBalanceContract.Standard,
             ProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion,
             SupportedMaps = Maps
         });
