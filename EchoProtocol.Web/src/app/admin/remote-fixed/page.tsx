@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { RemoteFixedCreateForm } from "@/components/admin/remote-fixed-create-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
@@ -20,8 +20,9 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
   ]);
   return <>
     <PageHeader title="Nội dung và cân bằng" description="Chọn nội dung tương thích và kích hoạt phiên bản cho các trận Remote Fixed thử nghiệm mới." />
-    <div className="grid gap-4 sm:grid-cols-2">
-      <StatCard label="Tính năng thử nghiệm" value={status.remoteFixedEnabled ? "Đang bật" : "Đang tắt"} />
+    <div className="grid gap-4 sm:grid-cols-3">
+      <StatCard label="Remote Fixed production" value={status.remoteFixedEnabled ? "Đang bật" : "Đang tắt"} />
+      <StatCard label="Thử nghiệm RFB-2" value={status.gameplayTestEnabled ? "Đang bật" : "Đang tắt"} />
       <StatCard label="Phiên bản quy tắc" value={status.protocolVersion} />
     </div>
     <Panel className="mt-5">

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
@@ -113,8 +113,9 @@ public sealed partial class RemoteFixedBalanceAdminService(
     public ServiceResult<RemoteFixedStatusResponse> GetStatus() =>
         ServiceResult<RemoteFixedStatusResponse>.Success(new()
         {
-            RemoteFixedEnabled = settings.Value.EnableRemoteFixedTest,
-            MatchDataPolicy = RemoteFixedBalanceContract.TestOnly,
+            RemoteFixedEnabled = settings.Value.EnableRemoteFixed,
+            GameplayTestEnabled = settings.Value.EnableRemoteFixedGameplayTest,
+            MatchDataPolicy = RemoteFixedBalanceContract.Standard,
             ProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion,
             SupportedMaps = Maps
         });
@@ -129,6 +130,9 @@ public sealed partial class RemoteFixedBalanceAdminService(
         if (!RemoteFixedBalanceContract.IsValidSnapshot(target.SnapshotJson, target.MapId) ||
             !string.Equals(RemoteFixedBalanceContract.ComputeHash(target.SnapshotJson), target.ContentHash, StringComparison.Ordinal))
             return Invalid<RemoteFixedActivationResponse>("Stored snapshot or hash is invalid.");
+        if (activate && RemoteFixedBalanceContract.UsesGameplayTuning(target.SnapshotJson) &&
+            !settings.Value.EnableRemoteFixedGameplayTest)
+            return Invalid<RemoteFixedActivationResponse>("RFB-2 activation requires an enabled gameplay test environment.");
         if (activate && RemoteFixedBalanceContract.GameVersion(target.SnapshotJson) is { } build &&
             !settings.Value.RemoteFixedGameVersions.Contains(build))
             return Invalid<RemoteFixedActivationResponse>("Unity build is outside the registered compatibility list.");
