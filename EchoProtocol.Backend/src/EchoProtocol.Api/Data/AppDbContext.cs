@@ -1,4 +1,4 @@
-using EchoProtocol.Api.Common;
+﻿using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -328,7 +328,7 @@ public class AppDbContext : DbContext
                         AND "BalanceProtocolVersion" = 'RFB-1'
                         AND "BalanceVersion" IS NOT NULL
                         AND "BalanceHash" IS NOT NULL
-                        AND "MatchDataPolicy" = 'TEST_ONLY'
+                        AND "MatchDataPolicy" IN ('TEST_ONLY', 'STANDARD')
                         AND "MapId" IS NOT NULL
                         AND "Difficulty" IS NOT NULL
                         AND "MapId" IN ('SciFi', 'Scene_A')

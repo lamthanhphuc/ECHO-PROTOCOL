@@ -8,5 +8,5 @@ public sealed class MatchAuthoritySettings
     public int JoinProofLifetimeSeconds { get; set; } = 120;
     public int LeaseLifetimeSeconds { get; set; } = 45;
     public int TelemetryDelegationRetentionHours { get; set; } = 24;
-    public bool EnableRemoteFixedTest { get; set; } = false;
+    public bool EnableRemoteFixed { get; set; } = false;
 }

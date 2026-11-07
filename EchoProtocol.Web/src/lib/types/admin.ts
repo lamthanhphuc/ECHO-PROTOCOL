@@ -1,4 +1,4 @@
-import type { PagedResponse, UserRole } from "./common";
+﻿import type { PagedResponse, UserRole } from "./common";
 import type { PaymentStatus } from "./payment";
 
 export interface AdminUser {
@@ -176,7 +176,7 @@ export interface RemoteFixedAudit {
 }
 export interface RemoteFixedStatus {
   remoteFixedEnabled: boolean;
-  matchDataPolicy: "TEST_ONLY";
+  matchDataPolicy: "STANDARD" | "TEST_ONLY";
   protocolVersion: "RFB-1";
   supportedMaps: Array<"SciFi" | "Scene_A">;
 }

@@ -30,7 +30,7 @@ public static class ErrorCodes
     public const string MatchCapacityReached = "MATCH_CAPACITY_REACHED";
     public const string JoinProofInvalid = "JOIN_PROOF_INVALID";
     public const string MatchPlayerBindingConflict = "MATCH_PLAYER_BINDING_CONFLICT";
-    public const string BalanceTestDisabled = "BALANCE_TEST_DISABLED";
+    public const string BalanceDisabled = "BALANCE_DISABLED";
     public const string BalanceVersionUnavailable = "BALANCE_VERSION_UNAVAILABLE";
     public const string BalanceSnapshotInvalid = "BALANCE_SNAPSHOT_INVALID";
     public const string BalanceNotRemoteFixed = "BALANCE_NOT_REMOTE_FIXED";
