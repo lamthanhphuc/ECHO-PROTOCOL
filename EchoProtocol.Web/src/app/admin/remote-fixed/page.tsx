@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { RemoteFixedCreateForm } from "@/components/admin/remote-fixed-create-form";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
@@ -19,7 +19,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
   return <>
     <PageHeader title="Cân bằng cố định" description="Tạo cấu hình, kiểm tra rồi kích hoạt cho các trận mới." />
     <div className="grid gap-4 sm:grid-cols-2">
-      <StatCard label="Tính năng thử nghiệm" value={status.remoteFixedEnabled ? "Đang bật" : "Đang tắt"} />
+      <StatCard label="Remote Fixed production" value={status.remoteFixedEnabled ? "Đang bật" : "Đang tắt"} />
       <StatCard label="Phiên bản quy tắc" value={status.protocolVersion} />
     </div>
     <Panel className="mt-5">

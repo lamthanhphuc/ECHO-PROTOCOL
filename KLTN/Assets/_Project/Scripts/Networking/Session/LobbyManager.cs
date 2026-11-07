@@ -21,7 +21,6 @@ namespace EchoProtocol.Networking
         public const string GameSceneName = "SciFi";
 
         [SerializeField] private NetworkBootstrap _bootstrap;
-        [SerializeField] private bool _useRemoteFixedBalanceTest;
         private bool _matchStartInProgress;
         private CancellationTokenSource _preMatchCancellation;
         private BackendAdaptiveInputSnapshotProvider _snapshotProvider;
@@ -421,8 +420,13 @@ namespace EchoProtocol.Networking
                     ReportError("Fusion room information is not ready. Match was not started; retry after room synchronization.");
                     return;
                 }
+                bool useRemoteFixed =
+                    authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Fixed
+                    && (selectedScene == GameSceneName
+                        || selectedScene == LobbyMapCatalog.ExplorationScene);
+
                 var (accepted, error) =
-                    await authority.StartMatchAsync(_useRemoteFixedBalanceTest);
+                    await authority.StartMatchAsync(useRemoteFixed);
                 Debug.LogWarning(
                     $"[NETDIAG][BackendStartResult] Accepted={accepted}; " +
                     $"SameRunner={ReferenceEquals(runner, _bootstrap?.Runner)}; " +
@@ -441,7 +445,7 @@ namespace EchoProtocol.Networking
                 loading.BackendAuthorized(
                     runner,
                     loadingAttempt,
-                    _useRemoteFixedBalanceTest);
+                    useRemoteFixed);
 
                 if (runner == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || !runner.IsSceneAuthority

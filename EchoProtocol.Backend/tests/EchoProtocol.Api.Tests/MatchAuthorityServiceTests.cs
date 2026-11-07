@@ -1,4 +1,4 @@
-using EchoProtocol.Api.Configurations;
+﻿using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.Entities;
@@ -279,7 +279,7 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal("FIXED", result.Data!.ResolutionMode);
         Assert.Equal("REMOTE_FIXED", result.Data.BalanceSource);
-        Assert.Equal("TEST_ONLY", result.Data.MatchDataPolicy);
+        Assert.Equal("STANDARD", result.Data.MatchDataPolicy);
         Assert.Equal("TEST-SCIFI-NORMAL-001", result.Data.BalanceVersion);
     }
 
@@ -293,7 +293,7 @@ public sealed class MatchAuthorityServiceTests
         var matchId = await CreateBoundHostMatch(service, host, "remote-disabled");
         var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
         Assert.False(result.IsSuccess);
-        Assert.Equal("BALANCE_TEST_DISABLED", result.ErrorCode);
+        Assert.Equal("BALANCE_DISABLED", result.ErrorCode);
     }
 
     [Fact]
@@ -1613,7 +1613,7 @@ public sealed class MatchAuthorityServiceTests
             JoinProofLifetimeSeconds = 120,
             LeaseLifetimeSeconds = 45,
             TelemetryDelegationRetentionHours = 24,
-            EnableRemoteFixedTest = remoteEnabled
+            EnableRemoteFixed = remoteEnabled
         });
         return new MatchAuthorityService(
             db,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
@@ -58,7 +58,8 @@ namespace EchoProtocol.Networking.Authority
                 && context.resolutionMode == "FIXED"
                 && context.balanceSource == "REMOTE_FIXED"
                 && context.balanceProtocolVersion == "RFB-1"
-                && context.matchDataPolicy == "TEST_ONLY"
+                && (context.matchDataPolicy == "STANDARD"
+                    || context.matchDataPolicy == "TEST_ONLY")
                 && !string.IsNullOrWhiteSpace(context.balanceVersion)
                 && !string.IsNullOrWhiteSpace(context.balanceHash)
                 && context.balanceVersion == locked.balanceVersion

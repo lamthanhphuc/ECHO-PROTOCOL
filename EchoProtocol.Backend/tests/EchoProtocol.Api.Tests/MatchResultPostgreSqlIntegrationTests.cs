@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using EchoProtocol.Api.Common;
@@ -2406,7 +2406,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
     private static ChangeRemoteFixedActivationRequest Change(string? expected) => new() { ExpectedActiveVersion = expected ?? "", Reason = "PR5 integration test" };
     private static RemoteFixedBalanceAdminService CreateRemoteAdminService(AppDbContext db) =>
-        new(db, new FixedTimeProvider(Now), Options.Create(new MatchAuthoritySettings { EnableRemoteFixedTest = true }));
+        new(db, new FixedTimeProvider(Now), Options.Create(new MatchAuthoritySettings { EnableRemoteFixed = true }));
     private static async Task SeedAdminVersions(PostgresScope scope, bool firstActive, params string[] versions)
     {
         await using var db = scope.CreateDbContext();
@@ -2484,7 +2484,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
         var settings = Options.Create(new MatchAuthoritySettings
         {
             ProofSigningKey = "test-proof-key-that-is-at-least-32-bytes",
-            EnableRemoteFixedTest = true
+            EnableRemoteFixed = true
         });
         return new MatchAuthorityService(db, new MatchJoinProofService(settings, time), settings, time);
     }

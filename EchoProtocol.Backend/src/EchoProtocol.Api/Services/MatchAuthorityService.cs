@@ -1,4 +1,4 @@
-using EchoProtocol.Api.Common;
+﻿using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
@@ -621,8 +621,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         RemoteFixedBalanceVersion? selected = null;
         if (source == "REMOTE_FIXED")
         {
-            if (!_settings.EnableRemoteFixedTest)
-                return Failure<MatchAuthorityResponse>("Remote Fixed testing is disabled", ErrorCodes.BalanceTestDisabled);
+            if (!_settings.EnableRemoteFixed)
+                return Failure<MatchAuthorityResponse>("Remote Fixed is disabled", ErrorCodes.BalanceDisabled);
 
             selected = await _db.RemoteFixedBalanceVersions.AsNoTracking().SingleOrDefaultAsync(item =>
                 item.IsActive && item.MapId == mapId && item.Difficulty == difficulty &&
@@ -644,9 +644,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         match.BalanceProtocolVersion = protocol;
         match.BalanceVersion = selected?.Version;
         match.BalanceHash = selected?.ContentHash;
-        match.MatchDataPolicy = selected is null
-            ? RemoteFixedBalanceContract.Standard
-            : RemoteFixedBalanceContract.TestOnly;
+        match.MatchDataPolicy = RemoteFixedBalanceContract.Standard;
         foreach (var player in match.Players)
             player.Participated = player.DisconnectedAtUtc == null;
         match.Status = MatchAuthorityStatus.InMatch;
