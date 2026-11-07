@@ -7,7 +7,9 @@ export async function GET() {
   catch (error) { return routeErrorResponse(error); }
 }
 export async function POST(request: Request) {
-  if (request.headers.get("origin") !== new URL(request.url).origin)
+  const origin = request.headers.get("origin");
+  const expectedOrigin = process.env.WEB_PUBLIC_ORIGIN;
+  if (!expectedOrigin || origin !== expectedOrigin)
     return Response.json({ success: false, message: "Yêu cầu không hợp lệ." }, { status: 403 });
   try {
     await requireSession();
