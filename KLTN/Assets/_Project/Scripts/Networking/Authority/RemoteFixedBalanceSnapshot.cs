@@ -15,6 +15,7 @@ namespace EchoProtocol.Networking.Authority
         public MinionStats minion;
         public GameplayEntry[] gameplay;
         public ContentVariant content;
+        public bool IsTestOnly { get; private set; }
         private Dictionary<string, float> _gameplay;
 
         [Serializable]
@@ -108,7 +109,8 @@ namespace EchoProtocol.Networking.Authority
                 && context.resolutionMode == "FIXED"
                 && context.balanceSource == "REMOTE_FIXED"
                 && context.balanceProtocolVersion == "RFB-1"
-                && context.matchDataPolicy == "TEST_ONLY"
+                && (context.matchDataPolicy == "STANDARD"
+                    || context.matchDataPolicy == "TEST_ONLY")
                 && !string.IsNullOrWhiteSpace(context.balanceVersion)
                 && !string.IsNullOrWhiteSpace(context.balanceHash)
                 && context.balanceVersion == locked.balanceVersion
@@ -117,9 +119,11 @@ namespace EchoProtocol.Networking.Authority
                 && TryDecode(
                     locked.snapshotPayloadBase64,
                     context.balanceHash,
-                    out var decoded) && decoded.MatchesContent(expectedMap)))
+                    out var decoded) && decoded.MatchesContent(expectedMap)
+                && (decoded.schemaVersion != "RFB-2" || context.matchDataPolicy == "TEST_ONLY")))
                 return false;
 
+            decoded.IsTestOnly = context.matchDataPolicy == "TEST_ONLY";
             snapshot = decoded;
             return true;
         }

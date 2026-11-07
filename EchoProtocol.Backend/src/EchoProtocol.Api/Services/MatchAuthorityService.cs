@@ -1,4 +1,4 @@
-using EchoProtocol.Api.Common;
+﻿using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
@@ -622,8 +622,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         RemoteFixedBalanceVersion? selected = null;
         if (source == "REMOTE_FIXED")
         {
-            if (!_settings.EnableRemoteFixedTest)
-                return Failure<MatchAuthorityResponse>("Remote Fixed testing is disabled", ErrorCodes.BalanceTestDisabled);
+            if (!_settings.EnableRemoteFixed)
+                return Failure<MatchAuthorityResponse>("Remote Fixed is disabled", ErrorCodes.BalanceDisabled);
 
             selected = await _db.RemoteFixedBalanceVersions.AsNoTracking().SingleOrDefaultAsync(item =>
                 item.IsActive && item.MapId == mapId && item.Difficulty == difficulty &&
@@ -635,8 +635,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 !string.Equals(RemoteFixedBalanceContract.ComputeHash(selected.SnapshotJson),
                     selected.ContentHash, StringComparison.Ordinal))
                 return Failure<MatchAuthorityResponse>("Remote Fixed Balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
-            if (RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson) && v2Request?.SupportsGameplayTuning != true)
-                return Failure<MatchAuthorityResponse>("This balance version requires a build with RFB-2 gameplay tuning", ErrorCodes.BalanceSnapshotInvalid);
+            if (RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson) &&
+                (!_settings.EnableRemoteFixedGameplayTest || v2Request?.SupportsGameplayTuning != true))
+                return Failure<MatchAuthorityResponse>("This balance version requires an enabled RFB-2 test environment and compatible build", ErrorCodes.BalanceSnapshotInvalid);
             if (RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson) is { } build &&
                 (build != v2Request?.GameVersion || !_settings.RemoteFixedGameVersions.Contains(build)))
                 return Failure<MatchAuthorityResponse>("Unity build does not match the selected content version", ErrorCodes.BalanceSnapshotInvalid);
@@ -650,9 +651,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         match.BalanceProtocolVersion = protocol;
         match.BalanceVersion = selected?.Version;
         match.BalanceHash = selected?.ContentHash;
-        match.MatchDataPolicy = selected is null
-            ? RemoteFixedBalanceContract.Standard
-            : RemoteFixedBalanceContract.TestOnly;
+        match.MatchDataPolicy = selected is not null && RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson)
+            ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard;
         foreach (var player in match.Players)
             player.Participated = player.DisconnectedAtUtc == null;
         match.Status = MatchAuthorityStatus.InMatch;

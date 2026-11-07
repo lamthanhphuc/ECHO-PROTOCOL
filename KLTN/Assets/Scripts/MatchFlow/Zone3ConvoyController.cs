@@ -44,7 +44,7 @@ namespace EchoProtocol.Networking
         {
             var runner = NetworkBootstrap.Instance != null ? NetworkBootstrap.Instance.Runner : null;
             if (!Debug.isDebugBuild || runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority
-                || MatchAuthorityRuntime.Instance?.TryGetRemoteFixedBalance(out _) != true
+                || RemoteFixedBalanceSnapshot.Current?.IsTestOnly != true
                 || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)
                 return false;
             DebugFastConvoy = !DebugFastConvoy;

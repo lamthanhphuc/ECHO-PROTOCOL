@@ -115,7 +115,7 @@ namespace EchoProtocol.Networking.Tests
                     balanceProtocolVersion = "RFB-1",
                     balanceVersion = "pr3-test-version",
                     balanceHash = hash,
-                    matchDataPolicy = "TEST_ONLY"
+                    matchDataPolicy = "STANDARD"
                 },
                 new LockedBalanceDto
                 {
@@ -172,7 +172,7 @@ namespace EchoProtocol.Networking.Tests
                     break;
 
                 case "policy":
-                    data.Context.matchDataPolicy = "STANDARD";
+                    data.Context.matchDataPolicy = "INVALID";
                     break;
 
                 case "map":
@@ -205,6 +205,23 @@ namespace EchoProtocol.Networking.Tests
                     "NORMAL",
                     out _),
                 Is.False);
+        }
+
+        [Test]
+        public void LockedBalance_LegacyTestOnly_IsAccepted()
+        {
+            var data = LockedExample();
+            data.Context.matchDataPolicy = "TEST_ONLY";
+
+            Assert.That(
+                RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                    data.Context,
+                    data.Locked,
+                    data.MatchId,
+                    "SciFi",
+                    "NORMAL",
+                    out _),
+                Is.True);
         }
     }
 }

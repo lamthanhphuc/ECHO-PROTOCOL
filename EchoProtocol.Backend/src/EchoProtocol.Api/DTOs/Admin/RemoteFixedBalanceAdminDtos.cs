@@ -62,6 +62,7 @@ public sealed class RemoteFixedAuditResponse
 public sealed class RemoteFixedStatusResponse
 {
     public bool RemoteFixedEnabled { get; init; }
+    public bool GameplayTestEnabled { get; init; }
     public string MatchDataPolicy { get; init; } = "";
     public string ProtocolVersion { get; init; } = "";
     public IReadOnlyList<string> SupportedMaps { get; init; } = [];

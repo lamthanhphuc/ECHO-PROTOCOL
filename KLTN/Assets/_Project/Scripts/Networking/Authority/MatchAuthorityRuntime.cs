@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
@@ -2069,7 +2069,7 @@ namespace EchoProtocol.Networking.Authority
         }
 
         public async Task<(bool Accepted, string Error)> StartMatchAsync(
-            bool useRemoteFixedTest = false)
+            bool useRemoteFixed = false)
         {
             if (_backendEndRequestInProgress)
                 return (false, "Previous match is still being finalized.");
@@ -2085,14 +2085,14 @@ namespace EchoProtocol.Networking.Authority
                 !runner.IsServer || !runner.SessionInfo.IsValid)
                 return (false, "Authoritative room is unavailable.");
 
-            if (useRemoteFixedTest &&
+            if (useRemoteFixed &&
                 requestedScenarioResolutionMode != ScenarioResolutionMode.Fixed)
                 return (false, "Remote Fixed requires FIXED mode.");
 
             var matchId = MatchId;
             var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
             var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
-            var result = useRemoteFixedTest
+            var result = useRemoteFixed
                 ? await _api.StartV2Async(matchId, mapId, difficulty)
                 : await _api.StartAsync(matchId, mapId, difficulty);
 
@@ -2103,7 +2103,7 @@ namespace EchoProtocol.Networking.Authority
                 return (false, error);
             }
 
-            if (useRemoteFixedTest)
+            if (useRemoteFixed)
             {
                 string failure = null;
                 RemoteFixedBalanceSnapshot snapshot = null;
