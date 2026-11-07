@@ -21,17 +21,17 @@ public sealed record AdaptiveConfiguration(
     Dictionary<string, AdaptiveParameter> Parameters, AdaptivePilotPolicy Pilot);
 
 public sealed record PublishAdaptiveConfiguration(
-    [property: Required, StringLength(80)] string Compatibility,
+    [Required, StringLength(80)] string Compatibility,
     string? ExpectedVersion,
-    [property: Required] AdaptiveConfiguration Configuration);
+    [Required] AdaptiveConfiguration Configuration);
 
 public sealed record AdaptiveSample(
-    [property: Range(0, 100)] decimal? Survival,
-    [property: Range(0, 100)] decimal? Noise,
-    [property: Range(0, int.MaxValue)] int SurvivalSamples,
-    [property: Range(0, int.MaxValue)] int NoiseSamples);
+    [Range(0, 100)] decimal? Survival,
+    [Range(0, 100)] decimal? Noise,
+    [Range(0, int.MaxValue)] int SurvivalSamples,
+    [Range(0, int.MaxValue)] int NoiseSamples);
 
 public sealed record PreviewAdaptiveConfiguration(
-    [property: Required, StringLength(80)] string Compatibility,
-    [property: Required] AdaptiveConfiguration Configuration,
-    [property: Required, MinLength(1), MaxLength(4)] AdaptiveSample[] Players);
+    [Required, StringLength(80)] string Compatibility,
+    [Required] AdaptiveConfiguration Configuration,
+    [Required, MinLength(1), MaxLength(4)] AdaptiveSample[] Players);

@@ -9,9 +9,9 @@ using Npgsql;
 namespace EchoProtocol.Api.Services;
 
 public sealed record ProposeShopPrice(Guid ItemId, int ExpectedPrice,
-    [property: Range(0, 1000000)] int Price, [property: Required, StringLength(500, MinimumLength = 10)] string Reason);
+    [Range(0, 1000000)] int Price, [Required, StringLength(500, MinimumLength = 10)] string Reason);
 
-public sealed record ReviewShopPrice([property: Required] bool? Approve, [property: Required, StringLength(500, MinimumLength = 10)] string Reason);
+public sealed record ReviewShopPrice([Required] bool? Approve, [Required, StringLength(500, MinimumLength = 10)] string Reason);
 
 public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, TimeProvider clock)
 {
