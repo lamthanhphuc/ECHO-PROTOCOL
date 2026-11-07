@@ -56,7 +56,9 @@ namespace EchoProtocol.AI.Common.AED
         }
 
         public static AEDV02HistoricalCompetence Competence(Guid user, string axis, string context, DateTime now,
-            IEnumerable<AEDV02HistoricalOpportunity> observations)
+            IEnumerable<AEDV02HistoricalOpportunity> observations, int minimumMatches = HistoryMatches,
+            int minimumResolved = HistoryResolved, double maximumAgeDays = HistoryMaxAgeDays,
+            double halfLifeDays = HistoryHalfLifeDays)
         {
             if (user == Guid.Empty || axis is not ("Stalker" or "Minion" or "Objective" or "Tool" or "Teamwork" or "ResourceManagement") ||
                 !AEDV02WorldSample.Hash(context) || observations == null)
@@ -65,7 +67,7 @@ namespace EchoProtocol.AI.Common.AED
             if (all.Any(x => x == null || x.Opportunity == null || x.MatchId == Guid.Empty))
                 return new AEDV02HistoricalCompetence(null, 0, 0, 0, "Invalid");
             var source = all.Where(x => x.Opportunity.UserId == user && x.Opportunity.Axis == axis && x.Context == context &&
-                x.ContractVersion == Version && x.EndedAtUtc <= now && (now - x.EndedAtUtc).TotalDays <= HistoryMaxAgeDays).ToArray();
+                x.ContractVersion == Version && x.EndedAtUtc <= now && (now - x.EndedAtUtc).TotalDays <= maximumAgeDays).ToArray();
             if (source.Any(x => !x.Opportunity.IsValid() || !AEDV02WorldSample.Hash(x.SourceFingerprint)))
                 return new AEDV02HistoricalCompetence(null, 0, 0, 0, "Invalid");
             var groups = source.GroupBy(x => (x.MatchId, x.Opportunity.Id)).ToArray();
@@ -74,8 +76,8 @@ namespace EchoProtocol.AI.Common.AED
             var unique = groups.Select(g => g.OrderBy(x => x.Opportunity.Resolution == "Censored").ThenByDescending(x => x.EndedAtUtc).First()).ToArray();
             var resolved = unique.Where(x => x.Opportunity.Resolution != "Censored").ToArray();
             int matches = resolved.Select(x => x.MatchId).Distinct().Count(), censored = unique.Length - resolved.Length;
-            double? score = MatchBalancedScore(resolved, now);
-            string confidence = unique.Length == 0 ? "ColdStart" : matches >= HistoryMatches && resolved.Length >= HistoryResolved &&
+            double? score = MatchBalancedScore(resolved, now, halfLifeDays);
+            string confidence = unique.Length == 0 ? "ColdStart" : matches >= minimumMatches && resolved.Length >= minimumResolved &&
                 censored * 4 <= unique.Length ? "Sufficient" : "Insufficient";
             if (axis == "Tool" && unique.Length != 0)
             {
@@ -84,9 +86,9 @@ namespace EchoProtocol.AI.Common.AED
                 {
                     var family = unique.Where(x => x.Opportunity.ToolId == type).ToArray();
                     var successesAndFailures = family.Where(x => x.Opportunity.Resolution != "Censored").ToArray();
-                    var familyScore = MatchBalancedScore(successesAndFailures, now);
-                    if (!familyScore.HasValue || successesAndFailures.Length < HistoryResolved ||
-                        successesAndFailures.Select(x => x.MatchId).Distinct().Count() < HistoryMatches ||
+                    var familyScore = MatchBalancedScore(successesAndFailures, now, halfLifeDays);
+                    if (!familyScore.HasValue || successesAndFailures.Length < minimumResolved ||
+                        successesAndFailures.Select(x => x.MatchId).Distinct().Count() < minimumMatches ||
                         (family.Length - successesAndFailures.Length) * 4 > family.Length)
                     { score = null; confidence = "Insufficient"; break; }
                     minimum = Math.Min(minimum, familyScore.Value);
@@ -96,12 +98,12 @@ namespace EchoProtocol.AI.Common.AED
             return new AEDV02HistoricalCompetence(score, matches, resolved.Length, censored, confidence);
         }
 
-        private static double? MatchBalancedScore(IEnumerable<AEDV02HistoricalOpportunity> resolved, DateTime now)
+        private static double? MatchBalancedScore(IEnumerable<AEDV02HistoricalOpportunity> resolved, DateTime now, double halfLifeDays)
         {
             double weighted = 0, weights = 0;
             foreach (var match in resolved.GroupBy(x => x.MatchId))
             {
-                double weight = Math.Pow(.5, (now - match.Max(x => x.EndedAtUtc)).TotalDays / HistoryHalfLifeDays);
+                double weight = Math.Pow(.5, (now - match.Max(x => x.EndedAtUtc)).TotalDays / halfLifeDays);
                 weighted += match.Average(x => x.Opportunity.Resolution == "Success" ? 1d : 0d) * weight;
                 weights += weight;
             }

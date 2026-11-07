@@ -49,6 +49,9 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         if (scenario == null || scenario.ResolutionMode != ScenarioResolutionMode.Adaptive || scenario.SnapshotId != request.SnapshotId ||
             scenario.Snapshot.SnapshotContentFingerprint != request.SnapshotFingerprint || scenario.Snapshot.RosterIdentity != request.RosterIdentity)
             return Fail("HOLD_STALE_SNAPSHOT", ErrorCodes.ScenarioDecisionStaleRoster);
+        var managed = await AdaptiveConfigurationService.ForVersionAsync(db, scenario.PolicyConfigVersion, ct);
+        var policy = managed?.Pilot ?? AdaptiveConfigurationService.DefaultPilot;
+        if (managed is not null && scenario.UsedFixedFallback) return Fail("HOLD_PREMATCH_FIXED_FALLBACK");
         var read = await new ScenarioSnapshotReadService(db, clock).GetAsync(caller, matchId, scenario.DecisionId, ct);
         bool coldStart = read.IsSuccess && read.Data!.SnapshotValidity == "PARTIAL" && read.Data.ReasonCodes is { Length: > 0 } &&
             read.Data.ReasonCodes.All(x => x is "PROFILE_MISSING" or "INSUFFICIENT_OBSERVED_PROFILE_EVIDENCE");
@@ -64,7 +67,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         if (await db.AEDV02Decisions.AnyAsync(x => x.MatchId == matchId && x.PhaseOrdinal == request.PhaseOrdinal && x.DecisionPoint == request.DecisionPoint && x.WindowSequence >= request.WindowSequence, ct)) return Fail("HOLD_WINDOW_ALREADY_USED");
         var initialOptional = previousRow?.InitialOptionalBudget ?? (int)proposed.Get(AEDV02Key.OptionalToolBudget);
         AEDV02SourceResult? source = null;
-        string hold = string.Empty;
+        string hold = managed is not null && Enum.GetValues<AEDV02Key>().Any(key =>
+            !managed.Parameters[key.ToString()].Tiers.Contains(proposed.Get(key))) ? "HOLD_ADMIN_TIER_DISABLED" : string.Empty;
         if (!preMatch)
         {
             if (!AEDV02WorldSample.Hash(request.SourceFingerprint)) return Fail("HOLD_INSUFFICIENT_EVIDENCE");
@@ -89,14 +93,24 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         if (preMatch)
         {
             var legacy = scenario.ScenarioConfig;
-            var baseline = await db.ScenarioConfigs.AsNoTracking().SingleOrDefaultAsync(x => x.ScenarioConfigId == legacy.FallbackConfigId, ct);
-            if (ScenarioFingerprint.Config(legacy) != scenario.ScenarioConfigFingerprint || baseline == null || !baseline.IsFixedFallback ||
+            var baseline = await db.ScenarioConfigs.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.ScenarioConfigId == legacy.FallbackConfigId && x.ScenarioConfigVersion == legacy.FallbackConfigVersion, ct);
+            double mappedSpeed = 0d;
+            bool mappedIncrease = baseline != null && AEDV02Plan.TryMapPreMatchChaseIncrease(baseline.ChaseSpeed, legacy.ChaseSpeed, out mappedSpeed);
+            if (ScenarioFingerprint.Config(legacy) != scenario.ScenarioConfigFingerprint || baseline == null ||
+                (managed is null ? !baseline.IsFixedFallback : !AdaptiveConfigurationService.IsApprovedFixed(baseline)) ||
                 legacy.DetectionFillRate != baseline.DetectionFillRate || legacy.DetectionDecayRate != baseline.DetectionDecayRate ||
-                legacy.ChaseSpeed != baseline.ChaseSpeed || legacy.SearchDuration != baseline.SearchDuration)
+                legacy.ChaseSpeed != baseline.ChaseSpeed && !mappedIncrease || legacy.SearchDuration != baseline.SearchDuration)
                 hold = "HOLD_PREMATCH_LEGACY_TUNING_UNMAPPED";
+            else if (mappedIncrease && proposed.Get(AEDV02Key.ChaseSpeed) != mappedSpeed)
+                hold = "HOLD_PREMATCH_CHASE_SPEED_MISMATCH";
             else if (legacy.SupportItemBudget is < 0 or > 2 || proposed.Get(AEDV02Key.OptionalToolBudget) != legacy.SupportItemBudget)
                 hold = "HOLD_PREMATCH_SUPPLY_MISMATCH";
-            else if (changed.Any(x => x is not (AEDV02Key.CabinetAmbushEnabled or AEDV02Key.OptionalToolBudget)))
+            else if (managed is not null && !MatchesManagedPreMatch(managed, proposed, mappedIncrease ? mappedSpeed : null))
+                hold = "HOLD_PREMATCH_CONFIG_MISMATCH";
+            else if (hold.Length == 0 && (managed is null
+                ? changed.Any(x => x is not (AEDV02Key.CabinetAmbushEnabled or AEDV02Key.OptionalToolBudget))
+                : adverse))
             {
                 var users = await db.MatchPlayerBindings.Where(x => x.MatchId == matchId).Select(x => x.UserId).ToArrayAsync(ct);
                 var history = await new AEDV02HistoricalCompetenceService(db, telemetry, clock).ReadAsync(matchId, users, request.SceneManifestFingerprint, "Stalker", ct);
@@ -107,7 +121,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         if (preMatch && proposed.Get(AEDV02Key.ResourceGrade) != 0) hold = "HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED";
         if (request.Support != null && (preMatch || !request.Support.IsValid() || changed.Length != 0 || request.ProposedReservations != null)) return Fail("AED_V02_SUPPORT_ACTION_INVALID", ErrorCodes.ValidationError);
         if (!preMatch && source != null && hold.Length == 0 && request.Support != null)
-            hold = await ValidateSupport(matchId, request.Support, source, content.ManifestJson, ct);
+            hold = await ValidateSupport(matchId, request.Support, source, content.ManifestJson, policy, ct);
         if (!preMatch && source != null && changed.Contains(AEDV02Key.ResourceGrade) && hold.Length == 0 &&
             !await ValidatePlacement(matchId, request.ProposedReservations, source, (int)proposed.Get(AEDV02Key.ResourceGrade), content.ManifestJson, ct)) hold = "HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED";
         if (!preMatch && source != null && changed.Contains(AEDV02Key.ResourceGrade) && proposed.Get(AEDV02Key.ResourceGrade) == 3 &&
@@ -130,7 +144,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             {
                 if (!source.PressureComplete || source.OpportunityContractVersion != AEDV02PilotOpportunities.Version || source.TeamPressureStatus != "Verified")
                     hold = "HOLD_INSUFFICIENT_EVIDENCE";
-                else if (source.TeamPressureTier < 3 || source.PlayerPressure.Values.Any(x => x >= .25) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
+                else if (source.TeamPressureTier < 3 || source.PlayerPressure.Values.Any(x => x >= policy.IncreasePressureCeiling) || source.RecentDownUsers.Length != 0) hold = "HOLD_TEAM_OVERLOADED";
                 else
                 {
                     string axis = (int)changedKey < 6
@@ -151,16 +165,19 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             else if (hold.Length == 0 && request.Support == null && proposed.PositiveTokens(initialOptional) >= previous.PositiveTokens(initialOptional))
             {
                 int channel = (int)changedKey < 6 ? 0 : changedKey is AEDV02Key.Zone1MinionCap or AEDV02Key.Zone2MinionCap or AEDV02Key.Zone3AdaptiveMinionCap ? 1 : 3;
-                if ((source.RecentDownUsers.Length == 0 && source.PlayerPressure.Values.All(x => x < .65) &&
+                if ((source.RecentDownUsers.Length == 0 && source.PlayerPressure.Values.All(x => x < policy.ReliefThreshold) &&
                     !(changedKey == AEDV02Key.ResourceGrade && source.ResourceNeeds?.Length > 0)) ||
                     source.PressureComponents.Values.All(x => x[channel] <= 0)) hold = "HOLD_RELIEF_CAUSE_UNVERIFIED";
             }
             if (hold.Length == 0 && previousRow != null && previousRow.ChangedKey.Length != 0 &&
                 (previousRow.AppliedAtUtc.HasValue || previousRow.ApplyStatus == "FAILED_EFFECT") &&
                 (adverse || source.RecentDownUsers.Length == 0) &&
-                now - (previousRow.AppliedAtUtc ?? previousRow.ExpiresAtUtc) < TimeSpan.FromSeconds(adverse ? 180 : 90)) hold = "HOLD_PACING_COOLDOWN";
+                now - (previousRow.AppliedAtUtc ?? previousRow.ExpiresAtUtc) <
+                    TimeSpan.FromSeconds(adverse ? policy.IncreaseCooldownSeconds : policy.ReliefCooldownSeconds)) hold = "HOLD_PACING_COOLDOWN";
         }
         await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
+        if (!await db.ScenarioDecisions.AnyAsync(x => x.DecisionId == scenario.DecisionId && x.IsCurrent, ct))
+            return Fail("HOLD_STALE_SNAPSHOT", ErrorCodes.ScenarioDecisionStaleRoster);
         if (await db.Set<AEDV02Cancellation>().AnyAsync(x => x.DecisionId == request.DecisionId, ct)) return Fail("ABORT_DECISION_CANCELLED");
         var appliedRevision = await db.AEDV02Decisions.Where(x => x.MatchId == matchId && (x.ApplyStatus == "APPLIED" || x.ApplyStatus == "FAILED_EFFECT"))
             .Select(x => (int?)x.PlanRevision).MaxAsync(ct) ?? 0;
@@ -195,6 +212,13 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             return Fail("AED_V02_LEDGER_CONFLICT");
         }
         return ServiceResult<AEDV02DecisionResult>.Success(Map(decision, false));
+    }
+
+    private static bool MatchesManagedPreMatch(DTOs.Admin.AdaptiveConfiguration config, AEDV02Plan proposed, double? mappedSpeed)
+    {
+        var baseline = AdaptiveConfigurationService.Baseline(config);
+        return Enum.GetValues<AEDV02Key>().All(key => key == AEDV02Key.OptionalToolBudget ||
+            proposed.Get(key) == (key == AEDV02Key.ChaseSpeed && mappedSpeed.HasValue ? mappedSpeed.Value : baseline.Get(key)));
     }
 
     public async Task<ServiceResult<AEDV02DecisionResult>> ConfirmAsync(Guid caller, Guid matchId, Guid decisionId, AEDV02ReceiptRequest receipt, CancellationToken ct = default)

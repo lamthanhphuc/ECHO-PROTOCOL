@@ -16,7 +16,12 @@ public sealed class AEDV02HistoricalCompetenceService(AppDbContext db, ITelemetr
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var context = AEDV02PilotOpportunities.ComparisonContext(sceneFingerprint, users.Length);
-        var cutoff = now.AddDays(-AEDV02PilotOpportunities.HistoryMaxAgeDays);
+        var version = await db.ScenarioDecisions.AsNoTracking().Where(x => x.MatchId == currentMatch && x.IsCurrent)
+            .Select(x => x.ProfileTuningVersion).SingleOrDefaultAsync(ct);
+        var revision = await ProfileTuningService.ReadAsync(db, version, ct);
+        var tuning = revision is null ? null : ProfileTuningService.Read(revision);
+        var maxAge = tuning?.HistoryMaxAgeDays ?? AEDV02PilotOpportunities.HistoryMaxAgeDays;
+        var cutoff = now.AddDays(-maxAge);
         var matches = await db.MatchPlayerBindings.AsNoTracking().Where(x => users.Contains(x.UserId) && x.MatchId != currentMatch)
             .Select(x => x.MatchId).Distinct().ToArrayAsync(ct);
         var ended = await db.MatchAuthorityBindings.AsNoTracking().Where(x => matches.Contains(x.MatchId) && x.Status == MatchAuthorityStatus.Ended &&
@@ -26,6 +31,10 @@ public sealed class AEDV02HistoricalCompetenceService(AppDbContext db, ITelemetr
             x.SceneManifestFingerprint == sceneFingerprint && x.SourceEndedAtUtc >= cutoff && x.SourceEndedAtUtc <= now)
             .OrderByDescending(x => x.SourceEndedAtUtc).Take(512).ToArrayAsync(ct);
         var observations = new List<AEDV02HistoricalOpportunity>();
+        AEDV02HistoricalCompetence Score(Guid user) => AEDV02PilotOpportunities.Competence(user, axis, context, now, observations,
+            tuning?.HistoryMatches ?? AEDV02PilotOpportunities.HistoryMatches,
+            tuning?.HistoryOpportunities ?? AEDV02PilotOpportunities.HistoryResolved,
+            maxAge, tuning?.HistoryHalfLifeDays ?? AEDV02PilotOpportunities.HistoryHalfLifeDays);
         var content = await db.AEDV02SceneContents.AsNoTracking().SingleOrDefaultAsync(x => x.Fingerprint == sceneFingerprint, ct);
         AEDV02SceneManifest? manifest = null;
         try
@@ -35,7 +44,7 @@ public sealed class AEDV02HistoricalCompetenceService(AppDbContext db, ITelemetr
         }
         catch (JsonException) { }
         if (manifest?.IsValid() != true)
-            return users.ToDictionary(user => user, user => AEDV02PilotOpportunities.Competence(user, axis, context, now, observations));
+            return users.ToDictionary(user => user, Score);
         var cache = new Dictionary<Guid, IReadOnlyList<TelemetryEventDocument>>();
         foreach (var proof in proofs)
         {
@@ -83,6 +92,6 @@ public sealed class AEDV02HistoricalCompetenceService(AppDbContext db, ITelemetr
                 // A corrupt stored source cannot grant competence; repository and cancellation failures still propagate.
             }
         }
-        return users.ToDictionary(user => user, user => AEDV02PilotOpportunities.Competence(user, axis, context, now, observations));
+        return users.ToDictionary(user => user, Score);
     }
 }

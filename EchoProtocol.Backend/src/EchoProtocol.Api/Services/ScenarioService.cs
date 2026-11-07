@@ -1,8 +1,10 @@
 using System.Data;
 using System.Text.Json;
+using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
+using EchoProtocol.Api.DTOs.Admin;
 using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
@@ -26,8 +28,15 @@ public sealed class ScenarioService(
     {
         if (request.DecisionId == Guid.Empty)
             return Fail("DecisionId is required", ErrorCodes.ValidationError);
+        bool useFixedAfterV02Hold = !string.IsNullOrEmpty(request.FallbackFromDecisionId);
+        Guid fallbackFrom = Guid.Empty;
+        if (useFixedAfterV02Hold && (!Guid.TryParse(request.FallbackFromDecisionId, out fallbackFrom) ||
+            fallbackFrom == Guid.Empty || request.DecisionId != AEDV02Plan.FixedFallbackDecisionId(fallbackFrom) ||
+            request.ResolutionMode != ScenarioResolutionMode.Adaptive))
+            return Fail("Invalid Fixed fallback decision", ErrorCodes.ValidationError);
         var requestFingerprint = ScenarioFingerprint.Hash(matchId.ToString("D"), request.ResolutionMode.ToString(),
             request.UnityCompatibilityVersion, request.ExperimentCondition?.Trim());
+        if (useFixedAfterV02Hold) requestFingerprint = ScenarioFingerprint.Hash(requestFingerprint, fallbackFrom.ToString("D"));
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
@@ -38,13 +47,17 @@ public sealed class ScenarioService(
             var existingById = await LoadDecisionAsync(request.DecisionId, cancellationToken);
             if (existingById is not null)
             {
-                if (!existingById.IsCurrent)
-                    return Fail(
-                        "Scenario decision is no longer current",
-                        ErrorCodes.ScenarioDecisionConflict);
                 if (existingById.MatchId != matchId || existingById.HostUserId != callerUserId
                     || !string.Equals(existingById.RequestFingerprint, requestFingerprint, StringComparison.Ordinal))
                     return Fail("DecisionId has conflicting semantics", ErrorCodes.ScenarioDecisionIdentityConflict);
+                if (!existingById.IsCurrent)
+                {
+                    var replacement = await LoadDecisionAsync(AEDV02Plan.FixedFallbackDecisionId(existingById.DecisionId), cancellationToken);
+                    if (replacement is not { IsCurrent: true, UsedFixedFallback: true } || replacement.MatchId != matchId ||
+                        replacement.HostUserId != callerUserId || replacement.PolicyConfigVersion != existingById.PolicyConfigVersion)
+                        return Fail("Scenario decision is no longer current", ErrorCodes.ScenarioDecisionConflict);
+                    existingById = replacement;
+                }
                 if (!await RosterStillMatchesAsync(existingById, cancellationToken))
                     return Fail("Decision snapshot roster is stale", ErrorCodes.ScenarioDecisionStaleRoster);
                 if (!CommittedConfigMatches(existingById))
@@ -60,22 +73,38 @@ public sealed class ScenarioService(
             if (snapshotResult.Snapshot.TeamSize == 0)
                 return Fail("A bound roster is required", ErrorCodes.ScenarioRosterEmpty);
 
-            var current = await db.ScenarioDecisions.Include(x => x.Snapshot)
+            var current = await db.ScenarioDecisions.Include(x => x.Snapshot).Include(x => x.ApplyReceipt).Include(x => x.ScenarioConfig)
                 .SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, cancellationToken);
+            if (useFixedAfterV02Hold && (current is null || current.DecisionId != fallbackFrom || current.HostUserId != callerUserId ||
+                current.UsedFixedFallback || current.ApplyReceipt is not null ||
+                current.PolicyConfigVersion?.StartsWith(AdaptiveConfigurationService.VersionPrefix, StringComparison.Ordinal) != true ||
+                current.ScenarioConfig.UnityCompatibilityVersion != request.UnityCompatibilityVersion ||
+                current.ExperimentCondition != request.ExperimentCondition?.Trim() ||
+                current.Snapshot.RosterIdentity != snapshotResult.Snapshot.RosterIdentity))
+                return Fail("Adaptive candidate can no longer fall back", ErrorCodes.ScenarioDecisionConflict);
             if (current is not null)
             {
-                if (string.Equals(current.Snapshot.RosterIdentity, snapshotResult.Snapshot.RosterIdentity, StringComparison.Ordinal))
+                if (!useFixedAfterV02Hold && string.Equals(current.Snapshot.RosterIdentity, snapshotResult.Snapshot.RosterIdentity, StringComparison.Ordinal))
                     return Fail("Match already has a different current decision", ErrorCodes.ScenarioDecisionConflict);
                 current.IsCurrent = false;
             }
 
-            var fixedResult = await registry.GetProductionFixedFallbackAsync(
-                request.UnityCompatibilityVersion, cancellationToken);
-            if (!fixedResult.IsSuccess)
-                return Fail(fixedResult.Message, fixedResult.ErrorCode!);
-            var config = fixedResult.Data!;
             var adaptive = request.ResolutionMode == ScenarioResolutionMode.Adaptive;
             var settings = policyOptions.Value;
+            var published = adaptive && !useFixedAfterV02Hold ? await AdaptiveConfigurationService.LatestAsync(db,
+                request.UnityCompatibilityVersion, cancellationToken) : null;
+            var managed = useFixedAfterV02Hold
+                ? await AdaptiveConfigurationService.ForVersionAsync(db, current!.PolicyConfigVersion, cancellationToken)
+                : published is null ? null : AdaptiveConfigurationService.Read(published);
+            var fixedResult = managed is null
+                ? await registry.GetProductionFixedFallbackAsync(request.UnityCompatibilityVersion, cancellationToken)
+                : await AdaptiveConfigurationService.LoadAsync(registry, managed.Fixed, request.UnityCompatibilityVersion, cancellationToken);
+            if (!fixedResult.IsSuccess) return Fail(fixedResult.Message, fixedResult.ErrorCode!);
+            if (fixedResult.Data is not { } config || (managed is not null && !AdaptiveConfigurationService.IsApprovedFixed(config)))
+                return Fail("Selected Fixed fallback is no longer approved or compatible", ErrorCodes.ScenarioFixedFallbackInvalid);
+            var policyConfigVersion = useFixedAfterV02Hold ? current!.PolicyConfigVersion
+                : published?.Version ?? (adaptive && settings.Enabled ? settings.PolicyConfigVersion : null);
+            string? ruleId = null;
 
             string? fallbackReason = adaptive ? "POLICY_CONFIG_INVALID" : null;
 
@@ -86,7 +115,49 @@ public sealed class ScenarioService(
                 ? "FIXED_FALLBACK"
                 : "FIXED_CONFIG_ISSUED";
 
-            if (adaptive && settings.Enabled)
+            if (useFixedAfterV02Hold)
+            {
+                ruleId = current!.PreMatchRule;
+                var v02 = await db.AEDV02Decisions.Where(x => x.MatchId == matchId && x.SnapshotId == current.SnapshotId)
+                    .OrderByDescending(x => x.PlanRevision).ToArrayAsync(cancellationToken);
+                if (v02.Any(x => x.ApplyStatus is "APPLIED" or "FAILED_EFFECT"))
+                    return Fail("Adaptive revision was already applied", ErrorCodes.ScenarioApplyConflict);
+                fallbackReason = v02.FirstOrDefault(x => x.ApprovalStatus == "HOLD")?.ReasonCode ?? "HOLD_PREMATCH_V02_UNAVAILABLE";
+                foreach (var pending in v02.Where(x => x.ApplyStatus == "PENDING"))
+                {
+                    pending.ApplyStatus = "ABORTED";
+                    pending.ReasonCode = "HOLD_PREMATCH_FIXED_FALLBACK";
+                }
+            }
+            else if (managed is not null)
+            {
+                var snapshot = snapshotResult.Snapshot;
+                var samples = snapshot.Validity == AdaptiveSnapshotValidity.Invalid ? [] : snapshot.Players.Select(x =>
+                    new AdaptiveSample(x.SurvivalStatus == "ACTIVE" ? x.SurvivalScore : null,
+                        x.NoiseStatus == "ACTIVE" ? x.NoiseScore : null, x.SurvivalSampleCount ?? 0, x.NoiseSampleCount ?? 0)).ToArray();
+                var evaluation = AdaptiveConfigurationService.Evaluate(managed, samples);
+                ruleId = evaluation.Rule;
+                fallbackReason = evaluation.Reason;
+                candidateStatus = fallbackReason == "HOLD_RULE" ? ScenarioCandidateValidationStatus.Valid
+                    : ScenarioCandidateValidationStatus.NotEvaluated;
+                if (evaluation.Choice is not null)
+                {
+                    var chosen = await AdaptiveConfigurationService.LoadAsync(registry, evaluation.Choice,
+                        request.UnityCompatibilityVersion, cancellationToken);
+                    if (chosen.Data is { } candidate && AdaptiveConfigurationService.IsApprovedCandidate(ruleId!, config, candidate))
+                    {
+                        config = candidate;
+                        candidateStatus = ScenarioCandidateValidationStatus.Valid;
+                        resolutionResult = "ADAPTIVE_CONFIG_ISSUED";
+                    }
+                    else
+                    {
+                        fallbackReason = "ADAPTIVE_CONFIG_UNAVAILABLE";
+                        candidateStatus = ScenarioCandidateValidationStatus.Invalid;
+                    }
+                }
+            }
+            else if (adaptive && settings.Enabled)
             {
                 candidateStatus = ScenarioCandidateValidationStatus.Invalid;
 
@@ -120,12 +191,13 @@ public sealed class ScenarioService(
                             settings.NoiseLowThreshold,
                             settings.NoiseHighThreshold)
                         : null;
+                    ruleId = rule;
 
                     if (rule is null)
                     {
                         fallbackReason = "INPUT_INVALID";
                     }
-                    else if (rule == "AED-PRE-040-MIXED-HOLD")
+                    else if (rule == AEDPreMatchPolicyV1.Hold)
                     {
                         fallbackReason = "HOLD_RULE";
                         candidateStatus = ScenarioCandidateValidationStatus.Valid;
@@ -143,9 +215,7 @@ public sealed class ScenarioService(
                         }
                         else
                         {
-                            var relief = rule is
-                                "AED-PRE-010-SURVIVAL-LOW-RELIEVE" or
-                                "AED-PRE-020-NOISE-LOW-RELIEVE";
+                            var relief = rule is AEDPreMatchPolicyV1.SurvivalRelief or AEDPreMatchPolicyV1.NoiseRelief;
 
                             var values = relief
                                 ? settings.SupportItemBudgetCandidateValues
@@ -174,15 +244,19 @@ public sealed class ScenarioService(
                 }
             }
 
+            var historyPolicyVersion = useFixedAfterV02Hold ? current!.ProfileTuningVersion
+                : adaptive ? (await ProfileTuningService.LatestAsync(db, cancellationToken))?.Version : null;
             var configFingerprint = ScenarioFingerprint.Config(config);
             var decisionFingerprint = ScenarioFingerprint.Hash(
                 matchId.ToString("D"), "PRE_MATCH", request.ResolutionMode.ToString().ToUpperInvariant(),
                 snapshotResult.Snapshot.SnapshotContentFingerprint, config.ScenarioConfigId,
                 config.ScenarioConfigVersion, configFingerprint, config.PolicyVersion,
                 config.ContentWhitelistVersion, config.FallbackConfigVersion, fallbackReason,
-                adaptive && settings.Enabled ? settings.PolicyConfigVersion : null,
+                policyConfigVersion,
                 adaptive && settings.Enabled ? settings.EvidencePolicyVersion : null,
                 adaptive && settings.Enabled ? settings.ParameterRegistryVersion : null);
+            if (historyPolicyVersion is not null)
+                decisionFingerprint = ScenarioFingerprint.Hash(decisionFingerprint, historyPolicyVersion);
             var decision = new ScenarioDecision
             {
                 DecisionId = request.DecisionId, MatchId = matchId, HostUserId = callerUserId,
@@ -191,8 +265,7 @@ public sealed class ScenarioService(
                 DecisionSemanticFingerprint = decisionFingerprint, ScenarioConfigId = config.ScenarioConfigId,
                 ScenarioConfigVersion = config.ScenarioConfigVersion, ScenarioConfigFingerprint = configFingerprint,
                 PolicyVersion = config.PolicyVersion,
-                PolicyConfigVersion = adaptive && settings.Enabled
-                    ? settings.PolicyConfigVersion : null,
+                PolicyConfigVersion = policyConfigVersion,
                 EvidencePolicyVersion = adaptive && settings.Enabled
                     ? settings.EvidencePolicyVersion : null,
                 ParameterRegistryVersion = adaptive && settings.Enabled
@@ -201,6 +274,8 @@ public sealed class ScenarioService(
                 FallbackConfigId = config.FallbackConfigId, FallbackConfigVersion = config.FallbackConfigVersion,
                 UsedFixedFallback = adaptive && config.ConfigSource == ScenarioConfigSource.Fixed,
                 FallbackReasonCode = fallbackReason,
+                PreMatchRule = ruleId,
+                ProfileTuningVersion = historyPolicyVersion,
                 CandidateValidationStatus = candidateStatus,
                 ResolutionResult = resolutionResult,
                 Status = ScenarioDecisionStatus.Committed, IsCurrent = true,
@@ -351,6 +426,6 @@ public sealed class ScenarioService(
                 c.SupportItemBudget, c.DetectionFillRate, c.DetectionDecayRate, c.ChaseSpeed,
                 c.SearchDuration, c.RouteModifier, c.EscapeDoorTimerSeconds, c.FallbackConfigId,
                 c.FallbackConfigVersion, c.ContentWhitelistVersion, c.UnityCompatibilityVersion,
-                d.ScenarioConfigFingerprint));
+                d.ScenarioConfigFingerprint), d.PolicyConfigVersion, d.PreMatchRule);
     }
 }

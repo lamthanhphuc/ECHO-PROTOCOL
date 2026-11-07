@@ -1,5 +1,12 @@
 namespace EchoProtocol.Api.Entities;
 
+public sealed class AEDV02ClientObservation
+{
+    public Guid DecisionId { get; set; }
+    public Guid UserId { get; set; }
+    public DateTime ObservedAtUtc { get; set; }
+}
+
 public sealed class AEDV02Cancellation
 {
     public Guid DecisionId { get; set; }

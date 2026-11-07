@@ -19,6 +19,43 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("adaptive")]
+    public Task<IActionResult> AdaptiveConfiguration([FromQuery] string? compatibility,
+        [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
+        Execute(() => adaptive.GetAsync(compatibility, ct), ct);
+
+    [HttpPost("adaptive")]
+    public Task<IActionResult> PublishAdaptiveConfiguration(PublishAdaptiveConfiguration request,
+        [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
+        WithAdmin(id => adaptive.PublishAsync(id, request, ct), ct);
+
+    [HttpPost("adaptive/preview")]
+    public Task<IActionResult> PreviewAdaptiveConfiguration(PreviewAdaptiveConfiguration request,
+        [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
+        Execute(() => adaptive.PreviewAsync(request, ct), ct);
+
+    [HttpGet("matches/{matchId:guid}/adaptive")]
+    public Task<IActionResult> MatchAdaptive(Guid matchId, [FromServices] AdaptiveMatchAuditService audit, CancellationToken ct) =>
+        Execute(() => audit.GetAsync(matchId, ct), ct);
+
+    [HttpGet("ai-profile")]
+    public Task<IActionResult> ProfileTuning([FromServices] ProfileTuningService tuning, CancellationToken ct) =>
+        Execute(() => tuning.GetAsync(ct), ct);
+
+    [HttpPost("ai-profile")]
+    public Task<IActionResult> PublishProfileTuning(PublishProfileTuning request,
+        [FromServices] ProfileTuningService tuning, CancellationToken ct) =>
+        WithAdmin(id => tuning.PublishAsync(id, request, ct), ct);
+
+    [HttpPost("ai-profile/preview")]
+    public Task<IActionResult> PreviewProfileTuning(PreviewProfileTuning request,
+        [FromServices] ProfileTuningService tuning, CancellationToken ct) =>
+        Execute(() => tuning.PreviewAsync(request, ct), ct);
+
+    [HttpPost("matches/{matchId:guid}/reprocess-profiles")]
+    public Task<IActionResult> ReprocessProfiles(Guid matchId, [FromServices] ProfileTuningService tuning, CancellationToken ct) =>
+        WithAdmin(_ => tuning.RequeueAsync(matchId, ct), ct);
+
     [HttpGet("remote-fixed/status")]
     public Task<IActionResult> RemoteFixedStatus([FromServices] RemoteFixedBalanceAdminService remoteFixed, CancellationToken ct) =>
         Execute(() => Task.FromResult(remoteFixed.GetStatus()), ct);

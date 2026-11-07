@@ -1,9 +1,11 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Networking;
+using EchoProtocol.Auth;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -51,6 +53,26 @@ namespace EchoProtocol.Networking
                 !TryReadV02Plan(authority.MatchId, out var plan, out var revision)) return;
             _v02LoggedMatch = authority.MatchId; _v02LoggedRevision = revision;
             Debug.Log($"[AED_V02][FUSION_CONFIG] role={(Object.HasStateAuthority ? "Host" : "Client")} match={authority.MatchId:D} version={AEDV02Plan.CatalogVersion} revision={revision} fingerprint={plan.Fingerprint()} action={AEDV02ActionFingerprint} roster={AEDV02RosterIdentity} scene={AEDV02SceneFingerprint}");
+            if (!Object.HasStateAuthority && Guid.TryParse(AEDV02DecisionId.ToString(), out var decision))
+                _ = ReportV02ClientObservationAsync(authority.MatchId, decision, revision, plan.Fingerprint());
+        }
+
+        private static async Task ReportV02ClientObservationAsync(Guid match, Guid decision, int revision, string fingerprint)
+        {
+            try
+            {
+                var api = new AEDV02ApiService(AuthRuntime.EnsureExists().Client);
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    var result = await api.ClientObserved(match, decision, revision, fingerprint);
+                    if (result?.IsSuccess == true) return;
+                    if (attempt < 2) await Task.Delay(1000 * (attempt + 1));
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[AED_V02][CLIENT_OBSERVATION] {ex.GetType().Name}");
+            }
         }
 
         public bool TryGetV02ObjectiveSource(PlayerRef player, out string unit)
@@ -175,10 +197,10 @@ namespace EchoProtocol.Networking
                     source.planFingerprint != request.previousPlanFingerprint || source.rosterIdentity != authority.AEDv2RosterIdentity ||
                     source.sceneManifestFingerprint != request.sceneManifestFingerprint || source.startTick != request.startTick || source.endTick != request.endTick ||
                     source.endTick > Runner.Tick.Raw || !DateTime.TryParse(source.sourceEndedAtUtc, out var ended) ||
-                    DateTime.UtcNow - ended.ToUniversalTime() > TimeSpan.FromSeconds(AEDV02PilotPolicy.EvidenceMaxAgeSeconds)) return false;
+                    DateTime.UtcNow - ended.ToUniversalTime() > TimeSpan.FromSeconds(authority.V02EvidenceMaxAge)) return false;
             }
             if (!AEDv2Authority.CommitV02(authority.MatchId, request, approval, authority.AEDv2RosterIdentity, true, true, true,
-                preMatch || safe, DateTime.UtcNow, out reason)) return false;
+                preMatch || safe, DateTime.UtcNow, out reason, authority.V02Configuration)) return false;
             if (!AEDv2Authority.TryGetV02(authority.MatchId, out var plan, out var revision)) return false;
             if (AEDV02PlanRevision == revision) return true;
             var values = plan.ToArray();

@@ -93,17 +93,17 @@ namespace EchoProtocol.AI.AED
         {
             ClearStagedBackendPreMatch(Guid.Empty);
 
+            bool managedFixed = decision?.IsManaged == true && decision.usedFixedFallback;
+            var expectedId = CreateDecisionId(matchId, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", 0);
             if (matchId == Guid.Empty ||
                 decision?.config == null ||
                 decision.matchId != matchId.ToString("D") ||
                 !Guid.TryParse(decision.decisionId, out var decisionId) ||
-                decisionId != CreateDecisionId(
-                    matchId, ScenarioDecisionPoint.PreMatch, "PRE_MATCH", 0) ||
-                decision.resolutionResult != "ADAPTIVE_CONFIG_ISSUED" ||
-                decision.usedFixedFallback ||
-                decision.candidateValidationStatus != "VALID" ||
+                (decisionId != expectedId && !(managedFixed && decisionId == AEDV02Plan.FixedFallbackDecisionId(expectedId))) ||
+                (managedFixed ? decision.resolutionResult != "FIXED_FALLBACK" || decision.config.configSource != "FIXED"
+                    : decision.resolutionResult != "ADAPTIVE_CONFIG_ISSUED" || decision.usedFixedFallback ||
+                      decision.candidateValidationStatus != "VALID" || decision.config.configSource != "ADAPTIVE") ||
                 decision.decisionStatus != "COMMITTED" ||
-                decision.config.configSource != "ADAPTIVE" ||
                 decision.config.unityCompatibilityVersion != Application.version)
             {
                 return false;
@@ -125,8 +125,9 @@ namespace EchoProtocol.AI.AED
                 c.monsterType != baseline.MonsterType ||
                 c.objectiveSpawnSetId != baseline.ObjectiveSpawnSetId ||
                 c.routeModifier != baseline.RouteModifier ||
-                c.fallbackConfigId != baseline.FallbackConfigId ||
-                c.fallbackConfigVersion != FixedDirector.FixedBaselineScenarioVersion ||
+                (!decision.IsManaged && (c.fallbackConfigId != baseline.FallbackConfigId ||
+                    c.fallbackConfigVersion != FixedDirector.FixedBaselineScenarioVersion)) ||
+                (managedFixed && (c.fallbackConfigId != c.scenarioConfigId || c.fallbackConfigVersion != c.scenarioConfigVersion)) ||
                 c.contentWhitelistVersion != FixedDirector.FixedBaselineContentWhitelistVersion ||
                 c.detectionFillRate != baseline.MonsterParameters.DetectionFillRate ||
                 c.detectionDecayRate != baseline.MonsterParameters.DetectionDecayRate ||
@@ -151,7 +152,7 @@ namespace EchoProtocol.AI.AED
             bool supportChanged = c.supportItemBudget != baseline.SupportItemBudget;
             bool chaseChanged = c.chaseSpeed != baseline.MonsterParameters.ChaseSpeed;
 
-            if (supportChanged == chaseChanged ||
+            if (!decision.IsManaged && (supportChanged == chaseChanged ||
                 !supportRule.CandidateValues.Contains((double)c.supportItemBudget) ||
                 !chaseRule.CandidateValues.Contains(c.chaseSpeed) ||
                 (supportChanged && c.supportItemBudget != supportRule.CandidateValues
@@ -159,17 +160,23 @@ namespace EchoProtocol.AI.AED
                     .DefaultIfEmpty(double.NaN).Min()) ||
                 (chaseChanged && c.chaseSpeed != chaseRule.CandidateValues
                     .Where(value => value > baseline.MonsterParameters.ChaseSpeed)
-                    .DefaultIfEmpty(double.NaN).Min()))
+                    .DefaultIfEmpty(double.NaN).Min())))
             {
                 return false;
             }
+            if (decision.IsManaged && (c.supportItemBudget > 2 || !managedFixed &&
+                (decision.preMatchRule == "AED-PRE-030-BOTH-HIGH-INCREASE"
+                    ? c.chaseSpeed is not (8d or 10d)
+                    : c.supportItemBudget < 1 || c.chaseSpeed is not (7d or 7.5d or 8d or 9d))))
+                return false;
+            if (managedFixed && c.chaseSpeed is not (7d or 7.5d or 8d or 9d)) return false;
 
             try
             {
                 var config = new ScenarioConfig(
                     c.scenarioConfigVersion,
                     c.policyVersion,
-                    ScenarioConfigSource.Adaptive,
+                    managedFixed ? ScenarioConfigSource.Fixed : ScenarioConfigSource.Adaptive,
                     c.mapId,
                     c.monsterType,
                     c.objectiveSpawnSetId,
@@ -258,7 +265,7 @@ namespace EchoProtocol.AI.AED
             if (!TryGetStagedBackendPreMatch(
                     matchId, out var decision, out var stagedConfig) ||
                 appliedConfig == null ||
-                appliedConfig.ConfigSource != ScenarioConfigSource.Adaptive ||
+                appliedConfig.ConfigSource != stagedConfig.ConfigSource ||
                 appliedConfig.ScenarioConfigVersion != stagedConfig.ScenarioConfigVersion ||
                 ScenarioConfigFingerprint.Compute(appliedConfig) !=
                     ScenarioConfigFingerprint.Compute(stagedConfig) ||

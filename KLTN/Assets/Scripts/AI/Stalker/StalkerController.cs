@@ -355,6 +355,7 @@ namespace EchoProtocol.AI.Stalker
         private long _legacySimulationTick;
         private ScenarioMonsterParameters _scenarioMonsterParameters;
         private bool _hasScenarioMonsterParameters;
+        private bool _managedFixedMonsterParameters;
         private bool _aedv2ProfileOwnsTuning;
         private IReadOnlyList<StalkerTargetCandidate> _currentVisibleTargetCandidates;
         private IReadOnlyList<PlayerId> _currentVisibleObjectiveCarrierIds;
@@ -915,10 +916,11 @@ namespace EchoProtocol.AI.Stalker
                 && metadata.Zone == _patrolZone;
         }
 
-        public void ApplyScenarioMonsterParameters(ScenarioMonsterParameters parameters)
+        public void ApplyScenarioMonsterParameters(ScenarioMonsterParameters parameters, bool managedFixed = false)
         {
             _scenarioMonsterParameters = parameters ?? throw new System.ArgumentNullException(nameof(parameters));
             _hasScenarioMonsterParameters = true;
+            _managedFixedMonsterParameters = managedFixed;
             ApplyMovementSpeedForCurrentState();
         }
 
@@ -932,6 +934,7 @@ namespace EchoProtocol.AI.Stalker
 
             _scenarioMonsterParameters = null;
             _hasScenarioMonsterParameters = false;
+            _managedFixedMonsterParameters = false;
 
             ApplyMovementSpeedForCurrentState();
         }
@@ -4569,7 +4572,7 @@ namespace EchoProtocol.AI.Stalker
         private bool ShouldUseScenarioMonsterParameters()
         {
             return !_aedv2ProfileOwnsTuning
-                && useScenarioMonsterOverrides
+                && (useScenarioMonsterOverrides || _managedFixedMonsterParameters)
                 && _hasScenarioMonsterParameters
                 && _scenarioMonsterParameters != null;
         }

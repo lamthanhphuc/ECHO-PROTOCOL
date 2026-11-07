@@ -10,6 +10,8 @@ const items = [
   { href: "/admin/wallet-transactions", label: "Lịch sử số dư" },
   { href: "/admin/purchases", label: "Giao dịch mua" },
   { href: "/admin/remote-fixed", label: "Cân bằng cố định" },
+  { href: "/admin/adaptive", label: "Adaptive" },
+  { href: "/admin/ai-profile", label: "Hồ sơ AI" },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

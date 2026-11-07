@@ -43,6 +43,8 @@ public class AppDbContext : DbContext
     public DbSet<AEDDirectorDecisionV1> AEDDirectorDecisionsV1 => Set<AEDDirectorDecisionV1>();
     public DbSet<AEDPhase8VerifiedSourceV1> AEDPhase8VerifiedSourcesV1 => Set<AEDPhase8VerifiedSourceV1>();
     public DbSet<AEDV02Decision> AEDV02Decisions => Set<AEDV02Decision>();
+    public DbSet<AdaptiveConfigurationVersion> AdaptiveConfigurationVersions => Set<AdaptiveConfigurationVersion>();
+    public DbSet<ProfileTuningVersion> ProfileTuningVersions => Set<ProfileTuningVersion>();
     public DbSet<AEDV02VerifiedSource> AEDV02VerifiedSources => Set<AEDV02VerifiedSource>();
     public DbSet<AEDV02SceneContent> AEDV02SceneContents => Set<AEDV02SceneContent>();
     public DbSet<AEDV02SkillObservation> AEDV02SkillObservations => Set<AEDV02SkillObservation>();
@@ -54,6 +56,22 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ProfileTuningVersion>(entity =>
+        {
+            entity.HasKey(x => x.Version);
+            entity.Property(x => x.Version).HasMaxLength(80);
+            entity.Property(x => x.SettingsJson).HasColumnType("jsonb");
+            entity.HasIndex(x => x.Revision).IsUnique();
+        });
+        modelBuilder.Entity<AdaptiveConfigurationVersion>(entity =>
+        {
+            entity.HasKey(x => x.Version);
+            entity.Property(x => x.Version).HasMaxLength(80);
+            entity.Property(x => x.Compatibility).HasMaxLength(80);
+            entity.Property(x => x.ConfigurationJson).HasColumnType("jsonb");
+            entity.HasIndex(x => new { x.Compatibility, x.Revision }).IsUnique();
+        });
+
         modelBuilder.Entity<AEDV02Decision>(entity =>
         {
             entity.HasKey(x => x.DecisionId);
@@ -66,6 +84,12 @@ public class AppDbContext : DbContext
             entity.Property(x => x.ProposalJson).HasColumnType("text");
             entity.Property(x => x.ActionFingerprint).HasMaxLength(64);
             entity.HasOne<MatchAuthorityBinding>().WithMany().HasForeignKey(x => x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<AEDV02ClientObservation>(entity =>
+        {
+            entity.ToTable("AEDV02ClientObservations");
+            entity.HasKey(x => new { x.DecisionId, x.UserId });
+            entity.HasOne<AEDV02Decision>().WithMany().HasForeignKey(x => x.DecisionId).OnDelete(DeleteBehavior.Restrict);
         });
         modelBuilder.Entity<AEDV02Cancellation>(entity =>
         {

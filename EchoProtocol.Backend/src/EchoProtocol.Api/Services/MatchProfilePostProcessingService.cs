@@ -16,6 +16,7 @@ public sealed class MatchProfilePostProcessingService(AppDbContext db, TimeProvi
         {
             MatchId = matchId,
             Status = "PENDING",
+            ProfileTuningVersion = (await ProfileTuningService.LatestAsync(db, cancellationToken))?.Version,
             NextAttemptAtUtc = clock.GetUtcNow().UtcDateTime
         });
         try { await db.SaveChangesAsync(cancellationToken); }

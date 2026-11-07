@@ -168,6 +168,7 @@ namespace EchoProtocol.AI.AED
         public string resolutionMode;
         public string unityCompatibilityVersion;
         public string experimentCondition;
+        public string fallbackFromDecisionId;
     }
 
     [Serializable]
@@ -215,6 +216,9 @@ namespace EchoProtocol.AI.AED
         public string resolutionResult;
         public bool usedFixedFallback;
         public string fallbackReasonCode;
+        public string policyConfigVersion;
+        public string preMatchRule;
+        public bool IsManaged => policyConfigVersion?.StartsWith("AED_ADMIN_", StringComparison.Ordinal) == true;
         public string candidateValidationStatus;
         public string decisionStatus;
         public string unityApplyStatus;

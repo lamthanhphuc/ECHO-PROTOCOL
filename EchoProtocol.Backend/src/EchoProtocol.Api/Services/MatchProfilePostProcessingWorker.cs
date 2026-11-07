@@ -32,9 +32,14 @@ public sealed class MatchProfilePostProcessingWorker(
             .Where(result => !db.MatchProfileProcessingJobs.Any(job => job.MatchId == result.MatchId))
             .OrderBy(result => result.SubmittedAtUtc).Select(result => result.MatchId)
             .Take(10).ToListAsync(ct);
-        foreach (var matchId in missing)
-            db.MatchProfileProcessingJobs.Add(new MatchProfileProcessingJob { MatchId = matchId, NextAttemptAtUtc = now });
-        if (missing.Count > 0) await db.SaveChangesAsync(ct);
+        if (missing.Count > 0)
+        {
+            var version = (await ProfileTuningService.LatestAsync(db, ct))?.Version;
+            foreach (var matchId in missing)
+                db.MatchProfileProcessingJobs.Add(new MatchProfileProcessingJob
+                    { MatchId = matchId, NextAttemptAtUtc = now, ProfileTuningVersion = version });
+            await db.SaveChangesAsync(ct);
+        }
 
         var job = await db.MatchProfileProcessingJobs.AsNoTracking()
             .Where(item => item.Status == "PENDING" && item.NextAttemptAtUtc <= now
@@ -55,38 +60,49 @@ public sealed class MatchProfilePostProcessingWorker(
         try
         {
             var repository = scope.ServiceProvider.GetRequiredService<ITelemetryEventRepository>();
+            var tuning = scope.ServiceProvider.GetRequiredService<ProfileTuningService>();
             var result = await db.MatchResults.AsNoTracking().SingleOrDefaultAsync(item => item.MatchId == job.MatchId, ct);
             var match = await db.MatchAuthorityBindings.AsNoTracking().SingleOrDefaultAsync(item => item.MatchId == job.MatchId, ct);
             var events = await repository.LoadAcceptedMatchEventsAsync(job.MatchId, ct);
             if (result is null || match?.Status != MatchAuthorityStatus.Ended
                 || events.Count(item => item.EventType == "MATCH_ENDED") != 1)
             {
-                await RetryAsync(db, job.MatchId, job.Attempts + 1, "MATCH_OR_TELEMETRY_PENDING", ct);
+                await RetryAsync(db, job.MatchId, leaseUntil, job.Attempts + 1, "MATCH_OR_TELEMETRY_PENDING", ct);
                 return;
             }
 
             if (match!.MatchDataPolicy != RemoteFixedBalanceContract.TestOnly)
             {
-                var updater = scope.ServiceProvider.GetRequiredService<IPlayerAIProfileUpdater>();
                 var users = await db.MatchPlayerBindings.AsNoTracking().Where(item => item.MatchId == job.MatchId)
                     .Select(item => item.UserId).Distinct().OrderBy(userId => userId).ToListAsync(ct);
                 foreach (var userId in users)
                 {
+                    var lineage = await db.PlayerAIProfiles.AsNoTracking().Where(x => x.UserId == userId)
+                        .Select(x => new { x.AlphaConfigVersion }).SingleOrDefaultAsync(ct);
+                    var policyVersion = await ProfileTuningService.ReadAsync(db, lineage == null
+                        ? job.ProfileTuningVersion : lineage.AlphaConfigVersion, ct);
+                    var policy = policyVersion is null ? scope.ServiceProvider.GetRequiredService<IPlayerAIProfilePolicy>()
+                        : tuning.PlayerPolicy(policyVersion);
+                    var updater = new PlayerAIProfileUpdater(db, new MatchTelemetryAggregator(db, repository, policy), policy, clock);
                     var updated = await updater.ProcessAsync(job.MatchId, userId, ct);
                     if (!updated.IsSuccess)
                     {
-                        await RetryAsync(db, job.MatchId, job.Attempts + 1, updated.ErrorCode ?? "PLAYER_PROFILE_PENDING", ct);
+                        await RetryAsync(db, job.MatchId, leaseUntil, job.Attempts + 1, updated.ErrorCode ?? "PLAYER_PROFILE_PENDING", ct);
                         return;
                     }
                 }
             }
-            var team = await scope.ServiceProvider.GetRequiredService<ITeamProfileService>().ProcessAsync(job.MatchId, ct);
+            var teamVersion = await ProfileTuningService.ReadAsync(db, job.ProfileTuningVersion, ct);
+            var teamPolicy = teamVersion is null ? scope.ServiceProvider.GetRequiredService<ITeamProfilePolicy>()
+                : tuning.TeamPolicy(teamVersion);
+            var team = await new TeamProfileService(db, repository, teamPolicy, clock).ProcessAsync(job.MatchId, ct);
             if (!team.IsSuccess || team.Data?.ProcessingStatus == TeamProfileProcessingStatus.Pending)
             {
-                await RetryAsync(db, job.MatchId, job.Attempts + 1, team.ErrorCode ?? "TEAM_PROFILE_PENDING", ct);
+                await RetryAsync(db, job.MatchId, leaseUntil, job.Attempts + 1, team.ErrorCode ?? "TEAM_PROFILE_PENDING", ct);
                 return;
             }
-            await db.MatchProfileProcessingJobs.Where(item => item.MatchId == job.MatchId)
+            await db.MatchProfileProcessingJobs.Where(item => item.MatchId == job.MatchId && item.Status == "PROCESSING" &&
+                item.LeaseExpiresAtUtc == leaseUntil)
                 .ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, "COMPLETED")
                     .SetProperty(item => item.LeaseExpiresAtUtc, (DateTime?)null)
                     .SetProperty(item => item.LastError, string.Empty), ct);
@@ -95,15 +111,16 @@ public sealed class MatchProfilePostProcessingWorker(
         catch (Exception exception)
         {
             logger.LogError(exception, "Profile post-processing failed for match {MatchId}", job.MatchId);
-            await RetryAsync(db, job.MatchId, job.Attempts + 1, exception.GetType().Name, ct);
+            await RetryAsync(db, job.MatchId, leaseUntil, job.Attempts + 1, exception.GetType().Name, ct);
         }
     }
 
-    private async Task RetryAsync(AppDbContext db, Guid matchId, int attempts, string error, CancellationToken ct)
+    private async Task RetryAsync(AppDbContext db, Guid matchId, DateTime leaseUntil, int attempts, string error, CancellationToken ct)
     {
         // shortcut: retry ends after 20 attempts, add an operator replay path before raising this ceiling.
         var dead = attempts >= 20;
-        await db.MatchProfileProcessingJobs.Where(item => item.MatchId == matchId)
+        await db.MatchProfileProcessingJobs.Where(item => item.MatchId == matchId && item.Status == "PROCESSING" &&
+            item.LeaseExpiresAtUtc == leaseUntil)
             .ExecuteUpdateAsync(update => update
                 .SetProperty(item => item.Status, dead ? "FAILED" : "PENDING")
                 .SetProperty(item => item.NextAttemptAtUtc, clock.GetUtcNow().UtcDateTime.AddSeconds(Math.Min(300, attempts * 5)))

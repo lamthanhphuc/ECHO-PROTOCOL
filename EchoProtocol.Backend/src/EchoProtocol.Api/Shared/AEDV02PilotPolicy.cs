@@ -65,11 +65,15 @@ namespace EchoProtocol.AI.Common.AED
 
     public static class AEDV02PressureNormalizer
     {
-        private static readonly double[] Weights = { .30, .20, .25, .15, .10 };
+        public static IReadOnlyList<double> DefaultWeights { get; } = Array.AsReadOnly(new[] { .30, .20, .25, .15, .10 });
         private static readonly double[] Denominators = { 60, 45, 2, 2, 60 };
 
         public static AEDV02PressureSnapshot Project(Guid matchId, Guid userId, double now,
-            double observedFrom, IReadOnlyList<double>? sourceWatermarks, IEnumerable<AEDV02PressureFact> facts)
+            double observedFrom, IReadOnlyList<double>? sourceWatermarks, IEnumerable<AEDV02PressureFact> facts,
+            double observationSeconds = AEDV02PilotPolicy.ObservationSeconds,
+            double windowSeconds = AEDV02PilotPolicy.WindowSeconds,
+            double evidenceMaxAgeSeconds = AEDV02PilotPolicy.EvidenceMaxAgeSeconds,
+            IReadOnlyList<double>? weights = null)
         {
             var components = new double[5];
             if (matchId == Guid.Empty || userId == Guid.Empty || !AEDV02PilotPolicy.Finite(now) || now < 0 ||
@@ -95,27 +99,27 @@ namespace EchoProtocol.AI.Common.AED
                 }
                 unique.Add(fact.EventId, fact);
             }
-            foreach (var group in unique.Values.Where(x => x.EndedSeconds >= now - AEDV02PilotPolicy.WindowSeconds)
+            foreach (var group in unique.Values.Where(x => x.EndedSeconds >= now - windowSeconds)
                 .GroupBy(x => (x.Channel, x.EpisodeId)))
             {
                 var channel = (int)group.Key.Channel;
                 // Merge exposure intervals in one episode; overlapping callbacks do not multiply duration.
-                double amount = 0, end = now - AEDV02PilotPolicy.WindowSeconds;
+                double amount = 0, end = now - windowSeconds;
                 foreach (var fact in group.OrderBy(x => x.StartedSeconds))
                 {
                     var decay = Math.Pow(.5, (now - fact.EndedSeconds) / AEDV02PilotPolicy.DecayHalfLifeSeconds);
                     if (channel == 2 || channel == 3) { amount = Math.Max(amount, decay); continue; }
-                    var start = Math.Max(end, Math.Max(fact.StartedSeconds, now - AEDV02PilotPolicy.WindowSeconds));
+                    var start = Math.Max(end, Math.Max(fact.StartedSeconds, now - windowSeconds));
                     amount += Math.Max(0, fact.EndedSeconds - start) * decay;
                     end = Math.Max(end, fact.EndedSeconds);
                 }
                 components[channel] += amount / Denominators[channel];
             }
             double score = 0;
-            for (int i = 0; i < 5; i++) { components[i] = Math.Min(1, components[i]); score += components[i] * Weights[i]; }
+            for (int i = 0; i < 5; i++) { components[i] = Math.Min(1, components[i]); score += components[i] * (weights ?? DefaultWeights)[i]; }
             var complete = sourceWatermarks != null && sourceWatermarks.Count == 5 &&
                 sourceWatermarks.All(x => AEDV02PilotPolicy.Finite(x) && x >= observedFrom && x <= now &&
-                    now - x <= AEDV02PilotPolicy.EvidenceMaxAgeSeconds) && now - observedFrom >= AEDV02PilotPolicy.ObservationSeconds;
+                    now - x <= evidenceMaxAgeSeconds) && now - observedFrom >= observationSeconds;
             return new AEDV02PressureSnapshot(components, Math.Min(1, score), complete,
                 complete ? "PRESSURE_SOURCE_COMPLETE" : "HOLD_INSUFFICIENT_EVIDENCE");
         }
@@ -126,17 +130,19 @@ namespace EchoProtocol.AI.Common.AED
         private int _tier = -1;
         private double _lowerSince = double.NaN;
         private double _lastNow = -1;
-        public int Update(AEDV02PressureSnapshot snapshot, double now)
+        public int Update(AEDV02PressureSnapshot snapshot, double now,
+            double dwellSeconds = AEDV02PilotPolicy.TierDwellSeconds,
+            double evidenceMaxAgeSeconds = AEDV02PilotPolicy.EvidenceMaxAgeSeconds)
         {
             if (!snapshot.Complete || !AEDV02PilotPolicy.Finite(now) || now < _lastNow) { _lowerSince = double.NaN; return -1; }
-            if (now - _lastNow > AEDV02PilotPolicy.EvidenceMaxAgeSeconds) _lowerSince = double.NaN;
+            if (now - _lastNow > evidenceMaxAgeSeconds) _lowerSince = double.NaN;
             _lastNow = now;
             int proposed = snapshot.Tier;
             if (_tier < 0 || proposed >= _tier) { _tier = proposed; _lowerSince = double.NaN; return _tier; }
             double threshold = _tier == 4 ? .85 : _tier == 3 ? .65 : _tier == 2 ? .45 : .25;
             if (snapshot.Score >= threshold - AEDV02PilotPolicy.TierHysteresis) { _lowerSince = double.NaN; return _tier; }
             if (double.IsNaN(_lowerSince)) _lowerSince = now;
-            if (now - _lowerSince >= AEDV02PilotPolicy.TierDwellSeconds) { _tier = proposed; _lowerSince = double.NaN; }
+            if (now - _lowerSince >= dwellSeconds) { _tier = proposed; _lowerSince = double.NaN; }
             return _tier;
         }
         public void InvalidateObservation() => _lowerSince = double.NaN;
@@ -170,7 +176,10 @@ namespace EchoProtocol.AI.Common.AED
         public void Reset(Guid matchId) { _players.Clear(); MatchId = matchId; }
 
         public bool TryGrant(Guid matchId, Guid userId, ulong spotId, string encounterId, int revision,
-            double now, bool approvedPolicy, AEDV02PressureSnapshot pressure, out AEDV02HideProtectionToken? token)
+            double now, bool approvedPolicy, AEDV02PressureSnapshot pressure, out AEDV02HideProtectionToken? token,
+            double protectionSeconds = AEDV02PilotPolicy.ProtectionSeconds,
+            double protectionCooldownSeconds = AEDV02PilotPolicy.ProtectionCooldownSeconds,
+            int protectionQuota = AEDV02PilotPolicy.ProtectionQuota)
         {
             token = null;
             if (matchId == Guid.Empty || matchId != MatchId || userId == Guid.Empty || spotId == 0 ||
@@ -179,14 +188,14 @@ namespace EchoProtocol.AI.Common.AED
             if (!_players.TryGetValue(userId, out var state)) _players.Add(userId, state = new PlayerState());
             if (state.Token != null && state.Token.HideSpotId == spotId && !state.Token.VoluntaryExit && now < state.Token.ExpiresSeconds)
             { token = state.Token; return true; }
-            if (state.Grants >= AEDV02PilotPolicy.ProtectionQuota ||
-                now - state.LastGrant < AEDV02PilotPolicy.ProtectionCooldownSeconds || !state.Encounters.Add(encounterId)) return false;
+            if (state.Grants >= protectionQuota ||
+                now - state.LastGrant < protectionCooldownSeconds || !state.Encounters.Add(encounterId)) return false;
             state.Grants++; state.LastGrant = now;
             token = state.Token = new AEDV02HideProtectionToken
             {
                 TokenId = Guid.NewGuid(), MatchId = matchId, UserId = userId, HideSpotId = spotId,
-                PlanRevision = revision, GrantOrdinal = state.Grants, GrantedSeconds = now, ExpiresSeconds = now + AEDV02PilotPolicy.ProtectionSeconds,
-                GraceUntilSeconds = now + AEDV02PilotPolicy.ProtectionSeconds + AEDV02PilotPolicy.ProtectionGraceSeconds
+                PlanRevision = revision, GrantOrdinal = state.Grants, GrantedSeconds = now, ExpiresSeconds = now + protectionSeconds,
+                GraceUntilSeconds = now + protectionSeconds + AEDV02PilotPolicy.ProtectionGraceSeconds
             };
             return true;
         }

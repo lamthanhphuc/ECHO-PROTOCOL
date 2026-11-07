@@ -4,6 +4,17 @@ using EchoProtocol.Api;
 
 namespace EchoProtocol.AI.AED
 {
+    [Serializable] public sealed class AEDV02ConfigurationDto
+    {
+        [Serializable] public sealed class Parameter { public double[] tiers; }
+        public string version;
+        public double[] baseline;
+        public Parameter[] parameters;
+        public double observationSeconds, windowSeconds, evidenceMaxAgeSeconds, reliefThreshold, increasePressureCeiling;
+        public double[] pressureWeights;
+        public double tierDwellSeconds, protectionSeconds, protectionCooldownSeconds;
+        public int protectionQuota;
+    }
     [Serializable] public sealed class AEDV02SourceRequestDto
     { public int phaseOrdinal; public long startTick; public long endTick; public string sceneManifestFingerprint; public bool allowEmergencyWindow; }
     [Serializable] public sealed class AEDV02PlayerPressureDto
@@ -58,11 +69,20 @@ namespace EchoProtocol.AI.AED
     }
     [Serializable] public sealed class AEDV02ReceiptDto
     { public string receiptId; public string effectEventId; public int planRevision; public string planFingerprint; public long appliedTick; }
+    [Serializable] public sealed class AEDV02ClientObservationDto
+    { public int planRevision; public string planFingerprint; }
 
     public sealed class AEDV02ApiService
     {
         private readonly ApiClient _client;
         public AEDV02ApiService(ApiClient client) { _client = client ?? throw new ArgumentNullException(nameof(client)); }
+        public Task<ApiResult<ApiResponse<AEDV02ConfigurationDto>>> Configuration(Guid match)
+        {
+            var completion = new TaskCompletionSource<ApiResult<ApiResponse<AEDV02ConfigurationDto>>>();
+            _client.GetJson<ApiResponse<AEDV02ConfigurationDto>>($"/api/matches/{match:D}/aed-v02/configuration",
+                true, result => completion.TrySetResult(result));
+            return completion.Task;
+        }
         public Task<ApiResult<ApiResponse<AEDV02HistoricalProfileDto>>> Profile(Guid match, string sceneFingerprint)
         {
             var completion = new TaskCompletionSource<ApiResult<ApiResponse<AEDV02HistoricalProfileDto>>>();
@@ -81,6 +101,9 @@ namespace EchoProtocol.AI.AED
         }
         public Task<ApiResult<ApiResponse<AEDV02DecisionResultDto>>> Applied(Guid matchId, Guid decision, AEDV02ReceiptDto request) =>
             Put<AEDV02ReceiptDto, AEDV02DecisionResultDto>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/applied", request);
+        public Task<ApiResult<ApiResponse<bool>>> ClientObserved(Guid matchId, Guid decision, int revision, string fingerprint) =>
+            Put<AEDV02ClientObservationDto, bool>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/client-observed",
+                new AEDV02ClientObservationDto { planRevision = revision, planFingerprint = fingerprint });
         public Task<ApiResult<ApiResponse<AEDV02DecisionResultDto>>> Abort(Guid matchId, Guid decision, bool mayHaveCommitted = false) =>
             Put<AEDV02ReceiptDto, AEDV02DecisionResultDto>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/aborted?mayHaveCommitted={(mayHaveCommitted ? "true" : "false")}", new AEDV02ReceiptDto());
         private Task<ApiResult<ApiResponse<T>>> Post<R, T>(string endpoint, R request)

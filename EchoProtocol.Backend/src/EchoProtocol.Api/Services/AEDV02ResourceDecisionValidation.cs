@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EchoProtocol.AI.Common.AED;
+using EchoProtocol.Api.DTOs.Admin;
 using EchoProtocol.Api.DTOs.Scenarios;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
@@ -8,7 +9,8 @@ namespace EchoProtocol.Api.Services;
 
 public sealed partial class AEDV02DecisionService
 {
-    private async Task<string> ValidateSupport(Guid match, AEDV02SupportAction support, AEDV02SourceResult source, string json, CancellationToken ct)
+    private async Task<string> ValidateSupport(Guid match, AEDV02SupportAction support, AEDV02SourceResult source, string json,
+        AdaptivePilotPolicy policy, CancellationToken ct)
     {
         if (support.Kind != "EMERGENCY" && !source.PressureComplete || source.OpportunityContractVersion != AEDV02PilotOpportunities.Version ||
             source.ResourceNeeds?.Any(x => x.UserId == support.UserId && x.CauseEventId == support.CauseEventId && x.ToolId == support.ToolId &&
@@ -17,9 +19,9 @@ public sealed partial class AEDV02DecisionService
         var previous = await db.AEDV02Decisions.AsNoTracking().Where(x => x.MatchId == match && x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED" && x.ChangedKey == "SupportTool").ToArrayAsync(ct);
         var requests = previous.Select(x => JsonSerializer.Deserialize<AEDV02DecisionRequest>(x.ProposalJson)).ToArray();
         int count = requests.Count(x => x?.Support?.Kind == support.Kind);
-        if (count >= (support.Kind == "EMERGENCY" ? AEDV02PilotOpportunities.EmergencySupportQuota : AEDV02PilotOpportunities.OrdinarySupportQuota) ||
+        if (count >= (support.Kind == "EMERGENCY" ? policy.EmergencySupportQuota : policy.OrdinarySupportQuota) ||
             requests.Any(x => x?.Support?.CauseEventId == support.CauseEventId && x.Support.UserId == support.UserId)) return "HOLD_SUPPORT_QUOTA";
-        if (support.Kind == "ORDINARY" && previous.Any(x => clock.GetUtcNow().UtcDateTime - x.CreatedAtUtc < TimeSpan.FromSeconds(AEDV02PilotOpportunities.SupportSeparationSeconds)))
+        if (support.Kind == "ORDINARY" && previous.Any(x => clock.GetUtcNow().UtcDateTime - x.CreatedAtUtc < TimeSpan.FromSeconds(policy.SupportCooldownSeconds)))
             return "HOLD_SUPPORT_COOLDOWN";
         var manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(json)!;
         var marker = manifest.Markers.SingleOrDefault(x => x.Id == support.MarkerId && x.Zone == support.Zone && x.Kind == "TOOL" &&

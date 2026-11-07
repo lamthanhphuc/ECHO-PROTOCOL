@@ -297,7 +297,8 @@ namespace EchoProtocol.Networking
                     var api = new AEDSnapshotApiService();
                     var (decision, resolveError) = await api.ResolvePreMatchAsync(matchId, decisionId,
                         authority.ExperimentCondition, _preMatchCancellation.Token);
-                    if (decision == null || !Guid.TryParse(decision.snapshotId, out var snapshotId)
+                    if (decision == null || !Guid.TryParse(decision.decisionId, out decisionId) ||
+                        !Guid.TryParse(decision.snapshotId, out var snapshotId)
                         || snapshotId == Guid.Empty || decision.matchId != matchId.ToString("D"))
                     {
                         ReportError("AED pre-match: " + (resolveError ?? "Backend returned an invalid match or snapshot ID."));
@@ -312,7 +313,7 @@ namespace EchoProtocol.Networking
                         $"candidate={decision.candidateValidationStatus}");
 
                     if (settings.ExtendedPolicyGameplayEnabled &&
-                        decision.usedFixedFallback)
+                        decision.usedFixedFallback && !decision.IsManaged)
                     {
                         ReportError(
                             "AED gameplay rejected: Backend issued fixed fallback. " +
@@ -354,7 +355,7 @@ namespace EchoProtocol.Networking
                     settings.TryBuildEvidencePolicy(out var evidence, out _);
                     var gate = AEDInputGate.Evaluate(snapshot, request, policy,
                         evidence, currency);
-                    if (gate.Status == AEDInputGateStatus.Invalid)
+                    if (gate.Status == AEDInputGateStatus.Invalid && !(decision.IsManaged && decision.usedFixedFallback))
                     {
                         ReportError("AED pre-match input invalid: "
                             + string.Join(",", gate.Reasons));
@@ -367,7 +368,7 @@ namespace EchoProtocol.Networking
                         $"missing={snapshot.MissingProfileUserIds.Count} " +
                         $"plan={AEDv2Plan.Normal().Fingerprint()}");
 
-                    if (decision.resolutionResult == "ADAPTIVE_CONFIG_ISSUED")
+                    if (decision.resolutionResult == "ADAPTIVE_CONFIG_ISSUED" || decision.IsManaged && decision.usedFixedFallback)
                     {
                         if (!ScenarioConfigAuthorityRuntime.EnsureExists()
                                 .TryStageBackendPreMatch(matchId, decision))
@@ -385,6 +386,29 @@ namespace EchoProtocol.Networking
                             $"budget={decision.config.supportItemBudget}");
                     }
                     await authority.StageV02PreMatchAsync(_preMatchCancellation.Token);
+                    if (decision.IsManaged && !decision.usedFixedFallback && !authority.HasStagedV02PreMatch &&
+                        (settings.PacingV02GameplayEnabled || decision.preMatchRule == "AED-PRE-030-BOTH-HIGH-INCREASE"))
+                    {
+                        var fallbackId = AEDV02Plan.FixedFallbackDecisionId(decisionId);
+                        var (fallback, fallbackError) = await api.ResolvePreMatchAsync(matchId, fallbackId,
+                            authority.ExperimentCondition, _preMatchCancellation.Token, decisionId);
+                        if (_preMatchCancellation.IsCancellationRequested || authority.MatchId != matchId || !loading.IsCurrent(runner, loadingAttempt) ||
+                            fallback?.usedFixedFallback != true ||
+                            !ScenarioConfigAuthorityRuntime.EnsureExists().TryStageBackendPreMatch(matchId, fallback))
+                        {
+                            ReportError("AED v0.2 không lấy được cấu hình Fixed dự phòng. " + fallbackError);
+                            return;
+                        }
+                        _snapshotProvider.Dispose();
+                        _snapshotProvider = null;
+                        Debug.Log($"[AED_V02][PREMATCH_FIXED_FALLBACK] match={matchId:D} decision={fallback.decisionId} reason={fallback.fallbackReasonCode}");
+                    }
+                    else if (settings.PacingV02GameplayEnabled && decision.resolutionResult == "ADAPTIVE_CONFIG_ISSUED" &&
+                        decision.config.chaseSpeed != FixedDirector.FixedBaselineChaseSpeed && !authority.HasStagedV02PreMatch)
+                    {
+                        ReportError("AED v0.2 chưa duyệt kế hoạch trước trận.");
+                        return;
+                    }
                 }
 
                 Debug.LogWarning(

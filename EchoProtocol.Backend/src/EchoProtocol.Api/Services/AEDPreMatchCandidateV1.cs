@@ -5,29 +5,21 @@ namespace EchoProtocol.Api.Services;
 
 public static class AEDPreMatchCandidateV1
 {
-    private const string SurvivalRelief =
-        "AED-PRE-010-SURVIVAL-LOW-RELIEVE";
-    private const string NoiseRelief =
-        "AED-PRE-020-NOISE-LOW-RELIEVE";
-    private const string Increase =
-        "AED-PRE-030-BOTH-HIGH-INCREASE";
-    private const string Hold =
-        "AED-PRE-040-MIXED-HOLD";
-
     public static bool TrySelect(
         string ruleId,
         ScenarioConfigDefinition baseline,
         IReadOnlyList<ScenarioConfigDefinition> approvedCandidates,
         IReadOnlyList<double> registeredValues,
         out ScenarioConfigDefinition? selected,
-        out string reason)
+        out string reason,
+        bool requireDefaultFallback = true)
     {
         selected = null;
 
         if (baseline is null ||
             approvedCandidates is null ||
             baseline.ConfigSource != ScenarioConfigSource.Fixed ||
-            !baseline.IsFixedFallback ||
+            (requireDefaultFallback && !baseline.IsFixedFallback) ||
             !baseline.IsActive ||
             !baseline.IsProductionApproved ||
             !double.IsFinite(baseline.ChaseSpeed))
@@ -36,15 +28,15 @@ public static class AEDPreMatchCandidateV1
             return false;
         }
 
-        if (ruleId == Hold)
+        if (ruleId == AEDPreMatchPolicyV1.Hold)
         {
             reason = "HOLD_RULE";
             return false;
         }
 
-        var relief = ruleId is SurvivalRelief or NoiseRelief;
+        var relief = ruleId is AEDPreMatchPolicyV1.SurvivalRelief or AEDPreMatchPolicyV1.NoiseRelief;
 
-        if (!relief && ruleId != Increase)
+        if (!relief && ruleId != AEDPreMatchPolicyV1.Increase)
         {
             reason = "RULE_UNSUPPORTED";
             return false;

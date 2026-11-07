@@ -9,6 +9,7 @@ public sealed class ResolveScenarioRequest
     public ScenarioResolutionMode ResolutionMode { get; set; }
     [Required, StringLength(80, MinimumLength = 1)] public string UnityCompatibilityVersion { get; set; } = string.Empty;
     [StringLength(80)] public string? ExperimentCondition { get; set; }
+    [StringLength(36)] public string? FallbackFromDecisionId { get; set; }
 }
 
 public sealed class ConfirmScenarioAppliedRequest
@@ -33,4 +34,4 @@ public sealed record ScenarioDecisionResponse(
     string ResolutionMode, string ResolutionResult, string? CandidateValidationStatus,
     bool UsedFixedFallback, string? FallbackReasonCode, string DecisionStatus,
     string UnityApplyStatus, DateTime CommittedAtUtc, DateTime? AppliedAtUtc,
-    bool IsReplay, ScenarioConfigResponse Config);
+    bool IsReplay, ScenarioConfigResponse Config, string? PolicyConfigVersion = null, string? PreMatchRule = null);

@@ -8,7 +8,7 @@ namespace EchoProtocol.Api.Services;
 
 public sealed partial class AEDV02DecisionService
 {
-    private static bool HasAcceptedCommit(IReadOnlyList<TelemetryEventDocument> events, AEDV02Decision decision, long? tick)
+    internal static bool HasAcceptedCommit(IReadOnlyList<TelemetryEventDocument> events, AEDV02Decision decision, long? tick)
     {
         var commits = new List<AEDV02PlanCommitSource>();
         var terminal = events.Where(x => x.MatchId == decision.MatchId && x.EventType is "MATCH_ENDED" or "MATCH_ABORTED")

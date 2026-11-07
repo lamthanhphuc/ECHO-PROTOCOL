@@ -18,6 +18,32 @@ namespace EchoProtocol.Api.Controllers;
 public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sources, AEDV02DecisionService decisions,
     TimeProvider clock, IOptions<AEDV02PilotSettings> settings, ITelemetryEventRepository telemetry) : ControllerBase
 {
+    [HttpGet("configuration")]
+    public async Task<IActionResult> Configuration(Guid matchId, CancellationToken ct)
+    {
+        if (!TryUser(out var user)) return Unauthorized();
+        var binding = await db.MatchAuthorityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
+        if (binding == null) return NotFound();
+        if (binding.HostUserId != user) return StatusCode(403);
+        if (!settings.Value.Enabled || binding.LeaseExpiresAtUtc <= clock.GetUtcNow().UtcDateTime ||
+            binding.Status is not (MatchAuthorityStatus.Lobby or MatchAuthorityStatus.InMatch)) return Conflict();
+        var scenario = await db.ScenarioDecisions.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
+        if (scenario?.ResolutionMode != ScenarioResolutionMode.Adaptive || scenario.UsedFixedFallback) return Conflict();
+        var config = await AdaptiveConfigurationService.ForVersionAsync(db, scenario.PolicyConfigVersion, ct);
+        if (config is null) return NotFound();
+        return Ok(ApiResponse<object>.Ok(new
+        {
+            Version = scenario.PolicyConfigVersion,
+            Baseline = AdaptiveConfigurationService.Baseline(config).ToArray(),
+            Parameters = Enum.GetValues<EchoProtocol.AI.Common.AED.AEDV02Key>()
+                .Select(key => new { config.Parameters[key.ToString()].Tiers }),
+            config.Pilot.ObservationSeconds, config.Pilot.WindowSeconds, config.Pilot.EvidenceMaxAgeSeconds,
+            config.Pilot.ReliefThreshold, config.Pilot.IncreasePressureCeiling, config.Pilot.PressureWeights,
+            config.Pilot.TierDwellSeconds, config.Pilot.ProtectionSeconds, config.Pilot.ProtectionCooldownSeconds,
+            config.Pilot.ProtectionQuota
+        }));
+    }
+
     [HttpPost("sources")]
     public async Task<IActionResult> Sources(Guid matchId, AEDV02SourceRequest request, CancellationToken ct)
     {
@@ -29,6 +55,9 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
         if (!settings.Value.Enabled || binding.Status != MatchAuthorityStatus.InMatch) return Conflict();
         var scenario = await db.ScenarioDecisions.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId && x.IsCurrent, ct);
         if (scenario?.ResolutionMode != ScenarioResolutionMode.Adaptive) return Conflict();
+        var config = await AdaptiveConfigurationService.ForVersionAsync(db, scenario.PolicyConfigVersion, ct);
+        if (config is not null && scenario.UsedFixedFallback) return Conflict();
+        var policy = config?.Pilot ?? AdaptiveConfigurationService.DefaultPilot;
         var result = await sources.VerifyAsync(matchId, request, ct);
         if (!result.IsSuccess) return Respond(result);
         var source = result.Data!;
@@ -42,9 +71,9 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
             source.SafeWindow, source.LogicalPhase, source.Zone, source.PhaseName, source.PlanRevision, source.PlanFingerprint, source.SourceEndedAtUtc,
             source.PressureComplete, source.MissingChannels, source.CabinetClueEventIds, source.TeamPressureStatus,
             source.OpportunityContractVersion, source.TeamPressureTier, source.TeamPressureSeverity, profile.IncreaseAxes, source.ResourceNeeds, source.SupportSafeWindow,
-            Math.Max(0, EchoProtocol.AI.Common.AED.AEDV02PilotOpportunities.OrdinarySupportQuota - supportKinds.Count(x => x == "ORDINARY")),
-            Math.Max(0, EchoProtocol.AI.Common.AED.AEDV02PilotOpportunities.EmergencySupportQuota - supportKinds.Count(x => x == "EMERGENCY")),
-            supportRows.Length == 0 ? null : supportRows.Max(x => x.CreatedAtUtc).AddSeconds(EchoProtocol.AI.Common.AED.AEDV02PilotOpportunities.SupportSeparationSeconds))));
+            Math.Max(0, policy.OrdinarySupportQuota - supportKinds.Count(x => x == "ORDINARY")),
+            Math.Max(0, policy.EmergencySupportQuota - supportKinds.Count(x => x == "EMERGENCY")),
+            supportRows.Length == 0 ? null : supportRows.Max(x => x.CreatedAtUtc).AddSeconds(policy.SupportCooldownSeconds))));
     }
     [HttpGet("profile")]
     public async Task<IActionResult> Profile(Guid matchId, [FromQuery] string sceneFingerprint, CancellationToken ct)
@@ -81,9 +110,32 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
     [HttpPut("decisions/{decisionId:guid}/aborted")]
     public async Task<IActionResult> Aborted(Guid matchId, Guid decisionId, CancellationToken ct, bool mayHaveCommitted = false) =>
         TryUser(out var user) ? Respond(await decisions.AbortAsync(user, matchId, decisionId, ct, mayHaveCommitted)) : Unauthorized();
+
+    [HttpPut("decisions/{decisionId:guid}/client-observed")]
+    public async Task<IActionResult> ClientObserved(Guid matchId, Guid decisionId, AEDV02ClientObservationRequest request, CancellationToken ct)
+    {
+        if (!TryUser(out var user)) return Unauthorized();
+        var decision = await db.AEDV02Decisions.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId && x.DecisionId == decisionId, ct);
+        if (decision is null) return NotFound();
+        if (decision.HostUserId == user || !await db.MatchPlayerBindings.AnyAsync(
+            x => x.MatchId == matchId && x.UserId == user && x.Participated, ct)) return Forbid();
+        if (decision.ApprovalStatus != "APPROVED" || decision.ApplyStatus == "ABORTED" ||
+            request.PlanRevision != decision.PlanRevision || request.PlanFingerprint != decision.PlanFingerprint)
+            return Conflict();
+        var observations = db.Set<EchoProtocol.Api.Entities.AEDV02ClientObservation>();
+        if (!await observations.AnyAsync(x => x.DecisionId == decisionId && x.UserId == user, ct))
+        {
+            observations.Add(new() { DecisionId = decisionId, UserId = user, ObservedAtUtc = clock.GetUtcNow().UtcDateTime });
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation }) { }
+        }
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
     private bool TryUser(out Guid user) => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out user) && user != Guid.Empty;
     private IActionResult Respond<T>(ServiceResult<T> result) => result.IsSuccess
         ? Ok(ApiResponse<T>.Ok(result.Data!, result.Message))
         : StatusCode(result.ErrorCode == ErrorCodes.MatchAuthorityForbidden ? 403 : result.ErrorCode == ErrorCodes.ValidationError ? 400 : 409,
             ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
 }
+
+public sealed record AEDV02ClientObservationRequest(int PlanRevision, string PlanFingerprint);
