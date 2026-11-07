@@ -8,11 +8,11 @@ public sealed record ProfileTuning(
     decimal ObjectiveTimeMin, decimal ObjectiveTimeMax,
     int HistoryMatches, int HistoryOpportunities, double HistoryMaxAgeDays, double HistoryHalfLifeDays);
 
-public sealed record PublishProfileTuning(string? ExpectedVersion, [property: Required] ProfileTuning Settings,
-    [property: Required, StringLength(64, MinimumLength = 64)] string PreviewFingerprint);
+public sealed record PublishProfileTuning(string? ExpectedVersion, [Required] ProfileTuning Settings,
+    [Required, StringLength(64, MinimumLength = 64)] string PreviewFingerprint);
 
 public sealed record PreviewProfileTuning(
-    [property: Required] ProfileTuning Settings, bool Survived, bool CompletedObjective, int ToolsUsed,
-    [property: Required] Dictionary<string, int> NoiseCounts,
-    [property: Range(0, 7200)] decimal ObjectiveSeconds,
-    [property: Range(0, 100)] decimal? PreviousScore);
+    [Required] ProfileTuning Settings, bool Survived, bool CompletedObjective, int ToolsUsed,
+    [Required] Dictionary<string, int> NoiseCounts,
+    [Range(0, 7200)] decimal ObjectiveSeconds,
+    [Range(0, 100)] decimal? PreviousScore);
