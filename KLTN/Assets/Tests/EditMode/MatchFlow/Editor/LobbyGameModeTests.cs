@@ -6,7 +6,6 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UI;
 
 public sealed class LobbyGameModeTests
 {
@@ -23,7 +22,7 @@ public sealed class LobbyGameModeTests
         Assert.That(LobbyMapCatalog.SceneName(2),Is.EqualTo("Scene_B"));
     }
     [Test]
-    public void MainMenuOffersModeOnlyWhenCreatingRoom() => ValidateMenu();
+    public void MainMenuLeavesModeSelectionToTheLobby() => ValidateMenu();
     public static void ValidateMenu()
     {
         var active = SceneManager.GetActiveScene();
@@ -38,17 +37,12 @@ public sealed class LobbyGameModeTests
             var so = new SerializedObject(controller);
             var original = (GameObject)so.FindProperty("difficultyRow").objectReferenceValue;
             var mode = original.transform.parent.Find("GameModeRow");
-            Assert.That(mode,Is.Not.Null);
             controller.SendMessage("OpenHost");
-            Assert.That(mode.gameObject.activeSelf,Is.True);
-            var button = mode.GetComponentInChildren<Button>(true);
-            button.onClick.Invoke();
-            Assert.That(button.GetComponentInChildren<Text>().text,Is.EqualTo(EchoProtocol.Settings.GameLanguage.Choose("<  THANH TRỪNG  >", "<  PURGE  >")));
-            var modeRect = (RectTransform)mode;
-            var confirm = (Button)so.FindProperty("confirmButton").objectReferenceValue;
-            Assert.That(((RectTransform)confirm.transform).anchoredPosition.y,Is.LessThan(modeRect.anchoredPosition.y-modeRect.sizeDelta.y));
+            Assert.That(original.activeSelf, Is.False);
+            Assert.That(mode == null || !mode.gameObject.activeSelf, Is.True);
             controller.SendMessage("OpenJoin");
-            Assert.That(mode.gameObject.activeSelf,Is.False);
+            Assert.That(original.activeSelf, Is.False);
+            Assert.That(mode == null || !mode.gameObject.activeSelf, Is.True);
         }
         finally
         {

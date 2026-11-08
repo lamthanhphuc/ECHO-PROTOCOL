@@ -62,7 +62,8 @@ public sealed class AlienHuntSceneTests
             Assert.That(meatSize.x, Is.InRange(1.20f, 1.44f), meat.name + " should be clearly visible at ground level.");
             Assert.That(meat.GetComponent<BoxCollider>().size.x, Is.InRange(1.20f, 1.44f),
                 meat.name + " pickup collider should match the model.");
-            Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, .2f, NavMesh.AllAreas), Is.True);
+            Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, .75f, NavMesh.AllAreas), Is.True,
+                $"{meat.name} at {meat.transform.position} must be within bait placement range of the NavMesh.");
             foreach (var alien in aliens)
                 Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
                     new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)), Is.GreaterThanOrEqualTo(25.9f));

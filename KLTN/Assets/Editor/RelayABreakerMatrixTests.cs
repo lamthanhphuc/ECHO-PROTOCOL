@@ -205,7 +205,7 @@ namespace EchoProtocol.Tests
             StringAssert.Contains("CaptureRelayACircuitState", handler);
             string ui = File.ReadAllText(prefix + "Assets/Scripts/RelayA/RelayAUIController.Breakers.cs");
             StringAssert.Contains("Đặt lại ma trận", ui);
-            StringAssert.Contains("MOVES", ui);
+            StringAssert.Contains("{state.Moves} lượt", ui);
             StringAssert.DoesNotContain("VERIFY", ui);
             StringAssert.DoesNotContain("FindOptimalPresses", ui);
         }

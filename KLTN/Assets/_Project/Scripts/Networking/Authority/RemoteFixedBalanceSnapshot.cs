@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace EchoProtocol.Networking.Authority
@@ -153,10 +154,9 @@ namespace EchoProtocol.Networking.Authority
                 }
 
                 var json = new UTF8Encoding(false, true).GetString(bytes);
-                var value = new RemoteFixedBalanceSnapshot();
-                // Keep optional legacy fields null when the payload omits them.
-                JsonUtility.FromJsonOverwrite(json, value);
-                if (value.schemaVersion is not ("RFB-1" or "RFB-2") ||
+                // Legacy payloads omit optional inline objects. Preserve that distinction.
+                var value = JsonConvert.DeserializeObject<RemoteFixedBalanceSnapshot>(json);
+                if (value == null || value.schemaVersion is not ("RFB-1" or "RFB-2") ||
                     value.player == null || value.stalker == null || value.minion == null)
                     return false;
 
@@ -191,6 +191,7 @@ namespace EchoProtocol.Networking.Authority
             }
             catch (Exception exception) when (
                 exception is FormatException ||
+                exception is JsonException ||
                 exception is DecoderFallbackException ||
                 exception is ArgumentException)
             {
