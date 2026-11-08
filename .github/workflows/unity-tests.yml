@@ -1,6 +1,10 @@
 name: Unity tests
 
 on:
+  push:
+    branches: [main, LTP]
+  pull_request:
+    branches: [main, LTP]
   workflow_dispatch:
 
 permissions:
@@ -13,7 +17,11 @@ concurrency:
 jobs:
   unity-tests:
     name: Unity ${{ matrix.mode }}
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/LTP'
+    # Unity licensing secrets are available only to trusted repository builds.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+       (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/LTP')))
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
