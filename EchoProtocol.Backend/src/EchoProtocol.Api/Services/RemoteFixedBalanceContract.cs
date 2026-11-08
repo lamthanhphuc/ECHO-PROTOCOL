@@ -29,7 +29,7 @@ public static class RemoteFixedBalanceContract
         return document.RootElement.TryGetProperty("content", out var content) ? content.GetProperty("gameVersion").GetString() : null;
     }
 
-    public static bool IsValidSnapshot(string? json, string? map = null)
+    public static bool IsValidSnapshot(string? json, string? map = null, bool allowRetiredFields = true)
     {
         if (string.IsNullOrWhiteSpace(json))
             return false;
@@ -55,7 +55,7 @@ public static class RemoteFixedBalanceContract
                 root.EnumerateObject().Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() != count ||
                 (map == "Scene_B" && !hasContent) ||
                 (hasContent && (!extended || !ValidContent(content, map))) ||
-                (extended && !ValidGameplay(root, map, hasContent)))
+                (extended && !ValidGameplay(root, map, hasContent, allowRetiredFields)))
                 return false;
 
             if (!ValidSection(root, "player",
@@ -93,7 +93,7 @@ public static class RemoteFixedBalanceContract
                 x.Monster == Read("monster") && x.Route == Read("route"));
     }
 
-    private static bool ValidGameplay(JsonElement root, string? map, bool hasContent)
+    private static bool ValidGameplay(JsonElement root, string? map, bool hasContent, bool allowRetiredFields)
     {
         if (!root.TryGetProperty("gameplay", out var gameplay) || gameplay.ValueKind != JsonValueKind.Array ||
             (!hasContent && gameplay.GetArrayLength() == 0) || gameplay.GetArrayLength() > RemoteGameplayTuning.Fields.Length) return false;
@@ -103,6 +103,7 @@ public static class RemoteFixedBalanceContract
         {
             if (entry.ValueKind != JsonValueKind.Object || entry.EnumerateObject().Count() != 2 ||
                 !entry.TryGetProperty("key", out var key) || key.ValueKind != JsonValueKind.String || key.GetString() is not { } name ||
+                (!allowRetiredFields && RemoteGameplayTuning.IsRetired(name)) ||
                 !RemoteGameplayTuning.ByKey.TryGetValue(name, out var field) || !keys.Add(name) ||
                 (map != null && field.Map != null && field.Map != map &&
                     !(!hasContent && map == "Scene_A" && field.Map == "Scene_B")) ||

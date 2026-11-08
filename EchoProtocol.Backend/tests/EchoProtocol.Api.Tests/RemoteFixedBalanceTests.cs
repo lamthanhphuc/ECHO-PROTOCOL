@@ -68,6 +68,24 @@ public sealed class RemoteFixedBalanceTests
     }
 
     [Theory]
+    [InlineData("stalkerHearing", 1)]
+    [InlineData("listenerHearing", 1)]
+    [InlineData("doorTravelSeconds", 1)]
+    [InlineData("toolsPerZone", 5)]
+    [InlineData("zone1ToolBudget", 5)]
+    [InlineData("zone2ToolBudget", 5)]
+    [InlineData("zone3ToolBudget", 5)]
+    public void RetiredGameplayField_IsAllowedOnlyForExistingSnapshots(string key, int value)
+    {
+        var json = ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
+            $",\"gameplay\":[{{\"key\":\"{key}\",\"value\":{value}}}]}}";
+
+        Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(json, "SciFi"));
+        Assert.False(RemoteFixedBalanceContract.IsValidSnapshot(json, "SciFi", allowRetiredFields: false));
+        Assert.DoesNotContain(RemoteGameplayTuning.EditableFields, field => field.Key == key);
+    }
+
+    [Theory]
     [InlineData("Scene_B", "PURGE", "LIZARD", "SCENE_B_AUTHORED", true)]
     [InlineData("Scene_B", "EXPEDITION", "LIZARD", "SCENE_B_AUTHORED", false)]
     [InlineData("SciFi", "EXPEDITION", "LIZARD", "DEFAULT_ROUTE", false)]

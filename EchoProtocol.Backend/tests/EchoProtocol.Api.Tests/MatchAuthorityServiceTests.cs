@@ -296,6 +296,34 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal("BALANCE_DISABLED", result.ErrorCode);
     }
 
+    [Theory]
+    [InlineData(false, true, "LOCAL")]
+    [InlineData(true, false, "LOCAL")]
+    [InlineData(true, true, "REMOTE_FIXED")]
+    public async Task V2AutoFixedLocksAvailableSource(bool remoteEnabled, bool hasActiveVersion, string expectedSource)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: remoteEnabled);
+        var version = hasActiveVersion ? SeedBalance(db) : null;
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "auto-fixed");
+        var request = V2Request("AUTO");
+        var result = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(expectedSource, result.Data!.BalanceSource);
+        Assert.Equal(expectedSource == "REMOTE_FIXED" ? version!.Version : null, result.Data.BalanceVersion);
+
+        if (version is not null)
+        {
+            version.IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        var retry = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(retry.IsSuccess, retry.Message);
+        Assert.Equal(expectedSource, retry.Data!.BalanceSource);
+        Assert.Equal(result.Data.BalanceHash, retry.Data.BalanceHash);
+    }
+
     [Fact]
     public async Task V2RemoteWithoutActiveVersionIsRejected()
     {
@@ -308,8 +336,10 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal("BALANCE_VERSION_UNAVAILABLE", result.ErrorCode);
     }
 
-    [Fact]
-    public async Task V2RemoteInvalidHashIsRejected()
+    [Theory]
+    [InlineData("REMOTE_FIXED")]
+    [InlineData("AUTO")]
+    public async Task V2RemoteInvalidHashIsRejected(string source)
     {
         await using var db = CreateDb();
         var service = CreateService(db, remoteEnabled: true);
@@ -318,7 +348,7 @@ public sealed class MatchAuthorityServiceTests
         await db.SaveChangesAsync();
         var host = Guid.NewGuid();
         var matchId = await CreateBoundHostMatch(service, host, "remote-bad-hash");
-        var result = await service.StartV2Async(host, matchId, V2Request("REMOTE_FIXED"), CancellationToken.None);
+        var result = await service.StartV2Async(host, matchId, V2Request(source), CancellationToken.None);
         Assert.False(result.IsSuccess);
         Assert.Equal("BALANCE_SNAPSHOT_INVALID", result.ErrorCode);
     }

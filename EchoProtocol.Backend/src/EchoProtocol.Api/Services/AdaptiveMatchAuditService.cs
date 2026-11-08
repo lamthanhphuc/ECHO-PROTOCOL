@@ -15,7 +15,7 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
     public async Task<ServiceResult<object>> GetAsync(Guid matchId, CancellationToken ct)
     {
         var match = await db.MatchAuthorityBindings.AsNoTracking().Where(x => x.MatchId == matchId)
-            .Select(x => new { x.Status, x.MatchDataPolicy }).SingleOrDefaultAsync(ct);
+            .Select(x => new { x.Status, x.BalanceSource, x.BalanceVersion, x.BalanceHash, x.MatchDataPolicy }).SingleOrDefaultAsync(ct);
         if (match is null)
             return ServiceResult<object>.Failure("Match was not found", ErrorCodes.NotFound);
         var preMatch = await db.ScenarioDecisions.AsNoTracking().Where(x => x.MatchId == matchId)
@@ -76,6 +76,24 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
             .Select(x => new { x.Status, x.Attempts, x.LastError, x.NextAttemptAtUtc, x.ProfileTuningVersion }).SingleOrDefaultAsync(ct);
         var mayReprocess = match.Status == MatchAuthorityStatus.Ended && match.MatchDataPolicy != RemoteFixedBalanceContract.TestOnly &&
             profile?.Status is "COMPLETED" or "FAILED";
-        return ServiceResult<object>.Success(new { preMatch, decisions, profile, mayReprocess, HostEvidenceUnavailable = pending && accepted is null });
+        var teamProfile = await db.TeamProfiles.AsNoTracking().Where(x => x.MatchId == matchId).Select(x => new
+        {
+            x.ProcessingRevision, Status = x.ProcessingStatus.ToString(), x.ProcessingReason, x.TelemetryCompleteness,
+            x.ProfileFormulaVersion, x.TeamPerformanceFormulaVersion, x.UpdatedAtUtc,
+            x.ObjectiveTimeSeconds, ObjectiveTimeStatus = x.ObjectiveTimeStatus.ToString(),
+            x.SurvivalScore, SurvivalStatus = x.SurvivalStatus.ToString(),
+            x.TeamworkScore, TeamworkStatus = x.TeamworkStatus.ToString(),
+            x.ResourceEfficiencyScore, ResourceStatus = x.ResourceEfficiencyScoreStatus.ToString(),
+            x.TeamPerformanceScore, PerformanceStatus = x.TeamPerformanceStatus.ToString()
+        }).SingleOrDefaultAsync(ct);
+        return ServiceResult<object>.Success(new
+        {
+            Baseline = match.BalanceSource is null ? null : new
+            {
+                Source = match.BalanceSource, Version = match.BalanceVersion,
+                Hash = match.BalanceHash, match.MatchDataPolicy
+            },
+            preMatch, decisions, profile, teamProfile, mayReprocess, HostEvidenceUnavailable = pending && accepted is null
+        });
     }
 }

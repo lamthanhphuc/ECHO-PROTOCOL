@@ -25,6 +25,7 @@ public sealed partial class RemoteFixedBalanceAdminService(
         if (pagination != null) return ServiceResult<AdminPagedResponse<RemoteFixedVersionResponse>>.Failure(pagination, ErrorCodes.ValidationError);
 
         var versions = db.RemoteFixedBalanceVersions.AsNoTracking();
+        if (query.ActiveOnly) versions = versions.Where(x => x.IsActive);
         if (map != null) versions = versions.Where(x => x.MapId == map);
         if (difficulty != null) versions = versions.Where(x => x.Difficulty == difficulty);
         return ServiceResult<AdminPagedResponse<RemoteFixedVersionResponse>>.Success(
@@ -44,13 +45,15 @@ public sealed partial class RemoteFixedBalanceAdminService(
         Guid adminUserId, CreateRemoteFixedVersionRequest request, CancellationToken ct)
     {
         var version = request.Version.Trim();
+        if (string.Equals(version, "DEFAULT", StringComparison.OrdinalIgnoreCase))
+            return Invalid<RemoteFixedVersionDetailResponse>("Default là cấu hình có sẵn trong Unity.");
         var map = request.MapId.Trim();
         var difficulty = request.Difficulty.Trim().ToUpperInvariant();
         if (version.Length is < 1 or > 80 || !VersionPattern().IsMatch(version))
             return Invalid<RemoteFixedVersionDetailResponse>("Version must start with a letter or digit and contain only letters, digits, '.', '_' or '-'.");
         if (!Maps.Contains(map)) return Invalid<RemoteFixedVersionDetailResponse>("Unsupported map.");
         if (!Difficulties.Contains(difficulty)) return Invalid<RemoteFixedVersionDetailResponse>("Unsupported difficulty.");
-        if (!RemoteFixedBalanceContract.IsValidSnapshot(request.SnapshotJson, map))
+        if (!RemoteFixedBalanceContract.IsValidSnapshot(request.SnapshotJson, map, allowRetiredFields: false))
             return Invalid<RemoteFixedVersionDetailResponse>("Invalid gameplay balance snapshot for this map.");
         if (RemoteFixedBalanceContract.GameVersion(request.SnapshotJson) is { } build && !settings.Value.RemoteFixedGameVersions.Contains(build))
             return Invalid<RemoteFixedVersionDetailResponse>("Unity build is outside the registered compatibility list.");

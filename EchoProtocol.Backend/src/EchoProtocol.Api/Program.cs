@@ -244,6 +244,7 @@ builder.Services.AddScoped<AdaptiveConfigurationService>();
 builder.Services.AddScoped<ProfileTuningService>();
 builder.Services.AddScoped<EconomyAdminService>();
 builder.Services.AddScoped<AdaptiveMatchAuditService>();
+builder.Services.AddScoped<AdminBalanceAnalyticsService>();
 builder.Services.AddScoped<AdminModerationService>();
 builder.Services.AddScoped<IMatchTelemetryAggregator, MatchTelemetryAggregator>();
 builder.Services.AddScoped<IPlayerAIProfileUpdater, PlayerAIProfileUpdater>();

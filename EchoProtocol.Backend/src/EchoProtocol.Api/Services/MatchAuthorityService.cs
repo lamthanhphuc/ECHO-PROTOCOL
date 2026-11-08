@@ -534,6 +534,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         var difficulty = (v2Request?.Difficulty ?? legacyRequest?.Difficulty)?.Trim().ToUpperInvariant();
         var mode = v2Request?.ResolutionMode?.Trim().ToUpperInvariant();
         var source = v2Request?.BalanceSource?.Trim().ToUpperInvariant();
+        var autoSource = source == "AUTO";
         var protocol = v2Request?.BalanceProtocolVersion?.Trim();
 
         MatchAuthorityBinding? match = await _db.MatchAuthorityBindings.Include(item => item.Players)
@@ -547,7 +548,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             if (match!.Status == MatchAuthorityStatus.InMatch)
             {
                 if (match.MapId != mapId || match.Difficulty != difficulty
-                    || match.ResolutionMode != mode || match.BalanceSource != source
+                    || match.ResolutionMode != mode
+                    || (autoSource ? match.BalanceSource is not ("LOCAL" or "REMOTE_FIXED") : match.BalanceSource != source)
                     || match.BalanceProtocolVersion != protocol)
                     return Failure<MatchAuthorityResponse>(
                         "Locked match context differs from the request", ErrorCodes.MatchSessionConflict);
@@ -575,8 +577,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         if (isV2 && (mapId is null || difficulty is null
             || mode is not ("FIXED" or "ADAPTIVE")
-            || source is not ("LOCAL" or "REMOTE_FIXED")
-            || (source == "REMOTE_FIXED" && mode != "FIXED")
+            || source is not ("LOCAL" or "REMOTE_FIXED" or "AUTO")
+            || (source is "REMOTE_FIXED" or "AUTO" && mode != "FIXED")
             || (source == "REMOTE_FIXED" && (!MatchContentCatalog.Entries.Any(x => x.Map == mapId) ||
                 (mapId == "Scene_B" && (v2Request?.SupportsGameplayTuning != true || string.IsNullOrWhiteSpace(v2Request.GameVersion)))))))
         {
@@ -620,17 +622,23 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         RemoteFixedBalanceVersion? selected = null;
-        if (source == "REMOTE_FIXED")
+        if (source == "REMOTE_FIXED" || autoSource)
         {
-            if (!_settings.EnableRemoteFixed)
+            if (!_settings.EnableRemoteFixed && !autoSource)
                 return Failure<MatchAuthorityResponse>("Remote Fixed is disabled", ErrorCodes.BalanceDisabled);
 
-            selected = await _db.RemoteFixedBalanceVersions.AsNoTracking().SingleOrDefaultAsync(item =>
-                item.IsActive && item.MapId == mapId && item.Difficulty == difficulty &&
-                item.ProtocolVersion == protocol, cancellationToken);
-            if (selected is null)
+            if (_settings.EnableRemoteFixed)
+                selected = await _db.RemoteFixedBalanceVersions.AsNoTracking().SingleOrDefaultAsync(item =>
+                    item.IsActive && item.MapId == mapId && item.Difficulty == difficulty &&
+                    item.ProtocolVersion == protocol, cancellationToken);
+            if (selected is null && !autoSource)
                 return Failure<MatchAuthorityResponse>("No active Remote Fixed Balance version", ErrorCodes.BalanceVersionUnavailable);
 
+            source = selected is null ? "LOCAL" : "REMOTE_FIXED";
+        }
+
+        if (selected is not null)
+        {
             if (!RemoteFixedBalanceContract.IsValidSnapshot(selected.SnapshotJson, mapId) ||
                 !string.Equals(RemoteFixedBalanceContract.ComputeHash(selected.SnapshotJson),
                     selected.ContentHash, StringComparison.Ordinal))

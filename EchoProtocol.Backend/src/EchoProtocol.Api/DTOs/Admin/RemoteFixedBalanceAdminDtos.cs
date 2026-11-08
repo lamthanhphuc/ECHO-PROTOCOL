@@ -20,6 +20,7 @@ public sealed class RemoteFixedVersionsQuery : AdminPagedQuery
 {
     public string? MapId { get; set; }
     public string? Difficulty { get; set; }
+    public bool ActiveOnly { get; set; }
 }
 
 public class RemoteFixedVersionResponse

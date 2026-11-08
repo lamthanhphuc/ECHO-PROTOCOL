@@ -19,6 +19,16 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("balance-analytics")]
+    public Task<IActionResult> BalanceAnalytics([FromServices] AdminBalanceAnalyticsService analytics, CancellationToken ct,
+        int days = 30, string? map = null, string? difficulty = null, int? teamSize = null, string? baseline = null, bool testOnly = false) =>
+        Execute(() => analytics.GetAsync(days, map, difficulty, teamSize, baseline, testOnly, ct), ct);
+
+    [HttpGet("users/{userId:guid}/ai-history")]
+    public Task<IActionResult> PlayerAIHistory(Guid userId, [FromServices] AdminBalanceAnalyticsService analytics,
+        CancellationToken ct, int page = 1) =>
+        Execute(() => analytics.PlayerAsync(userId, page, ct), ct);
+
     [HttpGet("economy")]
     public Task<IActionResult> Economy([FromServices] EconomyAdminService economy, CancellationToken ct) =>
         WithAdmin(id => economy.GetAsync(id, ct), ct);
@@ -72,7 +82,7 @@ public sealed class AdminController(
         Execute(() => Task.FromResult(remoteFixed.GetStatus()), ct);
 
     [HttpGet("remote-fixed/gameplay-fields")]
-    public IActionResult RemoteGameplayFields() => Ok(ApiResponse<RemoteGameplayTuning.Field[]>.Ok(RemoteGameplayTuning.Fields));
+    public IActionResult RemoteGameplayFields() => Ok(ApiResponse<RemoteGameplayTuning.Field[]>.Ok(RemoteGameplayTuning.EditableFields));
 
     [HttpGet("match-content")]
     public IActionResult MatchContent([FromServices] Microsoft.Extensions.Options.IOptions<EchoProtocol.Api.Configurations.MatchAuthoritySettings> settings) =>
