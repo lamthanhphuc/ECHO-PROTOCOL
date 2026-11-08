@@ -30,6 +30,12 @@ jobs:
       matrix:
         mode: [editmode, playmode]
     steps:
+      - name: Free disk space for Unity
+        run: |
+          df -h /
+          # These preinstalled SDKs are not used by the Linux Unity container.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           lfs: true
