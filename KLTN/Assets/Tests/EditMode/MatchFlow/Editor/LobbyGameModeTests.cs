@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Reflection;
 using EchoProtocol.Networking;
 using EchoProtocol.UI.MainMenu;
 using NUnit.Framework;
@@ -33,22 +34,27 @@ public sealed class LobbyGameModeTests
         try
         {
             controller = scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<MainMenuMatchmakingController>(true)).Single();
-            controller.SendMessage("Awake");
             var so = new SerializedObject(controller);
             var original = (GameObject)so.FindProperty("difficultyRow").objectReferenceValue;
             var mode = original.transform.parent.Find("GameModeRow");
-            controller.SendMessage("OpenHost");
+            InvokeMenuAction(controller, "OpenHost");
             Assert.That(original.activeSelf, Is.False);
             Assert.That(mode == null || !mode.gameObject.activeSelf, Is.True);
-            controller.SendMessage("OpenJoin");
+            InvokeMenuAction(controller, "OpenJoin");
             Assert.That(original.activeSelf, Is.False);
             Assert.That(mode == null || !mode.gameObject.activeSelf, Is.True);
         }
         finally
         {
-            if(controller)controller.SendMessage("OnDisable");
             if (opened) EditorSceneManager.CloseScene(scene,true);
             SceneManager.SetActiveScene(active);
         }
+    }
+
+    private static void InvokeMenuAction(MainMenuMatchmakingController controller, string name)
+    {
+        var method = typeof(MainMenuMatchmakingController).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, name);
+        method.Invoke(controller, null);
     }
 }

@@ -66,7 +66,9 @@ public sealed class AlienHuntSceneTests
                 $"{meat.name} at {meat.transform.position} must be within bait placement range of the NavMesh.");
             foreach (var alien in aliens)
                 Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
-                    new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)), Is.GreaterThanOrEqualTo(25.9f));
+                    new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)),
+                    Is.GreaterThanOrEqualTo(26f - meat.GetComponent<BoxCollider>().bounds.extents.x),
+                    $"{meat.name} must keep the authored clearance from {alien.name}, within its pickup footprint.");
         }
         var materials = aliens.SelectMany(a => a.GetComponentsInChildren<Renderer>()).SelectMany(r => r.sharedMaterials).Distinct().ToArray();
         Assert.That(materials.Length, Is.EqualTo(1));
