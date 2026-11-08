@@ -4,11 +4,16 @@ import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
 import { AdminCreditGrant } from "@/components/admin/admin-credit-grant";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
 import { adminApi } from "@/lib/api/server-api";
-import { formatDate, formatNumber } from "@/lib/utils/format";
+import { formatDate, formatNumber, param } from "@/lib/utils/format";
+import type { SearchParams } from "@/lib/types/common";
 
-export default async function UserDetailPage({ params }: { params: Promise<{ userId: string }> }) {
+export default async function UserDetailPage({ params, searchParams }: { params: Promise<{ userId: string }>; searchParams: Promise<SearchParams> }) {
   const { userId } = await params;
-  const [user, history] = await Promise.all([adminApi.user(userId), adminApi.moderationHistory(userId)]);
+  const requestedPage = Number(param((await searchParams).profilePage));
+  const page = Number.isInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000 ? requestedPage : 1;
+  const [user, history, ai] = await Promise.all([adminApi.user(userId), adminApi.moderationHistory(userId), adminApi.playerAIHistory(userId, page)]);
+  const profile = ai.profile;
+  const dimensions: Record<string, string> = { Survival: "Sinh tồn", Noise: "Tiếng ồn", Objective: "Mục tiêu", ToolUsage: "Dùng công cụ" };
   const flagged = history.find((item) => item.action === "FLAG_USER" || item.action === "CLEAR_USER")?.action === "FLAG_USER";
   return <>
     <PageHeader title={user.displayName ?? user.username} description={user.email} />
@@ -21,6 +26,36 @@ export default async function UserDetailPage({ params }: { params: Promise<{ use
       userId={user.userId}
       currentBalance={user.walletBalance ?? 0}
     />
+    <Panel className="mt-5" >
+      <h2 id="ai-history" className="admin-section-title mb-2">Hồ sơ AI và lịch sử điểm</h2>
+      {profile ? <>
+        <p className="muted mb-2 text-sm">Công thức {profile.profileFormulaVersion} · Revision {profile.profileRevision}</p>
+        <ul className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+          {([
+            ["Sinh tồn", profile.survivalScore, profile.survivalStatus, profile.survivalSampleCount],
+            ["Tiếng ồn", profile.noiseScore, profile.noiseStatus, profile.noiseSampleCount],
+            ["Mục tiêu", profile.objectiveScore, profile.objectiveStatus, profile.objectiveSampleCount],
+            ["Dùng công cụ", profile.toolUsageScore, profile.toolUsageStatus, profile.toolUsageSampleCount],
+          ] as const).map(([label, score, status, count]) => <li key={label}>{label} · {count > 0 ? score ?? "—" : "—"} · {count} mẫu · {status}</li>)}
+        </ul>
+      </> : <p className="muted mb-2 text-sm">Chưa có hồ sơ AI hiện hành.</p>}
+      <p className="muted mb-2 text-sm">Điểm quan sát từng trận và trạng thái đóng góp vào hồ sơ.</p>
+      {ai.rows.length === 0 ? <p className="muted text-sm">Trang này chưa có điểm trận.</p> : <div className="table-wrap"><table>
+        <thead><tr><th>Trận</th><th>Chỉ số</th><th>Điểm</th><th>Công thức và cấu hình</th><th>Đóng góp</th></tr></thead>
+        <tbody>{ai.rows.map((row) => <tr key={row.id}>
+          <td><Link className="text-red-300 hover:underline" href={`/admin/matches/${row.matchId}`}>{formatDate(row.matchEndTs)}</Link></td>
+          <td>{dimensions[row.dimension] ?? row.dimension}</td><td>{row.score}</td>
+          <td>{row.matchScoreFormulaVersion} · {row.normalizationConfigVersion} · {row.alphaConfigVersion}</td>
+          <td>{row.status === "Contributing" ? "Đang tính" : "Đã rút"}{row.retractionReason && ` · ${row.retractionReason}`}
+            {profile && row.profileLineageId !== profile.profileLineageId && " · Hồ sơ phiên bản trước"}</td>
+        </tr>)}</tbody>
+      </table></div>}
+      <div className="mt-3 flex gap-3 text-sm">
+        {page > 1 && <Link href={`?profilePage=${page - 1}#ai-history`}>Trang trước</Link>}
+        <span>Trang {page}</span>
+        {ai.hasNext && page < 10000 && <Link href={`?profilePage=${page + 1}#ai-history`}>Trang sau</Link>}
+      </div>
+    </Panel>
     <Panel className="mt-5">
       <dl className="grid gap-4 sm:grid-cols-2">
         <div><dt className="eyebrow">Mã người dùng</dt><dd className="code mt-1 break-all">{user.userId}</dd></div>

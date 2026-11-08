@@ -63,6 +63,14 @@ export interface AdaptivePreview {
 }
 
 export interface AdaptiveMatchAudit {
+  teamProfile?: {
+    processingRevision: number; status: string; processingReason: string; telemetryCompleteness: string;
+    profileFormulaVersion: string; teamPerformanceFormulaVersion: string | null; updatedAtUtc: string;
+    objectiveTimeSeconds: number | null; objectiveTimeStatus: string; survivalScore: number | null; survivalStatus: string;
+    teamworkScore: number | null; teamworkStatus: string; resourceEfficiencyScore: number | null; resourceStatus: string;
+    teamPerformanceScore: number | null; performanceStatus: string;
+  } | null;
+  baseline?: { source: string; version: string | null; hash: string | null; matchDataPolicy: string } | null;
   preMatch: Array<{
     decisionId: string;
     scenarioConfigId: string;
@@ -116,9 +124,9 @@ export const adaptiveParameterLabels: Record<string, string> = {
   SearchSeconds: "Thời gian tìm kiếm (giây)",
   ChaseSpeed: "Tốc độ đuổi (đơn vị Unity/giây)",
   SpecialCooldownSeconds: "Hồi chiêu đặc biệt (giây)",
-  Zone1MinionCap: "Giới hạn Minion Zone 1",
-  Zone2MinionCap: "Giới hạn Minion Zone 2",
-  Zone3AdaptiveMinionCap: "Giới hạn Minion Adaptive Zone 3",
+  Zone1MinionCap: "Giới hạn Minion Khu vực 1",
+  Zone2MinionCap: "Giới hạn Minion Khu vực 2",
+  Zone3AdaptiveMinionCap: "Giới hạn Minion Adaptive Khu vực 3",
   OptionalToolBudget: "Ngân sách công cụ tùy chọn",
   ResourceGrade: "Cấp tài nguyên",
   CabinetAmbushEnabled: "Phục kích tủ (0 tắt, 1 bật)",
@@ -132,7 +140,7 @@ export const adaptiveReasons: Record<string, string> = {
   HOLD_INCREASE_REQUIRES_FULL_ROSTER: "Tăng áp lực yêu cầu hồ sơ đủ điều kiện của toàn đội.",
   NO_APPROVED_NEXT_VALUE: "Chưa chọn ứng viên hợp lệ cho nấc kế tiếp.",
   ADAPTIVE_CONFIG_UNAVAILABLE: "Ứng viên đã chọn hiện không còn hợp lệ.",
-  HOLD_PREMATCH_FIXED_FALLBACK: "Trận đã dùng cấu hình Fixed dự phòng.",
+  HOLD_PREMATCH_FIXED_FALLBACK: "Trận đã dùng cấu hình dự phòng.",
   HOLD_PREMATCH_V02_UNAVAILABLE: "Host không nhận được kế hoạch v0.2 đã duyệt trước khi bắt đầu.",
   HOLD_PREMATCH_CHASE_SPEED_MISMATCH: "Tốc độ đề xuất khác nấc v0.2 đã duyệt.",
   HOLD_ADMIN_TIER_DISABLED: "Giá trị đề xuất nằm ngoài các nấc đã xuất bản.",
@@ -140,7 +148,7 @@ export const adaptiveReasons: Record<string, string> = {
   HOLD_GLOBAL_PRESSURE_BUDGET: "Kế hoạch vượt giới hạn một thay đổi tăng áp lực.",
   HOLD_SINGLE_DELTA_REQUIRED: "Một quyết định giữa trận chỉ được đổi một thông số.",
   HOLD_SINGLE_TIER_REQUIRED: "Một quyết định giữa trận chỉ được đổi một nấc.",
-  HOLD_ZONE3_SAFE_ENTRY_REQUIRED: "Tăng Minion Zone 3 cần cửa sổ an toàn khi vào Zone 3.",
+  HOLD_ZONE3_SAFE_ENTRY_REQUIRED: "Tăng Minion Khu vực 3 cần cửa sổ an toàn khi vào Khu vực 3.",
   HOLD_STALKER_COMPOSITE_BUDGET: "Trước trận chỉ đổi một thông số Stalker.",
   HOLD_PRESSURE_HANDOFF_WORLD_NOT_REVERTED: "Hiệu ứng áp lực trước đó chưa được gỡ khỏi trận.",
   HOLD_PREVIOUS_RECEIPT_PENDING: "Quyết định trước đang chờ biên nhận.",

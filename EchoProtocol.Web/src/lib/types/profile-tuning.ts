@@ -41,4 +41,5 @@ export interface RemoteGameplayField {
   max: number;
   integral: boolean;
   map: string | null;
+  help?: string | null;
 }

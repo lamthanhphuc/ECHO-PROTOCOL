@@ -63,6 +63,18 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
     setPreview(null);
   }
 
+  function loadSample(kind: "complete" | "missing" | "hold") {
+    const counts = {
+      survivalSamples: configuration.minimumSurvivalSamples,
+      noiseSamples: configuration.minimumNoiseSamples,
+    };
+    setPlayers([kind === "missing"
+      ? { survival: null, noise: null, survivalSamples: 0, noiseSamples: 0 }
+      : { ...counts, survival: kind === "hold" ? configuration.survivalLow : 100, noise: 100 }]);
+    setPreview(null);
+    setMessage("");
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
@@ -111,7 +123,7 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           </label>)}
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          {([["fixed", "Fixed dự phòng"], ["relief", "Ứng viên giảm áp lực"], ["increase", "Ứng viên tăng áp lực"]] as const).map(([field, label]) =>
+          {([["fixed", "Cấu hình dự phòng"], ["relief", "Ứng viên giảm áp lực"], ["increase", "Ứng viên tăng áp lực"]] as const).map(([field, label]) =>
             <label className="admin-field" key={field}>{label}
               <select className="input" required={field === "fixed"} value={optionKey(configuration[field])} onChange={(e) => {
                 const selected = data.options.find((option) => optionKey(option) === e.target.value);
@@ -191,6 +203,11 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
       <h2 className="mb-3 text-lg font-semibold">Chạy thử với hồ sơ mẫu</h2>
       <p className="muted mb-3 text-sm">Bỏ trống điểm để mô phỏng thiếu hồ sơ. Chạy thử dùng nội dung đang nhập và không lưu trận. Các chốt v0.2 được kiểm tra khi Host bắt đầu trận.</p>
       <fieldset disabled={busy} className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          <button className="button button-secondary" type="button" onClick={() => loadSample("complete")}>Đủ dữ liệu</button>
+          <button className="button button-secondary" type="button" onClick={() => loadSample("missing")}>Thiếu dữ liệu</button>
+          <button className="button button-secondary" type="button" onClick={() => loadSample("hold")}>Giữ nguyên</button>
+        </div>
         {players.map((player, index) => <div key={index} className="grid gap-2 rounded border border-[var(--line)] p-3 sm:grid-cols-4">
           <p className="sm:col-span-4">Người chơi {index + 1}</p>
           {sampleFields.map(([key, label]) => <label className="admin-field" key={key}>{label}
@@ -210,12 +227,12 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
             onClick={() => { setPlayers(players.slice(0, -1)); setPreview(null); }}>Bớt người</button>
           <button className="button button-secondary" type="submit" value="preview">Chạy thử</button>
         </div>
-      </fieldset>
-      {preview && <div role="status" className="mt-4 space-y-1 text-sm">
-        <p>{preview.usedFixedFallback ? "Fixed dự phòng" : "Ứng viên được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
-        {preview.rule && <p className="muted">{preview.rule}</p>}
+      {preview && <div role="status" className="space-y-1 rounded border border-[var(--line)] p-3 text-sm">
+        <p>{preview.usedFixedFallback ? "Cấu hình dự phòng" : "Ứng viên được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
+        {preview.rule && <details className="muted"><summary className="cursor-pointer">Chi tiết kỹ thuật</summary><code>{preview.rule}</code></details>}
         {preview.reason && <p>{adaptiveReasons[preview.reason] ?? preview.reason}</p>}
       </div>}
+      </fieldset>
     </Panel>
     <div>
       <button className="button" type="submit" value="publish" disabled={busy}>{busy ? "Đang xử lý…" : "Xuất bản cho trận mới"}</button>

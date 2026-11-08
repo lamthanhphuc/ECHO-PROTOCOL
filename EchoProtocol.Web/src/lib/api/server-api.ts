@@ -7,6 +7,7 @@ import type { PlayerProfile } from "@/lib/types/player";
 import type { AdaptiveAdminData, AdaptiveMatchAudit } from "@/lib/types/adaptive";
 import type { ProfileTuningData, RemoteGameplayField } from "@/lib/types/profile-tuning";
 import type { EconomyData, MatchContent } from "@/lib/types/operations";
+import type { BalanceAnalytics, PlayerAIHistory } from "@/lib/types/balance-analytics";
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
@@ -47,6 +48,8 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  balanceAnalytics: (query: string) => authorized<BalanceAnalytics>(`/api/admin/balance-analytics${query}`),
+  playerAIHistory: (id: string, page: number) => authorized<PlayerAIHistory>(`/api/admin/users/${encodeURIComponent(id)}/ai-history?page=${page}`),
   matchContent: () => authorized<MatchContent>("/api/admin/match-content"),
   economy: () => authorized<EconomyData>("/api/admin/economy"),
   profileTuning: () => authorized<ProfileTuningData>("/api/admin/ai-profile"),

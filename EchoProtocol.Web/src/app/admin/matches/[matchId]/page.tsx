@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { difficultyLabel, mapLabel } from "@/lib/utils/game-labels";
 import { adminApi } from "@/lib/api/server-api";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
 import { AdaptiveMatchPanel } from "@/components/admin/adaptive-match-panel";
@@ -25,14 +26,16 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
     <Link className="mb-5 inline-block text-sm text-red-300 hover:underline" href="/admin/matches">← Phòng và trận đấu</Link>
     <PageHeader title="Chi tiết phòng" description={match.matchId} />
     <div className="grid gap-4 sm:grid-cols-3">
-      <StatCard label="Trạng thái" value={<StatusBadge status={status} />} />
+      <StatCard label="Trạng thái phòng" value={<StatusBadge status={status} />} />
       <StatCard label="Chưa báo rời" value={`${match.connectedCount} / ${players.length}`} />
-      <StatCard label="Kết quả" value={match.outcome ? outcomes[match.outcome] : "Chưa có"} />
+      <StatCard label="Xác nhận kết quả" value={match.outcome ? `Đã lưu kết quả trận · ${outcomes[match.outcome] ?? match.outcome}` : "Chưa có kết quả từ máy chủ"} />
     </div>
     <Panel className="mt-5"><dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <div><dt className="eyebrow">Chủ phòng</dt><dd className="mt-1"><Link className="text-red-300 hover:underline" href={`/admin/users/${match.hostUserId}`}>{match.hostUsername || match.hostUserId}</Link></dd></div>
-      <div><dt className="eyebrow">Bản đồ</dt><dd className="mt-1">{match.mapId || "—"}</dd></div>
-      <div><dt className="eyebrow">Độ khó</dt><dd className="mt-1">{({ EASY: "Dễ", NORMAL: "Thường", HARD: "Khó" } as Record<string, string>)[match.difficulty || ""] || match.difficulty || "—"}</dd></div>
+      <div><dt className="eyebrow">Bản đồ</dt><dd className="mt-1">{mapLabel(match.mapId)}
+        {match.mapId && <details className="muted mt-1 text-xs"><summary className="cursor-pointer">Mã bản đồ</summary><code>{match.mapId}</code></details>}
+      </dd></div>
+      <div><dt className="eyebrow">Độ khó</dt><dd className="mt-1">{difficultyLabel(match.difficulty)}</dd></div>
       <div><dt className="eyebrow">Bắt đầu</dt><dd className="mt-1">{formatDate(match.startedAtUtc)}</dd></div>
       <div><dt className="eyebrow">Kết thúc</dt><dd className="mt-1">{formatDate(match.endedAtUtc)}</dd></div>
       <div><dt className="eyebrow">Quyền host hết hạn</dt><dd className="mt-1">{formatDate(match.leaseExpiresAtUtc)}</dd></div>

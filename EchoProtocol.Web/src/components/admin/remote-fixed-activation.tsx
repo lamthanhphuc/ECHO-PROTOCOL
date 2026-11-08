@@ -3,18 +3,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function RemoteFixedActivation({ version, activeVersion, isActive }: {
+export function RemoteFixedActivation({ version, activeVersion, isActive, activationBlocked, scope, useDefault = false }: {
   version: string; activeVersion: string | null; isActive: boolean;
+  activationBlocked: string | null; scope: string;
+  useDefault?: boolean;
 }) {
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const replacing = activeVersion !== null && activeVersion !== version;
 
   async function change(action: "activate" | "deactivate") {
+    if (action === "activate" && activationBlocked) return;
     const trimmed = reason.trim();
     if (!trimmed) return setMessage("Vui lòng nhập lý do.");
-    if (!window.confirm(`${action === "activate" ? "Kích hoạt" : "Ngừng kích hoạt"} ${version}?`)) return;
+    if (!window.confirm(action === "deactivate"
+      ? `Dùng mặc định trong game thay cho ${version} trên ${scope}?`
+      : replacing ? `Dùng ${version} thay cho ${activeVersion} trên ${scope}?` : `Kích hoạt ${version} cho ${scope}?`)) return;
     setBusy(true); setMessage("");
     try {
       const response = await fetch(`/api/bff/admin/remote-fixed/versions/${encodeURIComponent(version)}/${action}`, {
@@ -30,11 +36,13 @@ export function RemoteFixedActivation({ version, activeVersion, isActive }: {
   }
 
   return <div>
+    <p className="muted mb-3 text-sm">{scope}{!isActive && replacing ? ` · Sẽ thay thế ${activeVersion}` : ""}</p>
+    {!isActive && activationBlocked && <p className="mb-3 text-sm text-rose-300">{activationBlocked}</p>}
     <label className="admin-field">Lý do thay đổi<textarea className="input min-h-24" required maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
     <div className="mt-3 flex gap-3">
       {isActive
-        ? <button className="button" type="button" disabled={busy} onClick={() => change("deactivate")}>Ngừng kích hoạt</button>
-        : <button className="button" type="button" disabled={busy} onClick={() => change("activate")}>{activeVersion ? "Kích hoạt lại cấu hình này" : "Kích hoạt cấu hình"}</button>}
+        ? <button className="button" type="button" disabled={busy} onClick={() => change("deactivate")}>{useDefault ? "Dùng mặc định trong game" : "Ngừng kích hoạt"}</button>
+        : <button className="button" type="button" disabled={busy || !!activationBlocked} onClick={() => change("activate")}>{replacing ? "Thay cấu hình đang áp dụng" : "Kích hoạt cấu hình"}</button>}
     </div>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
   </div>;

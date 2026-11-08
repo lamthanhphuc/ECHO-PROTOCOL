@@ -12,6 +12,7 @@ const items = [
   { href: "/admin/remote-fixed", label: "Nội dung và cân bằng" },
   { href: "/admin/economy", label: "Kinh tế" },
   { href: "/admin/adaptive", label: "Adaptive" },
+  { href: "/admin/balance-analytics", label: "Phân tích cân bằng" },
   { href: "/admin/ai-profile", label: "Hồ sơ AI" },
 ];
 

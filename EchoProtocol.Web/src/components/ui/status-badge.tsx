@@ -5,7 +5,7 @@ const labels: Record<string, string> = {
   CANCELLED: "Đã hủy", EXPIRED: "Hết hạn", READY: "Sẵn sàng",
   RESERVED: "Đã giữ chỗ", UNKNOWN: "Chưa xác định", ADMIN: "Quản trị viên",
   WALLET_CREDIT: "Cộng xu", INVENTORY_ITEM: "Cấp vật phẩm", WALLET_TOPUP: "Nạp xu",
-  CHARACTER: "Nhân vật", TEAM_TOOL: "Công cụ đội", PET: "Thú cưng",
+  CHARACTER: "Nhân vật gốc", TEAM_TOOL: "Công cụ đội", PET: "Thú cưng",
   PET_SKIN: "Trang phục thú cưng", CHARACTER_OUTFIT: "Trang phục nhân vật",
   RECEIVED: "Đã nhận", VERIFIED: "Đã xác minh", FULFILLMENT_PENDING: "Chờ cấp phát",
   UNKNOWN_ORDER: "Không tìm thấy đơn", EVIDENCE_MISMATCH: "Thông tin không khớp",
