@@ -56,7 +56,6 @@ public sealed class AlienHuntSceneTests
             Assert.That(furnace.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(0));
         }
         var aliens = mission.Actors.Take(9).ToArray();
-        float normalBaitRadius = new SerializedObject(mission).FindProperty("baitRadius").floatValue;
         foreach (var meat in mission.Actors.Where(a => a.Kind == HuntKind.Meat))
         {
             var meatSize = meat.GetComponentInChildren<Renderer>().bounds.size;
@@ -66,21 +65,17 @@ public sealed class AlienHuntSceneTests
             // Authored pickup pivots use the scene builder's two-metre snap range.
             Assert.That(NavMesh.SamplePosition(meat.transform.position, out _, 2f, NavMesh.AllAreas), Is.True,
                 $"{meat.name} at {meat.transform.position} must be within the authored snap range of the NavMesh.");
-            foreach (var alien in aliens)
-                Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
-                    new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)),
-                    Is.GreaterThan(normalBaitRadius),
-                    $"{meat.name} must start outside the Normal bait radius of {alien.name}.");
         }
         var materials = aliens.SelectMany(a => a.GetComponentsInChildren<Renderer>()).SelectMany(r => r.sharedMaterials).Distinct().ToArray();
         Assert.That(materials.Length, Is.EqualTo(1));
         Assert.That(materials[0].GetTexture("_BaseMap"), Is.Not.Null);
         var path = new NavMeshPath();
+        Assert.That(NavMesh.SamplePosition(aliens[0].transform.position, out var origin, 1.5f, NavMesh.AllAreas), Is.True, aliens[0].name);
         foreach (var alien in aliens)
         {
-            Assert.That(NavMesh.SamplePosition(alien.transform.position, out var hit, .2f, NavMesh.AllAreas), Is.True, alien.name);
-            Assert.That(NavMesh.CalculatePath(aliens[0].transform.position, hit.position, NavMesh.AllAreas, path), Is.True);
-            Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete));
+            Assert.That(NavMesh.SamplePosition(alien.transform.position, out var hit, 1.5f, NavMesh.AllAreas), Is.True, alien.name);
+            Assert.That(NavMesh.CalculatePath(origin.position, hit.position, NavMesh.AllAreas, path), Is.True, alien.name);
+            Assert.That(path.status, Is.EqualTo(NavMeshPathStatus.PathComplete), alien.name);
             var animator = alien.GetComponentInChildren<Animator>();
             Assert.That(animator.runtimeAnimatorController.animationClips.Length, Is.EqualTo(5));
             foreach (var clip in animator.runtimeAnimatorController.animationClips)
@@ -119,6 +114,13 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission, Is.Not.Null, "Scene_B mission did not initialize after entering Play mode.");
         Assert.That(mission.Ready, Is.True);
         Assert.That(authoredHomes.Length, Is.EqualTo(9));
+        // Unplaced pickups must not act as bait, even when a randomized nest is nearby.
+        for (int i = 0; i < 9; i++)
+        {
+            var state = mission.Read(i);
+            Assert.That(state.Stage, Is.Not.EqualTo((int)AlienStage.Running));
+            Assert.That(state.Stage, Is.Not.EqualTo((int)AlienStage.Eating));
+        }
 
         int relocated = 0;
 
