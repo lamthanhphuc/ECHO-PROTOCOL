@@ -190,8 +190,9 @@ namespace EchoProtocol.Tests
         {
             var host = new RelayACircuitSimulation();
             var proxy = new RelayACircuitSimulation();
-            host.Initialize(_config, 3);
-            proxy.Initialize(_config, 3);
+            const int attemptSeed = 42;
+            host.Initialize(_config, 3, attemptSeed);
+            proxy.Initialize(_config, 3, attemptSeed);
             var state = host.Snapshot;
             int notifications = 0;
             proxy.Changed += _ => notifications++;

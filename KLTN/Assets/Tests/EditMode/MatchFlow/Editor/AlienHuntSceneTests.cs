@@ -56,6 +56,7 @@ public sealed class AlienHuntSceneTests
             Assert.That(furnace.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(0));
         }
         var aliens = mission.Actors.Take(9).ToArray();
+        float normalBaitRadius = new SerializedObject(mission).FindProperty("baitRadius").floatValue;
         foreach (var meat in mission.Actors.Where(a => a.Kind == HuntKind.Meat))
         {
             var meatSize = meat.GetComponentInChildren<Renderer>().bounds.size;
@@ -68,8 +69,8 @@ public sealed class AlienHuntSceneTests
             foreach (var alien in aliens)
                 Assert.That(Vector2.Distance(new Vector2(meat.transform.position.x, meat.transform.position.z),
                     new Vector2(alien.transform.parent.position.x, alien.transform.parent.position.z)),
-                    Is.GreaterThanOrEqualTo(26f - meat.GetComponent<BoxCollider>().bounds.extents.x),
-                    $"{meat.name} must keep the authored clearance from {alien.name}, within its pickup footprint.");
+                    Is.GreaterThan(normalBaitRadius),
+                    $"{meat.name} must start outside the Normal bait radius of {alien.name}.");
         }
         var materials = aliens.SelectMany(a => a.GetComponentsInChildren<Renderer>()).SelectMany(r => r.sharedMaterials).Distinct().ToArray();
         Assert.That(materials.Length, Is.EqualTo(1));
