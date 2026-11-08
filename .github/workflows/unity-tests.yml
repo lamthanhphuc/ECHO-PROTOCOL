@@ -27,7 +27,8 @@ jobs:
           lfs: true
           persist-credentials: false
       - name: Run Unity tests
-        uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4
+        # v4.3.2 launches Docker directly and avoids a separate CLI download.
+        uses: game-ci/unity-test-runner@fa6ced25861c16ef56187828c43f76d00df43a23 # v4.3.2
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
@@ -39,7 +40,6 @@ jobs:
           artifactsPath: unity-test-results
           githubToken: ''
       - name: Verify NUnit results
-        if: always()
         env:
           TEST_MODE: ${{ matrix.mode }}
         run: |
