@@ -277,7 +277,11 @@ public sealed class AlienHuntSceneTests
             Is.LessThanOrEqualTo(AlienHuntMission.JerrycanCount));
         yield return null;
         Assert.That(mission.Furnaces[0].OilVisible, Is.False);
-        Assert.That(mission.Furnaces[0].FireVisible, Is.False);
+        // Ignition stops emitting immediately, but existing particles finish their lifetime.
+        deadline = Time.realtimeSinceStartup + 3f;
+        while (mission.Furnaces[0].FireVisible && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Assert.That(mission.Furnaces[0].FireVisible, Is.False, "Flame particles should clear after the burn.");
         // Reproduce recovery after a dropped capture, with the burned alien's nest now vacant.
         var recovering = mission.Read(1);
         recovering.Stage = (int)AlienStage.Stunned; recovering.Remaining = .01f;
