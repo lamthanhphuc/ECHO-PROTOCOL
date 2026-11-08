@@ -7,80 +7,68 @@ permissions:
   contents: read
 
 concurrency:
-  group: unity-tests-windows
+  group: unity-tests-hosted
   cancel-in-progress: false
 
 jobs:
   unity-tests:
     name: Unity ${{ matrix.mode }}
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/LTP'
-    runs-on: [self-hosted, Windows, X64, echo-unity]
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        mode: [EditMode, PlayMode]
-    defaults:
-      run:
-        shell: pwsh
+        mode: [editmode, playmode]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           lfs: true
           persist-credentials: false
-      - name: Run Unity tests and verify NUnit results
+      - name: Run Unity tests
+        uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: KLTN
+          unityVersion: auto
+          testMode: ${{ matrix.mode }}
+          artifactsPath: unity-test-results
+          githubToken: ''
+      - name: Verify NUnit results
+        if: always()
         env:
           TEST_MODE: ${{ matrix.mode }}
-          UNITY_EDITOR_PATH: ${{ vars.UNITY_EDITOR_PATH }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $project = Join-Path $env:GITHUB_WORKSPACE 'KLTN'
-          $versionLine = Get-Content (Join-Path $project 'ProjectSettings/ProjectVersion.txt') |
-            Select-String '^m_EditorVersion:\s+(\S+)$'
-          if (!$versionLine) { throw 'Unity Editor version is missing from ProjectVersion.txt.' }
-          $version = $versionLine.Matches[0].Groups[1].Value
-          $editor = $env:UNITY_EDITOR_PATH
-          if (!$editor) {
-            $editor = Join-Path $env:ProgramFiles "Unity/Hub/Editor/$version/Editor/Unity.exe"
-          }
-          if (!(Test-Path -LiteralPath $editor -PathType Leaf)) { throw "Unity $version executable not found: $editor" }
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
 
-          $output = Join-Path $env:RUNNER_TEMP "echo-unity-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT-$env:TEST_MODE"
-          New-Item -ItemType Directory -Force -Path $output | Out-Null
-          $results = Join-Path $output 'results.xml'
-          $log = Join-Path $output 'editor.log'
-          # PlayMode tests can require a graphics device even in batch mode.
-          $arguments = @('-batchmode', '-runTests', '-projectPath', ('"{0}"' -f $project),
-            '-testPlatform', $env:TEST_MODE, '-testResults', ('"{0}"' -f $results), '-logFile', ('"{0}"' -f $log))
-          $process = Start-Process -FilePath $editor -ArgumentList $arguments -PassThru -Wait -WindowStyle Hidden
-          if (!(Test-Path -LiteralPath $results -PathType Leaf)) {
-            throw "Unity produced no NUnit XML (exit $($process.ExitCode)). See the Editor log."
-          }
-          [xml]$report = Get-Content -LiteralPath $results -Raw
-          $run = $report.SelectSingleNode('/test-run')
-          if (!$run) { throw 'Invalid NUnit XML: missing test-run.' }
-          $passed = [int]$run.GetAttribute('passed')
-          $failed = [int]$run.GetAttribute('failed')
-          $skipped = [int]$run.GetAttribute('skipped')
-          $inconclusive = [int]$run.GetAttribute('inconclusive')
-          @(
-            "### Unity $env:TEST_MODE"
-            "- Unity $version on $env:GITHUB_SHA"
-            "- Passed: $passed"
-            "- Failed: $failed"
-            "- Skipped: $skipped"
-            "- Inconclusive: $inconclusive"
-            "- Editor exit code: $($process.ExitCode)"
-          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          if ($process.ExitCode -ne 0 -or $failed -gt 0 -or $inconclusive -gt 0 -or
-              $passed -eq 0 -or $run.GetAttribute('result') -ne 'Passed') {
-            throw "Unity $env:TEST_MODE did not complete successfully. See the NUnit report and Editor log."
-          }
+          reports = []
+          for path in Path("unity-test-results").rglob("*.xml"):
+              root = ET.parse(path).getroot()
+              if root.tag == "test-run":
+                  reports.append(root)
+          if not reports:
+              raise SystemExit("Unity produced no NUnit test-run report.")
+          counts = {key: sum(int(report.get(key, "0")) for report in reports)
+                    for key in ("passed", "failed", "skipped", "inconclusive")}
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              print(f'### Unity {os.environ["TEST_MODE"]} on {os.environ["GITHUB_SHA"]}', file=summary)
+              for name, count in counts.items():
+                  print(f"- {name.capitalize()}: {count}", file=summary)
+          if (counts["passed"] == 0 or counts["failed"] or counts["inconclusive"]
+                  or any(report.get("result") != "Passed" for report in reports)):
+              raise SystemExit("Unity tests did not complete successfully.")
+          PY
       - name: Upload Unity results and Editor log
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unity-${{ matrix.mode }}-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/echo-unity-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.mode }}/
+          path: unity-test-results/
           if-no-files-found: warn
