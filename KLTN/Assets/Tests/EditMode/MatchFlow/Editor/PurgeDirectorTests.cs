@@ -18,6 +18,7 @@ using Assert=NUnit.Framework.Assert;
 public sealed class PurgeDirectorTests
 {
     private NetworkRunner runner;
+    private MatchFlowPlayModeSettings playModeSettings;
     private static void Set(NetworkMatchState m,string property,object value) => typeof(NetworkMatchState).GetProperty(property).SetValue(m,value);
     [Test]
     public void PurgeDetectionTimesMatchRageTiers()
@@ -31,6 +32,7 @@ public sealed class PurgeDirectorTests
     public IEnumerator DirectorRageUvSupplyAndCatchRunOnStateAuthority()
     {
         EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity");
+        playModeSettings = new MatchFlowPlayModeSettings();
         yield return new EnterPlayMode(false);
         runner=new GameObject("PurgeDirector_TestRunner").AddComponent<NetworkRunner>();
         var sceneManager=runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
@@ -303,8 +305,16 @@ public sealed class PurgeDirectorTests
     [UnityTearDown]
     public IEnumerator Cleanup()
     {
-        if(runner&&runner.IsRunning){var task=runner.Shutdown();while(!task.IsCompleted)yield return null;}
-        if(Application.isPlaying)yield return new ExitPlayMode();
+        try
+        {
+            if(runner&&runner.IsRunning){var task=runner.Shutdown();while(!task.IsCompleted)yield return null;}
+            if(Application.isPlaying)yield return new ExitPlayMode();
+        }
+        finally
+        {
+            playModeSettings?.Restore();
+            playModeSettings = null;
+        }
     }
 }
 

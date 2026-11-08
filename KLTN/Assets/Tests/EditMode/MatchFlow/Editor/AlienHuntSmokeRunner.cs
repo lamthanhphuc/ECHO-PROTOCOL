@@ -43,3 +43,22 @@ public static class AlienHuntSmokeRunner
         }
     }
 }
+
+// These EditMode coroutines keep local state across the Play Mode transition.
+internal sealed class MatchFlowPlayModeSettings
+{
+    private readonly bool wasEnabled = EditorSettings.enterPlayModeOptionsEnabled;
+    private readonly EnterPlayModeOptions previousOptions = EditorSettings.enterPlayModeOptions;
+
+    public MatchFlowPlayModeSettings()
+    {
+        EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
+        EditorSettings.enterPlayModeOptionsEnabled = true;
+    }
+
+    public void Restore()
+    {
+        EditorSettings.enterPlayModeOptions = previousOptions;
+        EditorSettings.enterPlayModeOptionsEnabled = wasEnabled;
+    }
+}

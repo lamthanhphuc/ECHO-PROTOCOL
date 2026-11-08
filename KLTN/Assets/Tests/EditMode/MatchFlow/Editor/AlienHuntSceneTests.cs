@@ -12,8 +12,23 @@ using Assert = NUnit.Framework.Assert;
 
 public sealed class AlienHuntSceneTests
 {
+    private MatchFlowPlayModeSettings playModeSettings;
+
     [Test]
-    public void PreparedSceneHasNineSingleColorAliensAndUsableFurnaces() => Validate();
+    public void PreparedSceneHasNineSingleColorAliensAndUsableFurnaces()
+    {
+        const string scenePath = "Assets/Scenes/Scene_B.unity";
+        var scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
+        if (scene.isLoaded)
+        {
+            Validate();
+            return;
+        }
+
+        scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+        try { Validate(); }
+        finally { EditorSceneManager.CloseScene(scene, true); }
+    }
 
     public static string Validate()
     {
@@ -71,7 +86,17 @@ public sealed class AlienHuntSceneTests
 
     [UnityTearDown]
     public IEnumerator LeavePlayMode()
-    { if (Application.isPlaying) yield return new ExitPlayMode(); }
+    {
+        try
+        {
+            if (Application.isPlaying) yield return new ExitPlayMode();
+        }
+        finally
+        {
+            playModeSettings?.Restore();
+            playModeSettings = null;
+        }
+    }
 
     [UnityTest]
     public IEnumerator BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien()
@@ -87,6 +112,7 @@ public sealed class AlienHuntSceneTests
             .Select(a => a.transform.position)
             .ToArray();
 
+        playModeSettings = new MatchFlowPlayModeSettings();
         yield return new EnterPlayMode(false);
         float initializationDeadline = Time.realtimeSinceStartup + 10f;
         while ((!AlienHuntMission.Instance || !AlienHuntMission.Instance.Ready)
