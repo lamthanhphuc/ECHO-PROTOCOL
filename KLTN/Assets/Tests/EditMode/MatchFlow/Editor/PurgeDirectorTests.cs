@@ -9,16 +9,14 @@ using EchoProtocol.Tools.Scanner;
 using Fusion;
 using NUnit.Framework;
 using UnityEditor;
-using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.TestTools;
 using Assert=NUnit.Framework.Assert;
 
 public sealed class PurgeDirectorTests
 {
     private NetworkRunner runner;
-    private MatchFlowPlayModeSettings playModeSettings;
     private static void Set(NetworkMatchState m,string property,object value) => typeof(NetworkMatchState).GetProperty(property).SetValue(m,value);
     [Test]
     public void PurgeDetectionTimesMatchRageTiers()
@@ -28,12 +26,9 @@ public sealed class PurgeDirectorTests
         Assert.That(methodFill, Is.Not.Null);
         Assert.That(methodDecay, Is.Not.Null);
     }
-    [UnityTest]
     public IEnumerator DirectorRageUvSupplyAndCatchRunOnStateAuthority()
     {
-        playModeSettings = new MatchFlowPlayModeSettings();
-        EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity");
-        yield return new EnterPlayMode(false);
+        yield return SceneManager.LoadSceneAsync("Assets/Scenes/Scene_B.unity", LoadSceneMode.Single);
         runner=new GameObject("PurgeDirector_TestRunner").AddComponent<NetworkRunner>();
         var sceneManager=runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
         var startup=runner.StartGame(new StartGameArgs{GameMode=GameMode.Single,SceneManager=sceneManager,
@@ -300,21 +295,16 @@ public sealed class PurgeDirectorTests
         Assert.That(match.HuntBurned,Is.EqualTo(9));Assert.That(match.IsEnded,Is.True);
         Assert.That(match.Result,Is.EqualTo(NetworkMatchResult.Win));
         var shutdown=runner.Shutdown();while(!shutdown.IsCompleted)yield return null;
-        yield return new ExitPlayMode();
     }
-    [UnityTearDown]
+
     public IEnumerator Cleanup()
     {
-        try
+        if (runner && runner.IsRunning)
         {
-            if(runner&&runner.IsRunning){var task=runner.Shutdown();while(!task.IsCompleted)yield return null;}
-            if(Application.isPlaying)yield return new ExitPlayMode();
+            var task = runner.Shutdown();
+            while (!task.IsCompleted) yield return null;
         }
-        finally
-        {
-            playModeSettings?.Restore();
-            playModeSettings = null;
-        }
+        if (runner) Object.Destroy(runner.gameObject);
     }
 }
 

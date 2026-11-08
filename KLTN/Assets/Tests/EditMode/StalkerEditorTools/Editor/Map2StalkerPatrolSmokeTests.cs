@@ -6,54 +6,31 @@ using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Stalker.Spatial.Editor;
 using NUnit.Framework;
 using UnityEditor;
-using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.TestTools;
 
 namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 {
     public sealed class Map2StalkerPatrolSmokeTests
     {
-        private MatchFlowPlayModeSettings playModeSettings;
-
-        [UnityTearDown]
-        public IEnumerator LeavePlayMode()
-        {
-            try
-            {
-                if (Application.isPlaying) yield return new ExitPlayMode();
-            }
-            finally
-            {
-                playModeSettings?.Restore();
-                playModeSettings = null;
-            }
-        }
-
-        [UnityTest]
         public IEnumerator Map2_LizardPrefabPatrolMovesOnSceneNavMesh() =>
             PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath);
 
-        [UnityTest]
         public IEnumerator Map2_HuntLizardPatrolMovesOnItsOwnSceneNavMesh() =>
             PatrolMoves("Assets/Scenes/Scene_B.unity", Map2RegionGraphAuthoring.HuntAssetPath);
 
-        [UnityTest]
         public IEnumerator Map2_LizardPatrolMovesFromReportedStuckLocation() =>
             PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath,
                 new Vector3(513.495f, 16.781f, 423.165f));
 
-        [UnityTest]
         public IEnumerator Map2_LizardFallbackReturnsFromReportedIsolatedStart() =>
             PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath,
                 new Vector3(490.142f, 16.844f, 544.636f));
 
         private IEnumerator PatrolMoves(string scenePath, string graphPath, Vector3? startPosition = null)
         {
-            playModeSettings = new MatchFlowPlayModeSettings();
-            EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-            yield return new EnterPlayMode(false);
+            yield return SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Single);
 
             var water = GameObject.Find("WaterPlane 2").GetComponent<Renderer>().bounds;
             foreach (var vertex in NavMesh.CalculateTriangulation().vertices)
@@ -105,7 +82,6 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             Assert.That(Vector3.Distance(start, instance.transform.position), Is.GreaterThanOrEqualTo(2f),
                 $"state={controller.CurrentState}, graph={controller.RegionGraphFallbackReason}, navigation={controller.NavigationFailureReason}");
             Object.Destroy(holder);
-            yield return new ExitPlayMode();
         }
     }
 }

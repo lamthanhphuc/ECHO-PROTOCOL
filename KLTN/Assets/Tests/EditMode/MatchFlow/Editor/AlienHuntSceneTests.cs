@@ -7,13 +7,11 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.TestTools;
+using UnityEngine.SceneManagement;
 using Assert = NUnit.Framework.Assert;
 
 public sealed class AlienHuntSceneTests
 {
-    private MatchFlowPlayModeSettings playModeSettings;
-
     [Test]
     public void PreparedSceneHasNineSingleColorAliensAndUsableFurnaces()
     {
@@ -84,36 +82,26 @@ public sealed class AlienHuntSceneTests
         return "PASS 9 connected alien spawns, one material, five correctly bound animations, 18 fuel, 12 meat and 3 furnaces.";
     }
 
-    [UnityTearDown]
-    public IEnumerator LeavePlayMode()
-    {
-        try
-        {
-            if (Application.isPlaying) yield return new ExitPlayMode();
-        }
-        finally
-        {
-            playModeSettings?.Restore();
-            playModeSettings = null;
-        }
-    }
-
-    [UnityTest]
     public IEnumerator BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien()
     {
-        playModeSettings = new MatchFlowPlayModeSettings();
-        EditorSceneManager.OpenScene(
-            "Assets/Scenes/Scene_B.unity", OpenSceneMode.Single);
+        const string scenePath = "Assets/Scenes/Scene_B.unity";
+        Vector3[] authoredHomes = null;
+        void CaptureHomes(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.path != scenePath) return;
+            // sceneLoaded runs after Awake and before Start relocates the nests.
+            authoredHomes = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<AlienHuntActor>(true))
+                .Where(actor => actor.Kind == HuntKind.Alien)
+                .OrderBy(actor => actor.Index)
+                .Select(actor => actor.transform.position)
+                .ToArray();
+        }
 
-        var authoredHomes = Object.FindObjectsByType<AlienHuntActor>(
-            FindObjectsInactive.Include,
-            FindObjectsSortMode.None)
-            .Where(a => a.Kind == HuntKind.Alien)
-            .OrderBy(a => a.Index)
-            .Select(a => a.transform.position)
-            .ToArray();
-
-        yield return new EnterPlayMode(false);
+        SceneManager.sceneLoaded += CaptureHomes;
+        try { yield return SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Single); }
+        finally { SceneManager.sceneLoaded -= CaptureHomes; }
+        Assert.That(authoredHomes, Is.Not.Null);
         float initializationDeadline = Time.realtimeSinceStartup + 10f;
         while ((!AlienHuntMission.Instance || !AlienHuntMission.Instance.Ready)
             && Time.realtimeSinceStartup < initializationDeadline) yield return null;
@@ -471,6 +459,5 @@ public sealed class AlienHuntSceneTests
         mission.Tick(.02f);
         Assert.That(Vector3.Distance(mission.Read(roamingAlien).Position,mission.Actors[otherNest].Home),
             Is.LessThan(2f),"An alien still stuck after a repath must recover at a connected nest.");
-        yield return new ExitPlayMode();
     }
 }
