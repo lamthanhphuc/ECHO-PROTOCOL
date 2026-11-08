@@ -55,7 +55,7 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void NormalPlanDoesNotChangeGameplay()
+        public void NormalPlanUsesApprovedMinionCapsAndPreservesOtherFixedParameters()
         {
             var plan = AEDv2Plan.Normal();
             var profile = Bridge.GetMethod("ToNormalDifficultyProfile").Invoke(null, new object[] { plan });
@@ -63,7 +63,15 @@ namespace EchoProtocol.Networking.Tests
             var profiles = Type.GetType("EchoProtocol.Gameplay.MatchDifficultyProfiles, Assembly-CSharp", true);
             var normal = profiles.GetMethod("Get").Invoke(null, new[] { Enum.Parse(difficulty, "Normal") });
             foreach (var property in profile.GetType().GetProperties())
-                Assert.That(property.GetValue(profile), Is.EqualTo(property.GetValue(normal)), property.Name);
+            {
+                object expected = property.Name switch
+                {
+                    "Zone1MinionCap" => (int)plan.Get(AEDv2Key.Zone1MinionCap),
+                    "Zone2MinionCap" => (int)plan.Get(AEDv2Key.Zone2MinionCap),
+                    _ => property.GetValue(normal)
+                };
+                Assert.That(property.GetValue(profile), Is.EqualTo(expected), property.Name);
+            }
         }
 
         [Test]

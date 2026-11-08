@@ -156,8 +156,9 @@ namespace EchoProtocol.Settings
             }
             for (int i = 0; i < Keys.Length; i++)
             {
-                if ((GameplayAction)i != GameplayAction.Inventory && i != (int)action && (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)
-                    || IsDefaultAlternate(action, key, Keys[i])))
+                if (i != (int)action &&
+                    (IsDefaultAlternate(action, key, Keys[i]) ||
+                     ((GameplayAction)i != GameplayAction.Inventory && (Keys[i] == key || IsDefaultAlternate((GameplayAction)i, key)))))
                 {
                     error = "Phím này đang dùng cho: " + ActionLabels[i] + ".";
                     return false;

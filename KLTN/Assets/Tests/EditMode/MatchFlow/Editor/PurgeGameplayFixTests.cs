@@ -140,10 +140,13 @@ public sealed class PurgeGameplayFixTests
 
     [Test] public void PurgeStaminaOverridesOnlySceneB()
     {
-        var scene = SceneManager.GetActiveScene();
-        string originalName = scene.name;
+        var previousScene = SceneManager.GetActiveScene();
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+            UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+            UnityEditor.SceneManagement.NewSceneMode.Additive);
         try
         {
+            SceneManager.SetActiveScene(scene);
             var movement = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PlayerNetwork.prefab").GetComponent<NetworkPlayerMovement>();
             scene.name = "Scene_B";
             Assert.That(movement.MaxStamina, Is.EqualTo(250));
@@ -152,7 +155,11 @@ public sealed class PurgeGameplayFixTests
             scene.name = "Stamina_OtherMode_Test";
             Assert.That(movement.MaxStamina, Is.EqualTo(200));
         }
-        finally { scene.name = originalName; }
+        finally
+        {
+            SceneManager.SetActiveScene(previousScene);
+            UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true);
+        }
     }
 
     [Test] public void EatingClipContainsPelvisMovementAndKeepsItsAssetReference()

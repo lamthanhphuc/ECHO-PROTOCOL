@@ -35,6 +35,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, 2, true, seed);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
                 var preset = sim.GetCurrentPreset();
                 waves.Add(preset.ReferenceWaveform);
                 sim.ScanSpectrum();
@@ -88,6 +89,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             var sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
             sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
             Assert.That(sim.Snapshot.SelectedChannelIndex, Is.EqualTo(-1));
             sim.SetActiveTab(1);
@@ -105,6 +107,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             var sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
             sim.ScanSpectrum();
             sim.SelectChannel(_config.Presets[0].CorrectChannelIndex);
 
@@ -124,6 +127,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, 0, true, seed);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
                 var preset = sim.GetCurrentPreset();
                 int matches = 0;
                 for (int i = 0; i < preset.Candidates.Length; i++)
@@ -149,6 +153,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex, true, 123);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
                 sim.ScanSpectrum();
                 sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
                 int selected = sim.SelectedChannelIndex;
@@ -175,6 +180,7 @@ namespace EchoProtocol.RelayB.Tests
             {
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex, true, 123);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
                 sim.ScanSpectrum();
                 sim.SelectChannel(sim.GetCurrentPreset().CorrectChannelIndex);
                 var seen = new System.Collections.Generic.HashSet<int>();
@@ -202,7 +208,9 @@ namespace EchoProtocol.RelayB.Tests
             var host = new RelayBSignalSimulation();
             var client = new RelayBSignalSimulation();
             host.Initialize(_config, 2, true, 123);
+            host.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
             client.Initialize(_config, 2, true, 123);
+            client.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
             host.ScanSpectrum();
             client.ScanSpectrum();
             int channel = host.GetCurrentPreset().CorrectChannelIndex;
@@ -264,6 +272,7 @@ namespace EchoProtocol.RelayB.Tests
                 var signal = preset.GetCandidate(preset.CorrectChannelIndex);
                 var sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, presetIndex);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
                 sim.ScanSpectrum();
                 sim.SelectChannel(preset.CorrectChannelIndex);
                 sim.SetFrequency(preset.TargetFrequency);
@@ -307,6 +316,7 @@ namespace EchoProtocol.RelayB.Tests
                 RelayBPreset preset = _config.Presets[i];
                 RelayBSignalSimulation sim = new RelayBSignalSimulation();
                 sim.Initialize(_config, i);
+                sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
                 sim.ScanSpectrum();
                 sim.SelectChannel(preset.CorrectChannelIndex);
@@ -379,6 +389,7 @@ namespace EchoProtocol.RelayB.Tests
 
                     RelayBSignalSimulation sim = new RelayBSignalSimulation();
                     sim.Initialize(_config, p);
+                    sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
                     sim.ScanSpectrum();
                     sim.SelectChannel(c);
@@ -400,6 +411,7 @@ namespace EchoProtocol.RelayB.Tests
             RelayBPreset preset = _config.Presets[0];
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             // Channel 3 has Triangle waveform, preset 0 expects Sine
             sim.ScanSpectrum();
@@ -419,6 +431,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             // Select correct channel but wrong frequency
             PrepareStage3(sim);
@@ -441,6 +454,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             Assert.That(sim.Snapshot.Progress01, Is.EqualTo(0f));
 
@@ -485,6 +499,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             PrepareStage3(sim);
             sim.SetFrequency(42f);
@@ -511,6 +526,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             PrepareStage3(sim);
             sim.SetFrequency(42f);
@@ -531,6 +547,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             bool warningFired = false;
             sim.DriftWarning += () => warningFired = true;
@@ -552,6 +569,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             bool driftFired = false;
             sim.DriftTriggered += () => driftFired = true;
@@ -574,6 +592,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             int count = 0;
             sim.DriftTriggered += () => count++;
@@ -603,6 +622,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             PrepareStage3(sim);
             sim.SetFrequency(42f);
@@ -624,6 +644,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             bool completed = false;
             sim.Completed += () => completed = true;
@@ -653,6 +674,7 @@ namespace EchoProtocol.RelayB.Tests
         {
             RelayBSignalSimulation sim = new RelayBSignalSimulation();
             sim.Initialize(_config, 0);
+            sim.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
 
             sim.ForceCompleteForAuthoritativeSync();
             Assert.IsTrue(sim.Snapshot.IsOnline);

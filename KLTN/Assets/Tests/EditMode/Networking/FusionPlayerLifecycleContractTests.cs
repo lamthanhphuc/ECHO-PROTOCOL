@@ -178,8 +178,9 @@ namespace EchoProtocol.Networking.Tests
             var session = File.ReadAllText("Assets/_Project/Scripts/Networking/Session/NetworkBootstrap.cs");
             var authority = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntime.cs");
 
-            StringAssert.Contains("state.ClearVerifiedBackendIdentityAuthoritative()", lifecycle);
-            StringAssert.Contains("BackendUserId = default", player);
+            StringAssert.Contains("state.SetDisconnectedAuthoritative(true)", lifecycle);
+            StringAssert.Contains("private void RpcConfirmBackendIdentity", player);
+            StringAssert.Contains("?.MarkReconnectProofSubmitted()", player);
             StringAssert.Contains("state.HasVerifiedBackendIdentity && !state.Disconnected", session);
             StringAssert.DoesNotContain("MarkReconnectProofSubmitted()", authority);
         }

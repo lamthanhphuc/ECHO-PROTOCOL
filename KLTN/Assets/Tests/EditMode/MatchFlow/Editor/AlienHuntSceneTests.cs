@@ -3,6 +3,7 @@ using System.Linq;
 using EchoProtocol.Networking;
 using Fusion;
 using NUnit.Framework;
+using Unity.AI.Navigation;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -17,15 +18,19 @@ public sealed class AlienHuntSceneTests
     {
         const string scenePath = "Assets/Scenes/Scene_B.unity";
         var scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
-        if (scene.isLoaded)
-        {
-            Validate();
-            return;
-        }
-
-        scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+        var navMeshes = scene.GetRootGameObjects()
+            .SelectMany(root => root.GetComponentsInChildren<NavMeshSurface>(true))
+            .Where(surface => surface.navMeshData)
+            .Select(surface => NavMesh.AddNavMeshData(surface.navMeshData, surface.transform.position, surface.transform.rotation))
+            .ToArray();
         try { Validate(); }
-        finally { EditorSceneManager.CloseScene(scene, true); }
+        finally
+        {
+            foreach (var navMesh in navMeshes) navMesh.Remove();
+            if (opened) EditorSceneManager.CloseScene(scene, true);
+        }
     }
 
     public static string Validate()

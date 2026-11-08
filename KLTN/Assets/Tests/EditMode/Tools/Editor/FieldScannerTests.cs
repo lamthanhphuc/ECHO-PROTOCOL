@@ -126,7 +126,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 var timer = (UnityEngine.UI.Text)hud.GetType().GetField("scanTimerText", flags).GetValue(hud);
                 hud.BindScanner(scanner);
                 render.Invoke(hud, null);
-                Assert.That(timer.text, Is.EqualTo("SẴN SÀNG"));
+                Assert.That(timer.text, Is.EqualTo("SẴN SÀNG  ·  [Chuột trái] Quét"));
                 Assert.That(status.text, Is.EqualTo("[Chuột trái] Quét"));
                 var hintUntil = hud.GetType().GetField("_modeHintUntil", flags);
                 hintUntil.SetValue(hud, Time.unscaledTime + 6f);
@@ -140,7 +140,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 Assert.That(status.text, Does.Contain("[Chuột trái] Quét"));
                 typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 8f);
                 render.Invoke(hud, null);
-                Assert.That(timer.text, Is.EqualTo("ĐANG QUÉT  08s"));
+                Assert.That(timer.text, Is.EqualTo("ĐANG QUÉT   <size=28>08s</size>"));
                 Assert.That(status.text, Is.EqualTo("ĐANG QUÉT..."));
                 typeof(NetworkFieldScanner).GetField("_hasLocalActiveResult", flags).SetValue(scanner, true);
                 typeof(NetworkFieldScanner).GetField("_localResultTimer", flags).SetValue(scanner, 1f);
@@ -153,7 +153,7 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 typeof(NetworkFieldScanner).GetField("_localActiveScanTimer", flags).SetValue(scanner, 0f);
                 typeof(NetworkFieldScanner).GetField("_localCooldownTimer", flags).SetValue(scanner, 10f);
                 render.Invoke(hud, null);
-                Assert.That(timer.text, Is.EqualTo("HỒI  10s"));
+                Assert.That(timer.text, Is.EqualTo("HỒI CHIÊU   <size=28>10s</size>"));
                 Assert.That(status.text, Is.EqualTo("MÁY QUÉT ĐANG HỒI"));
                 hud.UnbindScanner();
                 render.Invoke(hud, null);

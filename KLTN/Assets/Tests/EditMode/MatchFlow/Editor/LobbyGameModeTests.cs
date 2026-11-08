@@ -27,8 +27,9 @@ public sealed class LobbyGameModeTests
     public static void ValidateMenu()
     {
         var active = SceneManager.GetActiveScene();
-        Assert.That(active.path,Is.Not.EqualTo("Assets/Scenes/MainMenu.unity"),"Run from Scene_B to preserve an open authored MainMenu scene.");
-        var scene = EditorSceneManager.OpenScene("Assets/Scenes/MainMenu.unity",OpenSceneMode.Additive);
+        var scene = SceneManager.GetSceneByPath("Assets/Scenes/MainMenu.unity");
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene("Assets/Scenes/MainMenu.unity",OpenSceneMode.Additive);
         MainMenuMatchmakingController controller = null;
         try
         {
@@ -52,7 +53,7 @@ public sealed class LobbyGameModeTests
         finally
         {
             if(controller)controller.SendMessage("OnDisable");
-            EditorSceneManager.CloseScene(scene,true);
+            if (opened) EditorSceneManager.CloseScene(scene,true);
             SceneManager.SetActiveScene(active);
         }
     }

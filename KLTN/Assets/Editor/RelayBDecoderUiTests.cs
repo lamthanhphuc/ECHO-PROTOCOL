@@ -26,6 +26,7 @@ namespace EchoProtocol.RelayB.Tests
             var so = new SerializedObject(_controller); so.FindProperty("config").objectReferenceValue = prefab.GetComponent<RelayBController>().Config;
             so.ApplyModifiedPropertiesWithoutUndo();
             _controller.Simulation.Initialize(_controller.Config, 2, true, 441);
+            _controller.Simulation.Surge.ApplyRemote(RelayBSurgePhase.Contained, default, default, 0, 0, 0, 0);
             _controller.Simulation.ScanSpectrum();
             _controller.Simulation.SelectChannel(_controller.Simulation.GetCurrentPreset().CorrectChannelIndex);
             _controller.Simulation.SetActiveTab(1);

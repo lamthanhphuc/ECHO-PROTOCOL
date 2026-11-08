@@ -18,7 +18,7 @@ namespace EchoProtocol.Tests
         [Test]
         public void IndustrialHierarchy_ContainsMonitoringControlsStabilityAndConditionalWarning()
         {
-            foreach (string label in new[] { "POWER RELAY A", "STABILIZE OUTPUT", "SYSTEM MONITORING", "MANUAL CONTROL", "STABILITY" })
+            foreach (string label in new[] { "Relay A · Nguồn điện", "03 · Ổn định đầu ra", "Theo dõi hệ thống", "Điều chỉnh", "STABILITY" })
                 StringAssert.Contains(label, _source);
             StringAssert.Contains("_stabilizationWarningPanel.gameObject.SetActive(faultVisible", _source);
             StringAssert.Contains("_stabilizationStop.gameObject.SetActive(state.IsRunning", _source);

@@ -153,8 +153,10 @@ namespace EchoProtocol.Networking.Authority
                 }
 
                 var json = new UTF8Encoding(false, true).GetString(bytes);
-                var value = JsonUtility.FromJson<RemoteFixedBalanceSnapshot>(json);
-                if (value == null || value.schemaVersion is not ("RFB-1" or "RFB-2") ||
+                var value = new RemoteFixedBalanceSnapshot();
+                // Keep optional legacy fields null when the payload omits them.
+                JsonUtility.FromJsonOverwrite(json, value);
+                if (value.schemaVersion is not ("RFB-1" or "RFB-2") ||
                     value.player == null || value.stalker == null || value.minion == null)
                     return false;
 

@@ -142,7 +142,7 @@ namespace EchoProtocol.AI.AED.Tests
             }
         }
 
-        [TestCase("Assets/Scenes/MainMenu.unity", "EchoProtocol.UI.MainMenu.MainMenuMatchmakingController", "resolutionModeButton")]
+        [TestCase("Assets/Scenes/MainMenu.unity", "EchoProtocol.UI.MainMenu.MainMenuMatchmakingController", "confirmButton")]
         [TestCase("Assets/Scenes/Lobby.unity", "EchoProtocol.UI.LobbyRuntimeBindingsController", "startButton")]
         public void SceneModeSelectionAndStartControlsAreBound(string path, string typeName, string fieldName)
         {

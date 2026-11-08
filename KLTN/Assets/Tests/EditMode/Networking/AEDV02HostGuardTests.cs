@@ -93,14 +93,23 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
-        public void V02_NormalProfilePreservesEveryFixedNormalParameter()
+        public void V02_NormalProfileUsesApprovedMinionCapsAndPreservesOtherFixedParameters()
         {
             var bridge = Type.GetType("EchoProtocol.AI.AED.AEDv2GameplayBridge, Assembly-CSharp", true);
             var profile = bridge.GetMethod("ToV02NormalDifficultyProfile").Invoke(null, new object[] { AEDV02Plan.Normal() });
             var difficulty = Type.GetType("EchoProtocol.Gameplay.MatchDifficulty, Assembly-CSharp", true);
             var normal = Type.GetType("EchoProtocol.Gameplay.MatchDifficultyProfiles, Assembly-CSharp", true).GetMethod("Get")
                 .Invoke(null, new[] { Enum.Parse(difficulty, "Normal") });
-            foreach (var property in profile.GetType().GetProperties()) Assert.That(property.GetValue(profile), Is.EqualTo(property.GetValue(normal)), property.Name);
+            foreach (var property in profile.GetType().GetProperties())
+            {
+                object expected = property.Name switch
+                {
+                    "Zone1MinionCap" => (int)AEDV02Plan.Normal().Get(AEDV02Key.Zone1MinionCap),
+                    "Zone2MinionCap" => (int)AEDV02Plan.Normal().Get(AEDV02Key.Zone2MinionCap),
+                    _ => property.GetValue(normal)
+                };
+                Assert.That(property.GetValue(profile), Is.EqualTo(expected), property.Name);
+            }
         }
 
         [TestCase(0, 1, false)]
@@ -117,7 +126,7 @@ namespace EchoProtocol.Networking.Tests
         }
 
         private bool Commit((object Request, object Approval) data, bool host, bool adaptiveNormal, bool enabled, bool safe) =>
-            (bool)Authority.GetMethod("CommitV02").Invoke(null, new object[] { _match, data.Request, data.Approval, _roster, host, adaptiveNormal, enabled, safe, _now, null });
+            (bool)Authority.GetMethod("CommitV02").Invoke(null, new object[] { _match, data.Request, data.Approval, _roster, host, adaptiveNormal, enabled, safe, _now, null, null });
         private (object Request, object Approval) Payload(AEDV02Plan plan, int previousRevision)
         {
             var request = Activator.CreateInstance(Type.GetType("EchoProtocol.AI.AED.AEDV02DecisionRequestDto, Assembly-CSharp", true));

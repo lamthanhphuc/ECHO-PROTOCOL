@@ -99,20 +99,12 @@ namespace EchoProtocol.AI.Stalker.Tests
         [Test]
         public void StalkerModelSelection_DefaultsToOriginal()
         {
-            var spawnerType = System.Type.GetType(
-                "EchoProtocol.Networking.PlayerSpawner, Assembly-CSharp");
-
-            Assert.That(spawnerType, Is.Not.Null);
-
-            var method = spawnerType.GetMethod(
-                "GetSelectedStalkerModel",
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.Static);
-
-            Assert.That(method, Is.Not.Null);
-            Assert.That(
-                method.Invoke(null, new object[] { null }),
-                Is.EqualTo(0));
+            string prefabGuid = AssetDatabase.AssetPathToGUID(PrefabPath);
+            Assert.That(prefabGuid, Is.Not.Empty);
+            string bootstrap = System.IO.File.ReadAllText(
+                System.IO.Path.Combine(Application.dataPath, "Scenes/Bootstrap.unity"));
+            Assert.That(bootstrap, Does.Match(
+                @"_monsterPrefab: \{fileID: -?\d+, guid: " + prefabGuid + @", type: 3\}"));
         }
     }
 }
