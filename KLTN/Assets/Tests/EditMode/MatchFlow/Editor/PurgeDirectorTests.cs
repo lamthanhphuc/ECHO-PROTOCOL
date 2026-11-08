@@ -66,14 +66,14 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeRageTier, Is.EqualTo(0));
         Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Calm));
         Assert.That(match.PurgeHuntsStarted, Is.Zero);
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(6.6f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(4f).Within(.01f));
         match.RecordHuntBurn();
         Assert.That(match.HuntBurned, Is.EqualTo(2));
         Assert.That(match.PurgeRageTier, Is.EqualTo(1));
         Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Warning));
         Assert.That(match.PurgeHuntSeconds, Is.EqualTo(105f));
         Assert.That(match.PurgeHuntsStarted, Is.EqualTo(1));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(5.5f).Within(.01f));
         Assert.That(match.PurgeLastRitualElapsedSeconds,Is.GreaterThanOrEqualTo(0f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
@@ -104,7 +104,7 @@ public sealed class PurgeDirectorTests
         for (int i = 2; i < 6; i++) match.RecordHuntBurn();
         Assert.That(match.HuntBurned, Is.EqualTo(6));
         Assert.That(match.PurgeRageTier, Is.EqualTo(2));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7.8f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7f).Within(.01f));
         for (int i = 6; i < 8; i++) match.RecordHuntBurn();
         Assert.That(match.HuntBurned,Is.EqualTo(8));
         Assert.That(match.PurgeHuntSeconds,Is.EqualTo(195f));
@@ -116,7 +116,7 @@ public sealed class PurgeDirectorTests
         Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
             "A larger cap must not spawn Fishcat into an empty match.");
         Assert.That(match.PurgeRageTier, Is.EqualTo(3));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(9f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(8.5f).Within(.01f));
         // UV immunity must reject another immediate stagger.
         Set(match,"PurgeMood",PurgeBossMood.Hunting);Set(match,"PurgeUvExposure",2.5f);
         Set(match,"PurgeUvImmunity",TickTimer.CreateFromSeconds(runner,4));
@@ -214,7 +214,7 @@ public sealed class PurgeDirectorTests
         tickPurge.Invoke(match,null);
         Assert.That((bool)match.PurgeUvContact,Is.True);
         Assert.That(match.PurgeUvExposure,Is.GreaterThan(0f));
-        Assert.That(match.PurgeChaseSpeed,Is.EqualTo(speedBeforeUv*.6f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed,Is.EqualTo(speedBeforeUv*.1f).Within(.01f));
         var presenter=boss.GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter>();
         var animator=System.Array.Find(boss.GetComponentsInChildren<Animator>(true),a=>a.enabled);
         var updatePresentation=typeof(EchoProtocol.AI.Stalker.Presentation.StalkerAnimatorPresenter).GetMethod("Update",flags);

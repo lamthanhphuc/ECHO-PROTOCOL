@@ -222,6 +222,15 @@ public sealed class AlienHuntSceneTests
             + " remaining=" + (debugAgent.enabled ? debugAgent.remainingDistance : -1) + " timeScale=" + Time.timeScale
             + " states=" + string.Join(",", Enumerable.Range(0, 9).Select(i => i + ":" + mission.Read(i).Stage + "/" + mission.Read(i).Target)));
         Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.Eating));
+        int fuelIndex = Enumerable.Range(9, 18).First(i => mission.Read(i).Stage == 0);
+        player.transform.position = mission.Furnaces[0].transform.position;
+        Assert.That(mission.Act(actor, player.transform, -1, 0), Is.False, "An empty furnace accepted ignition.");
+        player.transform.position = mission.Actors[fuelIndex].transform.position;
+        Assert.That(mission.Act(actor, player.transform, fuelIndex, -1), Is.True);
+        player.transform.position = mission.Furnaces[0].transform.position;
+        Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
+        Assert.That(mission.Read(fuelIndex).Stage, Is.EqualTo(3));
+        Assert.That(mission.Read(fuelIndex).Remaining, Is.EqualTo(90f).Within(.1f));
         player.transform.position = mission.Actors[0].transform.position;
         Assert.That(mission.Act(actor, player.transform, 0, -1), Is.True);
         Assert.That(mission.Read(27).Stage, Is.EqualTo(3));
@@ -229,16 +238,6 @@ public sealed class AlienHuntSceneTests
         player.transform.position = mission.Furnaces[0].transform.position;
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
         Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.OnPan));
-        Assert.That(mission.Act(actor, player.transform, -1, 0), Is.False, "An unfueled pan burned an alien.");
-        int fuelIndex = Enumerable.Range(9, 18).First(i => mission.Read(i).Stage == 0);
-        player.transform.position = mission.Actors[fuelIndex].transform.position;
-        Assert.That(mission.Act(actor, player.transform, fuelIndex, -1), Is.True);
-        player.transform.position = mission.Furnaces[0].transform.position;
-        Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
-        Assert.That(mission.Read(fuelIndex).Stage, Is.EqualTo(3));
-        Assert.That(
-            mission.Read(fuelIndex).Remaining,
-            Is.EqualTo(90f).Within(.1f));
         Assert.That(mission.ReadFurnace(0).Fuel, Is.EqualTo(1));
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.True);
         Assert.That(mission.ReadFurnace(0).Fuel, Is.EqualTo(1), "Oil stays reserved until this alien finishes burning.");
@@ -246,8 +245,8 @@ public sealed class AlienHuntSceneTests
         Assert.That(mission.Furnaces[0].OilVisible, Is.True);
         Assert.That(mission.Furnaces[0].FireVisible, Is.True);
         Assert.That(mission.Act(actor, player.transform, -1, 0), Is.False, "A burning pan accepted a second ignition.");
-        deadline = Time.time + 20f;
-        while (mission.Burned == 0 && Time.time < deadline) yield return null;
+        deadline = Time.realtimeSinceStartup + 20f;
+        while (mission.Burned == 0 && Time.realtimeSinceStartup < deadline) yield return null;
         Assert.That(mission.Burned, Is.EqualTo(1));
         Assert.That(mission.Read(0).Stage, Is.EqualTo((int)AlienStage.Burned));
         Assert.That(mission.ReadFurnace(0).AlienSlot, Is.Zero);
