@@ -15,10 +15,20 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 {
     public sealed class Map2StalkerPatrolSmokeTests
     {
+        private MatchFlowPlayModeSettings playModeSettings;
+
         [UnityTearDown]
         public IEnumerator LeavePlayMode()
         {
-            if (Application.isPlaying) yield return new ExitPlayMode();
+            try
+            {
+                if (Application.isPlaying) yield return new ExitPlayMode();
+            }
+            finally
+            {
+                playModeSettings?.Restore();
+                playModeSettings = null;
+            }
         }
 
         [UnityTest]
@@ -41,8 +51,9 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 
         private IEnumerator PatrolMoves(string scenePath, string graphPath, Vector3? startPosition = null)
         {
+            playModeSettings = new MatchFlowPlayModeSettings();
             EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-            yield return new EnterPlayMode();
+            yield return new EnterPlayMode(false);
 
             var water = GameObject.Find("WaterPlane 2").GetComponent<Renderer>().bounds;
             foreach (var vertex in NavMesh.CalculateTriangulation().vertices)

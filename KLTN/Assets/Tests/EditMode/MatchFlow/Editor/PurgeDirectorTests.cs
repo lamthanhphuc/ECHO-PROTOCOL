@@ -31,8 +31,8 @@ public sealed class PurgeDirectorTests
     [UnityTest]
     public IEnumerator DirectorRageUvSupplyAndCatchRunOnStateAuthority()
     {
-        EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity");
         playModeSettings = new MatchFlowPlayModeSettings();
+        EditorSceneManager.OpenScene("Assets/Scenes/Scene_B.unity");
         yield return new EnterPlayMode(false);
         runner=new GameObject("PurgeDirector_TestRunner").AddComponent<NetworkRunner>();
         var sceneManager=runner.gameObject.AddComponent<NetworkSceneManagerDefault>();

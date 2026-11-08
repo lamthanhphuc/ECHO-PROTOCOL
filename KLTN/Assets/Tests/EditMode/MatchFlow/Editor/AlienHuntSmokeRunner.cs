@@ -49,15 +49,30 @@ internal sealed class MatchFlowPlayModeSettings
 {
     private readonly bool wasEnabled = EditorSettings.enterPlayModeOptionsEnabled;
     private readonly EnterPlayModeOptions previousOptions = EditorSettings.enterPlayModeOptions;
+    private readonly ScriptableObject editModeRunner;
+    private readonly HideFlags runnerHideFlags;
 
     public MatchFlowPlayModeSettings()
     {
+        // TestJobData is managed state. Keep its native runner alive during scene asset unloading.
+        foreach (var candidate in Resources.FindObjectsOfTypeAll<ScriptableObject>())
+        {
+            if (candidate.GetType().FullName != "UnityEditor.TestTools.TestRunner.EditModeRunner")
+                continue;
+
+            editModeRunner = candidate;
+            runnerHideFlags = candidate.hideFlags;
+            candidate.hideFlags |= HideFlags.DontUnloadUnusedAsset;
+            break;
+        }
+
         EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
         EditorSettings.enterPlayModeOptionsEnabled = true;
     }
 
     public void Restore()
     {
+        if (editModeRunner) editModeRunner.hideFlags = runnerHideFlags;
         EditorSettings.enterPlayModeOptions = previousOptions;
         EditorSettings.enterPlayModeOptionsEnabled = wasEnabled;
     }

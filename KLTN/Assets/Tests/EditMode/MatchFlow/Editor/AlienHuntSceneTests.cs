@@ -101,6 +101,7 @@ public sealed class AlienHuntSceneTests
     [UnityTest]
     public IEnumerator BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien()
     {
+        playModeSettings = new MatchFlowPlayModeSettings();
         EditorSceneManager.OpenScene(
             "Assets/Scenes/Scene_B.unity", OpenSceneMode.Single);
 
@@ -112,7 +113,6 @@ public sealed class AlienHuntSceneTests
             .Select(a => a.transform.position)
             .ToArray();
 
-        playModeSettings = new MatchFlowPlayModeSettings();
         yield return new EnterPlayMode(false);
         float initializationDeadline = Time.realtimeSinceStartup + 10f;
         while ((!AlienHuntMission.Instance || !AlienHuntMission.Instance.Ready)
