@@ -19,7 +19,8 @@ public sealed record AEDV02DecisionResult(Guid DecisionId, Guid MatchId, int Pha
     int WindowSequence, string WindowId, int PlanRevision, int ExpectedPlanRevision, string PreviousPlanFingerprint,
     string PlanFingerprint, double[] PlanValues, string RosterIdentity, string SourceFingerprint,
     string SceneManifestFingerprint, string PolicyVersion, string CatalogVersion, string ApprovalStatus,
-    string ApplyStatus, string ReasonCode, DateTime ExpiresAtUtc, string TargetPhaseName, Guid SnapshotId, string SnapshotFingerprint, bool IsReplay, string ActionFingerprint = "");
+    string ApplyStatus, string ReasonCode, DateTime ExpiresAtUtc, string TargetPhaseName, Guid SnapshotId, string SnapshotFingerprint, bool IsReplay, string ActionFingerprint = "",
+    double[]? StalkerValues = null, double? PreviousChaseSpeed = null, double[]? ResolvedValues = null, int? OptionalToolMask = null, int InitialOptionalBudget = 0);
 public sealed record AEDV02ReceiptRequest(Guid ReceiptId, Guid EffectEventId, int PlanRevision, string PlanFingerprint, long AppliedTick);
 public sealed record AEDV02PlayerPressureRead(Guid UserId, double Score, double[] Components, int Tier, string EpisodeId);
 public sealed record AEDV02SourceRead(string Fingerprint, int PhaseOrdinal, long StartTick, long EndTick,

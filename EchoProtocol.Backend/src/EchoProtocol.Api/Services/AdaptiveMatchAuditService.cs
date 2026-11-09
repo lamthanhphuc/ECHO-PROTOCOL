@@ -15,7 +15,7 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
     public async Task<ServiceResult<object>> GetAsync(Guid matchId, CancellationToken ct)
     {
         var match = await db.MatchAuthorityBindings.AsNoTracking().Where(x => x.MatchId == matchId)
-            .Select(x => new { x.Status, x.BalanceSource, x.BalanceVersion, x.BalanceHash, x.MatchDataPolicy }).SingleOrDefaultAsync(ct);
+            .Select(x => new { x.Status, x.BalanceSource, x.BalanceVersion, x.BalanceHash, x.BalanceBuildVersion, x.MatchDataPolicy }).SingleOrDefaultAsync(ct);
         if (match is null)
             return ServiceResult<object>.Failure("Match was not found", ErrorCodes.NotFound);
         var preMatch = await db.ScenarioDecisions.AsNoTracking().Where(x => x.MatchId == matchId)
@@ -54,11 +54,33 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
         }
         var plans = ledger.ToDictionary(x => x.PlanRevision, x => JsonSerializer.Deserialize<double[]>(x.PlanValuesJson)!);
         var normal = AEDV02Plan.Normal().ToArray();
+        var resolvedByRevision = ledger.ToDictionary(x => x.PlanRevision, AEDV02DecisionService.ReadResolvedValues);
+        var snapshot = resolvedByRevision.Values.Any(x => x?.Length == 13) &&
+            match.BalanceSource == "REMOTE_FIXED" && match.BalanceVersion != null
+            ? await db.RemoteFixedBalanceVersions.AsNoTracking().Where(x => x.Version == match.BalanceVersion)
+                .Select(x => x.SnapshotJson).SingleOrDefaultAsync(ct) : null;
+        var locked = RemoteFixedBalanceContract.AdaptiveBasis(
+            snapshot != null && RemoteFixedBalanceContract.ComputeHash(snapshot) == match.BalanceHash ? snapshot : null).Values;
         var keys = Enum.GetNames<AEDV02Key>();
         var decisions = ledger.Select(x =>
         {
-            var before = plans.GetValueOrDefault(x.ExpectedPlanRevision, normal);
-            var after = plans[x.PlanRevision];
+            var before = plans.GetValueOrDefault(x.ExpectedPlanRevision, normal).ToArray();
+            var after = plans[x.PlanRevision].ToArray();
+            var resolved = resolvedByRevision[x.PlanRevision];
+            if (resolved is { Length: 13 })
+            {
+                before = locked[..12];
+                resolvedByRevision.GetValueOrDefault(x.ExpectedPlanRevision)?.Take(12).ToArray().CopyTo(before, 0);
+                after = resolved[..12];
+            }
+            else if (resolved != null)
+            {
+                int chase = (int)AEDV02Key.ChaseSpeed;
+                before[chase] = x.PreviousChaseSpeed ?? resolved[chase];
+                after[chase] = resolved[chase];
+                for (int i = 0; i < after.Length; i++)
+                    if (i != chase) after[i] = before[i];
+            }
             var hostApplied = x.ApplyStatus is "APPLIED" or "FAILED_EFFECT" || x.ApplyStatus == "PENDING" &&
                 accepted is not null && AEDV02DecisionService.HasAcceptedCommit(accepted, x, null);
             return new
@@ -91,7 +113,7 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
             Baseline = match.BalanceSource is null ? null : new
             {
                 Source = match.BalanceSource, Version = match.BalanceVersion,
-                Hash = match.BalanceHash, match.MatchDataPolicy
+                Hash = match.BalanceHash, match.MatchDataPolicy, BuildVersion = match.BalanceBuildVersion
             },
             preMatch, decisions, profile, teamProfile, mayReprocess, HostEvidenceUnavailable = pending && accepted is null
         });

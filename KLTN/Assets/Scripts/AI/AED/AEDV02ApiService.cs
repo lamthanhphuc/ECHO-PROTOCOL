@@ -14,6 +14,7 @@ namespace EchoProtocol.AI.AED
         public double[] pressureWeights;
         public double tierDwellSeconds, protectionSeconds, protectionCooldownSeconds;
         public int protectionQuota;
+        public bool cabinetAmbushEnabled;
     }
     [Serializable] public sealed class AEDV02SourceRequestDto
     { public int phaseOrdinal; public long startTick; public long endTick; public string sceneManifestFingerprint; public bool allowEmergencyWindow; }
@@ -66,16 +67,29 @@ namespace EchoProtocol.AI.AED
         public string policyVersion; public string catalogVersion; public string approvalStatus; public string applyStatus;
         public string reasonCode; public string expiresAtUtc; public string targetPhaseName; public string snapshotId; public string snapshotFingerprint; public bool isReplay;
         public string actionFingerprint;
+        public double[] stalkerValues;
+        public double[] resolvedValues;
+        public int optionalToolMask;
+        public int initialOptionalBudget;
     }
     [Serializable] public sealed class AEDV02ReceiptDto
     { public string receiptId; public string effectEventId; public int planRevision; public string planFingerprint; public long appliedTick; }
     [Serializable] public sealed class AEDV02ClientObservationDto
-    { public int planRevision; public string planFingerprint; }
+    { public int planRevision; public string planFingerprint; public double observedChaseSpeed; public double[] observedStalkerValues; public double[] observedResolvedValues; }
+    [Serializable] public sealed class AEDV02ConfirmedRevisionDto
+    { public AEDV02DecisionResultDto revision; }
 
     public sealed class AEDV02ApiService
     {
         private readonly ApiClient _client;
         public AEDV02ApiService(ApiClient client) { _client = client ?? throw new ArgumentNullException(nameof(client)); }
+        public Task<ApiResult<ApiResponse<AEDV02ConfirmedRevisionDto>>> ConfirmedRevision(Guid match)
+        {
+            var completion = new TaskCompletionSource<ApiResult<ApiResponse<AEDV02ConfirmedRevisionDto>>>();
+            _client.GetJson<ApiResponse<AEDV02ConfirmedRevisionDto>>($"/api/matches/{match:D}/aed-v02/confirmed-revision",
+                true, result => completion.TrySetResult(result));
+            return completion.Task;
+        }
         public Task<ApiResult<ApiResponse<AEDV02ConfigurationDto>>> Configuration(Guid match)
         {
             var completion = new TaskCompletionSource<ApiResult<ApiResponse<AEDV02ConfigurationDto>>>();
@@ -101,9 +115,11 @@ namespace EchoProtocol.AI.AED
         }
         public Task<ApiResult<ApiResponse<AEDV02DecisionResultDto>>> Applied(Guid matchId, Guid decision, AEDV02ReceiptDto request) =>
             Put<AEDV02ReceiptDto, AEDV02DecisionResultDto>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/applied", request);
-        public Task<ApiResult<ApiResponse<bool>>> ClientObserved(Guid matchId, Guid decision, int revision, string fingerprint) =>
+        public Task<ApiResult<ApiResponse<bool>>> ClientObserved(Guid matchId, Guid decision, int revision, string fingerprint, double observedChaseSpeed,
+            double[] observedStalkerValues, double[] observedResolvedValues) =>
             Put<AEDV02ClientObservationDto, bool>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/client-observed",
-                new AEDV02ClientObservationDto { planRevision = revision, planFingerprint = fingerprint });
+                new AEDV02ClientObservationDto { planRevision = revision, planFingerprint = fingerprint, observedChaseSpeed = observedChaseSpeed,
+                    observedStalkerValues = observedStalkerValues, observedResolvedValues = observedResolvedValues });
         public Task<ApiResult<ApiResponse<AEDV02DecisionResultDto>>> Abort(Guid matchId, Guid decision, bool mayHaveCommitted = false) =>
             Put<AEDV02ReceiptDto, AEDV02DecisionResultDto>($"/api/matches/{matchId:D}/aed-v02/decisions/{decision:D}/aborted?mayHaveCommitted={(mayHaveCommitted ? "true" : "false")}", new AEDV02ReceiptDto());
         private Task<ApiResult<ApiResponse<T>>> Post<R, T>(string endpoint, R request)

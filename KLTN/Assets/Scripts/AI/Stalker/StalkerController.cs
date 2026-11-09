@@ -60,6 +60,17 @@ namespace EchoProtocol.AI.Stalker
         private bool _hasRemoteFixedSpeeds;
         private float _remoteFixedPatrolSpeed;
         private float _remoteFixedChaseSpeed;
+        private float? _automaticAdaptiveChaseSpeed;
+
+        private float? _automaticAdaptiveDetectionSeconds;
+        private float? _automaticAdaptiveSearchSeconds;
+
+        public void SetAutomaticAdaptiveTuning(float? chase, float? detection, float? search)
+        {
+            _automaticAdaptiveChaseSpeed = chase;
+            _automaticAdaptiveDetectionSeconds = detection;
+            _automaticAdaptiveSearchSeconds = search;
+        }
 
         public void ApplyRemoteFixedBalance(RemoteFixedBalanceSnapshot snapshot)
         {
@@ -472,7 +483,8 @@ namespace EchoProtocol.AI.Stalker
         public double AppliedDetectionDecayRate => GetDetectionDecayRate();
         public double AppliedChaseSpeed => GetChaseSpeed();
         public double AppliedSearchDuration => GetSearchDuration();
-        public float AppliedDetectionAcquireSeconds => detectionDurationSeconds;
+        public float AppliedDetectionAcquireSeconds =>
+            _automaticAdaptiveDetectionSeconds ?? RemoteFixedBalanceSnapshot.GameplayValue("stalkerDetectSeconds", detectionDurationSeconds);
         public float AppliedPostChaseCooldownSeconds => smartPatrolSettings?.PostChaseCooldownSeconds ?? 18f;
         public bool SmartPatrolEnabled => useSmartPatrolDirector;
         public float SmartPatrolOccupancySampleIntervalSeconds =>
@@ -4653,7 +4665,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetDetectionFillRate()
         {
-            float secondsOverride = RemoteFixedBalanceSnapshot.GameplayValue("stalkerDetectSeconds", 0f);
+            float secondsOverride = _automaticAdaptiveDetectionSeconds ?? RemoteFixedBalanceSnapshot.GameplayValue("stalkerDetectSeconds", 0f);
             if (secondsOverride > 0f) return GetDetectionMeterFull() / secondsOverride;
             if (PurgeTier >= 0) return GetDetectionMeterFull() / PurgeDetectSeconds;
             var value =
@@ -4679,7 +4691,7 @@ namespace EchoProtocol.AI.Stalker
 
         private float GetSearchDuration()
         {
-            float secondsOverride = RemoteFixedBalanceSnapshot.GameplayValue("stalkerSearchSeconds", 0f);
+            float secondsOverride = _automaticAdaptiveSearchSeconds ?? RemoteFixedBalanceSnapshot.GameplayValue("stalkerSearchSeconds", 0f);
             if (secondsOverride > 0f) return secondsOverride;
             if(_purgeControlled && _purgeHunting) return 75f;
             var value =
@@ -4693,6 +4705,7 @@ namespace EchoProtocol.AI.Stalker
         private float GetChaseSpeed()
         {
             if(_purgeControlled) return _purgeChaseSpeed;
+            if (_automaticAdaptiveChaseSpeed.HasValue) return _automaticAdaptiveChaseSpeed.Value;
             if (_hasRemoteFixedSpeeds)
                 return _remoteFixedChaseSpeed;
             var value =

@@ -67,6 +67,7 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
         <StatCard label="Có biên nhận áp dụng / Đã duyệt" value={ratio(data.applied, data.approved)} />
         <StatCard label="Có ít nhất một Client báo cáo / Đã áp dụng" value={ratio(data.clientObserved, data.applied)} />
         <StatCard label="Lỗi hiệu ứng / Đã duyệt" value={ratio(data.failedEffect, data.approved)} />
+        <StatCard label="Hoàn tác có biên nhận" value={data.confirmedRollbacks ?? 0} />
       </div>
       <p className="muted mt-3 text-sm">Hoàn tác · Chưa có dấu xác nhận riêng để tính tỷ lệ từ lịch sử hiện có.</p>
       <h3 className="mt-4 font-semibold">Lý do giữ nguyên hoặc fallback đã ghi nhận</h3>

@@ -40,6 +40,8 @@ public sealed class AEDV02Decision
     public string PolicyVersion { get; set; } = string.Empty;
     public string CatalogVersion { get; set; } = string.Empty;
     public string PlanValuesJson { get; set; } = string.Empty;
+    public string? StalkerValuesJson { get; set; }
+    public double? PreviousChaseSpeed { get; set; }
     public int InitialOptionalBudget { get; set; }
     public string ChangedKey { get; set; } = string.Empty;
     public string ReasonCode { get; set; } = string.Empty;

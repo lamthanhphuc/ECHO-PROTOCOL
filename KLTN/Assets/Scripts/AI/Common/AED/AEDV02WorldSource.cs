@@ -41,8 +41,9 @@ namespace EchoProtocol.AI.Common.AED
         public double DestinationZ { get; set; }
         public string JammerBlockerId { get; set; } = string.Empty;
         public double JammerProgress { get; set; }
-        public bool MatchesStalkerConsumer(AEDV02Plan plan) => plan != null && ConsumerValues != null && ConsumerValues.Length == 6 &&
-            ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) && Math.Abs(value - plan.Get((AEDV02Key)index)) < .000001).All(matches => matches);
+        public bool MatchesStalkerConsumer(AEDV02Plan plan, double[]? resolved = null) => plan != null && ConsumerValues != null && ConsumerValues.Length == 6 &&
+            (resolved == null || resolved.Length == 6) && ConsumerValues.Select((value, index) =>
+                AEDV02PilotPolicy.Finite(value) && Math.Abs(value - (resolved == null ? plan.Get((AEDV02Key)index) : resolved[index])) < .0001).All(matches => matches);
         public int Zone { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
@@ -134,10 +135,10 @@ namespace EchoProtocol.AI.Common.AED
         public int ReservationGrade { get; set; }
         public int[] SpawnedZones { get; set; } = Array.Empty<int>();
         public AEDV02SupplyReservation[] Reservations { get; set; } = Array.Empty<AEDV02SupplyReservation>();
-        public bool IsValid() => ReservationGrade is >= -1 and <= 3 && InitialOptionalBudget is >= 0 and <= 2 && OptionalBudget >= OptionalMaterialized &&
+        public bool IsValid() => ReservationGrade is >= -1 and <= 3 && InitialOptionalBudget is >= 0 and <= 3 && OptionalBudget >= OptionalMaterialized &&
             OptionalBudget <= InitialOptionalBudget && OptionalMaterialized >= 0 && SpawnedZones != null &&
             SpawnedZones.All(x => x is >= 1 and <= 3) && SpawnedZones.Distinct().Count() == SpawnedZones.Length &&
-            Reservations != null && Reservations.Length <= 17 && Reservations.All(x => x != null && x.EntryPath != null && x.EntryPath.Length <= 256 &&
+            Reservations != null && Reservations.Length <= 18 && Reservations.All(x => x != null && x.EntryPath != null && x.EntryPath.Length <= 256 &&
                 x.EntryPath.All(p => p != null && p.Length == 3 && p.All(AEDV02PilotPolicy.Finite)) && x.Zone is >= 1 and <= 3 &&
                 !SpawnedZones.Contains(x.Zone) && x.ToolId is 1 or 2 or 3 or 4 or 6 && !string.IsNullOrWhiteSpace(x.MarkerId) && x.MarkerId.Length <= 128) &&
             Reservations.Select(x => x.MarkerId).Distinct(StringComparer.Ordinal).Count() == Reservations.Length;
@@ -237,8 +238,7 @@ namespace EchoProtocol.AI.Common.AED
         private bool Threats(AEDV02ThreatSource[] threats, HashSet<Guid> users, bool minion) =>
             threats.All(x => x != null && Text(x.NetworkId) && Text(x.State) && x.EpisodeId != null && x.EpisodeId.Length <= 128 && x.Zone >= 1 && x.Zone <= 3 &&
                 x.ConsumerValues != null && (x.ConsumerValues.Length == 0 || !minion && x.ConsumerValues.Length == 6 &&
-                    x.ConsumerValues.Select((value, index) => AEDV02PilotPolicy.Finite(value) &&
-                        AEDV02Plan.AllowedValues((AEDV02Key)index).Any(allowed => Math.Abs(allowed - value) < .000001)).All(valid => valid)) &&
+                    x.ConsumerValues.All(value => AEDV02PilotPolicy.Finite(value) && value > 0 && value <= 900)) &&
                 x.InvestigationNoiseId != null && x.InvestigationNoiseId.Length <= 512 &&
                 x.JammerBlockerId != null && x.JammerBlockerId.Length <= 128 && (!minion || x.JammerBlockerId.Length == 0) &&
                 AEDV02PilotPolicy.Finite(x.JammerProgress) && x.JammerProgress >= 0 && x.JammerProgress <= 1 &&

@@ -50,6 +50,61 @@ namespace EchoProtocol.Networking.Authority
         private static MatchAuthorityRuntime _instance;
         private MatchAuthorityApiService _api;
         private RemoteFixedBalanceSnapshot _remoteFixedBalance;
+        public bool HasAutomaticBalance { get; private set; }
+
+        public double V02StalkerValue(AEDV02Plan plan, AEDV02Key key) => V02EffectiveValue(plan, key);
+
+        public double V02EffectiveValue(AEDV02Plan plan, AEDV02Key key)
+        {
+            var state = NetworkMatchState.Instance;
+            if (HasAutomaticBalance && state != null && state.TryReadV02ResolvedValue(MatchId, plan, key, out var approved))
+                return approved;
+            return TryResolveV02Value(key, plan.Get(key), out var value) ? value : V02Baseline(key);
+        }
+
+        internal bool TryResolveV02ToolMask(double tier, int initial, out int mask)
+        {
+            int basis = 0;
+            float defaultTools = _remoteFixedBalance?.Get("toolsPerZone", 5) ?? 5;
+            for (int zone = 1; zone <= 3; zone++)
+                if ((_remoteFixedBalance?.Get($"zone{zone}ToolBudget", defaultTools) ?? defaultTools) == 6)
+                    basis |= 1 << (zone - 1);
+            return AEDV02Plan.TryResolveOptionalMask(basis, (int)tier - initial, out mask);
+        }
+
+        internal double V02Baseline(AEDV02Key key)
+        {
+            var profile = MatchDifficultyProfiles.Get(MatchDifficulty.Normal);
+            var normal = key switch
+            {
+                AEDV02Key.Zone1MinionCap => profile.Zone1MinionCap,
+                AEDV02Key.Zone2MinionCap => profile.Zone2MinionCap,
+                AEDV02Key.Zone3AdaptiveMinionCap => profile.Zone3MinionCap,
+                _ => AEDV02Plan.Normal().Get(key)
+            };
+            var snapshot = _remoteFixedBalance;
+            if (snapshot == null) return normal;
+            return key switch
+            {
+                AEDV02Key.ChaseSpeed => snapshot.stalker.chaseSpeed,
+                AEDV02Key.DetectionAcquireSeconds => snapshot.Get("stalkerDetectSeconds", (float)normal),
+                AEDV02Key.SearchSeconds => snapshot.Get("stalkerSearchSeconds", (float)normal),
+                AEDV02Key.HearingMultiplier => snapshot.Get("stalkerHearing", (float)normal),
+                AEDV02Key.SpecialCooldownSeconds => snapshot.Get("stalkerSpecialCooldown", (float)normal),
+                AEDV02Key.Zone1MinionCap => snapshot.Get("minionCapZone1", (float)normal),
+                AEDV02Key.Zone2MinionCap => snapshot.Get("minionCapZone2", (float)normal),
+                AEDV02Key.Zone3AdaptiveMinionCap => snapshot.Get("minionCapZone3", (float)normal),
+                _ => normal
+            };
+        }
+
+        internal bool TryResolveV02Value(AEDV02Key key, double tier, out double value)
+        {
+            value = tier;
+            return !HasAutomaticBalance || (int)key >= (int)AEDV02Key.OptionalToolBudget ||
+                AEDV02Plan.TryResolveRelative(key, _remoteFixedBalance?.stalker.patrolSpeed ?? 6.5f,
+                    V02Baseline(key), tier, out value);
+        }
 
         public bool TryGetRemoteFixedBalance(out RemoteFixedBalanceSnapshot snapshot)
         {
@@ -1032,7 +1087,10 @@ namespace EchoProtocol.Networking.Authority
                 ReadScenarioResolutionMode(runner);
             requestedDifficulty =
                 ReadMatchDifficulty(runner);
+            ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.ConfigureAutomaticAdaptive(
+                requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive);
 
+            bool restoreAutomaticRevision = false;
             for (var attempt = 1;
                  attempt <= HostTakeoverRetryAttempts;
                  attempt++)
@@ -1104,6 +1162,16 @@ namespace EchoProtocol.Networking.Authority
 
                         _remoteFixedBalance = null;
                     }
+                    HasAutomaticBalance = !string.IsNullOrEmpty(context.balanceBuildVersion);
+                    if (HasAutomaticBalance)
+                    {
+                        requestedScenarioResolutionMode = context.resolutionMode == "ADAPTIVE"
+                            ? ScenarioResolutionMode.Adaptive : ScenarioResolutionMode.Fixed;
+                        restoreAutomaticRevision = requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+                            string.Equals(context.status, "InMatch", StringComparison.OrdinalIgnoreCase);
+                        ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.ConfigureAutomaticAdaptive(
+                            requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive);
+                    }
 
                     _migratedResultRoster.Clear();
 
@@ -1169,6 +1237,21 @@ namespace EchoProtocol.Networking.Authority
             }
 
             IsHostBinding = true;
+            if (restoreAutomaticRevision)
+            {
+                // Keep applying confirmed gameplay while new decisions wait for reconciled evidence.
+                V02DecisionsFrozen = true;
+                var confirmed = await new AEDV02ApiService(AuthRuntime.EnsureExists().Client).ConfirmedRevision(sessionMatchId);
+                var migratedState = NetworkMatchState.Instance;
+                if (!IsSuccessful(confirmed) || MatchId != sessionMatchId || _bootstrap?.Runner != runner ||
+                    migratedState == null || migratedState.Runner != runner ||
+                    !migratedState.RestoreConfirmedAutomaticV02(this, confirmed.Data.data.revision))
+                {
+                    Debug.LogError("[AED_V02] Cannot restore confirmed automatic revision on the new Host.");
+                    IsHostBinding = false;
+                    return false;
+                }
+            }
             _nextLeaseRenewal =
                 Time.unscaledTime + LeaseRenewIntervalSeconds;
 
@@ -2068,6 +2151,30 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        public async Task<(bool Accepted, bool Adaptive, string Error)> PrepareAutomaticBalanceAsync(string map)
+        {
+            if (!HasBinding || !IsHostBinding) return (false, false, "Missing host binding.");
+            var matchId = MatchId;
+            var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
+            var result = await _api.StartV2Async(matchId, map, difficulty, prepare: true);
+            if (!IsSuccessful(result)) return (false, false, Describe(result));
+            var context = result.Data.data;
+            if (context.balanceBuildVersion != Application.version)
+                return (false, false, "Backend did not lock the balance for this build.");
+            RemoteFixedBalanceSnapshot snapshot = null;
+            if (context.balanceSource == "REMOTE_FIXED")
+            {
+                var locked = await _api.GetLockedBalanceAsync(matchId);
+                if (!IsSuccessful(locked) || !RemoteFixedBalanceSnapshot.TryDecodeLocked(
+                    context, locked.Data.data, matchId, map, difficulty, out snapshot))
+                    return (false, false, "Locked Web balance could not be verified.");
+            }
+            if (MatchId != matchId || !IsHostBinding) return (false, false, "Host binding changed.");
+            _remoteFixedBalance = snapshot;
+            HasAutomaticBalance = true;
+            return (true, context.resolutionMode == "ADAPTIVE", string.Empty);
+        }
+
         public async Task<(bool Accepted, string Error)> StartMatchAsync(
             bool useRemoteFixed = false)
         {
@@ -2092,8 +2199,10 @@ namespace EchoProtocol.Networking.Authority
             var matchId = MatchId;
             var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
             var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
-            var result = useRemoteFixed
-                ? await _api.StartV2Async(matchId, mapId, difficulty)
+            bool automaticAdaptive = !Debug.isDebugBuild &&
+                requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive;
+            var result = useRemoteFixed || HasAutomaticBalance || automaticAdaptive
+                ? await _api.StartV2Async(matchId, mapId, difficulty, automaticAdaptive)
                 : await _api.StartAsync(matchId, mapId, difficulty);
 
             if (!IsSuccessful(result))
@@ -2103,7 +2212,8 @@ namespace EchoProtocol.Networking.Authority
                 return (false, error);
             }
 
-            if (useRemoteFixed)
+            _remoteFixedBalance = null;
+            if (result.Data.data.balanceSource == "REMOTE_FIXED")
             {
                 string failure = null;
                 RemoteFixedBalanceSnapshot snapshot = null;
@@ -2197,6 +2307,7 @@ namespace EchoProtocol.Networking.Authority
             var oldMatchId = MatchId;
             MatchId = Guid.Empty;
             _remoteFixedBalance = null;
+            HasAutomaticBalance = false;
             IsHostBinding = false;
             requestedScenarioResolutionMode = ScenarioResolutionMode.Fixed;
             requestedDifficulty = MatchDifficulty.Normal;

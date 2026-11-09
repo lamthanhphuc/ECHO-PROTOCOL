@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using EchoProtocol.AI.Common.AED;
 
 namespace EchoProtocol.Api.Services;
 
@@ -27,6 +28,43 @@ public static class RemoteFixedBalanceContract
     {
         using var document = JsonDocument.Parse(validatedJson);
         return document.RootElement.TryGetProperty("content", out var content) ? content.GetProperty("gameVersion").GetString() : null;
+    }
+
+    public static (double Patrol, double[] Values) AdaptiveBasis(string? validatedJson)
+    {
+        var values = AEDV02Plan.Normal().ToArray().Concat(new double[1]).ToArray();
+        values[(int)AEDV02Key.Zone1MinionCap] = 3;
+        values[(int)AEDV02Key.Zone2MinionCap] = 5;
+        if (validatedJson is null) return (6.5, values);
+        using var document = JsonDocument.Parse(validatedJson);
+        var root = document.RootElement;
+        var stalker = root.GetProperty("stalker");
+        values[(int)AEDV02Key.ChaseSpeed] = stalker.GetProperty("chaseSpeed").GetSingle();
+        if (root.TryGetProperty("gameplay", out var gameplay))
+        {
+            var fields = gameplay.EnumerateArray().ToDictionary(x => x.GetProperty("key").GetString()!, x => x.GetProperty("value").GetDouble());
+            var toolsPerZone = fields.GetValueOrDefault("toolsPerZone", 5);
+            for (int zone = 1; zone <= 3; zone++)
+                if (fields.GetValueOrDefault($"zone{zone}ToolBudget", toolsPerZone) == 6)
+                    values[12] += 1 << (zone - 1);
+            values[(int)AEDV02Key.OptionalToolBudget] = AEDV02Plan.OptionalCount((int)values[12]);
+            foreach (var entry in gameplay.EnumerateArray())
+            {
+                int index = entry.GetProperty("key").GetString() switch
+                {
+                    "stalkerDetectSeconds" => (int)AEDV02Key.DetectionAcquireSeconds,
+                    "stalkerHearing" => (int)AEDV02Key.HearingMultiplier,
+                    "stalkerSearchSeconds" => (int)AEDV02Key.SearchSeconds,
+                    "stalkerSpecialCooldown" => (int)AEDV02Key.SpecialCooldownSeconds,
+                    "minionCapZone1" => (int)AEDV02Key.Zone1MinionCap,
+                    "minionCapZone2" => (int)AEDV02Key.Zone2MinionCap,
+                    "minionCapZone3" => (int)AEDV02Key.Zone3AdaptiveMinionCap,
+                    _ => -1
+                };
+                if (index >= 0) values[index] = entry.GetProperty("value").GetSingle();
+            }
+        }
+        return (stalker.GetProperty("patrolSpeed").GetSingle(), values);
     }
 
     public static bool IsValidSnapshot(string? json, string? map = null, bool allowRetiredFields = true)

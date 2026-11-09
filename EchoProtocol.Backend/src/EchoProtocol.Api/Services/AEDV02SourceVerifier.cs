@@ -71,6 +71,18 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         var planRow = last.Sample.PlanRevision == 0 ? null : await db.AEDV02Decisions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.MatchId == matchId && x.PlanRevision == last.Sample.PlanRevision && x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED", ct);
         var observedPlan = planRow == null ? AEDV02Plan.Normal() : new AEDV02Plan(JsonSerializer.Deserialize<double[]>(planRow.PlanValuesJson)!);
+        var resolvedStalker = planRow == null ? null : AEDV02DecisionService.ReadStalkerValues(planRow);
+        var optionalMask = planRow == null ? null : AEDV02DecisionService.OptionalMask(AEDV02DecisionService.ReadResolvedValues(planRow));
+        AEDV02ProposedReservation[]? gradePlacement = null;
+        if (planRow != null && optionalMask.HasValue && observedPlan.Get(AEDV02Key.ResourceGrade) == -1)
+        {
+            var proposalJson = await db.AEDV02Decisions.AsNoTracking().Where(x =>
+                x.MatchId == matchId && x.PlanRevision <= planRow.PlanRevision && x.ChangedKey == "ResourceGrade" &&
+                x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED")
+                .OrderByDescending(x => x.PlanRevision).Select(x => x.ProposalJson).FirstOrDefaultAsync(ct);
+            if (string.IsNullOrEmpty(proposalJson)) return Hold("HOLD_RESOURCE_PLACEMENT_SOURCE_REQUIRED");
+            gradePlacement = JsonSerializer.Deserialize<AEDV02DecisionRequest>(proposalJson)?.ProposedReservations;
+        }
         if (last.Sample.PlanFingerprint != observedPlan.Fingerprint() || last.Sample.PlanRevision > 0 && planRow == null)
             return Hold("HOLD_PLAN_LINEAGE_MISMATCH");
         var sourceRange = accepted.Where(x => x.MatchId == matchId && x.EventSequence >= frames[0].Event.EventSequence &&
@@ -98,9 +110,14 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         for (int i = 0; i < frames.Count; i++)
         {
             var frame = frames[i]; var sample = frame.Sample;
-            if (sample.Supply != null && !VerifySupply(sample, manifest, observedPlan, planRow?.InitialOptionalBudget ?? 0, accepted, frame.Event.EventSequence, supportInstances))
+            if (sample.Supply != null && !VerifySupply(sample, manifest, observedPlan, planRow?.InitialOptionalBudget ?? 0, accepted, frame.Event.EventSequence, supportInstances, optionalMask, gradePlacement))
                 return Hold("HOLD_SUPPLY_RESERVATION_MISMATCH");
             if (sample.Stalkers.Length == 0) return Hold("HOLD_STALKER_CENSUS_MISSING");
+            if (resolvedStalker != null && sample.Stalkers.Any(x => !x.MatchesStalkerConsumer(observedPlan, resolvedStalker)))
+                return Hold("HOLD_STALKER_CONSUMER_NOT_OBSERVED");
+            if (resolvedStalker == null && sample.Stalkers.Any(x => x.ConsumerValues.Select((value, index) =>
+                AEDV02Plan.AllowedValues((AEDV02Key)index).Any(allowed => Math.Abs(allowed - value) < .000001)).Any(valid => !valid)))
+                return Hold("HOLD_STALKER_CONSUMER_NOT_OBSERVED");
             var phaseStarts = accepted.Where(x => x.MatchId == matchId && x.EventType == "PHASE_STARTED" && x.EventSequence < frame.Event.EventSequence)
                 .OrderBy(x => x.EventSequence).ToArray();
             if (phaseStarts.Length != sample.PhaseOrdinal || phaseStarts[^1].ValueJson["context"]["phase"].AsString != sample.PhaseName ||
@@ -386,11 +403,11 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         }
     }
     internal static bool VerifySupply(AEDV02WorldSample world, AEDV02SceneManifest manifest, AEDV02Plan plan,
-        int initialBudget, IEnumerable<TelemetryEventDocument> accepted, long sequence, ISet<string>? supportInstances = null)
+        int initialBudget, IEnumerable<TelemetryEventDocument> accepted, long sequence, ISet<string>? supportInstances = null, int? optionalMask = null, AEDV02ProposedReservation[]? gradePlacement = null, int requiredOptionalMask = 0)
     {
         var supply = world.Supply;
-        if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != initialBudget ||
-            supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) || supply.ReservationGrade != plan.Get(AEDV02Key.ResourceGrade)) return false;
+        if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != (optionalMask.HasValue ? 3 : initialBudget) ||
+            supply.OptionalBudget != (optionalMask.HasValue ? AEDV02Plan.OptionalCount(optionalMask.Value) : plan.Get(AEDV02Key.OptionalToolBudget)) || supply.ReservationGrade != plan.Get(AEDV02Key.ResourceGrade)) return false;
         var spawns = accepted.Where(x => x.EventSequence < sequence && x.EventType == "TEAM_TOOL_LIFECYCLE")
             .Select(x => x.ValueJson["data"].AsBsonDocument)
             .Where(x => x["action"] == "SPAWN" && x.TryGetValue("origin", out var origin) && origin == "WorldSpawn" &&
@@ -403,13 +420,17 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
             bool spawned = supply.SpawnedZones.Contains(zone);
             if (spawned && reservations.Length != 0 || !spawned && actual.Length != 0) return false;
             var ids = spawned ? actual : reservations.Select(x => x.ToolId).ToArray();
-            int limit = 5 + Math.Min(1, Math.Max(0, (spawned ? initialBudget : supply.OptionalBudget) - zone + 1));
-            if (ids.Length < 5 || ids.Length > limit || !new[] { 1, 2, 3, 4, 6 }.All(ids.Contains)) return false;
+            int limit = 5 + (optionalMask.HasValue ? AEDV02Plan.OptionalForZone(optionalMask.Value, zone) :
+                Math.Min(1, Math.Max(0, (spawned ? initialBudget : supply.OptionalBudget) - zone + 1)));
+            if (ids.Length < 5 || ids.Length > limit || AEDV02Plan.OptionalForZone(requiredOptionalMask, zone) != 0 && ids.Length != 6 ||
+                !new[] { 1, 2, 3, 4, 6 }.All(ids.Contains)) return false;
             if (spawned) materialized += actual.Length - 5;
             foreach (var item in reservations)
             {
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == item.MarkerId && x.Zone == zone && x.Kind == "TOOL" && x.AllowedToolIds.Contains(item.ToolId));
-                if (marker == null || !AEDV02ResourcePlacement.AllowsRole(supply.ReservationGrade, marker.ResourceRole)) return false;
+                if (marker == null || !AEDV02ResourcePlacement.AllowsRole(supply.ReservationGrade, marker.ResourceRole) &&
+                    !(optionalMask.HasValue && supply.ReservationGrade == -1 && gradePlacement?.Any(x =>
+                        x.Zone == item.Zone && x.MarkerId == item.MarkerId && x.ToolId == item.ToolId) == true)) return false;
                 if (supply.ReservationGrade != 0)
                 {
                     var entry = manifest.Markers.SingleOrDefault(x => x.Id == "Z" + zone + "_ENTRY");

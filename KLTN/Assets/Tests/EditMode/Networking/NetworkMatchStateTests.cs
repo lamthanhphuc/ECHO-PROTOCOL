@@ -8,6 +8,28 @@ namespace EchoProtocol.Networking.Tests
     public sealed class NetworkMatchStateTests
     {
         [Test]
+        public void AdaptiveTakeoverFreezesDecisionsAndUsesTheReplicatedPhaseForSupply()
+        {
+            const string root = "Assets/_Project/Scripts/Networking/";
+            string authority = File.ReadAllText(root + "Authority/MatchAuthorityRuntime.cs");
+            string coordinator = File.ReadAllText(root + "Authority/MatchAuthorityRuntimeV02Coordinator.cs");
+            string state = File.ReadAllText(root + "Match/NetworkMatchStateV02.cs");
+            StringAssert.Contains("V02DecisionsFrozen = true;", authority);
+            StringAssert.Contains("V02GameplayActive => !V02DecisionsFrozen", coordinator);
+            StringAssert.Contains("PhaseName(CurrentPhase)", state);
+        }
+
+        [Test]
+        public void AutomaticCabinetUsesBackendPermissionAndTheApprovedRevision()
+        {
+            string coordinator = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/MatchAuthorityRuntimeV02Coordinator.cs");
+            string stalker = File.ReadAllText("Assets/Scripts/AI/Stalker/Networking/StalkerFusionCabinetRuntime.cs");
+            StringAssert.Contains("_v02Configuration?.cabinetAmbushEnabled == true", coordinator);
+            StringAssert.Contains("!authority.V02CabinetPolicyEnabled", stalker);
+            StringAssert.Contains("plan.Get(AEDV02Key.CabinetAmbushEnabled) != 1", stalker);
+        }
+
+        [Test]
         public void AEDBackendPreMatch_CommitsCandidateBeforeFinalization()
         {
             var source = File.ReadAllText(

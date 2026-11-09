@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.DTOs.Scenarios;
@@ -10,6 +11,7 @@ using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace EchoProtocol.Api.Controllers;
 
@@ -23,6 +25,26 @@ public sealed class ScenariosController(IScenarioService service,
     AppDbContext db,
     TimeProvider clock) : ControllerBase
 {
+    [HttpGet("automatic-adaptive")]
+    public async Task<IActionResult> AutomaticAdaptive(Guid matchId, string compatibility,
+        [FromServices] IOptions<AEDV02PilotSettings> pilot,
+        [FromServices] IOptions<MatchAuthoritySettings> authority, CancellationToken ct)
+    {
+        if (!TryUser(out var userId)) return Unauthorized();
+        var match = await db.MatchAuthorityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
+        if (match is null) return NotFound();
+        if (match.HostUserId != userId) return StatusCode(403);
+        if (match.Status != MatchAuthorityStatus.Lobby || match.LeaseExpiresAtUtc <= clock.GetUtcNow().UtcDateTime)
+            return Conflict();
+
+        var published = pilot.Value.Enabled ? await AdaptiveConfigurationService.LatestAsync(db, compatibility, ct) : null;
+        var enabled = published is not null && AdaptiveConfigurationService.Read(published).Enabled &&
+            (!authority.Value.EnableRemoteFixed || !await db.RemoteFixedBalanceVersions.AsNoTracking().AnyAsync(
+                x => x.IsActive && x.MapId == "SciFi" && x.Difficulty == "NORMAL" &&
+                    x.ProtocolVersion == RemoteFixedBalanceContract.ProtocolVersion, ct));
+        return Ok(ApiResponse<object>.Ok(new { enabled }));
+    }
+
     [HttpPost("director-sources-v1")]
     public async Task<IActionResult> VerifyDirectorSourcesV1(Guid matchId, AEDPhase8SourceUploadRequestV1 request, CancellationToken ct)
     {

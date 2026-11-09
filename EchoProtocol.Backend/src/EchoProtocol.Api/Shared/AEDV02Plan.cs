@@ -27,11 +27,12 @@ namespace EchoProtocol.AI.Common.AED
         private static readonly double[][] Values = {
             new[] { 1, 1.25, 1.5 }, new[] { 12d, 18, 28 }, new[] { .85, 1, 1.15 },
             new[] { 1.5, 2.25, 3 }, new[] { 7d, 7.5, 8 }, new[] { 360d, 420, 540 },
-            new[] { 0d, 1 }, new[] { 1d, 2 }, new[] { 0d, 1 }, new[] { 0d, 1, 2 },
+            new[] { 0d, 1, 2 }, new[] { 1d, 2, 3 }, new[] { -1d, 0, 1 }, new[] { -1d, 0, 1, 2, 3 },
             new[] { -1d, 0, 1, 2, 3 }, new[] { 0d, 1 }
         };
         private static readonly double[] NormalValues = { 1.25, 18, 1, 2.25, 7.5, 420, 1, 2, 0, 0, 0, 0 };
         private readonly double[] _values;
+        private string? _fingerprint;
         public AEDV02Plan(double[] values)
         {
             if (values == null || values.Length != NormalValues.Length ||
@@ -39,6 +40,75 @@ namespace EchoProtocol.AI.Common.AED
             _values = (double[])values.Clone();
         }
         public static AEDV02Plan Normal() => new AEDV02Plan(NormalValues);
+        public static bool TryResolveChaseSpeed(double patrol, double baseline, double tier, out double speed)
+        {
+            speed = baseline;
+            double factor = tier == 7d ? .90 : tier == 7.5d ? 1 : tier == 8d ? 1.10 : 0;
+            if (!AEDV02PilotPolicy.Finite(patrol) || !AEDV02PilotPolicy.Finite(baseline) ||
+                patrol < .5 || patrol > 20 || baseline < patrol || baseline > 25 || factor == 0) return false;
+            // Neutral preserves the exact Fixed value. Only adjusted tiers round.
+            double candidate = factor == 1 ? baseline : Math.Round(baseline * factor, 2, MidpointRounding.AwayFromZero);
+            if (candidate < patrol || candidate > 25 || (factor != 1 && candidate == baseline)) return false;
+            speed = candidate;
+            return true;
+        }
+        public static bool TryResolveRelative(AEDV02Key key, double patrol, double baseline, double tier, out double value)
+        {
+            value = baseline;
+            if (!Enum.IsDefined(typeof(AEDV02Key), key) || !AEDV02PilotPolicy.Finite(baseline) ||
+                !AllowedValues(key).Contains(tier)) return false;
+            if (key == AEDV02Key.ChaseSpeed) return TryResolveChaseSpeed(patrol, baseline, tier, out value);
+            if ((int)key >= (int)AEDV02Key.OptionalToolBudget) return false;
+            (double min, double max) = key switch
+            {
+                AEDV02Key.DetectionAcquireSeconds => (.25, 8),
+                AEDV02Key.PostChaseCooldownSeconds => (12, 28),
+                AEDV02Key.HearingMultiplier => (.25, 2),
+                AEDV02Key.SearchSeconds => (.25, 30),
+                AEDV02Key.SpecialCooldownSeconds => (30, 900),
+                AEDV02Key.Zone1MinionCap => (0, 3),
+                AEDV02Key.Zone2MinionCap => (0, 5),
+                AEDV02Key.Zone3AdaptiveMinionCap => (0, 4),
+                _ => throw new ArgumentOutOfRangeException(nameof(key))
+            };
+            double neutral = NormalValues[(int)key];
+            double step = Math.Sign(tier - neutral);
+            if (baseline < min || baseline > max) return false;
+            if (step == 0) return true;
+            double candidate = (int)key < 6
+                ? Math.Round(baseline * (1 + step * .10), 2, MidpointRounding.AwayFromZero)
+                : baseline + step;
+            if (candidate < min || candidate > max || candidate == baseline) return false;
+            value = candidate;
+            return true;
+        }
+
+        public static bool TryResolveOptionalMask(int baselineMask, int step, out int mask)
+        {
+            mask = baselineMask;
+            if (baselineMask < 0 || baselineMask > 7 || step < -1 || step > 1) return false;
+            if (step == 0) return true;
+            for (int zone = 3; zone >= 1; zone--)
+            {
+                int bit = 1 << (zone - 1);
+                if (((mask & bit) != 0) == (step < 0))
+                { mask ^= bit; return true; }
+            }
+            return false;
+        }
+
+        public static int OptionalCount(int mask) => (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1);
+        public static int OptionalForZone(int mask, int zone) => (mask >> (zone - 1)) & 1;
+
+        public AEDV02Plan ForRelativePreMatch(Func<AEDV02Key, double, bool> canResolve)
+        {
+            var values = ToArray();
+            for (int index = 0; index < (int)AEDV02Key.OptionalToolBudget; index++)
+                if (index >= (int)AEDV02Key.Zone1MinionCap || !canResolve((AEDV02Key)index, values[index]))
+                    values[index] = NormalValues[index];
+            return new AEDV02Plan(values);
+        }
+
         public static Guid FixedFallbackDecisionId(Guid candidateDecisionId)
         {
             using var sha = SHA256.Create();
@@ -83,8 +153,10 @@ namespace EchoProtocol.AI.Common.AED
             if (zone >= 1 && zone <= 3 && components.Any(x => x[1] > 0))
             {
                 var key = zone == 1 ? AEDV02Key.Zone1MinionCap : zone == 2 ? AEDV02Key.Zone2MinionCap : AEDV02Key.Zone3AdaptiveMinionCap;
-                if (Get(key) != Values[(int)key][0] && allowed?.Invoke(key, Values[(int)key][0]) != false)
-                { next = With(key, Values[(int)key][0]); return true; }
+                var tiers = Values[(int)key];
+                int current = Array.IndexOf(tiers, Get(key));
+                if (current > 0 && allowed?.Invoke(key, tiers[current - 1]) != false)
+                { next = With(key, tiers[current - 1]); return true; }
             }
             return false;
         }
@@ -93,33 +165,38 @@ namespace EchoProtocol.AI.Common.AED
         public bool ReservesCabinetBudget(int zone) => (zone is 1 or 2) && Get(AEDV02Key.CabinetAmbushEnabled) == 1;
         public double[] ToArray() => (double[])_values.Clone();
         public AEDV02Plan With(AEDV02Key key, double value) { var values = ToArray(); values[(int)key] = value; return new AEDV02Plan(values); }
-        public string Fingerprint() => Hash(CatalogVersion + "|" + string.Join("|", _values.Select(x => x.ToString("R", CultureInfo.InvariantCulture))));
-        public int PositiveTokens(int initialOptionalBudget)
+        public string Fingerprint() => _fingerprint ??= Hash(CatalogVersion + "|" + string.Join("|", _values.Select(x => x.ToString("R", CultureInfo.InvariantCulture))));
+        public int PositiveTokens(int initialOptionalBudget, bool relative = false)
         {
             int count = 0;
             for (int i = 0; i < 6; i++) if (IsAdverse((AEDV02Key)i, NormalValues[i], _values[i])) count++;
             if (Get(AEDV02Key.Zone3AdaptiveMinionCap) > 0) count++;
+            if (relative && Get(AEDV02Key.Zone1MinionCap) > 1) count++;
+            if (relative && Get(AEDV02Key.Zone2MinionCap) > 2) count++;
             if (Get(AEDV02Key.OptionalToolBudget) < initialOptionalBudget || Get(AEDV02Key.ResourceGrade) < 0) count++;
             return count;
         }
-        public bool HasWorldPressureSlot(int initialOptionalBudget, int liveZone3Minions)
+        public bool HasWorldPressureSlot(int initialOptionalBudget, int liveZone3Minions, bool relative = false)
         {
             if (initialOptionalBudget is < 0 or > 2 || liveZone3Minions < 0) return false;
-            int tokens = PositiveTokens(initialOptionalBudget);
+            int tokens = PositiveTokens(initialOptionalBudget, relative);
             return tokens <= 1 && (tokens == 0 || (Get(AEDV02Key.Zone3AdaptiveMinionCap) == 1 ? liveZone3Minions <= 1 : liveZone3Minions == 0));
         }
         public bool TryValidateChange(AEDV02Plan previous, AEDV02DecisionPoint point, bool finalPhase,
-            int initialOptionalBudget, out AEDV02Key key, out string reason)
+            int initialOptionalBudget, out AEDV02Key key, out string reason, bool relative = false)
         {
             key = default; reason = "AED_V02_PLAN_INVALID";
             if (previous == null || initialOptionalBudget < 0 || initialOptionalBudget > 2 || !Enum.IsDefined(typeof(AEDV02DecisionPoint), point)) return false;
-            if (Get(AEDV02Key.OptionalToolBudget) > initialOptionalBudget) { reason = "HOLD_INITIAL_OPTIONAL_BUDGET"; return false; }
+            if (relative ? Math.Abs(Get(AEDV02Key.OptionalToolBudget) - initialOptionalBudget) > 1 :
+                Get(AEDV02Key.OptionalToolBudget) < 0 || Get(AEDV02Key.OptionalToolBudget) > initialOptionalBudget ||
+                Get(AEDV02Key.Zone1MinionCap) > 1 || Get(AEDV02Key.Zone2MinionCap) > 2 || Get(AEDV02Key.Zone3AdaptiveMinionCap) < 0)
+            { reason = "HOLD_INITIAL_OPTIONAL_BUDGET"; return false; }
             var changed = Enumerable.Range(0, _values.Length).Where(i => _values[i] != previous._values[i]).ToArray();
             if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Length != 1) { reason = "HOLD_SINGLE_DELTA_REQUIRED"; return false; }
             if (point != AEDV02DecisionPoint.PRE_MATCH && changed.Any(i => Math.Abs(Array.IndexOf(Values[i], _values[i]) - Array.IndexOf(Values[i], previous._values[i])) > 1))
             { reason = "HOLD_SINGLE_TIER_REQUIRED"; return false; }
             if (point == AEDV02DecisionPoint.PRE_MATCH && changed.Count(i => i < 6) > 1) { reason = "HOLD_STALKER_COMPOSITE_BUDGET"; return false; }
-            if (PositiveTokens(initialOptionalBudget) > 1) { reason = "HOLD_GLOBAL_PRESSURE_BUDGET"; return false; }
+            if (PositiveTokens(initialOptionalBudget, relative) > 1) { reason = "HOLD_GLOBAL_PRESSURE_BUDGET"; return false; }
             if (point == AEDV02DecisionPoint.PRE_MATCH && Get(AEDV02Key.Zone3AdaptiveMinionCap) != 0) { reason = "HOLD_ZONE3_OBSERVATION_REQUIRED"; return false; }
             if (finalPhase && changed.Any(i => IsAdverse((AEDV02Key)i, previous._values[i], _values[i]))) { reason = "HOLD_PHASE4_INCREASE"; return false; }
             if (changed.Length != 0) key = (AEDV02Key)changed[0];

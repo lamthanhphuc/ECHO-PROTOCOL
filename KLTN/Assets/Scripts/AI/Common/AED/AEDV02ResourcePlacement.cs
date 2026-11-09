@@ -8,7 +8,7 @@ namespace EchoProtocol.AI.Common.AED
     public static class AEDV02ResourcePlacement
     {
         public static bool ValidateProposed(AEDV02SceneManifest manifest, AEDV02WorldSample world,
-            AEDV02ProposedReservation[] proposed, int grade)
+            AEDV02ProposedReservation[] proposed, int grade, bool relative = false)
         {
             if (manifest == null || world?.Supply == null || manifest.MinimumToolSpacing < 0 || grade is < -1 or > 3 ||
                 proposed == null || proposed.Length == 0 || proposed.Length != world.Supply.Reservations.Length ||
@@ -23,7 +23,9 @@ namespace EchoProtocol.AI.Common.AED
                 foreach (var replacement in replacements)
                 {
                     var marker = manifest.Markers.SingleOrDefault(x => x.Id == replacement.MarkerId && x.Zone == zone.Key &&
-                        x.Kind == "TOOL" && x.AllowedToolIds.Contains(replacement.ToolId) && AllowsRole(grade, x.ResourceRole));
+                        x.Kind == "TOOL" && x.AllowedToolIds.Contains(replacement.ToolId) &&
+                        (AllowsRole(grade, x.ResourceRole) || relative && grade == -1 && zone.Any(previous =>
+                            previous.MarkerId == replacement.MarkerId && previous.ToolId == replacement.ToolId)));
                     if (marker == null || !manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var inside) || inside ||
                         !manifest.TryPathIntersectsSafeRoom(new[] { new[] { entry.X, entry.Y, entry.Z },
                             new[] { marker.X, marker.Y, marker.Z } }, out var routeIntersects) || routeIntersects) return false;
@@ -32,6 +34,8 @@ namespace EchoProtocol.AI.Common.AED
                         placements.Any(other => Distance(marker, other.X, other.Y, other.Z) < manifest.MinimumToolSpacing)) return false;
                     placements.Add(marker);
                 }
+                if (relative && grade == -1 && !placements.Any(x => x.Zone == zone.Key && x.ResourceRole == "SideRoom"))
+                    return false;
             }
             return placements.Count == proposed.Length;
         }
@@ -66,7 +70,7 @@ namespace EchoProtocol.AI.Common.AED
             grade == -1 && role == "SideRoom" || grade is 1 or 3 && role is "MainRoute" or "FirstRoom" or "ObjectiveRoute";
 
         public static bool TryPlan(int zone, int grade, int[] types, IEnumerable<AEDV02PlacementCandidate> candidates,
-            double spacing, out AEDV02SupplyReservation[] reservations)
+            double spacing, out AEDV02SupplyReservation[] reservations, AEDV02SupplyReservation[]? fallback = null)
         {
             reservations = Array.Empty<AEDV02SupplyReservation>();
             if (zone is < 1 or > 3 || grade is < -1 or > 3 || types == null || types.Length is < 1 or > 7 ||
@@ -76,17 +80,21 @@ namespace EchoProtocol.AI.Common.AED
                 !AEDV02WorldSample.Hash(x.Marker.Id) || x.Path == null || x.Path.Length > 256 ||
                 x.Path.Any(p => p == null || p.Length != 3 || p.Any(v => !AEDV02PilotPolicy.Finite(v))) ||
                 !AEDV02PilotPolicy.Finite(x.Marker.X) || !AEDV02PilotPolicy.Finite(x.Marker.Y) || !AEDV02PilotPolicy.Finite(x.Marker.Z))) return false;
-            var points = input.Where(x => x.Marker.Zone == zone && x.Marker.Kind == "TOOL" && AllowsRole(grade, x.Marker.ResourceRole) &&
-                AEDV02PilotPolicy.Finite(x.PathMeters) && x.PathMeters >= 0 && x.Path.Length != 0).OrderBy(x => x.PathMeters)
+            bool CanUse(AEDV02PlacementCandidate point, int type) => point.Marker.AllowedToolIds.Contains(type) &&
+                (AllowsRole(grade, point.Marker.ResourceRole) || grade == -1 && fallback?.Any(x =>
+                    x.Zone == zone && x.MarkerId == point.Marker.Id && x.ToolId == type) == true);
+            var points = input.Where(x => x.Marker.Zone == zone && x.Marker.Kind == "TOOL" && types.Any(type => CanUse(x, type)) &&
+                AEDV02PilotPolicy.Finite(x.PathMeters) && x.PathMeters >= 0 && x.Path.Length != 0)
+                .OrderBy(x => grade == -1 && x.Marker.ResourceRole != "SideRoom").ThenBy(x => x.PathMeters)
                 .ThenBy(x => x.Marker.Id, StringComparer.Ordinal).ToArray();
             if (points.Select(x => x.Marker.Id).Distinct(StringComparer.Ordinal).Count() != points.Length) return false;
             var selected = new List<(int Type, AEDV02PlacementCandidate Point)>();
             int attempts = 0;
-            var order = types.Select((type, index) => (type, index)).OrderBy(x => points.Count(p => p.Marker.AllowedToolIds.Contains(x.type))).ThenBy(x => x.index).ToArray();
+            var order = types.Select((type, index) => (type, index)).OrderBy(x => points.Count(p => CanUse(p, x.type))).ThenBy(x => x.index).ToArray();
             bool Select(int index)
             {
-                if (index == order.Length) return true;
-                foreach (var point in points.Where(x => x.Marker.AllowedToolIds.Contains(order[index].type)))
+                if (index == order.Length) return fallback == null || grade != -1 || selected.Any(x => x.Point.Marker.ResourceRole == "SideRoom");
+                foreach (var point in points.Where(x => CanUse(x, order[index].type)))
                 {
                     // Bound a pathological authored layout; absence of a proven placement remains a Hold.
                     if (++attempts > 4096) return false;

@@ -37,9 +37,25 @@ namespace EchoProtocol.Networking.Authority
         public bool HasStagedV02PreMatch => _v02StagedApproval != null;
         internal double V02EvidenceMaxAge => _v02Configuration?.evidenceMaxAgeSeconds ?? AEDV02PilotPolicy.EvidenceMaxAgeSeconds;
         private bool V02TierAllowed(AEDV02Key key, double value) =>
-            _v02Configuration == null || _v02Configuration.parameters[(int)key].tiers.Contains(value);
+            AEDV02Plan.AllowedValues(key).Contains(value) &&
+            (_v02Configuration == null || _v02Configuration.parameters[(int)key].tiers.Contains(value)) &&
+            (!HasAutomaticBalance ? key switch
+            {
+                AEDV02Key.Zone1MinionCap => value <= 1,
+                AEDV02Key.Zone2MinionCap => value <= 2,
+                AEDV02Key.Zone3AdaptiveMinionCap => value >= 0,
+                AEDV02Key.OptionalToolBudget => value is >= 0 and <= 2,
+                _ => true
+            } : key == AEDV02Key.OptionalToolBudget ?
+                TryResolveV02ToolMask(value, AEDv2Authority.V02InitialOptionalBudget, out _) :
+                TryResolveV02Value(key, value, out _));
 
-        private bool V02GameplayActive => IsHostBinding && RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
+        internal bool V02DecisionsFrozen { get; private set; }
+        internal bool V02CabinetPolicyEnabled => HasAutomaticBalance
+            ? _v02Configuration?.cabinetAmbushEnabled == true
+            : ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.CabinetAmbushEnabled == true;
+
+        private bool V02GameplayActive => !V02DecisionsFrozen && IsHostBinding && RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
             Difficulty == MatchDifficulty.Normal && ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled == true;
 
         public async Task StageV02PreMatchAsync(CancellationToken cancellation)
@@ -82,8 +98,8 @@ namespace EchoProtocol.Networking.Authority
             if (optional < 0 || optional > 2) { V02Log("PREMATCH_HOLD", "HOLD_UNREGISTERED_INITIAL_SUPPLY"); return; }
             var plan = baseline.With(AEDV02Key.OptionalToolBudget, optional);
             if (_v02Configuration == null)
-                plan = plan.With(AEDV02Key.CabinetAmbushEnabled, snapshot.SnapshotValidity == "Valid" && runtime.RuntimeSettings.CabinetAmbushEnabled ? 1 : 0);
-            else if (plan.Get(AEDV02Key.CabinetAmbushEnabled) == 1 && !runtime.RuntimeSettings.CabinetAmbushEnabled)
+                plan = plan.With(AEDV02Key.CabinetAmbushEnabled, snapshot.SnapshotValidity == "Valid" && V02CabinetPolicyEnabled ? 1 : 0);
+            else if (plan.Get(AEDV02Key.CabinetAmbushEnabled) == 1 && !V02CabinetPolicyEnabled)
                 return;
             if (staged && (decision.IsManaged ? decision.preMatchRule == "AED-PRE-030-BOTH-HIGH-INCREASE"
                 : candidate.MonsterParameters.ChaseSpeed != FixedDirector.FixedBaselineChaseSpeed))
@@ -104,6 +120,8 @@ namespace EchoProtocol.Networking.Authority
                         plan = plan.With(AEDV02Key.DetectionAcquireSeconds, 1);
                 }
             }
+            if (HasAutomaticBalance)
+                plan = plan.ForRelativePreMatch((key, tier) => TryResolveV02Value(key, tier, out _));
             if (MatchId != match || cancellation.IsCancellationRequested) return;
             var request = BuildV02Request(AEDV02Plan.Normal(), plan, 0, AEDV02DecisionPoint.PRE_MATCH, 0, "CORE_COLLECTION", null, scene);
             var approval = await RequestV02ApprovalAsync(match, request);
@@ -166,21 +184,32 @@ namespace EchoProtocol.Networking.Authority
             catch (Exception ex) { V02Log("DECISION_HOLD", "HOLD_BACKEND_REQUEST_FAILED:" + ex.GetType().Name); QueueV02Abort(match, request); return null; }
         }
 
-        private bool TryProposeV02(out AEDV02Plan previous, out AEDV02Plan next, out int revision, out AEDV02SourceResultDto source)
+        private bool TryProposeV02(NetworkMatchState state, out AEDV02Plan previous, out AEDV02Plan next, out int revision, out AEDV02SourceResultDto source)
         {
             source = LastVerifiedV02Source; next = null;
             if (!AEDv2Authority.TryGetV02(MatchId, out previous, out revision) || source?.players == null ||
                 source.planRevision != revision || source.planFingerprint != previous.Fingerprint() || source.rosterIdentity != AEDv2RosterIdentity ||
                 !DateTime.TryParse(source.sourceEndedAtUtc, out var ended) || DateTime.UtcNow - ended.ToUniversalTime() > TimeSpan.FromSeconds(V02EvidenceMaxAge)) return false;
             if (source.opportunityContractVersion == AEDV02PilotOpportunities.Version && !source.pressureComplete) return false;
+            if (HasAutomaticBalance && previous.ReservesCabinetBudget(source.zone) &&
+                source.recentDownUsers?.Length > 0 && V02TierAllowed(AEDV02Key.CabinetAmbushEnabled, 0))
+            { next = previous.With(AEDV02Key.CabinetAmbushEnabled, 0); return true; }
             if (previous.TryProposeRelief(source.players.Select(x => x.components).ToArray(), source.players.Select(x => x.score).ToArray(),
                 source.recentDownUsers?.Length > 0, source.zone, out next, _v02Configuration?.reliefThreshold ?? .65, V02TierAllowed)) return true;
             var grade = previous.Get(AEDV02Key.ResourceGrade);
             var nextGrade = grade < 0 ? 0 : grade + 1;
+            if (HasAutomaticBalance && source.resourceNeeds?.Length > 0)
+            {
+                double optional = previous.Get(AEDV02Key.OptionalToolBudget) + 1;
+                if (V02TierAllowed(AEDV02Key.OptionalToolBudget, optional) &&
+                    EchoProtocol.TeamTools.TeamToolWorldSpawn.CanSetV02SupplyBudget(_bootstrap.Runner, MatchId, (int)optional))
+                { next = previous.With(AEDV02Key.OptionalToolBudget, optional); return true; }
+            }
             if (source.resourceNeeds?.Length > 0 && previous.Get(AEDV02Key.ResourceGrade) < 3 &&
                 V02TierAllowed(AEDV02Key.ResourceGrade, nextGrade) &&
                 (previous.Get(AEDV02Key.ResourceGrade) < 2 || source.recentDownUsers?.Length > 0 || source.players.Any(x => x.score >= .85)) &&
-                EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId)?.Reservations.Length > 0)
+                EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId)?.Reservations.Length > 0 &&
+                state.PreviewV02ResourceGrade((int)nextGrade, out _))
             { next = previous.With(AEDV02Key.ResourceGrade, nextGrade); return true; }
             if (!source.pressureComplete || source.opportunityContractVersion != AEDV02PilotOpportunities.Version ||
                 source.teamPressureStatus != "Verified" || source.teamPressureTier < 3 ||
@@ -189,27 +218,56 @@ namespace EchoProtocol.Networking.Authority
             // Pilot Cabinet sessions keep their single positive slot available for the native encounter.
             if (previous.ReservesCabinetBudget(source.zone)) return false;
             var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
-            int initial = supply?.InitialOptionalBudget ?? 0;
+            int initial = HasAutomaticBalance ? AEDv2Authority.V02InitialOptionalBudget : supply?.InitialOptionalBudget ?? 0;
             var normal = AEDV02Plan.Normal();
             if (source.zone == 3 && source.phaseName == "ZONE_3_FIND_FRIGATE" && source.increaseAxes.Contains("Minion") &&
-                previous.Get(AEDV02Key.Zone3AdaptiveMinionCap) == 0 && V02TierAllowed(AEDV02Key.Zone3AdaptiveMinionCap, 1))
+                previous.Get(AEDV02Key.Zone3AdaptiveMinionCap) < 1 &&
+                V02TierAllowed(AEDV02Key.Zone3AdaptiveMinionCap, previous.Get(AEDV02Key.Zone3AdaptiveMinionCap) + 1))
             {
                 foreach (AEDV02Key key in Enum.GetValues(typeof(AEDV02Key)))
                     if ((int)key < 6 && AEDV02Plan.IsAdverse(key, normal.Get(key), previous.Get(key)))
-                    { next = previous.With(key, normal.Get(key)); return true; }
-                if (previous.PositiveTokens(initial) == 0) { next = previous.With(AEDV02Key.Zone3AdaptiveMinionCap, 1); return true; }
+                    { if (V02TierAllowed(key, normal.Get(key))) { next = previous.With(key, normal.Get(key)); return true; } }
+                if (previous.PositiveTokens(initial, HasAutomaticBalance) == 0)
+                { next = previous.With(AEDV02Key.Zone3AdaptiveMinionCap, previous.Get(AEDV02Key.Zone3AdaptiveMinionCap) + 1); return true; }
+            }
+            if (HasAutomaticBalance && previous.PositiveTokens(initial, true) == 0)
+            {
+                if (source.increaseAxes.Contains("Stalker"))
+                {
+                    if (source.zone is 1 or 2 && V02CabinetPolicyEnabled &&
+                        V02TierAllowed(AEDV02Key.CabinetAmbushEnabled, 1))
+                    { next = previous.With(AEDV02Key.CabinetAmbushEnabled, 1); return true; }
+                    foreach (var key in new[] { AEDV02Key.ChaseSpeed, AEDV02Key.DetectionAcquireSeconds,
+                        AEDV02Key.PostChaseCooldownSeconds, AEDV02Key.HearingMultiplier,
+                        AEDV02Key.SearchSeconds, AEDV02Key.SpecialCooldownSeconds })
+                    {
+                        double current = previous.Get(key);
+                        var tiers = AEDV02Plan.AllowedValues(key);
+                        var increase = tiers.Where(tier => AEDV02Plan.IsAdverse(key, current, tier))
+                            .OrderBy(tier => Math.Abs(tier - current)).Take(1);
+                        foreach (var tier in increase.Where(tier => V02TierAllowed(key, tier)))
+                        { next = previous.With(key, tier); return true; }
+                    }
+                }
+                if (source.zone is 1 or 2 && source.increaseAxes.Contains("Minion"))
+                {
+                    var key = source.zone == 1 ? AEDV02Key.Zone1MinionCap : AEDV02Key.Zone2MinionCap;
+                    var tier = previous.Get(key) + 1;
+                    if (V02TierAllowed(key, tier)) { next = previous.With(key, tier); return true; }
+                }
             }
             var nextDetection = previous.Get(AEDV02Key.DetectionAcquireSeconds) > 1.25 ? 1.25 : 1;
-            if (source.increaseAxes.Contains("Stalker") && previous.PositiveTokens(initial) == 0 &&
+            if (source.increaseAxes.Contains("Stalker") && previous.PositiveTokens(initial, HasAutomaticBalance) == 0 &&
                 previous.Get(AEDV02Key.DetectionAcquireSeconds) >= 1.25 && V02TierAllowed(AEDV02Key.DetectionAcquireSeconds, nextDetection))
             { next = previous.With(AEDV02Key.DetectionAcquireSeconds, nextDetection); return true; }
-            if (AEDV02PilotOpportunities.HasResourceManagementHistory(source.increaseAxes) && previous.PositiveTokens(initial) == 0 && supply != null)
+            if (AEDV02PilotOpportunities.HasResourceManagementHistory(source.increaseAxes) && previous.PositiveTokens(initial, HasAutomaticBalance) == 0 && supply != null)
             {
                 int reduced = (int)previous.Get(AEDV02Key.OptionalToolBudget) - 1;
-                if (reduced >= 0 && V02TierAllowed(AEDV02Key.OptionalToolBudget, reduced) &&
+                if ((HasAutomaticBalance || reduced >= 0) && V02TierAllowed(AEDV02Key.OptionalToolBudget, reduced) &&
                     EchoProtocol.TeamTools.TeamToolWorldSpawn.CanSetV02SupplyBudget(_bootstrap.Runner, MatchId, reduced))
                 { next = previous.With(AEDV02Key.OptionalToolBudget, reduced); return true; }
-                if (supply.Reservations.Length > 0 && grade > -1 && V02TierAllowed(AEDV02Key.ResourceGrade, grade - 1))
+                if (supply.Reservations.Length > 0 && grade > -1 && V02TierAllowed(AEDV02Key.ResourceGrade, grade - 1) &&
+                    state.PreviewV02ResourceGrade((int)grade - 1, out _))
                 { next = previous.With(AEDV02Key.ResourceGrade, grade - 1); return true; }
             }
             return false;
@@ -257,7 +315,7 @@ namespace EchoProtocol.Networking.Authority
             if (TryBuildV02SupportRequest(state, out var supportRequest))
             { _v02EvaluatedSource = supportRequest.sourceFingerprint; ApplyV02DecisionAsync(state, supportRequest, null); return; }
             if (
-                !state.IsV02SafeWindow() || !TryProposeV02(out var previous, out var next, out var revision, out var source) ||
+                !state.IsV02SafeWindow() || !TryProposeV02(state, out var previous, out var next, out var revision, out var source) ||
                 source.fingerprint == _v02EvaluatedSource) return;
             _v02EvaluatedSource = source.fingerprint;
             var request = BuildV02Request(previous, next, revision, AEDV02DecisionPoint.SAFE_WINDOW, ++_v02WindowSequence,
@@ -270,7 +328,7 @@ namespace EchoProtocol.Networking.Authority
         {
             if (!V02GameplayActive || BackendAdaptiveInputSnapshotProvider.Current == null) return false;
             if (_v02DecisionBusy || _v02PendingApproval != null || !state.IsV02SafeWindow() ||
-                !TryProposeV02(out var previous, out var next, out var revision, out var source)) return false;
+                !TryProposeV02(state, out var previous, out var next, out var revision, out var source)) return false;
             var request = BuildV02Request(previous, next, revision, AEDV02DecisionPoint.PHASE_BOUNDARY, 0,
                 targetPhase, source, source.sceneManifestFingerprint);
             if (!AttachV02Placement(state, previous, next, request)) return false;
@@ -329,11 +387,11 @@ namespace EchoProtocol.Networking.Authority
                 string consumer = "AEDPolicyEnvelope"; var key = AEDV02Key.CabinetAmbushEnabled; double value = plan.Get(key);
                 var ids = Array.Empty<string>();
                 string effectKey = null;
-                if (_v02PendingRequest.decisionPoint == "PRE_MATCH" && plan.Get(AEDV02Key.OptionalToolBudget) > 0)
+                if (_v02PendingRequest.decisionPoint == "PRE_MATCH" && (HasAutomaticBalance || plan.Get(AEDV02Key.OptionalToolBudget) > 0))
                 {
                     var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
-                    if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) ||
-                        supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget) || !supply.SpawnedZones.Contains(1)) return;
+                    if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != (HasAutomaticBalance ? 3 : plan.Get(AEDV02Key.OptionalToolBudget)) ||
+                        supply.OptionalBudget != V02EffectiveValue(plan, AEDV02Key.OptionalToolBudget) || !supply.SpawnedZones.Contains(1)) return;
                 }
                 if (_v02PendingRequest.support != null)
                 {
@@ -345,7 +403,7 @@ namespace EchoProtocol.Networking.Authority
                     var stalkers = FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == _bootstrap.Runner).ToArray();
                     if (stalkers.Length == 0 || stalkers.Any(x => x.V02AppliedRevision != _v02PendingApproval.planRevision ||
                         Enumerable.Range(0, 6).Any(index => !x.TryReadV02ConsumerValue((AEDV02Key)index, out var observed) ||
-                            Math.Abs(observed - plan.Get((AEDV02Key)index)) >= .000001))) return;
+                            Math.Abs(observed - V02StalkerValue(plan, (AEDV02Key)index)) >= .0001))) return;
                     ids = stalkers.Select(x => x.Object.Id.ToString()).ToArray();
                 }
                 else if (changed.Length == 1 && (int)changed[0] < 6)
@@ -353,15 +411,15 @@ namespace EchoProtocol.Networking.Authority
                     key = changed[0]; consumer = "StalkerFusionRuntime";
                     var stalkers = FindObjectsByType<StalkerFusionRuntime>().Where(x => x.Runner == _bootstrap.Runner).ToArray();
                     if (stalkers.Length == 0 || stalkers.Any(x => x.V02AppliedRevision != _v02PendingApproval.planRevision ||
-                        !x.TryReadV02ConsumerValue(key, out var observed) || Math.Abs(observed - plan.Get(key)) > .000001)) return;
-                    value = plan.Get(key); ids = stalkers.Select(x => x.Object.Id.ToString()).ToArray();
+                        !x.TryReadV02ConsumerValue(key, out var observed) || Math.Abs(observed - V02StalkerValue(plan, key)) > .0001)) return;
+                    value = V02StalkerValue(plan, key); ids = stalkers.Select(x => x.Object.Id.ToString()).ToArray();
                 }
                 else if (changed.Length == 1 && changed[0] is AEDV02Key.Zone1MinionCap or AEDV02Key.Zone2MinionCap or AEDV02Key.Zone3AdaptiveMinionCap)
                 {
                     key = changed[0]; consumer = "PlayerSpawner";
                     var spawner = FindAnyObjectByType<PlayerSpawner>();
                     if (spawner == null || !spawner.TryReadV02MinionCap(MatchId, _v02PendingApproval.planRevision, key, out value, out ids) ||
-                        Math.Abs(value - plan.Get(key)) > .000001) return;
+                        Math.Abs(value - V02EffectiveValue(plan, key)) > .000001) return;
                 }
                 else if (changed.Length == 1 && changed[0] == AEDV02Key.CabinetAmbushEnabled)
                 {
@@ -372,7 +430,7 @@ namespace EchoProtocol.Networking.Authority
                 else if (changed.Length == 1 && changed[0] == AEDV02Key.OptionalToolBudget)
                 {
                     var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
-                    if (supply == null || !supply.IsValid() || supply.OptionalBudget != plan.Get(AEDV02Key.OptionalToolBudget)) return;
+                    if (supply == null || !supply.IsValid() || supply.OptionalBudget != V02EffectiveValue(plan, AEDV02Key.OptionalToolBudget)) return;
                     key = changed[0]; value = supply.OptionalBudget; consumer = "TeamToolWorldSpawn";
                 }
                 else if (changed.Length == 1 && changed[0] == AEDV02Key.ResourceGrade)
@@ -440,6 +498,7 @@ namespace EchoProtocol.Networking.Authority
         private void ResetV02Coordinator()
         {
             _v02Configuration = null;
+            V02DecisionsFrozen = false;
             _v02CoordinatorGeneration++; _v02StagedRequest = null; _v02StagedApproval = null; _v02PendingRequest = null;
             _v02PendingApproval = null; _v02Receipt = null; _v02DecisionBusy = false; _v02ReceiptBusy = false;
             _v02EvaluatedSource = null; _v02WindowSequence = 0; _v02Aborts.Clear(); _v02CommittedAborts.Clear(); _v02AbortBusy = false;

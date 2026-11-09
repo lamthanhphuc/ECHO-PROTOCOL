@@ -105,6 +105,11 @@ namespace EchoProtocol.AI.Stalker.Networking
                 MatchAuthorityRuntime.Instance?.MatchId != matchId || !AEDv2Authority.TryGetV02(matchId, out _, out var revision)) return false;
             ApplyMatchDifficulty(); return V02AppliedRevision == revision;
         }
+        internal void RefreshAutomaticV02AfterTakeover()
+        {
+            if (Object != null && Object.IsValid && Object.HasStateAuthority)
+                ApplyMatchDifficulty();
+        }
         private bool _aedv2Applied;
         private bool _aedv2CorePressureEnabled = true;
 
@@ -299,6 +304,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                 return false;
 
             controller.ApplyRemoteFixedBalance(snapshot);
+            ApplyMatchDifficulty();
             return true;
         }
 
@@ -1457,23 +1463,27 @@ namespace EchoProtocol.AI.Stalker.Networking
                 && AEDv2Authority.TryGetV02(v02Match, out v02, out v02Revision);
             if (useV02) useAEDv2 = false;
             if (useAEDv2) profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(tuning);
-            if (useV02) profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
+            bool automatic = useV02 && authority.HasAutomaticBalance;
+            if (useV02 && !automatic) profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
 
+            float? AutomaticValue(AEDV02Key key) => automatic ? (float)authority.V02StalkerValue(v02, key) : (float?)null;
+            controller?.SetAutomaticAdaptiveTuning(AutomaticValue(AEDV02Key.ChaseSpeed),
+                AutomaticValue(AEDV02Key.DetectionAcquireSeconds), AutomaticValue(AEDV02Key.SearchSeconds));
             controller?.SetAEDv2ProfileOwnership(useAEDv2 || useV02);
             controller?.ApplyMatchDifficulty(profile);
             coreCarrierPursuitDelaySeconds = profile.CoreCarrierPursuitDelaySeconds;
-            hearingRangeMultiplier = RemoteFixedBalanceSnapshot.GameplayValue("stalkerHearing", profile.HearingRangeMultiplier);
+            hearingRangeMultiplier = AutomaticValue(AEDV02Key.HearingMultiplier) ?? RemoteFixedBalanceSnapshot.GameplayValue("stalkerHearing", profile.HearingRangeMultiplier);
             _objectiveInvestigationEnabled = profile.ObjectiveInvestigationEnabled;
             _aedv2CorePressureEnabled = useAEDv2
                 ? tuning.Get(AEDv2Key.CoreCarrierPressureEnabled) != 0
                 : profile.ObjectiveInvestigationEnabled;
             // Flashlight exposure is a fixed player-learnable rule, not an AED knob.
             _flashlightReactionEnabled = difficulty != MatchDifficulty.Easy;
-            specialEncounterRuntime?.SetCooldownSeconds(RemoteFixedBalanceSnapshot.GameplayValue(
+            specialEncounterRuntime?.SetCooldownSeconds(AutomaticValue(AEDV02Key.SpecialCooldownSeconds) ?? RemoteFixedBalanceSnapshot.GameplayValue(
                 "stalkerSpecialCooldown", profile.SpecialEncounterCooldownSeconds));
 
             controller?.ApplyAEDv2Pacing(
-                useV02 ? (float)v02.Get(AEDV02Key.PostChaseCooldownSeconds) : useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
+                useV02 ? (float)authority.V02StalkerValue(v02, AEDV02Key.PostChaseCooldownSeconds) : useAEDv2 ? (float)tuning.Get(AEDv2Key.PostChaseCooldownSeconds) : 18f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.PostAttackCooldownSeconds) : 22f,
                 useAEDv2 ? (float)tuning.Get(AEDv2Key.SameRoomCooldownSeconds) : 15f);
             specialEncounterRuntime?.SetAEDv2Pacing(
@@ -1490,7 +1500,7 @@ namespace EchoProtocol.AI.Stalker.Networking
                     bool observed = true;
                     for (int index = 0; index < 6; index++)
                     {
-                        if (!TryReadV02ConsumerValue((AEDV02Key)index, out var actual) || Math.Abs(actual - v02.Get((AEDV02Key)index)) >= .000001)
+                        if (!TryReadV02ConsumerValue((AEDV02Key)index, out var actual) || Math.Abs(actual - authority.V02StalkerValue(v02, (AEDV02Key)index)) >= .0001)
                         { observed = false; break; }
                         V02ConsumerValues.Set(index, actual);
                     }

@@ -47,4 +47,17 @@ public sealed class AEDV02SupplyLedgerTests
         Assert.That(next.OptionalMaterialized, Is.Zero);
         Assert.That(next.TryRecordZoneSpawn(1, 5, 0), Is.True);
     }
+
+    [Test]
+    public void RelativeBudgetChangesOnlyUnspawnedSlots()
+    {
+        var ledger = new AEDV02SupplyLedger(Guid.NewGuid(), 0, 5);
+        Assert.That(ledger.TryRecordZoneSpawn(1, 5, 1), Is.True);
+        Assert.That(ledger.TrySetOptionalMask(4), Is.False);
+        Assert.That(ledger.TrySetOptionalMask(1), Is.True);
+        Assert.That(ledger.OptionalMaterialized, Is.EqualTo(1));
+        Assert.That(ledger.OptionalForZone(3), Is.Zero);
+        Assert.That(ledger.TrySetOptionalMask(5), Is.True);
+        Assert.That(ledger.OptionalForZone(3), Is.EqualTo(1));
+    }
 }

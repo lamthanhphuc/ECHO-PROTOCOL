@@ -88,19 +88,31 @@ namespace EchoProtocol.Networking.Authority
                 });
 
         public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> StartV2Async(
-            Guid matchId, string mapId, string difficulty) =>
+            Guid matchId, string mapId, string difficulty, bool adaptive = false, bool prepare = false) =>
             PostAsync<StartMatchV2Request, MatchAuthorityDto>(
                 $"/api/matches/{matchId:D}/start-v2",
                 new StartMatchV2Request
                 {
                     mapId = mapId,
                     difficulty = difficulty,
-                    resolutionMode = "FIXED",
-                    balanceSource = "REMOTE_FIXED",
+                    resolutionMode = adaptive ? "ADAPTIVE" : "FIXED",
+                    balanceSource = "AUTO",
+                    prepareBalance = prepare,
+                    supportsRelativeAdaptiveV02 = true,
                     balanceProtocolVersion = "RFB-1",
                     supportsGameplayTuning = true,
                     gameVersion = UnityEngine.Application.version
                 });
+
+        [Serializable]
+        public sealed class AutomaticAdaptiveDto
+        {
+            public bool enabled;
+        }
+
+        public Task<ApiResult<ApiResponse<AutomaticAdaptiveDto>>> GetAutomaticAdaptiveAsync(Guid matchId) =>
+            GetAsync<AutomaticAdaptiveDto>(
+                $"/api/matches/{matchId:D}/scenario/automatic-adaptive?compatibility={Uri.EscapeDataString(UnityEngine.Application.version)}");
 
         public Task<ApiResult<ApiResponse<LockedBalanceDto>>> GetLockedBalanceAsync(
             Guid matchId) =>

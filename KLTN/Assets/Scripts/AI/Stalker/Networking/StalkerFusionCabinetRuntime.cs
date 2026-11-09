@@ -91,7 +91,8 @@ namespace EchoProtocol.AI.Stalker.Networking
             pressure = default; clients = Array.Empty<Guid>(); roots = new List<Transform>(); subject = null;
             var authority = MatchAuthorityRuntime.Instance; var settings = ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings;
             if (authority == null || !authority.HasStateAuthority || Object == null || !Object.IsValid || !Object.HasStateAuthority ||
-                Runner == null || !Runner.IsServer || settings?.PacingV02GameplayEnabled != true || !settings.CabinetAmbushEnabled ||
+                Runner == null || !Runner.IsServer || settings?.PacingV02GameplayEnabled != true ||
+                authority.V02DecisionsFrozen || !authority.V02CabinetPolicyEnabled ||
                 authority.RequestedScenarioResolutionMode != ScenarioResolutionMode.Adaptive || authority.Difficulty != EchoProtocol.Gameplay.MatchDifficulty.Normal ||
                 !AEDv2Authority.TryGetV02(authority.MatchId, out var plan, out var revision) || plan.Get(AEDV02Key.CabinetAmbushEnabled) != 1 ||
                 AEDv2Authority.V02PositiveTokens(authority.MatchId) != 0) { CabinetHold("HOLD_CABINET_POLICY"); return false; }

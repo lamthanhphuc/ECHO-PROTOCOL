@@ -17,17 +17,20 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
     private readonly IMatchJoinProofService _proofs;
     private readonly MatchAuthoritySettings _settings;
     private readonly TimeProvider _timeProvider;
+    private readonly AEDV02PilotSettings _pilot;
 
     public MatchAuthorityService(
         AppDbContext db,
         IMatchJoinProofService proofs,
         IOptions<MatchAuthoritySettings> settings,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IOptions<AEDV02PilotSettings>? pilot = null)
     {
         _db = db;
         _proofs = proofs;
         _settings = settings.Value;
         _timeProvider = timeProvider;
+        _pilot = pilot?.Value ?? new AEDV02PilotSettings();
     }
 
     public async Task<ServiceResult<MatchAuthorityResponse>> CreateAsync(
@@ -536,6 +539,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         var source = v2Request?.BalanceSource?.Trim().ToUpperInvariant();
         var autoSource = source == "AUTO";
         var protocol = v2Request?.BalanceProtocolVersion?.Trim();
+        var prepare = v2Request?.PrepareBalance == true;
+        var buildVersion = v2Request?.GameVersion?.Trim();
 
         MatchAuthorityBinding? match = await _db.MatchAuthorityBindings.Include(item => item.Players)
             .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
@@ -548,7 +553,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             if (match!.Status == MatchAuthorityStatus.InMatch)
             {
                 if (match.MapId != mapId || match.Difficulty != difficulty
-                    || match.ResolutionMode != mode
+                    || (!prepare && match.ResolutionMode != mode)
+                    || (match.BalanceBuildVersion != null && match.BalanceBuildVersion != buildVersion)
                     || (autoSource ? match.BalanceSource is not ("LOCAL" or "REMOTE_FIXED") : match.BalanceSource != source)
                     || match.BalanceProtocolVersion != protocol)
                     return Failure<MatchAuthorityResponse>(
@@ -578,7 +584,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         if (isV2 && (mapId is null || difficulty is null
             || mode is not ("FIXED" or "ADAPTIVE")
             || source is not ("LOCAL" or "REMOTE_FIXED" or "AUTO")
-            || (source is "REMOTE_FIXED" or "AUTO" && mode != "FIXED")
+            || (prepare && (!autoSource || string.IsNullOrEmpty(buildVersion) || mode != "FIXED"))
+            || (source is "REMOTE_FIXED" or "AUTO" && mode != "FIXED" && match?.BalanceBuildVersion == null)
             || (source == "REMOTE_FIXED" && (!MatchContentCatalog.Entries.Any(x => x.Map == mapId) ||
                 (mapId == "Scene_B" && (v2Request?.SupportsGameplayTuning != true || string.IsNullOrWhiteSpace(v2Request.GameVersion)))))))
         {
@@ -622,7 +629,19 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         RemoteFixedBalanceVersion? selected = null;
-        if (source == "REMOTE_FIXED" || autoSource)
+        bool pinned = match.BalanceBuildVersion != null;
+        if (pinned)
+        {
+            if (!isV2 || !autoSource || match.MapId != mapId || match.Difficulty != difficulty ||
+                match.BalanceBuildVersion != buildVersion || match.BalanceProtocolVersion != protocol)
+                return Failure<MatchAuthorityResponse>("Locked balance context differs from the request", ErrorCodes.MatchSessionConflict);
+            if (prepare)
+                return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Balance already locked");
+            if (mode != match.ResolutionMode && !(mode == "FIXED" && match.ResolutionMode == "ADAPTIVE" &&
+                await _db.ScenarioDecisions.AnyAsync(x => x.MatchId == matchId && x.IsCurrent && x.UsedFixedFallback, cancellationToken)))
+                return Failure<MatchAuthorityResponse>("Locked resolution mode differs from the request", ErrorCodes.MatchSessionConflict);
+        }
+        else if (source == "REMOTE_FIXED" || autoSource)
         {
             if (!_settings.EnableRemoteFixed && !autoSource)
                 return Failure<MatchAuthorityResponse>("Remote Fixed is disabled", ErrorCodes.BalanceDisabled);
@@ -646,21 +665,38 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             if (RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson) &&
                 (!_settings.EnableRemoteFixedGameplayTest || v2Request?.SupportsGameplayTuning != true))
                 return Failure<MatchAuthorityResponse>("This balance version requires an enabled RFB-2 test environment and compatible build", ErrorCodes.BalanceSnapshotInvalid);
-            if (RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson) is { } build &&
-                (build != v2Request?.GameVersion || !_settings.RemoteFixedGameVersions.Contains(build)))
+            if ((prepare && !_settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal)) ||
+                (RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson) is { } build &&
+                 (build != v2Request?.GameVersion || !_settings.RemoteFixedGameVersions.Contains(build))))
                 return Failure<MatchAuthorityResponse>("Unity build does not match the selected content version", ErrorCodes.BalanceSnapshotInvalid);
         }
 
         var now = UtcNow();
-        match.MapId = mapId;
-        match.Difficulty = difficulty;
+        if (!pinned)
+        {
+            match.MapId = mapId;
+            match.Difficulty = difficulty;
+            match.BalanceSource = source;
+            match.BalanceProtocolVersion = protocol;
+            match.BalanceVersion = selected?.Version;
+            match.BalanceHash = selected?.ContentHash;
+            match.MatchDataPolicy = selected is not null && RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson)
+                ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard;
+        }
+        if (prepare)
+        {
+            var configuration = v2Request?.SupportsRelativeAdaptiveV02 == true && _pilot.Enabled &&
+                mapId == "SciFi" && difficulty == "NORMAL" &&
+                _pilot.ChaseSpeedVerifiedCompatibilityVersions.Contains(buildVersion!, StringComparer.Ordinal)
+                ? await AdaptiveConfigurationService.LatestAsync(_db, buildVersion!, cancellationToken) : null;
+            match.BalanceBuildVersion = buildVersion;
+            match.ResolutionMode = configuration is not null && AdaptiveConfigurationService.Read(configuration).Enabled
+                ? "ADAPTIVE" : "FIXED";
+            match.UpdatedAtUtc = now;
+            await _db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Balance locked");
+        }
         match.ResolutionMode = mode;
-        match.BalanceSource = source;
-        match.BalanceProtocolVersion = protocol;
-        match.BalanceVersion = selected?.Version;
-        match.BalanceHash = selected?.ContentHash;
-        match.MatchDataPolicy = selected is not null && RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson)
-            ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard;
         foreach (var player in match.Players)
             player.Participated = player.DisconnectedAtUtc == null;
         match.Status = MatchAuthorityStatus.InMatch;
@@ -995,6 +1031,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         Difficulty = match.Difficulty,
         ResolutionMode = match.ResolutionMode,
         BalanceSource = match.BalanceSource,
+        BalanceBuildVersion = match.BalanceBuildVersion,
         BalanceProtocolVersion = match.BalanceProtocolVersion,
         BalanceVersion = match.BalanceVersion,
         BalanceHash = match.BalanceHash,

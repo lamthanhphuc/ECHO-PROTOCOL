@@ -38,8 +38,16 @@ namespace EchoProtocol.TeamTools
                     { Zone = x.Key, ToolId = item.ToolId, MarkerId = AEDV02SceneSource.MarkerId(item.Point.transform),
                         EntryPath = V02EntryPaths.TryGetValue(item.Point, out var path) ? path : Array.Empty<double[]>() })).ToArray() };
         }
-        public static bool CanSetV02SupplyBudget(NetworkRunner runner, Guid match, int budget) =>
-            _v02Supply != null && _v02Supply.MatchId == match && _v02Runner == runner && _v02Supply.CanSetOptionalBudget(budget);
+        public static bool CanSetV02SupplyBudget(NetworkRunner runner, Guid match, int budget)
+        {
+            if (_v02Supply == null || _v02Supply.MatchId != match || _v02Runner != runner) return false;
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority?.HasAutomaticBalance != true) return _v02Supply.CanSetOptionalBudget(budget);
+            return authority.TryResolveV02ToolMask(budget, AEDv2Authority.V02InitialOptionalBudget, out int mask) &&
+                _v02Supply.CanSetOptionalMask(mask) && Enumerable.Range(1, 3).All(zone =>
+                    _v02Supply.OptionalForZone(zone) == AEDV02Plan.OptionalForZone(mask, zone) ||
+                    AEDV02Plan.OptionalForZone(mask, zone) == 0 || V02NormalReservations[zone].Count > RequiredToolCountPerZone);
+        }
         private static bool IsV02Occupied(Vector3 position, IEnumerable<Transform> actors) => actors.Any(actor =>
             actor.GetComponentsInChildren<Collider>(true).Any(body => body.enabled && !body.isTrigger && body.bounds.Contains(position)) ||
             actor.TryGetComponent<CharacterController>(out var capsule) && new Bounds(actor.TransformPoint(capsule.center),
@@ -83,7 +91,14 @@ namespace EchoProtocol.TeamTools
                         MarkerId = AEDV02SceneSource.MarkerId(x.Point.transform),
                         EntryPath = candidates.Single(c => c.Marker.Id == AEDV02SceneSource.MarkerId(x.Point.transform)).Path }).ToArray();
                 }
-                else if (!AEDV02ResourcePlacement.TryPlan(zone, grade, types, candidates, spacing, out reservations)) return false;
+                else
+                {
+                    var fallback = grade == -1 && MatchAuthorityRuntime.Instance?.HasAutomaticBalance == true
+                        ? V02Reservations[zone].Take(types.Length).Select(item => new AEDV02SupplyReservation
+                        { Zone = zone, ToolId = item.ToolId, MarkerId = AEDV02SceneSource.MarkerId(item.Point.transform) }).ToArray()
+                        : null;
+                    if (!AEDV02ResourcePlacement.TryPlan(zone, grade, types, candidates, spacing, out reservations, fallback)) return false;
+                }
                 var plans = new List<SpawnPlan>();
                 foreach (var reservation in reservations)
                 {
@@ -129,22 +144,43 @@ namespace EchoProtocol.TeamTools
             if (runner == null || !runner.IsServer || catalog == null || match == Guid.Empty || plan == null || zone < 1 || zone > 3 ||
                 !AEDV02SceneSource.TryLoad(out var manifest, out _) ||
                 !UnityEngine.SceneManagement.SceneManager.GetSceneByPath(manifest.ScenePath).isLoaded) return false;
+            bool relative = authority.HasAutomaticBalance;
+            int tier = (int)plan.Get(AEDV02Key.OptionalToolBudget);
+            int mask = 0;
+            if (relative && !authority.TryResolveV02ToolMask(tier, AEDv2Authority.V02InitialOptionalBudget, out mask)) return false;
             if (_v02Supply == null || _v02Supply.MatchId != match || _v02Runner != runner)
             {
                 ResetV02(Guid.Empty);
-                _v02Supply = new AEDV02SupplyLedger(match, (int)plan.Get(AEDV02Key.OptionalToolBudget)); _v02Runner = runner;
+                _v02Supply = new AEDV02SupplyLedger(match, relative ? AEDv2Authority.V02InitialOptionalBudget : tier,
+                    relative ? mask : (int?)null); _v02Runner = runner;
                 var points = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude)
                     .Where(x => x.gameObject.scene.path == manifest.ScenePath).ToArray();
                 for (int reservedZone = 1; reservedZone <= 3; reservedZone++)
                 {
                     int count = RequiredToolCountPerZone + _v02Supply.OptionalForZone(reservedZone);
-                    if (!TryBuildZonePlan(catalog, points, (TeamToolSpawnZone)reservedZone, count, spacing, true, out var reserved))
+                    if (!(relative && TryBuildZonePlan(catalog, points, (TeamToolSpawnZone)reservedZone,
+                            RequiredToolCountPerZone + 1, spacing, true, out var reserved)) &&
+                        !TryBuildZonePlan(catalog, points, (TeamToolSpawnZone)reservedZone, count, spacing, true, out reserved))
                     { ResetV02(match); return false; }
                     V02Reservations.Add(reservedZone, reserved);
                     V02NormalReservations.Add(reservedZone, new List<SpawnPlan>(reserved));
                 }
+                if (relative && NetworkMatchState.Instance is { } state)
+                {
+                    for (int restored = 1; restored <= 3; restored++)
+                    {
+                        int bit = 1 << (restored - 1);
+                        if ((state.AEDV02SupplySpawnedMask & bit) != 0 &&
+                            !_v02Supply.TryRecordZoneSpawn(restored, RequiredToolCountPerZone,
+                                (state.AEDV02SupplyMaterializedMask & bit) == 0 ? 0 : 1))
+                        { ResetV02(match); return false; }
+                    }
+                }
             }
-            if (!_v02Supply.TrySetOptionalBudget((int)plan.Get(AEDV02Key.OptionalToolBudget))) return false;
+            if (relative && _v02Supply.ResourceGrade == 0)
+                foreach (var pair in V02NormalReservations)
+                    if (!_v02Supply.HasSpawned(pair.Key)) V02Reservations[pair.Key] = pair.Value;
+            if (!(relative ? _v02Supply.TrySetOptionalMask(mask) : _v02Supply.TrySetOptionalBudget(tier))) return false;
             if (!TryPrepareV02Grade(runner, catalog, match, (int)plan.Get(AEDV02Key.ResourceGrade), spacing, true)) return false;
             if (_v02Supply.HasSpawned(zone)) return true;
             var plans = V02Reservations[zone].Take(RequiredToolCountPerZone + _v02Supply.OptionalForZone(zone)).ToArray();
@@ -193,6 +229,7 @@ namespace EchoProtocol.TeamTools
             }
             if (!_v02Supply.TryRecordZoneSpawn(zone, RequiredToolCountPerZone, plans.Length - RequiredToolCountPerZone))
             { RollbackSpawned(runner, spawned); return false; }
+            if (relative) NetworkMatchState.Instance?.RecordV02SupplySpawn(zone, plans.Length > RequiredToolCountPerZone);
             for (int i = 0; i < spawned.Count; i++)
                 MatchAuthorityRuntime.Instance?.RecordPhase8ToolSpawn(spawned[i].Id, plans[i].ToolId, zone, runner.Tick.Raw);
             Debug.Log($"[AED_V02][ZONE_TOOL_SPAWN] match={match:D} zone={zone} required=5 optional={plans.Length - 5} budget={_v02Supply.OptionalBudget}");

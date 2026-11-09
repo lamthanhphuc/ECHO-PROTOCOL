@@ -19,6 +19,36 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("remote-fixed/game-defaults")]
+    public async Task<IActionResult> UnityBalanceDefaults(
+        [FromServices] Microsoft.Extensions.Options.IOptions<Configurations.MatchAuthoritySettings> settings,
+        CancellationToken ct)
+    {
+        var path = settings.Value.UnityBalanceDefaultsManifestPath;
+        if (string.IsNullOrWhiteSpace(path))
+            return Ok(ApiResponse<object>.Ok(new { available = false }));
+        try
+        {
+            await using var stream = System.IO.File.OpenRead(path);
+            if (stream.Length > 64 * 1024)
+                return Ok(ApiResponse<object>.Ok(new { available = false }));
+            using var document = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = document.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                !root.TryGetProperty("schema", out var schema) || schema.ValueKind != System.Text.Json.JsonValueKind.String ||
+                schema.GetString() != "UNITY_BALANCE_DEFAULTS_V1" ||
+                !root.TryGetProperty("gameVersion", out var gameVersion) ||
+                gameVersion.ValueKind != System.Text.Json.JsonValueKind.String || string.IsNullOrWhiteSpace(gameVersion.GetString()) ||
+                !root.TryGetProperty("profiles", out var profiles) || profiles.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return Ok(ApiResponse<object>.Ok(new { available = false }));
+            return Ok(ApiResponse<object>.Ok(new { available = true, gameVersion = gameVersion.GetString(), profiles = profiles.Clone() }));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            logger.LogWarning(ex, "Unity balance defaults manifest could not be loaded");
+            return Ok(ApiResponse<object>.Ok(new { available = false }));
+        }
+    }
     [HttpGet("balance-analytics")]
     public Task<IActionResult> BalanceAnalytics([FromServices] AdminBalanceAnalyticsService analytics, CancellationToken ct,
         int days = 30, string? map = null, string? difficulty = null, int? teamSize = null, string? baseline = null, bool testOnly = false) =>

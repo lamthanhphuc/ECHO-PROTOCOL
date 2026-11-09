@@ -1442,11 +1442,11 @@ namespace EchoProtocol.Networking
                 ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
             var profile = MatchDifficultyProfiles.Get(difficulty);
             var authority = MatchAuthorityRuntime.Instance;
-            if (difficulty == MatchDifficulty.Normal && authority != null &&
+            if (difficulty == MatchDifficulty.Normal && authority != null && !authority.HasAutomaticBalance &&
                 authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
                 AEDv2Authority.TryGetV02(authority.MatchId, out var v02, out _))
                 profile = AEDv2GameplayBridge.ToV02NormalDifficultyProfile(v02);
-            else if (difficulty == MatchDifficulty.Normal && authority != null &&
+            else if (difficulty == MatchDifficulty.Normal && authority != null && !authority.HasAutomaticBalance &&
                 authority.TryGetMatchId(out var aedMatchId) &&
                 AEDv2Authority.TryGetApplied(aedMatchId, out var plan, out _))
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
@@ -1458,6 +1458,12 @@ namespace EchoProtocol.Networking
             if (zone == RegionSemanticZone.Zone03 && zone3Cap >= 0) cap = (int)zone3Cap;
             else if (zone != RegionSemanticZone.Zone03)
                 cap = (int)RemoteFixedBalanceSnapshot.GameplayValue(zone == RegionSemanticZone.Zone01 ? "minionCapZone1" : "minionCapZone2", cap);
+            if (authority?.HasAutomaticBalance == true && AEDv2Authority.TryGetV02(authority.MatchId, out var automaticPlan, out _))
+            {
+                var key = zone == RegionSemanticZone.Zone01 ? AEDV02Key.Zone1MinionCap :
+                    zone == RegionSemanticZone.Zone02 ? AEDV02Key.Zone2MinionCap : AEDV02Key.Zone3AdaptiveMinionCap;
+                cap = (int)authority.V02EffectiveValue(automaticPlan, key);
+            }
             _v02ObservedMinionZone = (int)zone;
             _v02ObservedMinionCap = cap;
             _v02ObservedMinionRevision = authority != null && AEDv2Authority.TryGetV02(authority.MatchId, out _, out var observedRevision) ? observedRevision : 0;
@@ -1496,7 +1502,8 @@ namespace EchoProtocol.Networking
 
             if (!TryGetCreepMinionSpawnAnchor(zone, out var stalker)) return;
             if (!TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
-            if (zone == RegionSemanticZone.Zone03 && _v02ObservedMinionRevision > 0)
+            if (zone == RegionSemanticZone.Zone03 && _v02ObservedMinionRevision > 0 &&
+                (authority?.HasAutomaticBalance != true || count >= authority.V02Baseline(AEDV02Key.Zone3AdaptiveMinionCap)))
             {
                 var state = NetworkMatchState.Instance;
                 if (authority == null || !authority.V02Zone3SpawnEntitled || state == null ||
@@ -1720,7 +1727,9 @@ namespace EchoProtocol.Networking
             value = _v02ObservedMinionCap;
             objectIds = _creepMinionInstances.Where(x => IsValidNetworkObject(x) && x.TryGetComponent<CreepMinionRuntime>(out var minion) &&
                 (int)minion.Zone == zone && !minion.IsDying).Select(x => x.Id.ToString()).ToArray();
-            return key != AEDV02Key.Zone3AdaptiveMinionCap || value != 1 || objectIds.Length != 0;
+            var authority = MatchAuthorityRuntime.Instance;
+            var baseline = authority?.HasAutomaticBalance == true ? authority.V02Baseline(key) : 0;
+            return key != AEDV02Key.Zone3AdaptiveMinionCap || value <= baseline || objectIds.Length > baseline;
         }
 
         private bool TryGetCreepMinionSpawnAnchor(

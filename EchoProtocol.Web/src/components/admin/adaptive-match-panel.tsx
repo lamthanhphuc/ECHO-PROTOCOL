@@ -38,6 +38,7 @@ export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAud
       <h3 className="mb-2 font-semibold">Cấu hình nền đã khóa</h3>
       <p className="text-sm">{baseline.source === "LOCAL" ? "Mặc định trong game" : `Cấu hình từ Web${baseline.version ? ` · ${baseline.version}` : ""}`}
         {" · "}{baseline.matchDataPolicy === "TEST_ONLY" ? "Trận thử nghiệm" : baseline.matchDataPolicy === "STANDARD" ? "Trận thường" : "Chưa xác định chính sách dữ liệu"}</p>
+      {baseline.buildVersion && <p className="text-sm">Bản game · {baseline.buildVersion}</p>}
       <details className="muted mt-1 text-xs">
         <summary className="cursor-pointer">Chi tiết kỹ thuật</summary>
         <code className="break-all">{baseline.source} · {baseline.matchDataPolicy}{baseline.hash && ` · ${baseline.hash}`}</code>

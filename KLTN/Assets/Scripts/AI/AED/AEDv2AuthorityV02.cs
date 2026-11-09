@@ -13,6 +13,9 @@ namespace EchoProtocol.AI.AED
         private static AEDV02Plan _v02Plan;
         private static int _v02Revision;
         private static int _v02InitialOptional;
+        public static int V02InitialOptionalBudget => _v02InitialOptional;
+        private static bool _v02Relative;
+        internal static bool HasRelativeV02 => _v02Relative;
         private static string _v02Roster;
         private static string _v02Scene;
         private static DateTime _v02SourceEndedUtc;
@@ -61,7 +64,7 @@ namespace EchoProtocol.AI.AED
                 approval.expectedPlanRevision != _v02Revision || approval.planRevision <= _v02Revision ||
                 approval.previousPlanFingerprint != previous.Fingerprint() || request.previousPlanFingerprint != previous.Fingerprint() ||
                 (!next.TryValidateChange(previous, point, AEDV02PhaseMap.LogicalPhase(request.targetPhaseName) == 4,
-                    optional, out _, out reason) && !(request.support != null && next.ToArray().SequenceEqual(previous.ToArray()) && reason == "HOLD_SINGLE_DELTA_REQUIRED"))) return false;
+                    optional, out _, out reason, approval.resolvedValues != null) && !(request.support != null && next.ToArray().SequenceEqual(previous.ToArray()) && reason == "HOLD_SINGLE_DELTA_REQUIRED"))) return false;
             if (request.proposedReservations != null && next.Get(AEDV02Key.ResourceGrade) == previous.Get(AEDV02Key.ResourceGrade)) return false;
             if (_v02Match == Guid.Empty)
             {
@@ -69,7 +72,7 @@ namespace EchoProtocol.AI.AED
                 _v02Configuration = configuration;
             }
             _v02Match = matchId; _v02Decision = decisionId; _v02Plan = next; _v02Revision = approval.planRevision;
-            _v02InitialOptional = optional; _v02Roster = currentRoster; _v02Scene = approval.sceneManifestFingerprint;
+            _v02InitialOptional = optional; _v02Relative = approval.resolvedValues != null; _v02Roster = currentRoster; _v02Scene = approval.sceneManifestFingerprint;
             InvalidateV02Source(); reason = string.Empty; return true;
         }
 
@@ -79,7 +82,23 @@ namespace EchoProtocol.AI.AED
             if (_v02Match != matchId || matchId == Guid.Empty || _v02Plan == null) return false;
             plan = _v02Plan; revision = _v02Revision; return true;
         }
-        public static int V02PositiveTokens(Guid matchId) => TryGetV02(matchId, out var plan, out _) ? plan.PositiveTokens(_v02InitialOptional) : int.MaxValue;
+
+        internal static void RestoreConfirmedAutomaticV02(Guid matchId, Guid decisionId, AEDV02Plan plan,
+            AEDV02DecisionResultDto approved)
+        {
+            _v02Match = matchId;
+            _v02Decision = decisionId;
+            _v02Plan = plan;
+            _v02Revision = approved.planRevision;
+            _v02InitialOptional = approved.initialOptionalBudget;
+            _v02Relative = approved.resolvedValues != null;
+            _v02Roster = approved.rosterIdentity;
+            _v02Scene = approved.sceneManifestFingerprint;
+            _v02Configuration = null;
+            V02Hide.Reset(matchId);
+            InvalidateV02Source();
+        }
+        public static int V02PositiveTokens(Guid matchId) => TryGetV02(matchId, out var plan, out _) ? plan.PositiveTokens(_v02InitialOptional, _v02Relative) : int.MaxValue;
 
         public static bool AcceptV02Source(Guid matchId, AEDV02SourceResultDto source, string currentRoster,
             IEnumerable<Guid> users, DateTime nowUtc)
@@ -151,7 +170,7 @@ namespace EchoProtocol.AI.AED
         private static void ResetV02(Guid matchId)
         {
             if (matchId != Guid.Empty && matchId != _v02Match) return;
-            _v02Match = Guid.Empty; _v02Decision = Guid.Empty; _v02Plan = null; _v02Revision = 0; _v02InitialOptional = 0;
+            _v02Match = Guid.Empty; _v02Decision = Guid.Empty; _v02Plan = null; _v02Revision = 0; _v02InitialOptional = 0; _v02Relative = false;
             _v02Configuration = null;
             _v02Roster = null; _v02Scene = null; V02Pressure.Clear(); V02Episodes.Clear(); V02Tiers.Clear(); V02Hide.Reset(Guid.Empty);
         }

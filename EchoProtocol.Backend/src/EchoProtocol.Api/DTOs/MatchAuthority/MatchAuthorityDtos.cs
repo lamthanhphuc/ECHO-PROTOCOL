@@ -28,6 +28,7 @@ public sealed class MatchAuthorityResponse
     public string? BalanceProtocolVersion { get; set; }
     public string? BalanceVersion { get; set; }
     public string? BalanceHash { get; set; }
+    public string? BalanceBuildVersion { get; set; }
     public string MatchDataPolicy { get; set; } = "STANDARD";
 }
 
@@ -48,6 +49,8 @@ public sealed class StartMatchAuthorityRequest
 
 public sealed class StartMatchV2Request
 {
+    public bool PrepareBalance { get; set; }
+    public bool SupportsRelativeAdaptiveV02 { get; set; }
     [StringLength(80)] public string? GameVersion { get; set; }
     public bool SupportsGameplayTuning { get; set; }
     [Required, StringLength(64, MinimumLength = 1)]

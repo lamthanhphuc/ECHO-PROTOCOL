@@ -566,8 +566,10 @@ namespace EchoProtocol.Networking
                         toolsPerZone);
 
                     int supportBonus = ScenarioSupportItemBudget;
+                    if (MatchAuthorityRuntime.Instance?.HasAutomaticBalance == true) supportBonus = 0;
                     if (difficulty == MatchDifficulty.Normal &&
                         MatchAuthorityRuntime.Instance != null &&
+                        !MatchAuthorityRuntime.Instance.HasAutomaticBalance &&
                         MatchAuthorityRuntime.Instance.TryGetMatchId(out var tuningMatchId) &&
                         AEDv2Authority.TryGetApplied(tuningMatchId, out var tuning, out _))
                     {
@@ -583,7 +585,7 @@ namespace EchoProtocol.Networking
                         MatchAuthorityRuntime.Instance != null &&
                         AEDv2Authority.TryGetV02(MatchAuthorityRuntime.Instance.MatchId, out var v02Plan, out _)
                         ? TeamToolWorldSpawn.TrySpawnV02Zone(Runner, _teamToolPickupCatalog, MatchAuthorityRuntime.Instance.MatchId,
-                            v02Plan, 1, _teamToolSpawnMinimumSpacing)
+                            v02Plan, 1, V02SupplySpacing)
                         : TeamToolWorldSpawn.TrySpawnInitial(
                         Runner, _teamToolPickupCatalog,
                         (int)RemoteFixedBalanceSnapshot.GameplayValue("zone1ToolBudget", baselinePerZone) + extraZone1,

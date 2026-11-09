@@ -46,6 +46,12 @@ namespace EchoProtocol.AI.AED
                 pacingV02GameplayEnabled = adaptive;
         }
 
+        public void ConfigureAutomaticAdaptive(bool enabled)
+        {
+            if (!Debug.isDebugBuild)
+                pacingV02GameplayEnabled = enabled;
+        }
+
 #if AED_V02_PILOT_HARNESS
         public void ConfigurePilotHarness(bool gameplay, bool cabinet)
         {

@@ -45,6 +45,23 @@ const sample = { survival: 25 as number | null, noise: 50 as number | null, surv
 const sampleFields = [["survival", "Sinh tồn"], ["noise", "Tiếng ồn"],
   ["survivalSamples", "Mẫu sinh tồn"], ["noiseSamples", "Mẫu tiếng ồn"]] as const;
 
+const relativeFields: Record<string, { min: number; max: number; baseline: number; neutral: number; adverse: number; unit: string }> = {
+  DetectionAcquireSeconds: { min: .25, max: 8, baseline: 1.25, neutral: 1.25, adverse: -1, unit: "giây" },
+  PostChaseCooldownSeconds: { min: 12, max: 28, baseline: 18, neutral: 18, adverse: -1, unit: "giây" },
+  HearingMultiplier: { min: .25, max: 2, baseline: 1, neutral: 1, adverse: 1, unit: "" },
+  SearchSeconds: { min: .25, max: 30, baseline: 2.25, neutral: 2.25, adverse: 1, unit: "giây" },
+  ChaseSpeed: { min: .5, max: 25, baseline: 10, neutral: 7.5, adverse: 1, unit: "m/s" },
+  SpecialCooldownSeconds: { min: 30, max: 900, baseline: 420, neutral: 420, adverse: -1, unit: "giây" },
+  Zone1MinionCap: { min: 0, max: 3, baseline: 3, neutral: 1, adverse: 1, unit: "Minion" },
+  Zone2MinionCap: { min: 0, max: 5, baseline: 5, neutral: 2, adverse: 1, unit: "Minion" },
+  Zone3AdaptiveMinionCap: { min: 0, max: 4, baseline: 0, neutral: 0, adverse: 1, unit: "Minion" },
+};
+const contextualRules: Record<string, string> = {
+  OptionalToolBudget: "Điều chỉnh một suất tùy chọn quanh phân bổ đã khóa. Hệ thống xét từ Khu vực 3 về Khu vực 1 và giữ nguyên nếu khu vực được chọn đã phát vật phẩm hoặc thiếu điểm đặt.",
+  ResourceGrade: "Thay đổi cấp bố trí cho vật phẩm chưa phát. Mỗi lần đổi một nấc và cần dữ liệu nhu cầu hoặc lịch sử sử dụng phù hợp.",
+  CabinetAmbushEnabled: "Cho phép hoặc khóa phục kích tủ trong Khu vực 1 và 2. Game vẫn kiểm tra dữ liệu, khoảng cách, cooldown và chốt dồn áp lực trước khi thực hiện.",
+};
+
 function optionKey(reference: AdaptiveConfigRef | null) {
   return reference ? JSON.stringify([reference.id, reference.version]) : "";
 }
@@ -56,6 +73,19 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<AdaptivePreview | null>(null);
+  const [relativeKey, setRelativeKey] = useState("ChaseSpeed");
+  const [relativeBasis, setRelativeBasis] = useState(10);
+  const [patrolBasis, setPatrolBasis] = useState(6.5);
+  const [relativeCurrent, setRelativeCurrent] = useState(9);
+  const [optionalZones, setOptionalZones] = useState([false, false, false]);
+  const [spawnedZones, setSpawnedZones] = useState([true, false, false]);
+  const field = relativeFields[relativeKey];
+  const speed = relativeKey === "ChaseSpeed";
+  const min = speed ? patrolBasis : field?.min ?? 0;
+  const validPreview = field && [relativeBasis, relativeCurrent, min].every(Number.isFinite) &&
+    relativeBasis >= min && relativeBasis <= field.max && relativeCurrent >= min && relativeCurrent <= field.max &&
+    (!speed || patrolBasis >= .5 && patrolBasis <= 20) &&
+    (!relativeKey.startsWith("Zone") || Number.isInteger(relativeBasis) && Number.isInteger(relativeCurrent));
   const fixed = data.options.find((option) => optionKey(option) === optionKey(configuration.fixed));
 
   function update(next: AdaptiveConfiguration) {
@@ -141,7 +171,65 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
     <Panel>
       <h2 className="mb-3 text-lg font-semibold">Adaptive v0.2 giữa trận</h2>
       <p className="muted mb-2 text-sm">Pilot trên backend · {data.pilotEnabled ? "Đang bật" : "Đang tắt"}</p>
-      <p className="muted mb-4 text-sm">Chọn giá trị gốc và dải nấc liền kề trong catalog. Nấc mặc định luôn được giữ để có đường hoàn tác.</p>
+      <div className="mb-4 space-y-3 rounded border border-[var(--line)] p-3 text-sm">
+        <h3 className="font-medium">Xem thử điều chỉnh · Cơ sở nghiên cứu / Thường</h3>
+        <p className="muted">Nhập giá trị nền đã khóa và giá trị đang áp dụng. Nấc mới luôn tính từ nền. Khi policy giữ nguyên, trận tiếp tục dùng giá trị đang áp dụng.</p>
+        <label className="admin-field">Thông số
+          <select className="input" value={relativeKey} onChange={(event) => {
+            const key = event.target.value;
+            const baseline = relativeFields[key]?.baseline ?? 0;
+            setRelativeKey(key);
+            setRelativeBasis(baseline);
+            setRelativeCurrent(baseline);
+          }}>
+            {[...Object.keys(relativeFields), ...Object.keys(contextualRules)].map((key) =>
+              <option key={key} value={key}>{adaptiveParameterLabels[key] ?? key}</option>)}
+          </select>
+        </label>
+        {field ? <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {speed && <label className="admin-field">Tốc độ tuần tra nền (m/s)<input className="input" type="number" step="any" value={Number.isNaN(patrolBasis) ? "" : patrolBasis} onChange={(e) => setPatrolBasis(e.target.valueAsNumber)} /></label>}
+            <label className="admin-field">Giá trị nền {field.unit && `(${field.unit})`}<input className="input" type="number" step="any" value={Number.isNaN(relativeBasis) ? "" : relativeBasis} onChange={(e) => setRelativeBasis(e.target.valueAsNumber)} /></label>
+            <label className="admin-field">Đang áp dụng {field.unit && `(${field.unit})`}<input className="input" type="number" step="any" value={Number.isNaN(relativeCurrent) ? "" : relativeCurrent} onChange={(e) => setRelativeCurrent(e.target.valueAsNumber)} /></label>
+          </div>
+          {validPreview ? <ul className="list-disc pl-5">{(data.catalog[relativeKey]?.tiers ?? []).map((tier) => {
+            const direction = Math.sign(tier - field.neutral);
+            const projected = direction === 0 ? relativeBasis : relativeKey.startsWith("Zone")
+              ? relativeBasis + direction : Math.round(Math.fround(relativeBasis) * (1 + direction / 10) * 100) / 100;
+            const reason = speed && direction !== 0 && !data.chaseSpeedAdminVerified ? "build chưa có bằng chứng" :
+              !configuration.parameters[relativeKey]?.tiers.includes(tier) ? "nấc đang tắt" :
+              projected < min || projected > field.max || direction !== 0 && projected === relativeBasis ? "chạm giới hạn an toàn" : "";
+            const action = direction === 0 ? "Về nền" : direction === field.adverse ? "Tăng áp lực" : "Giảm áp lực";
+            return <li key={tier}>{action} · {relativeBasis} → {projected} → <strong>{reason ? relativeCurrent : projected} {field.unit}</strong>{reason && ` · Giữ nguyên, ${reason}`}</li>;
+          })}<li>Giữ nguyên → <strong>{relativeCurrent} {field.unit}</strong></li></ul>
+            : <p className="muted">Nhập giá trị hợp lệ trong khoảng {min}–{field.max} {field.unit}.</p>}
+        </> : <>
+          <p className="muted">{contextualRules[relativeKey]}</p>
+          {relativeKey === "OptionalToolBudget" && <>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {optionalZones.map((optional, index) => <fieldset key={index} className="rounded border border-[var(--line)] p-2">
+                <legend>Khu vực {index + 1}</legend>
+                <label className="flex gap-2"><input type="checkbox" checked={optional} onChange={(e) =>
+                  setOptionalZones((zones) => zones.map((value, zone) => zone === index ? e.target.checked : value))
+                } />Có suất tùy chọn ở nền</label>
+                <label className="flex gap-2"><input type="checkbox" checked={spawnedZones[index]} onChange={(e) =>
+                  setSpawnedZones((zones) => zones.map((value, zone) => zone === index ? e.target.checked : value))
+                } />Đã phát công cụ</label>
+              </fieldset>)}
+            </div>
+            <ul className="list-disc pl-5">{([-1, 1] as const).map((step) => {
+              const zone = optionalZones.lastIndexOf(step === -1);
+              const action = step < 0 ? "Bớt một suất" : "Thêm một suất";
+              return <li key={step}>{action} · {zone < 0 ? "Giữ nguyên, chạm giới hạn" :
+                spawnedZones[zone] ? `Giữ nguyên, Khu vực ${zone + 1} đã phát công cụ` :
+                `Khu vực ${zone + 1} có ${step < 0 ? 5 : 6} công cụ nếu vị trí và bằng chứng hợp lệ`}</li>;
+            })}</ul>
+          </>}
+          {relativeKey === "ResourceGrade" && <p>Các cấp từ thấp đến cao: phòng phụ ưu tiên → bố trí nền → ưu tiên tuyến chính → bố trí hỗ trợ → hỗ trợ khẩn cấp.</p>}
+          {relativeKey === "CabinetAmbushEnabled" && <p>Tắt → không tạo phục kích mới. Bật → đủ điều kiện để game xét phục kích tại cửa sổ an toàn.</p>}
+        </>}
+      </div>
+      <p className="muted mb-4 text-sm">Các nấc dưới đây là giá trị policy. Trong luồng tự động, chúng chọn hướng điều chỉnh quanh nền của trận. Relay và xe hộ tống dùng giá trị nền.</p>
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Object.entries(data.catalog).map(([key, approved]) => {
           const value = configuration.parameters[key];
@@ -152,7 +240,9 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
             <label className="admin-field">Giá trị gốc
               <select className="input" disabled={approved.baselineLocked} value={value.baseline}
                 onChange={(e) => setParameter({ ...value, baseline: Number(e.target.value) })}>
-                {value.tiers.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+                {value.tiers.filter((tier) =>
+                  (key !== "Zone1MinionCap" && key !== "Zone2MinionCap") || tier <= approved.baseline
+                ).map((tier) => <option key={tier} value={tier}>{tier}</option>)}
               </select>
             </label>
             <div className="mt-2 flex flex-wrap gap-3">

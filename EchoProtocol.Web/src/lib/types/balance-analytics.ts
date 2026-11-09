@@ -8,6 +8,7 @@ export interface BalanceAnalytics {
   applied: number;
   clientObserved: number;
   failedEffect: number;
+  confirmedRollbacks?: number;
 }
 
 export interface PlayerAIHistory {

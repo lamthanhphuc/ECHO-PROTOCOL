@@ -11,4 +11,5 @@ public sealed class MatchAuthoritySettings
     public bool EnableRemoteFixed { get; set; } = false;
     public bool EnableRemoteFixedGameplayTest { get; set; } = false;
     public string[] RemoteFixedGameVersions { get; set; } = ["0.1.0"];
+    public string? UnityBalanceDefaultsManifestPath { get; set; }
 }

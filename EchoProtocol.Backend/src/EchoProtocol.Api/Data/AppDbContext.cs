@@ -354,7 +354,9 @@ public class AppDbContext : DbContext
                     OR
                     (
                         "BalanceSource" = 'REMOTE_FIXED'
-                        AND "ResolutionMode" = 'FIXED'
+                        AND ("ResolutionMode" = 'FIXED' OR
+                            ("ResolutionMode" = 'ADAPTIVE' AND "BalanceBuildVersion" IS NOT NULL
+                             AND "MapId" = 'SciFi' AND "Difficulty" = 'NORMAL'))
                         AND "BalanceProtocolVersion" = 'RFB-1'
                         AND "BalanceVersion" IS NOT NULL
                         AND "BalanceHash" IS NOT NULL
@@ -372,6 +374,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Difficulty).HasMaxLength(16);
             entity.Property(e => e.ResolutionMode).HasMaxLength(16);
             entity.Property(e => e.BalanceSource).HasMaxLength(20);
+            entity.Property(e => e.BalanceBuildVersion).HasMaxLength(80);
             entity.Property(e => e.BalanceProtocolVersion).HasMaxLength(20);
             entity.Property(e => e.BalanceVersion).HasMaxLength(80);
             entity.Property(e => e.BalanceHash).HasMaxLength(64);

@@ -325,6 +325,97 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
+    public async Task AutomaticBalanceIsPinnedInLobbyBeforeAnActiveVersionChanges()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true);
+        var version = SeedBalance(db);
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "automatic-lock");
+        var request = V2Request("AUTO");
+        request.PrepareBalance = true;
+        request.GameVersion = "0.1.0";
+        var prepared = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(prepared.IsSuccess, prepared.Message);
+        Assert.Equal(MatchAuthorityStatus.Lobby, prepared.Data!.Status);
+        Assert.Equal(version.Version, prepared.Data.BalanceVersion);
+
+        version.IsActive = false;
+        await db.SaveChangesAsync();
+        var retry = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.Equal(version.ContentHash, retry.Data!.BalanceHash);
+        request.PrepareBalance = false;
+        var started = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(started.IsSuccess, started.Message);
+        Assert.Equal(MatchAuthorityStatus.InMatch, started.Data!.Status);
+        Assert.Equal(version.ContentHash, started.Data.BalanceHash);
+        var locked = await service.GetLockedBalanceAsync(host, matchId, CancellationToken.None);
+        Assert.True(locked.IsSuccess, locked.Message);
+        Assert.Equal(version.Version, locked.Data!.BalanceVersion);
+    }
+
+    [Theory]
+    [InlineData(false, true, "FIXED")]
+    [InlineData(true, false, "FIXED")]
+    [InlineData(true, true, "ADAPTIVE")]
+    public async Task PreparedRfb2PreservesTestOnlyAndRequiresVerifiedAdaptiveBuild(bool verified, bool supportsRelative, string mode)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true, new AEDV02PilotSettings
+        {
+            Enabled = true, ChaseSpeedVerifiedCompatibilityVersions = verified ? ["0.1.0"] : []
+        });
+        db.AdaptiveConfigurationVersions.Add(new AdaptiveConfigurationVersion
+        {
+            Version = "AED_ADMIN_TEST", Compatibility = "0.1.0", Revision = 1,
+            ConfigurationJson = """{"Enabled":true}"""
+        });
+        var version = SeedBalance(db);
+        version.SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
+            ""","gameplay":[],"content":{"gameVersion":"0.1.0","mode":"EXPEDITION","monster":"STALKER","route":"DEFAULT_ROUTE"}}""";
+        version.ContentHash = RemoteFixedBalanceContract.ComputeHash(version.SnapshotJson);
+        await db.SaveChangesAsync();
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "automatic-rfb2");
+        var request = V2Request("AUTO");
+        request.PrepareBalance = true;
+        request.SupportsGameplayTuning = true;
+        request.SupportsRelativeAdaptiveV02 = supportsRelative;
+        request.GameVersion = "different-build";
+        Assert.False((await service.StartV2Async(host, matchId, request, CancellationToken.None)).IsSuccess);
+        request.GameVersion = "0.1.0";
+        var prepared = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(prepared.IsSuccess, prepared.Message);
+        Assert.Equal(mode, prepared.Data!.ResolutionMode);
+        Assert.Equal("TEST_ONLY", prepared.Data.MatchDataPolicy);
+        request.PrepareBalance = false;
+        request.ResolutionMode = mode;
+        var started = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(started.IsSuccess, started.Message);
+        Assert.Equal("TEST_ONLY", started.Data!.MatchDataPolicy);
+    }
+
+    [Theory]
+    [InlineData(7.5, 7, 6.75)]
+    [InlineData(10, 7, 9)]
+    [InlineData(10, 7.5, 10)]
+    [InlineData(10, 8, 11)]
+    public void AutomaticChaseSpeedUsesLockedBasis(double basis, double tier, double expected)
+    {
+        Assert.True(EchoProtocol.AI.Common.AED.AEDV02Plan.TryResolveChaseSpeed(6.5, basis, tier, out var speed));
+        Assert.Equal(expected, speed);
+    }
+
+    [Theory]
+    [InlineData(9.5, 10, 7)]
+    [InlineData(6.5, 24, 8)]
+    public void AutomaticChaseSpeedRejectsUnsafeTier(double patrol, double basis, double tier)
+    {
+        Assert.False(EchoProtocol.AI.Common.AED.AEDV02Plan.TryResolveChaseSpeed(patrol, basis, tier, out var speed));
+        Assert.Equal(basis, speed);
+    }
+
+    [Fact]
     public async Task V2RemoteWithoutActiveVersionIsRejected()
     {
         await using var db = CreateDb();
@@ -335,6 +426,46 @@ public sealed class MatchAuthorityServiceTests
         Assert.False(result.IsSuccess);
         Assert.Equal("BALANCE_VERSION_UNAVAILABLE", result.ErrorCode);
     }
+
+    [Theory]
+    [InlineData(0, 4, 1, 3.6)]
+    [InlineData(1, 18, 28, 19.8)]
+    [InlineData(2, 1.5, .85, 1.35)]
+    [InlineData(3, 10, 3, 11)]
+    [InlineData(4, 10, 7, 9)]
+    [InlineData(5, 600, 360, 540)]
+    [InlineData(6, 3, 0, 2)]
+    [InlineData(7, 3, 1, 2)]
+    [InlineData(8, 2, 1, 3)]
+    public void AutomaticAdaptiveUsesLockedBaseline(int key, double baseline, double tier, double expected)
+    {
+        Assert.True(EchoProtocol.AI.Common.AED.AEDV02Plan.TryResolveRelative(
+            (EchoProtocol.AI.Common.AED.AEDV02Key)key, 6.5, baseline, tier, out var value));
+        Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 4)]
+    [InlineData(2, 1, 6)]
+    [InlineData(5, -1, 1)]
+    [InlineData(7, -1, 3)]
+    [InlineData(7, 0, 7)]
+    public void RelativeOptionalBudgetPreservesOtherZoneAllocations(int baseline, int step, int expected)
+    {
+        Assert.True(EchoProtocol.AI.Common.AED.AEDV02Plan.TryResolveOptionalMask(baseline, step, out var mask));
+        Assert.Equal(expected, mask);
+    }
+
+    [Theory]
+    [InlineData(0, -1)]
+    [InlineData(7, 1)]
+    [InlineData(1, 2)]
+    public void RelativeOptionalBudgetHoldsAtBounds(int baseline, int step)
+    {
+        Assert.False(EchoProtocol.AI.Common.AED.AEDV02Plan.TryResolveOptionalMask(baseline, step, out var mask));
+        Assert.Equal(baseline, mask);
+    }
+
 
     [Theory]
     [InlineData("REMOTE_FIXED")]
@@ -1657,7 +1788,7 @@ public sealed class MatchAuthorityServiceTests
         return new AppDbContext(options);
     }
 
-    private static MatchAuthorityService CreateService(AppDbContext db, bool remoteEnabled = false)
+    private static MatchAuthorityService CreateService(AppDbContext db, bool remoteEnabled = false, AEDV02PilotSettings? pilot = null)
     {
         var time = new FixedTimeProvider(Now);
         var settings = Options.Create(new MatchAuthoritySettings
@@ -1673,7 +1804,8 @@ public sealed class MatchAuthorityServiceTests
             db,
             new MatchJoinProofService(settings, time),
             settings,
-            time);
+            time,
+            pilot == null ? null : Options.Create(pilot));
     }
 
     private static RemoteFixedBalanceVersion SeedBalance(AppDbContext db)

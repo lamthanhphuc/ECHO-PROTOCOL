@@ -78,6 +78,7 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
             Total = matches.Count, truncated, limit, cohorts, reasons,
             Approved = approved.Length, Applied = applied.Length,
             ClientObserved = applied.Count(x => x.ClientObserved),
+            ConfirmedRollbacks = applied.Count(x => x.ReasonCode is AEDV02DecisionService.ApprovedChaseRollback or AEDV02DecisionService.ApprovedRelativeRollback),
             FailedEffect = approved.Count(x => x.ApplyStatus == "FAILED_EFFECT")
         });
     }

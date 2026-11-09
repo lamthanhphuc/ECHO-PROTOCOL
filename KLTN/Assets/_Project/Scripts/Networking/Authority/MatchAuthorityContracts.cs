@@ -24,6 +24,7 @@ namespace EchoProtocol.Networking.Authority
         public string resolutionMode;
         public string balanceSource;
         public string balanceProtocolVersion;
+        public string balanceBuildVersion;
         public string balanceVersion;
         public string balanceHash;
         public string matchDataPolicy;
@@ -95,6 +96,8 @@ namespace EchoProtocol.Networking.Authority
     [Serializable]
     public sealed class StartMatchV2Request
     {
+        public bool prepareBalance;
+        public bool supportsRelativeAdaptiveV02;
         public string gameVersion;
         public bool supportsGameplayTuning;
         public string mapId;

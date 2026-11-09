@@ -107,7 +107,9 @@ namespace EchoProtocol.Networking.Authority
                 && lockedId == expectedMatchId
                 && context.mapId == expectedMap
                 && context.difficulty == expectedDifficulty
-                && context.resolutionMode == "FIXED"
+                && (context.resolutionMode == "FIXED" ||
+                    (context.resolutionMode == "ADAPTIVE" && !string.IsNullOrEmpty(context.balanceBuildVersion)
+                     && context.balanceBuildVersion == Application.version && expectedMap == "SciFi" && expectedDifficulty == "NORMAL"))
                 && context.balanceSource == "REMOTE_FIXED"
                 && context.balanceProtocolVersion == "RFB-1"
                 && (context.matchDataPolicy == "STANDARD"

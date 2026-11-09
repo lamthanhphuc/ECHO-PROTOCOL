@@ -277,7 +277,7 @@ namespace EchoProtocol.Networking.Authority
                 }
                 for (int key = 0; key < observed.ConsumerValues.Length; key++)
                     if (!stalker.TryReadV02ConsumerValue((AEDV02Key)key, out observed.ConsumerValues[key]) ||
-                        Math.Abs(observed.ConsumerValues[key] - plan.Get((AEDV02Key)key)) >= .000001)
+                        Math.Abs(observed.ConsumerValues[key] - V02StalkerValue(plan, (AEDV02Key)key)) >= .0001)
                     { reason = "HOLD_CONSUMER_NOT_OBSERVED"; return false; }
                 stalkerSources.Add(observed);
             }

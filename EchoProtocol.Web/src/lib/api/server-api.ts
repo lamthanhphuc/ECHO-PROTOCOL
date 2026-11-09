@@ -69,6 +69,11 @@ export const adminApi = {
     authorized<AdminWalletTransactionsPage>(`/api/admin/wallet-transactions${query}`),
   purchases: (query: string) => authorized<AdminPurchasesPage>(`/api/admin/purchases${query}`),
   remoteFixedStatus: () => authorized<RemoteFixedStatus>("/api/admin/remote-fixed/status"),
+  unityBalanceDefaults: () => authorized<{ available: boolean; gameVersion?: string; profiles?: Array<{
+    mapId: string; difficulty: string; patrolSpeed: number; chaseSpeed: number; detectionSeconds: number;
+    searchSeconds: number; hearingMultiplier: number; specialCooldownSeconds: number;
+    zone1Minions: number; zone2Minions: number; zone3Minions: number; toolsPerZone: number; revivesPerZone: number;
+  }> }>("/api/admin/remote-fixed/game-defaults"),
   remoteFixedVersions: (query: string) =>
     authorized<RemoteFixedVersionsPage>(`/api/admin/remote-fixed/versions${query}`),
   remoteFixedVersion: (version: string) =>

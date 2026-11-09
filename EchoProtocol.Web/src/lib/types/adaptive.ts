@@ -70,7 +70,7 @@ export interface AdaptiveMatchAudit {
     teamworkScore: number | null; teamworkStatus: string; resourceEfficiencyScore: number | null; resourceStatus: string;
     teamPerformanceScore: number | null; performanceStatus: string;
   } | null;
-  baseline?: { source: string; version: string | null; hash: string | null; matchDataPolicy: string } | null;
+  baseline?: { source: string; version: string | null; hash: string | null; matchDataPolicy: string; buildVersion?: string | null } | null;
   preMatch: Array<{
     decisionId: string;
     scenarioConfigId: string;
@@ -133,6 +133,15 @@ export const adaptiveParameterLabels: Record<string, string> = {
 };
 
 export const adaptiveReasons: Record<string, string> = {
+  APPROVED_CHASE_ROLLBACK: "Quay về nấc truy đuổi đã xác nhận trước đó. Chỉ tính hoàn tác sau khi có biên nhận.",
+  HOLD_RELATIVE_CHASE_LIMIT: "Giữ tốc độ hiện hành vì nấc dự kiến vượt giới hạn an toàn hoặc không tạo thay đổi.",
+  HOLD_RELATIVE_FIELD_LIMIT: "Giữ nguyên vì nấc dự kiến vượt giới hạn của cấu hình nền.",
+  HOLD_MINION_ZONE_INACTIVE: "Giữ nguyên vì đội chưa ở khu vực cần điều chỉnh.",
+  HOLD_OPTIONAL_ALREADY_MATERIALIZED: "Giữ nguyên vì suất công cụ đã được phát hoặc vị trí đã được chốt.",
+  APPROVED_BASELINE_AT_RELATIVE_LIMIT: "Đã duyệt kế hoạch. Tốc độ truy đuổi giữ nền vì nấc trước trận vượt giới hạn.",
+  APPROVED_RELATIVE_ROLLBACK: "Quay về bộ giá trị của revision đã được xác nhận trước đó.",
+  HOLD_RELATIVE_FIELD_UNSUPPORTED: "Giữ nguyên vì thông số này chưa được mở cho điều chỉnh tương đối.",
+  HOLD_LOCKED_BALANCE_INVALID: "Không điều chỉnh vì không xác minh được cấu hình nền đã khóa.",
   POLICY_DISABLED: "Policy Adaptive đang tắt.",
   POLICY_CONFIG_INVALID: "Policy trước trận chưa được bật hoặc cấu hình không hợp lệ.",
   INPUT_INVALID: "Hồ sơ chưa đạt yêu cầu số mẫu hoặc độ phủ.",

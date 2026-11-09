@@ -47,12 +47,12 @@ public sealed partial class AEDV02DecisionService
         return string.Empty;
     }
 
-    private async Task<bool> ValidatePlacement(Guid match, AEDV02ProposedReservation[]? proposed, AEDV02SourceResult source, int grade, string json, CancellationToken ct)
+    private async Task<bool> ValidatePlacement(Guid match, AEDV02ProposedReservation[]? proposed, AEDV02SourceResult source, int grade, string json, CancellationToken ct, bool relative = false)
     {
         if (proposed == null) return false;
         var manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(json)!;
         var world = await ReadSourceWorld(match, source, ct);
-        return world != null && AEDV02ResourcePlacement.ValidateProposed(manifest, world, proposed, grade);
+        return world != null && AEDV02ResourcePlacement.ValidateProposed(manifest, world, proposed, grade, relative);
     }
 
     private async Task<AEDV02WorldSample?> ReadSourceWorld(Guid match, AEDV02SourceResult source, CancellationToken ct)

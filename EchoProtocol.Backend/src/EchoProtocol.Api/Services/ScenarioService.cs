@@ -43,6 +43,8 @@ public sealed class ScenarioService(
             var match = await db.MatchAuthorityBindings.SingleOrDefaultAsync(x => x.MatchId == matchId, cancellationToken);
             var auth = ValidateHost(match, callerUserId, requireLobby: false);
             if (auth is not null) return Fail(auth.Value.Message, auth.Value.Code);
+            if (match!.BalanceBuildVersion != null && request.UnityCompatibilityVersion != match.BalanceBuildVersion)
+                return Fail("Unity build does not match the locked balance", ErrorCodes.MatchSessionConflict);
 
             var existingById = await LoadDecisionAsync(request.DecisionId, cancellationToken);
             if (existingById is not null)

@@ -275,6 +275,20 @@ namespace EchoProtocol.Networking
                 }
 
                 var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
+                bool automaticMode = !Debug.isDebugBuild;
+                if (automaticMode)
+                {
+                    var prepared = await authority.PrepareAutomaticBalanceAsync(selectedScene);
+                    if (!loading.IsCurrent(runner, loadingAttempt)) return;
+                    if (!prepared.Accepted || prepared.Adaptive && settings == null)
+                    {
+                        ReportError(prepared.Accepted ? "Thiếu thiết lập Adaptive của bản game." : prepared.Error);
+                        return;
+                    }
+                    bool adaptive = prepared.Adaptive;
+                    authority.RequestScenarioResolutionMode(adaptive ? ScenarioResolutionMode.Adaptive : ScenarioResolutionMode.Fixed);
+                    settings?.ConfigureAutomaticAdaptive(adaptive);
+                }
                 var needsSnapshot =
                     authority.RequestedScenarioResolutionMode ==
                         ScenarioResolutionMode.Adaptive;
@@ -311,6 +325,13 @@ namespace EchoProtocol.Networking
                         $"fixedFallback={decision.usedFixedFallback} " +
                         $"fallbackReason={decision.fallbackReasonCode} " +
                         $"candidate={decision.candidateValidationStatus}");
+
+                    if (automaticMode && decision.usedFixedFallback)
+                    {
+                        authority.RequestScenarioResolutionMode(ScenarioResolutionMode.Fixed);
+                        settings.ConfigureAutomaticAdaptive(false);
+                        goto StartWithSelectedMode;
+                    }
 
                     if (settings.ExtendedPolicyGameplayEnabled &&
                         decision.usedFixedFallback && !decision.IsManaged)
@@ -401,6 +422,12 @@ namespace EchoProtocol.Networking
                         }
                         _snapshotProvider.Dispose();
                         _snapshotProvider = null;
+                        if (automaticMode)
+                        {
+                            ScenarioConfigAuthorityRuntime.Instance.ClearStagedBackendPreMatch(matchId);
+                            authority.RequestScenarioResolutionMode(ScenarioResolutionMode.Fixed);
+                            settings.ConfigureAutomaticAdaptive(false);
+                        }
                         Debug.Log($"[AED_V02][PREMATCH_FIXED_FALLBACK] match={matchId:D} decision={fallback.decisionId} reason={fallback.fallbackReasonCode}");
                     }
                     else if (settings.PacingV02GameplayEnabled && decision.resolutionResult == "ADAPTIVE_CONFIG_ISSUED" &&
@@ -411,6 +438,17 @@ namespace EchoProtocol.Networking
                     }
                 }
 
+                StartWithSelectedMode:
+                if (!loading.IsCurrent(runner, loadingAttempt)) return;
+                if (automaticMode && (!runner.SessionInfo.IsValid || !runner.SessionInfo.UpdateCustomProperties(new Dictionary<string, SessionProperty>
+                    {
+                        [MatchAuthorityRuntime.ScenarioResolutionModeSessionProperty] =
+                            authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive ? "ADAPTIVE" : "FIXED"
+                    })))
+                {
+                    ReportError("Không đồng bộ được chế độ trận. Vui lòng thử lại.");
+                    return;
+                }
                 Debug.LogWarning(
                     $"[NETDIAG][BeforeBackendStart] " +
                     $"SameRunner={ReferenceEquals(runner, _bootstrap?.Runner)}; " +
@@ -471,7 +509,7 @@ namespace EchoProtocol.Networking
                 loading.BackendAuthorized(
                     runner,
                     loadingAttempt,
-                    useRemoteFixed);
+                    authority.TryGetRemoteFixedBalance(out _));
 
                 if (runner == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || !runner.IsSceneAuthority

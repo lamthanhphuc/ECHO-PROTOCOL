@@ -18,6 +18,21 @@ namespace EchoProtocol.Api.Controllers;
 public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sources, AEDV02DecisionService decisions,
     TimeProvider clock, IOptions<AEDV02PilotSettings> settings, ITelemetryEventRepository telemetry) : ControllerBase
 {
+    [HttpGet("confirmed-revision")]
+    public async Task<IActionResult> ConfirmedRevision(Guid matchId, CancellationToken ct)
+    {
+        if (!TryUser(out var user)) return Unauthorized();
+        var binding = await db.MatchAuthorityBindings.AsNoTracking().SingleOrDefaultAsync(x => x.MatchId == matchId, ct);
+        if (binding == null) return NotFound();
+        if (binding.HostUserId != user) return StatusCode(403);
+        if (binding.BalanceBuildVersion == null || binding.ResolutionMode != "ADAPTIVE" ||
+            binding.Status != MatchAuthorityStatus.InMatch || binding.LeaseExpiresAtUtc <= clock.GetUtcNow().UtcDateTime)
+            return Conflict();
+        var row = await db.AEDV02Decisions.AsNoTracking().Where(x => x.MatchId == matchId &&
+            x.ApplyStatus == "APPLIED" && x.ReceiptId != null && x.StalkerValuesJson != null)
+            .OrderByDescending(x => x.PlanRevision).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<object>.Ok(new { revision = row == null ? null : AEDV02DecisionService.Map(row, true) }));
+    }
     [HttpGet("configuration")]
     public async Task<IActionResult> Configuration(Guid matchId, CancellationToken ct)
     {
@@ -40,7 +55,7 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
             config.Pilot.ObservationSeconds, config.Pilot.WindowSeconds, config.Pilot.EvidenceMaxAgeSeconds,
             config.Pilot.ReliefThreshold, config.Pilot.IncreasePressureCeiling, config.Pilot.PressureWeights,
             config.Pilot.TierDwellSeconds, config.Pilot.ProtectionSeconds, config.Pilot.ProtectionCooldownSeconds,
-            config.Pilot.ProtectionQuota
+            config.Pilot.ProtectionQuota, settings.Value.CabinetAmbushEnabled
         }));
     }
 
@@ -122,6 +137,16 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
         if (decision.ApprovalStatus != "APPROVED" || decision.ApplyStatus == "ABORTED" ||
             request.PlanRevision != decision.PlanRevision || request.PlanFingerprint != decision.PlanFingerprint)
             return Conflict();
+        var resolved = AEDV02DecisionService.ReadStalkerValues(decision);
+        if (resolved != null && (!request.ObservedChaseSpeed.HasValue ||
+            !double.IsFinite(request.ObservedChaseSpeed.Value) ||
+            Math.Abs(request.ObservedChaseSpeed.Value - resolved[(int)EchoProtocol.AI.Common.AED.AEDV02Key.ChaseSpeed]) >= .0001))
+            return Conflict();
+        if (AEDV02DecisionService.ReadResolvedValues(decision) is { Length: 13 } effective &&
+            (request.ObservedStalkerValues?.Length != 6 || request.ObservedResolvedValues?.Length != 12 ||
+             request.ObservedStalkerValues.Where((value, index) => !double.IsFinite(value) || Math.Abs(value - effective[index]) >= .0001).Any() ||
+             request.ObservedResolvedValues.Where((value, index) => !double.IsFinite(value) || Math.Abs(value - effective[index]) >= .0001).Any()))
+            return Conflict();
         var observations = db.Set<EchoProtocol.Api.Entities.AEDV02ClientObservation>();
         if (!await observations.AnyAsync(x => x.DecisionId == decisionId && x.UserId == user, ct))
         {
@@ -138,4 +163,5 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
             ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
 }
 
-public sealed record AEDV02ClientObservationRequest(int PlanRevision, string PlanFingerprint);
+public sealed record AEDV02ClientObservationRequest(int PlanRevision, string PlanFingerprint, double? ObservedChaseSpeed = null,
+    double[]? ObservedStalkerValues = null, double[]? ObservedResolvedValues = null);
