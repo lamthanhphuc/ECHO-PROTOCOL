@@ -195,7 +195,7 @@ namespace EchoProtocol.Networking.Authority
                 source.recentDownUsers?.Length > 0 && V02TierAllowed(AEDV02Key.CabinetAmbushEnabled, 0))
             { next = previous.With(AEDV02Key.CabinetAmbushEnabled, 0); return true; }
             if (previous.TryProposeRelief(source.players.Select(x => x.components).ToArray(), source.players.Select(x => x.score).ToArray(),
-                source.recentDownUsers?.Length > 0, source.zone, out next, _v02Configuration?.reliefThreshold ?? .65, V02TierAllowed)) return true;
+                source.recentDownUsers?.Length > 0, source.zone, out next, _v02Configuration?.reliefThreshold ?? .65, V02TierAllowed, relative: HasAutomaticBalance)) return true;
             var grade = previous.Get(AEDV02Key.ResourceGrade);
             var nextGrade = grade < 0 ? 0 : grade + 1;
             if (HasAutomaticBalance && source.resourceNeeds?.Length > 0)

@@ -127,7 +127,7 @@ namespace EchoProtocol.AI.Common.AED
         }
 
         public bool TryProposeRelief(double[][] components, double[] scores, bool recentDown, int zone, out AEDV02Plan next,
-            double reliefThreshold = .65, Func<AEDV02Key, double, bool>? allowed = null)
+            double reliefThreshold = .65, Func<AEDV02Key, double, bool>? allowed = null, bool relative = false)
         {
             next = null!;
             if (components == null || scores == null || components.Length == 0 || components.Length != scores.Length ||
@@ -155,7 +155,8 @@ namespace EchoProtocol.AI.Common.AED
                 var key = zone == 1 ? AEDV02Key.Zone1MinionCap : zone == 2 ? AEDV02Key.Zone2MinionCap : AEDV02Key.Zone3AdaptiveMinionCap;
                 var tiers = Values[(int)key];
                 int current = Array.IndexOf(tiers, Get(key));
-                if (current > 0 && allowed?.Invoke(key, tiers[current - 1]) != false)
+                if (current > 0 && (relative || tiers[current - 1] >= 0) &&
+                    allowed?.Invoke(key, tiers[current - 1]) != false)
                 { next = With(key, tiers[current - 1]); return true; }
             }
             return false;
