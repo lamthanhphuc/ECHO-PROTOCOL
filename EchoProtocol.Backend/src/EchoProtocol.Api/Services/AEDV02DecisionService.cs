@@ -85,6 +85,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         var windowId = AEDV02Plan.WindowId(matchId, request.PhaseOrdinal, point, request.WindowSequence, request.StartTick, request.EndTick, request.SourceFingerprint);
         if (request.WindowId != windowId) return Fail("AED_V02_WINDOW_ID_INVALID", ErrorCodes.ValidationError);
         bool relative = authority.BalanceBuildVersion != null;
+        bool solo = relative && await db.MatchPlayerBindings.CountAsync(x => x.MatchId == matchId &&
+            (preMatch ? x.DisconnectedAtUtc == null : x.Participated), ct) == 1;
         if (!proposed.TryValidateChange(previous, point, source?.LogicalPhase == 4 || AEDV02PhaseMap.LogicalPhase(request.TargetPhaseName) == 4,
             initialOptional, out var changedKey, out var reason, relative))
         {
@@ -134,7 +136,15 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                 else
                     hold = key == AEDV02Key.ChaseSpeed ? "HOLD_RELATIVE_CHASE_LIMIT" : "HOLD_RELATIVE_FIELD_LIMIT";
             }
-            if (AEDV02Plan.TryResolveOptionalMask((int)basis[12],
+            if (solo)
+            {
+                resolvedValues[12] = 0;
+                resolvedValues[(int)AEDV02Key.OptionalToolBudget] = 0;
+                if (!preMatch && (request.Support != null ||
+                    changed.Any(key => key is AEDV02Key.OptionalToolBudget or AEDV02Key.ResourceGrade)))
+                    hold = "HOLD_SOLO_TEAM_SUPPLY_DISABLED";
+            }
+            else if (AEDV02Plan.TryResolveOptionalMask((int)basis[12],
                 (int)proposed.Get(AEDV02Key.OptionalToolBudget) - initialOptional, out var mask))
             {
                 resolvedValues[12] = mask;
@@ -277,6 +287,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             rollback = prior != null && ReadResolvedValues(prior) is { Length: 13 } confirmed &&
                 confirmed.SequenceEqual(resolvedValues);
         }
+        var effectKeys = solo && preMatch ? changed.Where(key => key != AEDV02Key.OptionalToolBudget).ToArray() : changed;
         var decision = new AEDV02Decision
         {
             DecisionId = request.DecisionId, MatchId = matchId, HostUserId = caller, PhaseOrdinal = request.PhaseOrdinal,
@@ -290,7 +301,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             SourceFingerprint = request.SourceFingerprint, SceneManifestFingerprint = request.SceneManifestFingerprint,
             PolicyVersion = request.PolicyVersion, CatalogVersion = request.CatalogVersion, RequestFingerprint = requestFingerprint,
             ProposalJson = JsonSerializer.Serialize(request), ActionFingerprint = request.Support?.Fingerprint(request.DecisionId) ?? AEDV02ProposedReservation.Fingerprint(request.ProposedReservations),
-            InitialOptionalBudget = initialOptional, ChangedKey = request.Support != null ? "SupportTool" : changed.Length == 1 ? changedKey.ToString() : string.Empty,
+            InitialOptionalBudget = initialOptional, ChangedKey = request.Support != null ? "SupportTool" : effectKeys.Length == 1 ? effectKeys[0].ToString() : string.Empty,
             ApprovalStatus = hold.Length == 0 ? "APPROVED" : "HOLD", ApplyStatus = hold.Length == 0 ? "PENDING" : "NOT_APPLICABLE",
             ReasonCode = hold.Length == 0 ? (rollback ? ApprovedRelativeRollback : preMatchLimit ? "APPROVED_BASELINE_AT_RELATIVE_LIMIT" : "APPROVED_REV02_PILOT") : hold, CreatedAtUtc = now,
             ExpiresAtUtc = preMatch ? authority.LeaseExpiresAtUtc : new[] { now.AddSeconds(10), authority.LeaseExpiresAtUtc }.Min()
@@ -360,6 +371,13 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             .ToArray();
         var samples = observations.Select(x => x.World!).ToArray();
         if (samples.Length == 0) return Fail("HOLD_WORLD_EFFECT_NOT_OBSERVED");
+        bool solo = resolved?.Length == 13 && await db.MatchPlayerBindings.CountAsync(x =>
+            x.MatchId == matchId && x.Participated, ct) == 1;
+        if (solo)
+        {
+            samples = samples.Where(world => world.Supply == null && !world.Tools.Any(tool => tool.Origin == "WorldSpawn")).ToArray();
+            if (samples.Length == 0) return Fail("HOLD_SOLO_TEAM_SUPPLY_DISABLED");
+        }
         if ((decision.DecisionPoint == "PRE_MATCH" || effect.Consumer == "StalkerFusionRuntime") &&
             !samples.Any(world => world.Stalkers.Length > 0 && world.Stalkers.All(stalker => stalker.MatchesStalkerConsumer(plan, stalkerValues))))
             return Fail("HOLD_STALKER_CONSUMER_NOT_OBSERVED");
@@ -374,7 +392,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                 return Fail("HOLD_SUPPLY_RESERVATION_SOURCE_REQUIRED");
             requiredOptionalMask = toolMask & ~priorMask;
         }
-        if ((decision.DecisionPoint == "PRE_MATCH" && (resolved?.Length == 13 || plan.Get(AEDV02Key.OptionalToolBudget) > 0) || decision.ChangedKey is "OptionalToolBudget" or "ResourceGrade") &&
+        if (!solo && (decision.DecisionPoint == "PRE_MATCH" && (resolved?.Length == 13 || plan.Get(AEDV02Key.OptionalToolBudget) > 0) || decision.ChangedKey is "OptionalToolBudget" or "ResourceGrade") &&
             !observations.Any(x => x.World!.Supply?.SpawnedZones.Contains(1) == true && AEDV02SourceVerifier.VerifySupply(x.World, manifest, plan,
                 decision.InitialOptionalBudget, events.Where(e => e.MatchId == matchId), x.Event.EventSequence, supportInstances, OptionalMask(resolved), proposal?.ProposedReservations, requiredOptionalMask)))
             return Fail("HOLD_SUPPLY_RESERVATION_SOURCE_REQUIRED");
