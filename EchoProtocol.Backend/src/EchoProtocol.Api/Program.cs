@@ -243,6 +243,7 @@ builder.Services.AddScoped<RemoteFixedBalanceAdminService>();
 builder.Services.AddScoped<AdaptiveConfigurationService>();
 builder.Services.AddScoped<ProfileTuningService>();
 builder.Services.AddScoped<EconomyAdminService>();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<AdaptiveMatchAuditService>();
 builder.Services.AddScoped<AdminBalanceAnalyticsService>();
 builder.Services.AddScoped<AdminModerationService>();

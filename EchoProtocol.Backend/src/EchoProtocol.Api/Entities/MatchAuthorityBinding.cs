@@ -14,6 +14,7 @@ public sealed class MatchAuthorityBinding
     public string? ResolutionMode { get; set; }
     public string? BalanceSource { get; set; }
     public string? BalanceBuildVersion { get; set; }
+    public string? AdaptivePolicyConfigVersion { get; set; }
     public string? BalanceProtocolVersion { get; set; }
     public string? BalanceVersion { get; set; }
     public string? BalanceHash { get; set; }

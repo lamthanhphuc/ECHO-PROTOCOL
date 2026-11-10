@@ -686,12 +686,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         if (prepare)
         {
             var configuration = v2Request?.SupportsRelativeAdaptiveV02 == true && _pilot.Enabled &&
-                mapId == "SciFi" && difficulty == "NORMAL" &&
-                _pilot.ChaseSpeedVerifiedCompatibilityVersions.Contains(buildVersion!, StringComparer.Ordinal)
+                mapId == "SciFi" && difficulty == "NORMAL"
                 ? await AdaptiveConfigurationService.LatestAsync(_db, buildVersion!, cancellationToken) : null;
             match.BalanceBuildVersion = buildVersion;
             match.ResolutionMode = configuration is not null && AdaptiveConfigurationService.Read(configuration).Enabled
                 ? "ADAPTIVE" : "FIXED";
+            match.AdaptivePolicyConfigVersion = match.ResolutionMode == "ADAPTIVE" ? configuration!.Version : null;
             match.UpdatedAtUtc = now;
             await _db.SaveChangesAsync(cancellationToken);
             return ServiceResult<MatchAuthorityResponse>.Success(Map(match), "Balance locked");

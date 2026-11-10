@@ -40,6 +40,8 @@ namespace EchoProtocol.AI.Common.AED
             _values = (double[])values.Clone();
         }
         public static AEDV02Plan Normal() => new AEDV02Plan(NormalValues);
+        public const double PreMatchReliefChaseTier = 7d;
+
         public static bool TryResolveChaseSpeed(double patrol, double baseline, double tier, out double speed)
         {
             speed = baseline;
@@ -107,6 +109,16 @@ namespace EchoProtocol.AI.Common.AED
                 if (index >= (int)AEDV02Key.Zone1MinionCap || !canResolve((AEDV02Key)index, values[index]))
                     values[index] = NormalValues[index];
             return new AEDV02Plan(values);
+        }
+
+        public double PreMatchReliefChase(Func<AEDV02Key, double, bool> canResolve)
+        {
+            var normal = Normal();
+            bool anotherStalkerChange = Enumerable.Range(0, 6).Any(index =>
+                index != (int)AEDV02Key.ChaseSpeed && _values[index] != NormalValues[index] &&
+                canResolve((AEDV02Key)index, _values[index]));
+            return !anotherStalkerChange && canResolve(AEDV02Key.ChaseSpeed, PreMatchReliefChaseTier)
+                ? PreMatchReliefChaseTier : normal.Get(AEDV02Key.ChaseSpeed);
         }
 
         public static Guid FixedFallbackDecisionId(Guid candidateDecisionId)

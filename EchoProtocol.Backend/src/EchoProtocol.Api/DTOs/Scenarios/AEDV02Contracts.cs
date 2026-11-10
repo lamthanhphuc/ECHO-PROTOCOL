@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using EchoProtocol.AI.Common.AED;
 
 namespace EchoProtocol.Api.DTOs.Scenarios;
@@ -14,7 +15,8 @@ public sealed record AEDV02DecisionRequest(Guid DecisionId, int PhaseOrdinal, st
     string WindowId, int ExpectedPlanRevision, string PreviousPlanFingerprint, double[] PlanValues,
     Guid SnapshotId, string SnapshotFingerprint, string RosterIdentity, string SourceFingerprint,
     long StartTick, long EndTick, string SceneManifestFingerprint, string PolicyVersion, string CatalogVersion,
-    string ResolutionMode, string Difficulty, string TargetPhaseName, AEDV02ProposedReservation[]? ProposedReservations = null, AEDV02SupportAction? Support = null);
+    string ResolutionMode, string Difficulty, string TargetPhaseName, AEDV02ProposedReservation[]? ProposedReservations = null, AEDV02SupportAction? Support = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool SupportsRelativePreMatchRelief = false);
 public sealed record AEDV02DecisionResult(Guid DecisionId, Guid MatchId, int PhaseOrdinal, string DecisionPoint,
     int WindowSequence, string WindowId, int PlanRevision, int ExpectedPlanRevision, string PreviousPlanFingerprint,
     string PlanFingerprint, double[] PlanValues, string RosterIdentity, string SourceFingerprint,

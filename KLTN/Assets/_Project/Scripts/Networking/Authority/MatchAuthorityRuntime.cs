@@ -64,6 +64,9 @@ namespace EchoProtocol.Networking.Authority
 
         internal bool TryResolveV02ToolMask(double tier, int initial, out int mask)
         {
+            mask = 0;
+            if (NetworkMatchState.Instance?.IsAutomaticSoloMatch == true)
+                return tier == initial;
             int basis = 0;
             float defaultTools = _remoteFixedBalance?.Get("toolsPerZone", 5) ?? 5;
             for (int zone = 1; zone <= 3; zone++)
@@ -128,6 +131,7 @@ namespace EchoProtocol.Networking.Authority
         private const float MinimumBackendMatchResultAgeSeconds = 61f;
 
         private float _backendMatchStartedAtRealtime = -1f;
+        internal int StartedRosterCount { get; private set; }
         private bool _localRewardRequestInProgress;
         private bool _localRewardFetchQueued;
         private int _localRewardFetchAttempts;
@@ -143,6 +147,7 @@ namespace EchoProtocol.Networking.Authority
         private TelemetryRuntimeBehaviour _telemetry;
         private DateTime _matchStartedAtUtc;
         private bool _telemetryMatchActive;
+        private readonly List<Action> _pendingInitialSpawns = new();
         private bool _phase8DebugEvidenceInvalidated;
         private bool _phase8InventoryEvidenceInvalidated;
 
@@ -160,6 +165,8 @@ namespace EchoProtocol.Networking.Authority
         private float _nextMatchEndRetryAt;
         private bool _matchEndRetryWarningLogged;
         private bool _pendingAuthoritativeTelemetryMatchStart;
+        private float _nextTelemetryMatchStartAttempt;
+        private string _managedPreMatchContentWhitelistVersion;
         private string _currentTelemetryPhase = "CORE_COLLECTION";
         private HostRuntimeNoiseService _runtimeNoise;
         private readonly AEDv2MatchEvidenceCollector _aedv2Evidence = new AEDv2MatchEvidenceCollector();
@@ -424,7 +431,7 @@ namespace EchoProtocol.Networking.Authority
                         x.Kind == "TOOL" && x.AllowedToolIds.Contains(toolId)) is not { } marker)
                     throw new InvalidOperationException("AED_P8_SCENE_TOOL_MARKER_INVALID");
                 int? charges = null;
-                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
+                if (toolId is 2 or 4 && _bootstrap?.Runner != null && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
                     charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
                         toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
                 _aedPhase8Source.RecordSceneToolSpawnWithCharges(
@@ -452,19 +459,32 @@ namespace EchoProtocol.Networking.Authority
             NetworkId instanceId, int toolId, int zone, long tick)
         {
             if (!HasStateAuthority) return;
+            int? charges = null;
+            if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
+                charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
+                    toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
             if (!_telemetryMatchActive)
             {
-                MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_BEFORE_TELEMETRY_MATCH_START");
-                Debug.LogWarning($"[AED_P8][TOOL_SOURCE_MISSED] action=SPAWN id={instanceId} reason=MATCH_NOT_ACTIVE");
+                if (!TryQueueInitialSpawn(() => PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges)))
+                    MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_BEFORE_TELEMETRY_MATCH_START");
                 return;
             }
+            PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges);
+        }
+
+        private bool TryQueueInitialSpawn(Action publish)
+        {
+            if (_backendMatchStartedAtRealtime < 0 || _matchStartedAtUtc != default ||
+                _pendingInitialSpawns.Count >= 128) return false;
+            _pendingInitialSpawns.Add(publish);
+            return true;
+        }
+
+        private void PublishPhase8ToolSpawn(NetworkId instanceId, int toolId, int zone, long tick, int? charges)
+        {
             try
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:spawn";
-                int? charges = null;
-                if (toolId is 2 or 4 && _bootstrap.Runner.TryFindObject(instanceId, out var toolObject))
-                    charges = toolObject.TryGetComponent<NetworkTeamToolPickup>(out var pickup) ? pickup.RemainingUses :
-                        toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
                 _aedPhase8Source.RecordToolSpawnWithCharges(
                     instanceId.ToString(), toolId, zone, tick,
                     occurrenceKey, charges);
@@ -606,7 +626,13 @@ namespace EchoProtocol.Networking.Authority
 
         public void RecordPhase8MinionSpawn(NetworkId minionId, int zone, long tick)
         {
-            if (!HasStateAuthority || !_telemetryMatchActive) return;
+            if (!HasStateAuthority) return;
+            if (!_telemetryMatchActive)
+            {
+                if (!TryQueueInitialSpawn(() => RecordPhase8MinionSpawn(minionId, zone, tick)))
+                    _aedMinionEvidence.MarkIncomplete();
+                return;
+            }
             try
             {
                 var occurrenceKey = $"p8:minion:{minionId}:spawn";
@@ -919,6 +945,11 @@ namespace EchoProtocol.Networking.Authority
         {
             TickResultOutbox();
             var matchState = NetworkMatchState.Instance;
+            if (_pendingAuthoritativeTelemetryMatchStart && Time.unscaledTime >= _nextTelemetryMatchStartAttempt)
+            {
+                _nextTelemetryMatchStartAttempt = Time.unscaledTime + 1f;
+                TryBeginAuthoritativeTelemetryMatch();
+            }
             SampleAEDv2PlayerObservation(matchState);
             TickV02Coordinator(matchState);
             TickV02WorldSource(matchState);
@@ -2275,6 +2306,7 @@ namespace EchoProtocol.Networking.Authority
                     $"hash={result.Data.data.balanceHash}");
             }
 
+            StartedRosterCount = result.Data.data.players?.Length ?? 0;
             _backendMatchStartedAtRealtime = Time.realtimeSinceStartup;
 
             RuntimeLog.Log(
@@ -2322,6 +2354,7 @@ namespace EchoProtocol.Networking.Authority
             _nextBackendMatchResultRetryAt = 0f;
             _pendingBackendOutcome = null;
             _pendingObjectiveCompletion = 0f;
+            StartedRosterCount = 0;
             _backendMatchStartedAtRealtime = -1f;
             _boundPlayers.Clear();
             _disconnectedActors.Clear();
@@ -2329,6 +2362,7 @@ namespace EchoProtocol.Networking.Authority
             _migratedResultRoster.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
+            _pendingInitialSpawns.Clear();
             _phase8InventoryEvidenceInvalidated = false;
             _phase8DebugEvidenceInvalidated = false;
             _matchEndEmitted = false;
@@ -2340,6 +2374,8 @@ namespace EchoProtocol.Networking.Authority
             _nextMatchEndRetryAt = 0f;
             _matchEndRetryWarningLogged = false;
             _pendingAuthoritativeTelemetryMatchStart = false;
+            _nextTelemetryMatchStartAttempt = 0;
+            _managedPreMatchContentWhitelistVersion = null;
             _currentTelemetryPhase = "CORE_COLLECTION";
             _runtimeNoiseTelemetryCapacityWarningLogged = false;
             _runtimeNoiseTelemetryInactiveWarningLogged = false;
@@ -2400,8 +2436,17 @@ namespace EchoProtocol.Networking.Authority
         private void HandleSessionStateChanged(NetworkSessionState state, string message)
         {
             if (state != NetworkSessionState.InMatch || !HasStateAuthority) return;
-            _runtimeNoise?.BeginMatch(MatchId);
-            _pendingAuthoritativeTelemetryMatchStart = true;
+            RequestAuthoritativeTelemetryMatchStart();
+        }
+
+        private void RequestAuthoritativeTelemetryMatchStart()
+        {
+            if (_telemetryMatchActive) return;
+            if (!_pendingAuthoritativeTelemetryMatchStart)
+            {
+                _runtimeNoise?.BeginMatch(MatchId);
+                _pendingAuthoritativeTelemetryMatchStart = true;
+            }
             TryBeginAuthoritativeTelemetryMatch();
         }
 
@@ -2418,7 +2463,20 @@ namespace EchoProtocol.Networking.Authority
                 return;
             }
 
-            TryBeginAuthoritativeTelemetryMatch();
+            // The authoritative scene can resolve its scenario before the lobby
+            // publishes InMatch. Backend acceptance and this record already bind the match.
+            if (_backendMatchStartedAtRealtime >= 0 && record.HasStateAuthority)
+                RequestAuthoritativeTelemetryMatchStart();
+            else
+                TryBeginAuthoritativeTelemetryMatch();
+        }
+
+        internal void NotifyManagedPreMatchApplied(Guid matchId, string contentWhitelistVersion)
+        {
+            if (!HasStateAuthority || matchId == Guid.Empty || matchId != MatchId ||
+                _backendMatchStartedAtRealtime < 0 || string.IsNullOrWhiteSpace(contentWhitelistVersion)) return;
+            _managedPreMatchContentWhitelistVersion = contentWhitelistVersion;
+            RequestAuthoritativeTelemetryMatchStart();
         }
 
         private void TryBeginAuthoritativeTelemetryMatch()
@@ -2445,16 +2503,11 @@ namespace EchoProtocol.Networking.Authority
                     ? scenarioRuntime.LastResolutionRecord
                     : null;
 
-            if (resolutionRecord == null
-                || resolutionRecord.TargetMatchId
-                    != MatchId
-                || !resolutionRecord.HasStateAuthority)
-            {
-                return;
-            }
-
-            var resolvedContentWhitelistVersion =
-                resolutionRecord.ContentWhitelistVersion;
+            var resolvedContentWhitelistVersion = _managedPreMatchContentWhitelistVersion;
+            if (resolutionRecord != null && resolutionRecord.TargetMatchId == MatchId &&
+                resolutionRecord.HasStateAuthority)
+                resolvedContentWhitelistVersion = resolutionRecord.ContentWhitelistVersion;
+            if (resolvedContentWhitelistVersion == null) return;
 
             if (string.IsNullOrWhiteSpace(
                     telemetryMapContentVersion)
@@ -2539,23 +2592,9 @@ namespace EchoProtocol.Networking.Authority
                 return;
             }
 
-            if (sequenceAllocator.IsActive)
-            {
-                if (sequenceAllocator.MatchId != MatchId)
-                {
-                    Debug.LogError(
-                        "[Telemetry] MATCH_STARTED blocked: " +
-                        "another telemetry match is already active.");
-
-                    return;
-                }
-
-                // Same authoritative match already owns the sequence
-                // domain. Do not BeginMatch again. This allows a
-                // previously created-but-not-buffered MATCH_STARTED
-                // occurrence to retry through TelemetryEmitter.
-            }
-            else if (!_telemetry.TryBeginAuthoritativeMatch())
+            // Retrying the same match must preserve its sequence and occurrence identity.
+            if ((!sequenceAllocator.IsActive || sequenceAllocator.MatchId != MatchId) &&
+                !_telemetry.TryBeginAuthoritativeMatch())
             {
                 return;
             }
@@ -2587,6 +2626,7 @@ namespace EchoProtocol.Networking.Authority
 
             _matchStartedAtUtc = occurredAtUtc;
             _telemetryMatchActive = true;
+            Debug.Log($"[Telemetry] MATCH_STARTED buffered match={MatchId:D}.");
             _aedPhase8Source.BeginMatch(MatchId);
             _pendingAuthoritativeTelemetryMatchStart = false;
             _matchEndEmitted = false;
@@ -2617,7 +2657,16 @@ namespace EchoProtocol.Networking.Authority
             ApplyPhase8DebugEvidenceInvalidation();
             ApplyPhase8InventoryEvidenceInvalidation();
             if (phaseStarted)
+            {
+                foreach (var publish in _pendingInitialSpawns)
+                    publish();
                 CaptureExistingPhase8LobbyLoadouts();
+            }
+            else if (_pendingInitialSpawns.Count != 0)
+            {
+                MarkPhase8InventoryEvidenceIncomplete("INITIAL_PHASE_NOT_BUFFERED");
+            }
+            _pendingInitialSpawns.Clear();
             if (!phaseStarted)
             {
                 _aedv2Evidence.MarkIncomplete();

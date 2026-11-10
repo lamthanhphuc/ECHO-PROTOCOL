@@ -93,8 +93,16 @@ public sealed class ScenarioService(
 
             var adaptive = request.ResolutionMode == ScenarioResolutionMode.Adaptive;
             var settings = policyOptions.Value;
-            var published = adaptive && !useFixedAfterV02Hold ? await AdaptiveConfigurationService.LatestAsync(db,
-                request.UnityCompatibilityVersion, cancellationToken) : null;
+            AdaptiveConfigurationVersion? published = null;
+            if (adaptive && !useFixedAfterV02Hold)
+            {
+                published = match.AdaptivePolicyConfigVersion is { } pinnedPolicy
+                    ? await db.AdaptiveConfigurationVersions.AsNoTracking().SingleOrDefaultAsync(x =>
+                        x.Version == pinnedPolicy && x.Compatibility == request.UnityCompatibilityVersion, cancellationToken)
+                    : await AdaptiveConfigurationService.LatestAsync(db, request.UnityCompatibilityVersion, cancellationToken);
+                if (published is null && match.AdaptivePolicyConfigVersion is not null)
+                    return Fail("Locked Adaptive policy is unavailable", ErrorCodes.MatchSessionConflict);
+            }
             var managed = useFixedAfterV02Hold
                 ? await AdaptiveConfigurationService.ForVersionAsync(db, current!.PolicyConfigVersion, cancellationToken)
                 : published is null ? null : AdaptiveConfigurationService.Read(published);

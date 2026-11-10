@@ -187,7 +187,7 @@ namespace EchoProtocol.Telemetry.Unity
 
             try
             {
-                _eventFactory.BeginMatch();
+                _eventFactory.BeginMatch(replacePreviousMatch: true);
                 return true;
             }
             catch (Exception exception)

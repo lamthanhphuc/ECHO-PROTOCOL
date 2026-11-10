@@ -320,6 +320,8 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
       {preview && <div role="status" className="space-y-1 rounded border border-[var(--line)] p-3 text-sm">
         <p>{preview.usedFixedFallback ? "Cấu hình dự phòng" : "Ứng viên được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
         {preview.rule && <details className="muted"><summary className="cursor-pointer">Chi tiết kỹ thuật</summary><code>{preview.rule}</code></details>}
+        {preview.reliefChaseFactor === 0.9 && <p>Dự kiến giảm tốc độ truy đuổi 10% nếu giá trị nền cho phép.</p>}
+        {preview.reliefChaseFactor === 1 && <p>Dự kiến giữ tốc độ nền theo nấc được phép và quota Stalker.</p>}
         {preview.reason && <p>{adaptiveReasons[preview.reason] ?? preview.reason}</p>}
       </div>}
       </fieldset>

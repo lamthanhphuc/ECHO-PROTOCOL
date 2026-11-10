@@ -117,7 +117,12 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
         var fixedConfig = validation.Data!;
         var (rule, choice, reason) = Evaluate(request.Configuration, request.Players);
         var selected = choice ?? new(fixedConfig.ScenarioConfigId, fixedConfig.ScenarioConfigVersion);
-        return ServiceResult<object>.Success(new { rule, selected, UsedFixedFallback = choice is null, reason });
+        double? reliefChaseFactor = choice is not null && rule == AEDPreMatchPolicyV1.SurvivalRelief
+            ? Baseline(request.Configuration).PreMatchReliefChase((key, tier) =>
+                (key != AEDV02Key.ChaseSpeed || ChaseSpeedVerified(request.Compatibility)) &&
+                request.Configuration.Parameters[key.ToString()].Tiers.Contains(tier)) == AEDV02Plan.PreMatchReliefChaseTier ? .9 : 1
+            : null;
+        return ServiceResult<object>.Success(new { rule, selected, UsedFixedFallback = choice is null, reason, reliefChaseFactor });
     }
 
     public static (string? Rule, AdaptiveConfigRef? Choice, string? Reason) Evaluate(

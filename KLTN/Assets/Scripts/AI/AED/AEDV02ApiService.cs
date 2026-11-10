@@ -51,6 +51,7 @@ namespace EchoProtocol.AI.AED
     { public string contractVersion; public string comparisonContext; public string[] increaseAxes; }
     [Serializable] public sealed class AEDV02DecisionRequestDto
     {
+        public bool supportsRelativePreMatchRelief;
         public string decisionId; public int phaseOrdinal; public string decisionPoint; public int windowSequence;
         public string windowId; public int expectedPlanRevision; public string previousPlanFingerprint; public double[] planValues;
         public string snapshotId; public string snapshotFingerprint; public string rosterIdentity; public string sourceFingerprint;

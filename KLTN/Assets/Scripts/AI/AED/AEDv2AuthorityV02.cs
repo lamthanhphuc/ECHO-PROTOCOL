@@ -59,7 +59,9 @@ namespace EchoProtocol.AI.AED
                 approval.windowId != AEDV02Plan.WindowId(matchId, request.phaseOrdinal, point, request.windowSequence, request.startTick, request.endTick, request.sourceFingerprint)) return false;
             if (_v02Match == matchId && _v02Decision == decisionId) { reason = "REPLAY"; return _v02Plan.Fingerprint() == next.Fingerprint(); }
             var previous = _v02Plan ?? AEDV02Plan.Normal();
-            var optional = point == AEDV02DecisionPoint.PRE_MATCH ? (int)next.Get(AEDV02Key.OptionalToolBudget) : _v02InitialOptional;
+            var optional = point != AEDV02DecisionPoint.PRE_MATCH ? _v02InitialOptional :
+                request.supportsRelativePreMatchRelief && approval.resolvedValues != null
+                    ? approval.initialOptionalBudget : (int)next.Get(AEDV02Key.OptionalToolBudget);
             if (_v02Match != Guid.Empty && _v02Match != matchId || request.expectedPlanRevision != _v02Revision ||
                 approval.expectedPlanRevision != _v02Revision || approval.planRevision <= _v02Revision ||
                 approval.previousPlanFingerprint != previous.Fingerprint() || request.previousPlanFingerprint != previous.Fingerprint() ||

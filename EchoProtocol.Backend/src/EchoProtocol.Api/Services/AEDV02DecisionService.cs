@@ -85,6 +85,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
         var windowId = AEDV02Plan.WindowId(matchId, request.PhaseOrdinal, point, request.WindowSequence, request.StartTick, request.EndTick, request.SourceFingerprint);
         if (request.WindowId != windowId) return Fail("AED_V02_WINDOW_ID_INVALID", ErrorCodes.ValidationError);
         bool relative = authority.BalanceBuildVersion != null;
+        bool mappedRelief = relative && preMatch && request.SupportsRelativePreMatchRelief && managed is not null &&
+            scenario.PreMatchRule == AEDPreMatchPolicyV1.SurvivalRelief;
         bool solo = relative && await db.MatchPlayerBindings.CountAsync(x => x.MatchId == matchId &&
             (preMatch ? x.DisconnectedAtUtc == null : x.Participated), ct) == 1;
         if (!proposed.TryValidateChange(previous, point, source?.LogicalPhase == 4 || AEDV02PhaseMap.LogicalPhase(request.TargetPhaseName) == 4,
@@ -115,7 +117,9 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                     return Fail("HOLD_LOCKED_BALANCE_INVALID");
             }
             var (patrol, basis) = RemoteFixedBalanceContract.AdaptiveBasis(snapshot);
-            canResolve = (key, tier) => AEDV02Plan.TryResolveRelative(key, patrol, basis[(int)key], tier, out _);
+            bool chaseVerified = settings.Value.ChaseSpeedVerifiedCompatibilityVersions.Contains(authority.BalanceBuildVersion!, StringComparer.Ordinal);
+            canResolve = (key, tier) => (key != AEDV02Key.ChaseSpeed || chaseVerified || tier == AEDV02Plan.Normal().Get(key)) &&
+                AEDV02Plan.TryResolveRelative(key, patrol, basis[(int)key], tier, out _);
             var prior = previousRow == null ? null : ReadResolvedValues(previousRow);
             var applied = basis.ToArray();
             prior?.CopyTo(applied, 0);
@@ -123,7 +127,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             previousOptionalMask = (int)applied[12];
             zone3Baseline = (int)basis[(int)AEDV02Key.Zone3AdaptiveMinionCap];
             previousChase = applied[(int)AEDV02Key.ChaseSpeed];
-            resolvedValues = basis;
+            resolvedValues = basis.ToArray();
             foreach (var key in Enum.GetValues<AEDV02Key>())
             {
                 int index = (int)key;
@@ -131,6 +135,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                     resolvedValues[index] = proposed.Get(key);
                 else if (proposed.Get(key) == previous.Get(key))
                     resolvedValues[index] = applied[index];
+                else if (key == AEDV02Key.ChaseSpeed && !chaseVerified && proposed.Get(key) != AEDV02Plan.Normal().Get(key))
+                    hold = "HOLD_CHASE_SPEED_BUILD_UNVERIFIED";
                 else if (AEDV02Plan.TryResolveRelative(key, patrol, basis[index], proposed.Get(key), out var value))
                     resolvedValues[index] = value;
                 else
@@ -144,13 +150,19 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                     changed.Any(key => key is AEDV02Key.OptionalToolBudget or AEDV02Key.ResourceGrade)))
                     hold = "HOLD_SOLO_TEAM_SUPPLY_DISABLED";
             }
-            else if (AEDV02Plan.TryResolveOptionalMask((int)basis[12],
-                (int)proposed.Get(AEDV02Key.OptionalToolBudget) - initialOptional, out var mask))
+            else
             {
-                resolvedValues[12] = mask;
-                resolvedValues[(int)AEDV02Key.OptionalToolBudget] = AEDV02Plan.OptionalCount(mask);
+                // The managed relief candidate adds one optional tool if the locked mask has room.
+                if (mappedRelief && initialOptional > 0 && AEDV02Plan.TryResolveOptionalMask((int)basis[12], 1, out _))
+                    initialOptional--;
+                if (AEDV02Plan.TryResolveOptionalMask((int)basis[12],
+                    (int)proposed.Get(AEDV02Key.OptionalToolBudget) - initialOptional, out var mask))
+                {
+                    resolvedValues[12] = mask;
+                    resolvedValues[(int)AEDV02Key.OptionalToolBudget] = AEDV02Plan.OptionalCount(mask);
+                }
+                else hold = "HOLD_RELATIVE_FIELD_LIMIT";
             }
-            else hold = "HOLD_RELATIVE_FIELD_LIMIT";
         }
         bool adverse = changed.Any(x => AEDV02Plan.IsAdverse(x, previous.Get(x), proposed.Get(x)) && (relative && !preMatch || x != AEDV02Key.CabinetAmbushEnabled));
         bool preMatchLimit = false;
@@ -161,6 +173,12 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                 x.ScenarioConfigId == legacy.FallbackConfigId && x.ScenarioConfigVersion == legacy.FallbackConfigVersion, ct);
             double mappedSpeed = 0d;
             bool mappedIncrease = baseline != null && AEDV02Plan.TryMapPreMatchChaseIncrease(baseline.ChaseSpeed, legacy.ChaseSpeed, out mappedSpeed);
+            if (mappedRelief)
+            {
+                mappedSpeed = AdaptiveConfigurationService.Baseline(managed!).PreMatchReliefChase((key, tier) =>
+                    managed!.Parameters[key.ToString()].Tiers.Contains(tier) && canResolve!(key, tier));
+                preMatchLimit = mappedSpeed != AEDV02Plan.PreMatchReliefChaseTier;
+            }
             if (mappedIncrease && canResolve?.Invoke(AEDV02Key.ChaseSpeed, mappedSpeed) == false)
             {
                 mappedSpeed = AEDV02Plan.Normal().Get(AEDV02Key.ChaseSpeed);
@@ -173,11 +191,11 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                 legacy.DetectionFillRate != baseline.DetectionFillRate || legacy.DetectionDecayRate != baseline.DetectionDecayRate ||
                 legacy.ChaseSpeed != baseline.ChaseSpeed && !mappedIncrease || legacy.SearchDuration != baseline.SearchDuration)
                 hold = "HOLD_PREMATCH_LEGACY_TUNING_UNMAPPED";
-            else if (mappedIncrease && proposed.Get(AEDV02Key.ChaseSpeed) != mappedSpeed)
+            else if ((mappedIncrease || mappedRelief) && proposed.Get(AEDV02Key.ChaseSpeed) != mappedSpeed)
                 hold = "HOLD_PREMATCH_CHASE_SPEED_MISMATCH";
             else if (legacy.SupportItemBudget is < 0 or > 2 || proposed.Get(AEDV02Key.OptionalToolBudget) != legacy.SupportItemBudget)
                 hold = "HOLD_PREMATCH_SUPPLY_MISMATCH";
-            else if (managed is not null && !MatchesManagedPreMatch(managed, proposed, mappedIncrease ? mappedSpeed : null, canResolve))
+            else if (managed is not null && !MatchesManagedPreMatch(managed, proposed, mappedIncrease || mappedRelief ? mappedSpeed : null, canResolve))
                 hold = "HOLD_PREMATCH_CONFIG_MISMATCH";
             else if (hold.Length == 0 && (managed is null
                 ? changed.Any(x => x is not (AEDV02Key.CabinetAmbushEnabled or AEDV02Key.OptionalToolBudget))
@@ -303,7 +321,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             ProposalJson = JsonSerializer.Serialize(request), ActionFingerprint = request.Support?.Fingerprint(request.DecisionId) ?? AEDV02ProposedReservation.Fingerprint(request.ProposedReservations),
             InitialOptionalBudget = initialOptional, ChangedKey = request.Support != null ? "SupportTool" : effectKeys.Length == 1 ? effectKeys[0].ToString() : string.Empty,
             ApprovalStatus = hold.Length == 0 ? "APPROVED" : "HOLD", ApplyStatus = hold.Length == 0 ? "PENDING" : "NOT_APPLICABLE",
-            ReasonCode = hold.Length == 0 ? (rollback ? ApprovedRelativeRollback : preMatchLimit ? "APPROVED_BASELINE_AT_RELATIVE_LIMIT" : "APPROVED_REV02_PILOT") : hold, CreatedAtUtc = now,
+            ReasonCode = hold.Length == 0 ? (rollback ? ApprovedRelativeRollback : preMatchLimit && mappedRelief ? "APPROVED_PREMATCH_RELIEF_CHASE_UNCHANGED" : preMatchLimit ? "APPROVED_BASELINE_AT_RELATIVE_LIMIT" : "APPROVED_REV02_PILOT") : hold, CreatedAtUtc = now,
             ExpiresAtUtc = preMatch ? authority.LeaseExpiresAtUtc : new[] { now.AddSeconds(10), authority.LeaseExpiresAtUtc }.Min()
         };
         db.AEDV02Decisions.Add(decision);
@@ -378,11 +396,14 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             samples = samples.Where(world => world.Supply == null && !world.Tools.Any(tool => tool.Origin == "WorldSpawn")).ToArray();
             if (samples.Length == 0) return Fail("HOLD_SOLO_TEAM_SUPPLY_DISABLED");
         }
-        if ((decision.DecisionPoint == "PRE_MATCH" || effect.Consumer == "StalkerFusionRuntime") &&
-            !samples.Any(world => world.Stalkers.Length > 0 && world.Stalkers.All(stalker => stalker.MatchesStalkerConsumer(plan, stalkerValues))))
+        bool requireStalker = decision.DecisionPoint == "PRE_MATCH" || effect.Consumer == "StalkerFusionRuntime";
+        bool MatchesStalker(AEDV02WorldSample world) => world.Stalkers.Length > 0 &&
+            world.Stalkers.All(stalker => stalker.MatchesStalkerConsumer(plan, stalkerValues));
+        if (requireStalker && !samples.Any(MatchesStalker))
             return Fail("HOLD_STALKER_CONSUMER_NOT_OBSERVED");
         var supportInstances = await sources.AcceptedSupportInstances(matchId, events, ct);
-        int requiredOptionalMask = 0;
+        int requiredOptionalMask = decision.DecisionPoint == "PRE_MATCH" && proposal?.SupportsRelativePreMatchRelief == true &&
+            plan.Get(AEDV02Key.OptionalToolBudget) > decision.InitialOptionalBudget ? OptionalMask(resolved) ?? 0 : 0;
         if (!(decision.DecisionPoint == "PRE_MATCH" && decision.ExpectedPlanRevision == 0) &&
             decision.ChangedKey == nameof(AEDV02Key.OptionalToolBudget) && OptionalMask(resolved) is { } toolMask)
         {
@@ -393,7 +414,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             requiredOptionalMask = toolMask & ~priorMask;
         }
         if (!solo && (decision.DecisionPoint == "PRE_MATCH" && (resolved?.Length == 13 || plan.Get(AEDV02Key.OptionalToolBudget) > 0) || decision.ChangedKey is "OptionalToolBudget" or "ResourceGrade") &&
-            !observations.Any(x => x.World!.Supply?.SpawnedZones.Contains(1) == true && AEDV02SourceVerifier.VerifySupply(x.World, manifest, plan,
+            !observations.Any(x => (!requireStalker || MatchesStalker(x.World!)) &&
+                x.World!.Supply?.SpawnedZones.Contains(1) == true && AEDV02SourceVerifier.VerifySupply(x.World, manifest, plan,
                 decision.InitialOptionalBudget, events.Where(e => e.MatchId == matchId), x.Event.EventSequence, supportInstances, OptionalMask(resolved), proposal?.ProposedReservations, requiredOptionalMask)))
             return Fail("HOLD_SUPPLY_RESERVATION_SOURCE_REQUIRED");
         if (decision.ChangedKey == "SupportTool")

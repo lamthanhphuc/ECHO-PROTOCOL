@@ -16,6 +16,7 @@ public sealed partial class ScenarioServiceTests
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("valid")]
     [InlineData("missing-source")]
+    [InlineData("split-evidence")]
     [InlineData("missing-required")]
     [InlineData("unregistered-marker")]
     [InlineData("forged-initial-budget")]
@@ -66,6 +67,10 @@ public sealed partial class ScenarioServiceTests
             switch (mutation)
             {
                 case "missing-source": world.Supply = null; break;
+                case "split-evidence":
+                    if (ordinal == 0) world.Supply = null;
+                    else world.Stalkers[0].ConsumerValues[(int)AEDV02Key.ChaseSpeed] = 8;
+                    break;
                 case "missing-required": world.Supply.Reservations[0].ToolId = 6; break;
                 case "unregistered-marker": world.Supply.Reservations[0].MarkerId = "not-registered"; break;
                 case "forged-initial-budget": world.Supply.InitialOptionalBudget = 2; break;

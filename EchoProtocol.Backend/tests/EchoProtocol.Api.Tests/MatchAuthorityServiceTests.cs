@@ -355,10 +355,10 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Theory]
-    [InlineData(false, true, "FIXED")]
+    [InlineData(false, true, "ADAPTIVE")]
     [InlineData(true, false, "FIXED")]
     [InlineData(true, true, "ADAPTIVE")]
-    public async Task PreparedRfb2PreservesTestOnlyAndRequiresVerifiedAdaptiveBuild(bool verified, bool supportsRelative, string mode)
+    public async Task PreparedRfb2PreservesTestOnlyAndRequiresRelativeAdaptiveSupport(bool verified, bool supportsRelative, string mode)
     {
         await using var db = CreateDb();
         var service = CreateService(db, remoteEnabled: true, new AEDV02PilotSettings
@@ -388,6 +388,18 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(prepared.IsSuccess, prepared.Message);
         Assert.Equal(mode, prepared.Data!.ResolutionMode);
         Assert.Equal("TEST_ONLY", prepared.Data.MatchDataPolicy);
+        var pinnedPolicy = mode == "ADAPTIVE" ? "AED_ADMIN_TEST" : null;
+        Assert.Equal(pinnedPolicy, db.MatchAuthorityBindings.Single(x => x.MatchId == matchId).AdaptivePolicyConfigVersion);
+        db.AdaptiveConfigurationVersions.Add(new AdaptiveConfigurationVersion
+        {
+            Version = "AED_ADMIN_TEST_DISABLED", Compatibility = "0.1.0", Revision = 2,
+            ConfigurationJson = """{"Enabled":false}"""
+        });
+        await db.SaveChangesAsync();
+        var replay = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+        Assert.True(replay.IsSuccess, replay.Message);
+        Assert.Equal(mode, replay.Data!.ResolutionMode);
+        Assert.Equal(pinnedPolicy, db.MatchAuthorityBindings.Single(x => x.MatchId == matchId).AdaptivePolicyConfigVersion);
         request.PrepareBalance = false;
         request.ResolutionMode = mode;
         var started = await service.StartV2Async(host, matchId, request, CancellationToken.None);

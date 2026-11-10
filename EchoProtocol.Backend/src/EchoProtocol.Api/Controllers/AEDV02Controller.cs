@@ -10,13 +10,14 @@ using EchoProtocol.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace EchoProtocol.Api.Controllers;
 
 [ApiController, Authorize, Route("api/matches/{matchId:guid}/aed-v02")]
 public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sources, AEDV02DecisionService decisions,
-    TimeProvider clock, IOptions<AEDV02PilotSettings> settings, ITelemetryEventRepository telemetry) : ControllerBase
+    TimeProvider clock, IOptions<AEDV02PilotSettings> settings, ITelemetryEventRepository telemetry, IMemoryCache cache) : ControllerBase
 {
     [HttpGet("confirmed-revision")]
     public async Task<IActionResult> ConfirmedRevision(Guid matchId, CancellationToken ct)
@@ -46,12 +47,17 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
         if (scenario?.ResolutionMode != ScenarioResolutionMode.Adaptive || scenario.UsedFixedFallback) return Conflict();
         var config = await AdaptiveConfigurationService.ForVersionAsync(db, scenario.PolicyConfigVersion, ct);
         if (config is null) return NotFound();
+        const EchoProtocol.AI.Common.AED.AEDV02Key chase = EchoProtocol.AI.Common.AED.AEDV02Key.ChaseSpeed;
+        bool chaseLocked = binding.BalanceBuildVersion != null &&
+            !settings.Value.ChaseSpeedVerifiedCompatibilityVersions.Contains(binding.BalanceBuildVersion, StringComparer.Ordinal);
+        var baseline = AdaptiveConfigurationService.Baseline(config);
+        double neutralChase = EchoProtocol.AI.Common.AED.AEDV02Plan.Normal().Get(chase);
         return Ok(ApiResponse<object>.Ok(new
         {
             Version = scenario.PolicyConfigVersion,
-            Baseline = AdaptiveConfigurationService.Baseline(config).ToArray(),
+            Baseline = (chaseLocked ? baseline.With(chase, neutralChase) : baseline).ToArray(),
             Parameters = Enum.GetValues<EchoProtocol.AI.Common.AED.AEDV02Key>()
-                .Select(key => new { config.Parameters[key.ToString()].Tiers }),
+                .Select(key => new { Tiers = chaseLocked && key == chase ? [neutralChase] : config.Parameters[key.ToString()].Tiers }),
             config.Pilot.ObservationSeconds, config.Pilot.WindowSeconds, config.Pilot.EvidenceMaxAgeSeconds,
             config.Pilot.ReliefThreshold, config.Pilot.IncreasePressureCeiling, config.Pilot.PressureWeights,
             config.Pilot.TierDwellSeconds, config.Pilot.ProtectionSeconds, config.Pilot.ProtectionCooldownSeconds,
@@ -74,6 +80,14 @@ public sealed class AEDV02Controller(AppDbContext db, AEDV02SourceVerifier sourc
         if (config is not null && scenario.UsedFixedFallback) return Conflict();
         var policy = config?.Pilot ?? AdaptiveConfigurationService.DefaultPilot;
         var result = await sources.VerifyAsync(matchId, request, ct);
+        var sourceStatus = !result.IsSuccess ? result.Message :
+            !result.Data!.PressureComplete ? "HOLD_INSUFFICIENT_EVIDENCE" :
+            !result.Data.SafeWindow ? "HOLD_SAFE_WINDOW_CLOSED" : null;
+        var key = AdaptiveSourceStatus.CacheKey(matchId);
+        if (sourceStatus is null)
+            cache.Remove(key);
+        else
+            cache.Set(key, new AdaptiveSourceStatus(matchId, sourceStatus, clock.GetUtcNow().UtcDateTime), TimeSpan.FromHours(2));
         if (!result.IsSuccess) return Respond(result);
         var source = result.Data!;
         var profile = await HistoricalProfile(matchId, source.PlayerPressure.Keys.ToArray(), source.SceneManifestFingerprint, ct);

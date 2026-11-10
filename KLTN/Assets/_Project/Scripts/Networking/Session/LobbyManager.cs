@@ -440,14 +440,22 @@ namespace EchoProtocol.Networking
 
                 StartWithSelectedMode:
                 if (!loading.IsCurrent(runner, loadingAttempt)) return;
-                if (automaticMode && (!runner.SessionInfo.IsValid || !runner.SessionInfo.UpdateCustomProperties(new Dictionary<string, SessionProperty>
-                    {
-                        [MatchAuthorityRuntime.ScenarioResolutionModeSessionProperty] =
-                            authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive ? "ADAPTIVE" : "FIXED"
-                    })))
+                if (automaticMode)
                 {
-                    ReportError("Không đồng bộ được chế độ trận. Vui lòng thử lại.");
-                    return;
+                    var session = runner.SessionInfo;
+                    var key = MatchAuthorityRuntime.ScenarioResolutionModeSessionProperty;
+                    var selectedMode = authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
+                        ? "ADAPTIVE" : "FIXED";
+                    bool alreadyPublished = session.IsValid && session.Properties != null &&
+                        session.Properties.TryGetValue(key, out var currentMode) &&
+                        string.Equals((string)currentMode, selectedMode, StringComparison.Ordinal);
+                    if (!alreadyPublished && (!session.IsValid ||
+                        !session.UpdateCustomProperties(new Dictionary<string, SessionProperty> { [key] = selectedMode })))
+                    {
+                        Debug.LogWarning($"[LobbyManager] Session mode update rejected. Valid={session.IsValid}; Desired={selectedMode}");
+                        ReportError("Không đồng bộ được chế độ trận. Vui lòng thử lại.");
+                        return;
+                    }
                 }
                 Debug.LogWarning(
                     $"[NETDIAG][BeforeBackendStart] " +

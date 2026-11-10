@@ -150,6 +150,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private TeamToolPickupCatalog _teamToolPickupCatalog;
         [SerializeField, Min(0f)] private float _teamToolSpawnMinimumSpacing = 6f;
 
+        [Networked] internal NetworkBool IsAutomaticSoloMatch { get; private set; }
         [Networked] private NetworkBool TeamToolWorldSpawnInitialized { get; set; }
 
         [Networked, OnChangedRender(nameof(HandleReplicatedStateChanged))]
@@ -482,6 +483,7 @@ namespace EchoProtocol.Networking
             if (Object.HasStateAuthority
                 && !NetworkBootstrap.IsHostMigrationResumeActive)
             {
+                IsAutomaticSoloMatch = MatchAuthorityRuntime.Instance is { HasAutomaticBalance: true, StartedRosterCount: 1 };
                 InitializeRemoteGameplayPresentation();
                 CurrentPhase = NetworkMatchPhase.CoreObjective;
                 Zone2Stage = Zone2MissionStage.Zone1CoreObjective;
@@ -555,7 +557,7 @@ namespace EchoProtocol.Networking
                 }
 
                 MatchAuthorityRuntime.Instance?.CommitStagedV02PreMatch(this);
-                if (!TeamToolWorldSpawnInitialized && !AlienHuntMission.Instance)
+                if (!IsAutomaticSoloMatch && !TeamToolWorldSpawnInitialized && !AlienHuntMission.Instance)
                 {
                     var difficulty = MatchAuthorityRuntime.Instance != null
                         ? MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
@@ -594,17 +596,15 @@ namespace EchoProtocol.Networking
                         RemoteFixedBalanceSnapshot.GameplayValue("toolSpawnSpacing", _teamToolSpawnMinimumSpacing),
                         supportBonus > 0, allowOptionalShortfall: RemoteFixedBalanceSnapshot.Current?.schemaVersion == "RFB-2");
 
-                    if (TeamToolWorldSpawnInitialized &&
-                        MatchAuthorityRuntime.Instance != null &&
-                        MatchAuthorityRuntime.Instance.TryGetMatchId(
-                            out var backendMatchId) &&
-                        ScenarioConfigAuthorityRuntime.Instance != null)
-                    {
-                        _ = ScenarioConfigAuthorityRuntime.Instance
-                            .ConfirmStagedBackendPreMatchAsync(
-                                backendMatchId,
-                                CurrentAppliedScenarioConfig);
-                    }
+                }
+
+                if ((TeamToolWorldSpawnInitialized || IsAutomaticSoloMatch) &&
+                    MatchAuthorityRuntime.Instance != null &&
+                    MatchAuthorityRuntime.Instance.TryGetMatchId(out var backendMatchId) &&
+                    ScenarioConfigAuthorityRuntime.Instance != null)
+                {
+                    _ = ScenarioConfigAuthorityRuntime.Instance.ConfirmStagedBackendPreMatchAsync(
+                        backendMatchId, CurrentAppliedScenarioConfig);
                 }
             }
 
@@ -4921,6 +4921,7 @@ namespace EchoProtocol.Networking
             {
                 ScenarioConfigManaged = true;
                 ApplyScenarioConfigAuthoritative(stagedConfig, matchId);
+                authority?.NotifyManagedPreMatchApplied(matchId, stagedDecision.config.contentWhitelistVersion);
                 return;
             }
             if (decisionPoint != ScenarioDecisionPoint.PreMatch && ScenarioConfigManaged) return;

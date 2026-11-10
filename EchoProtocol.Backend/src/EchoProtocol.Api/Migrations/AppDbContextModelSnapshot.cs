@@ -821,6 +821,10 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AdaptivePolicyConfigVersion")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<string>("BalanceBuildVersion")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");

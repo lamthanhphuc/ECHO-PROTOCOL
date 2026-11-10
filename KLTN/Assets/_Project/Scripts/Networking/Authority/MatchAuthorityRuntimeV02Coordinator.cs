@@ -107,7 +107,13 @@ namespace EchoProtocol.Networking.Authority
                 var approvedSpeed = candidate.MonsterParameters.ChaseSpeed;
                 if (!AEDV02Plan.TryMapPreMatchChaseIncrease(approvedSpeed == 8d ? 7.5d : FixedDirector.FixedBaselineChaseSpeed, approvedSpeed, out var speed))
                     return;
-                plan = plan.With(AEDV02Key.ChaseSpeed, speed);
+                plan = plan.With(AEDV02Key.ChaseSpeed, !HasAutomaticBalance || V02TierAllowed(AEDV02Key.ChaseSpeed, speed)
+                    ? speed : AEDV02Plan.Normal().Get(AEDV02Key.ChaseSpeed));
+            }
+            else if (HasAutomaticBalance && staged && decision.IsManaged &&
+                decision.preMatchRule == "AED-PRE-010-SURVIVAL-LOW-RELIEVE")
+            {
+                plan = plan.With(AEDV02Key.ChaseSpeed, plan.PreMatchReliefChase(V02TierAllowed));
             }
             else if (_v02Configuration == null)
             {
@@ -156,6 +162,7 @@ namespace EchoProtocol.Networking.Authority
             return new AEDV02DecisionRequestDto
             {
                 decisionId = Guid.NewGuid().ToString("D"), phaseOrdinal = source?.phaseOrdinal ?? 0,
+                supportsRelativePreMatchRelief = HasAutomaticBalance && point == AEDV02DecisionPoint.PRE_MATCH,
                 decisionPoint = point.ToString(), windowSequence = sequence,
                 windowId = AEDV02Plan.WindowId(MatchId, source?.phaseOrdinal ?? 0, point, sequence, source?.startTick ?? 0, source?.endTick ?? 0, source?.fingerprint ?? string.Empty),
                 expectedPlanRevision = revision, previousPlanFingerprint = previous.Fingerprint(), planValues = next.ToArray(),
@@ -281,6 +288,7 @@ namespace EchoProtocol.Networking.Authority
         private bool TryBuildV02SupportRequest(NetworkMatchState state, out AEDV02DecisionRequestDto request)
         {
             request = null;
+            if (state.IsAutomaticSoloMatch) return false;
             var source = LastVerifiedV02Source;
             if (source?.resourceNeeds == null || source.fingerprint == _v02EvaluatedSource ||
                 !AEDv2Authority.TryGetV02(MatchId, out var plan, out var revision) || source.planRevision != revision || source.planFingerprint != plan.Fingerprint() ||
@@ -358,7 +366,9 @@ namespace EchoProtocol.Networking.Authority
         {
             _v02PendingRequest = request; _v02PendingApproval = approval; _v02Receipt = null; _v02NextReceiptAt = 0;
             var plan = new AEDV02Plan(approval.planValues);
-            _v02PendingChangedKeys = Enum.GetValues(typeof(AEDV02Key)).Cast<AEDV02Key>().Where(x => plan.Get(x) != previous.Get(x)).ToArray();
+            bool solo = NetworkMatchState.Instance?.IsAutomaticSoloMatch == true;
+            _v02PendingChangedKeys = Enum.GetValues(typeof(AEDV02Key)).Cast<AEDV02Key>()
+                .Where(x => plan.Get(x) != previous.Get(x) && (!solo || x != AEDV02Key.OptionalToolBudget)).ToArray();
             if (_v02PendingChangedKeys.Contains(AEDV02Key.Zone3AdaptiveMinionCap)) V02Zone3SpawnEntitled = plan.Get(AEDV02Key.Zone3AdaptiveMinionCap) == 1;
             _v02CommitSource = new AEDV02PlanCommitSource { DecisionId = Guid.Parse(approval.decisionId), PlanRevision = approval.planRevision,
                 PlanFingerprint = plan.Fingerprint(), ActionFingerprint = approval.actionFingerprint ?? string.Empty, AppliedTick = _bootstrap.Runner.Tick.Raw };
@@ -369,29 +379,48 @@ namespace EchoProtocol.Networking.Authority
         {
             if (_v02CommitEnqueued) return true;
             if (_v02CommitSource == null || !_telemetryMatchActive || _telemetry.Phase8LifecycleAdapter == null) return false;
+            // Pre-match commits may happen during scene startup, before MATCH_STARTED is buffered.
+            // Keep the original simulation tick but publish inside the telemetry match timeline.
+            var occurredAt = _v02CommittedAtUtc < _matchStartedAtUtc ? _matchStartedAtUtc : _v02CommittedAtUtc;
             _v02CommitEnqueued = _telemetry.Phase8LifecycleAdapter.EmitAEDV02Commit("v02:commit:" + _v02CommitSource.DecisionId,
-                _v02CommittedAtUtc, _v02CommitPhase, AEDV02SourceJson.Commit(_v02CommitSource), out _, out _);
+                occurredAt, _v02CommitPhase, AEDV02SourceJson.Commit(_v02CommitSource), out _, out var failure);
+            if (!_v02CommitEnqueued) WaitForV02Evidence($"COMMIT_BUFFER_{failure}");
             if (_v02CommitEnqueued) _telemetry.TryFlushNow();
             return _v02CommitEnqueued;
         }
 
+        private void WaitForV02Evidence(string reason)
+        {
+            _v02NextReceiptAt = Time.unscaledTime + 2f;
+            V02Log("RECEIPT_EVIDENCE_PENDING", reason, _v02PendingApproval);
+        }
+
         private void TickV02Receipt(NetworkMatchState state)
         {
-            if (_v02ReceiptBusy || Time.unscaledTime < _v02NextReceiptAt || !HasStateAuthority || _v02Receipt == null && !_telemetryMatchActive ||
-                _bootstrap?.Runner == null || state.AEDV02PlanRevision != _v02PendingApproval.planRevision) return;
+            if (_v02ReceiptBusy || Time.unscaledTime < _v02NextReceiptAt || !HasStateAuthority || _bootstrap?.Runner == null) return;
+            if (_v02Receipt == null && !_telemetryMatchActive)
+            { WaitForV02Evidence("MATCH_TELEMETRY_NOT_STARTED"); return; }
+            if (state.AEDV02PlanRevision != _v02PendingApproval.planRevision)
+            { WaitForV02Evidence("HOST_REVISION_NOT_VISIBLE"); return; }
             if (_v02Receipt == null)
             {
+                if (_telemetry.Phase8LifecycleAdapter == null)
+                { WaitForV02Evidence("LIFECYCLE_ADAPTER_NOT_READY"); return; }
                 if (!EmitV02CommittedState()) return;
                 var plan = new AEDV02Plan(_v02PendingApproval.planValues);
                 var changed = _v02PendingChangedKeys;
                 string consumer = "AEDPolicyEnvelope"; var key = AEDV02Key.CabinetAmbushEnabled; double value = plan.Get(key);
                 var ids = Array.Empty<string>();
                 string effectKey = null;
-                if (_v02PendingRequest.decisionPoint == "PRE_MATCH" && (HasAutomaticBalance || plan.Get(AEDV02Key.OptionalToolBudget) > 0))
+                if (!state.IsAutomaticSoloMatch && _v02PendingRequest.decisionPoint == "PRE_MATCH" && (HasAutomaticBalance || plan.Get(AEDV02Key.OptionalToolBudget) > 0))
                 {
                     var supply = EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(_bootstrap.Runner, MatchId);
                     if (supply == null || !supply.IsValid() || supply.InitialOptionalBudget != (HasAutomaticBalance ? 3 : plan.Get(AEDV02Key.OptionalToolBudget)) ||
-                        supply.OptionalBudget != V02EffectiveValue(plan, AEDV02Key.OptionalToolBudget) || !supply.SpawnedZones.Contains(1)) return;
+                        supply.OptionalBudget != V02EffectiveValue(plan, AEDV02Key.OptionalToolBudget) || !supply.SpawnedZones.Contains(1))
+                    {
+                        WaitForV02Evidence($"PREMATCH_SUPPLY_NOT_OBSERVED actual={supply?.OptionalBudget} expected={V02EffectiveValue(plan, AEDV02Key.OptionalToolBudget)} valid={supply?.IsValid()}");
+                        return;
+                    }
                 }
                 if (_v02PendingRequest.support != null)
                 {
@@ -445,7 +474,8 @@ namespace EchoProtocol.Networking.Authority
                 var effect = new AEDV02EffectSource { DecisionId = Guid.Parse(_v02PendingApproval.decisionId), PlanRevision = _v02PendingApproval.planRevision,
                     PlanFingerprint = plan.Fingerprint(), Consumer = consumer, Key = effectKey ?? key.ToString(), ObservedValue = value, ObservedTick = tick, NetworkObjectIds = ids };
                 if (!_telemetry.Phase8LifecycleAdapter.EmitAEDV02Effect("v02:effect:" + effect.DecisionId, DateTime.UtcNow, _currentTelemetryPhase,
-                    AEDV02SourceJson.Effect(effect), out var emitted, out _)) return;
+                    AEDV02SourceJson.Effect(effect), out var emitted, out var failure))
+                { WaitForV02Evidence($"EFFECT_BUFFER_{failure}"); return; }
                 _v02Receipt = new AEDV02ReceiptDto { receiptId = Guid.NewGuid().ToString("D"), effectEventId = emitted.Id.ToString("D"),
                     planRevision = effect.PlanRevision, planFingerprint = effect.PlanFingerprint, appliedTick = _v02CommitSource.AppliedTick };
                 _v02NextWorldTick = 0; TickV02WorldSource(state); _telemetry.TryFlushNow(); _v02NextReceiptAt = Time.unscaledTime + 2; return;

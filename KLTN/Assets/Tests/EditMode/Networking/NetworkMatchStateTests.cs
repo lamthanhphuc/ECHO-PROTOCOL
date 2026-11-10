@@ -163,7 +163,7 @@ namespace EchoProtocol.Networking.Tests
                 match);
 
             StringAssert.Contains(
-                "TeamToolWorldSpawnInitialized &&",
+                "(TeamToolWorldSpawnInitialized || IsAutomaticSoloMatch) &&",
                 match);
 
             StringAssert.Contains(

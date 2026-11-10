@@ -6,11 +6,18 @@ using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using MongoDB.Driver;
 
 namespace EchoProtocol.Api.Services;
 
-public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRepository telemetry, ILogger<AdaptiveMatchAuditService> logger)
+internal sealed record AdaptiveSourceStatus(Guid MatchId, string ReasonCode, DateTime CheckedAtUtc)
+{
+    public static object CacheKey(Guid matchId) => (typeof(AdaptiveSourceStatus), matchId);
+}
+
+public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRepository telemetry,
+    ILogger<AdaptiveMatchAuditService> logger, IMemoryCache cache)
 {
     public async Task<ServiceResult<object>> GetAsync(Guid matchId, CancellationToken ct)
     {
@@ -108,6 +115,7 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
             x.ResourceEfficiencyScore, ResourceStatus = x.ResourceEfficiencyScoreStatus.ToString(),
             x.TeamPerformanceScore, PerformanceStatus = x.TeamPerformanceStatus.ToString()
         }).SingleOrDefaultAsync(ct);
+        cache.TryGetValue<AdaptiveSourceStatus>(AdaptiveSourceStatus.CacheKey(matchId), out var sourceStatus);
         return ServiceResult<object>.Success(new
         {
             Baseline = match.BalanceSource is null ? null : new
@@ -115,7 +123,7 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
                 Source = match.BalanceSource, Version = match.BalanceVersion,
                 Hash = match.BalanceHash, match.MatchDataPolicy, BuildVersion = match.BalanceBuildVersion
             },
-            preMatch, decisions, profile, teamProfile, mayReprocess, HostEvidenceUnavailable = pending && accepted is null
+            preMatch, decisions, profile, teamProfile, mayReprocess, SourceStatus = sourceStatus, HostEvidenceUnavailable = pending && accepted is null
         });
     }
 }

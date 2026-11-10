@@ -58,6 +58,7 @@ export interface AdaptiveAdminData {
 export interface AdaptivePreview {
   rule: string | null;
   selected: AdaptiveConfigRef;
+  reliefChaseFactor?: number | null;
   usedFixedFallback: boolean;
   reason: string | null;
 }
@@ -115,6 +116,7 @@ export interface AdaptiveMatchAudit {
   profile: { status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED"; attempts: number; lastError: string; nextAttemptAtUtc: string; profileTuningVersion: string | null } | null;
   mayReprocess: boolean;
   hostEvidenceUnavailable: boolean;
+  sourceStatus?: { reasonCode: string; checkedAtUtc: string } | null;
 }
 
 export const adaptiveParameterLabels: Record<string, string> = {
@@ -134,11 +136,13 @@ export const adaptiveParameterLabels: Record<string, string> = {
 
 export const adaptiveReasons: Record<string, string> = {
   APPROVED_CHASE_ROLLBACK: "Quay về nấc truy đuổi đã xác nhận trước đó. Chỉ tính hoàn tác sau khi có biên nhận.",
+  APPROVED_BASELINE_AT_RELATIVE_LIMIT: "Giữ tốc độ nền vì nấc trước trận bị khóa hoặc vượt giới hạn an toàn.",
+  HOLD_CHASE_SPEED_BUILD_UNVERIFIED: "Bản game chưa được xác minh điều chỉnh tốc độ truy đuổi.",
+  APPROVED_PREMATCH_RELIEF_CHASE_UNCHANGED: "Giữ tốc độ nền vì nấc giảm bị khóa, vượt giới hạn hoặc quota Stalker đã dành cho thông số khác.",
   HOLD_RELATIVE_CHASE_LIMIT: "Giữ tốc độ hiện hành vì nấc dự kiến vượt giới hạn an toàn hoặc không tạo thay đổi.",
   HOLD_RELATIVE_FIELD_LIMIT: "Giữ nguyên vì nấc dự kiến vượt giới hạn của cấu hình nền.",
   HOLD_MINION_ZONE_INACTIVE: "Giữ nguyên vì đội chưa ở khu vực cần điều chỉnh.",
   HOLD_OPTIONAL_ALREADY_MATERIALIZED: "Giữ nguyên vì suất công cụ đã được phát hoặc vị trí đã được chốt.",
-  APPROVED_BASELINE_AT_RELATIVE_LIMIT: "Đã duyệt kế hoạch. Tốc độ truy đuổi giữ nền vì nấc trước trận vượt giới hạn.",
   APPROVED_RELATIVE_ROLLBACK: "Quay về bộ giá trị của revision đã được xác nhận trước đó.",
   HOLD_RELATIVE_FIELD_UNSUPPORTED: "Giữ nguyên vì thông số này chưa được mở cho điều chỉnh tương đối.",
   HOLD_LOCKED_BALANCE_INVALID: "Không điều chỉnh vì không xác minh được cấu hình nền đã khóa.",

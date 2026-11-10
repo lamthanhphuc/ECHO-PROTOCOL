@@ -42,13 +42,16 @@ namespace EchoProtocol.Telemetry
             _occurrenceCapacity = occurrenceCapacity;
         }
 
-        public void BeginMatch()
+        public void BeginMatch(bool replacePreviousMatch = false)
         {
             EnsureAuthority();
             if (!_authorityContext.TryGetMatchId(out var matchId) || matchId == Guid.Empty)
             {
                 throw new InvalidOperationException("Authoritative match ID is unavailable.");
             }
+
+            if (replacePreviousMatch && _sequenceAllocator.IsActive && _sequenceAllocator.MatchId != matchId)
+                _sequenceAllocator.MarkTerminal();
 
             _sequenceAllocator.BeginMatch(matchId);
             _eventsByOccurrence.Clear();

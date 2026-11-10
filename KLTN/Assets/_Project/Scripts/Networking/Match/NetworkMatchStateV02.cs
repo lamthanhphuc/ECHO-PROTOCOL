@@ -59,7 +59,7 @@ namespace EchoProtocol.Networking
         private void TickV02Supply()
         {
             var authority = MatchAuthorityRuntime.Instance;
-            if (authority == null || authority.HasAutomaticBalance && !AEDv2Authority.HasRelativeV02 || Status != NetworkMatchStatus.Running ||
+            if (IsAutomaticSoloMatch || authority == null || authority.HasAutomaticBalance && !AEDv2Authority.HasRelativeV02 || Status != NetworkMatchStatus.Running ||
                 ScenarioConfigAuthorityRuntime.Instance?.RuntimeSettings?.PacingV02GameplayEnabled != true ||
                 !TryReadV02Plan(authority.MatchId, out var plan, out _)) return;
             int zone = AEDV02PhaseMap.LogicalPhase(PhaseName(CurrentPhase));
@@ -280,7 +280,9 @@ namespace EchoProtocol.Networking
                 try { proposed = new AEDV02Plan(request.planValues); }
                 catch (ArgumentException) { return false; }
                 if (!MatchesAutomaticV02Approval(authority, proposed, approval,
-                    request.decisionPoint == "PRE_MATCH" ? (int)proposed.Get(AEDV02Key.OptionalToolBudget) : AEDv2Authority.V02InitialOptionalBudget))
+                    request.decisionPoint == "PRE_MATCH" && request.supportsRelativePreMatchRelief
+                        ? approval.initialOptionalBudget
+                        : request.decisionPoint == "PRE_MATCH" ? (int)proposed.Get(AEDV02Key.OptionalToolBudget) : AEDv2Authority.V02InitialOptionalBudget))
                 { reason = "HOLD_RESOLVED_BALANCE_MISMATCH"; return false; }
             }
             bool preMatch = request.decisionPoint == "PRE_MATCH";

@@ -52,18 +52,25 @@ export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAud
         <p>Cấu hình {item.scenarioConfigId} · {item.scenarioConfigVersion}</p>
         <p>Policy {item.policyVersion} · {item.policyConfigVersion ?? "Mặc định"}</p>
         {item.profileTuningVersion && <p>Policy lịch sử đội · {item.profileTuningVersion}</p>}
-        <p>Hồ sơ {item.validity} · {item.teamSize} người · Ngân sách {item.supportItemBudget} · Tốc độ trong registry {item.chaseSpeed}</p>
+        <p>Hồ sơ {item.validity} · {item.teamSize} người</p>
+        {item.preMatchRule === "AED-PRE-010-SURVIVAL-LOW-RELIEVE" && <p>Policy chọn giảm áp lực vì điểm sinh tồn thấp.</p>}
+        {item.preMatchRule === "AED-PRE-030-BOTH-HIGH-INCREASE" && <p>Policy chọn tăng áp lực dựa trên hồ sơ đội.</p>}
         {item.usedFixedFallback && <p>Cấu hình dự phòng {item.fallbackConfigId} · {item.fallbackConfigVersion}
           {item.fallbackReasonCode && adaptiveReasons[item.fallbackReasonCode] && ` · ${adaptiveReasons[item.fallbackReasonCode]}`}
         </p>}
         <p>Host {item.appliedAtUtc ? `xác nhận lúc ${formatDate(item.appliedAtUtc)}` : "chưa xác nhận cấu hình trước trận"}</p>
         <details className="muted text-xs"><summary className="cursor-pointer">Chi tiết kỹ thuật</summary>
+          <p>Giá trị registry · Tốc độ {item.chaseSpeed} · Ngân sách công cụ {item.supportItemBudget}</p>
           <code>{[item.resolutionResult, item.preMatchRule, item.fallbackReasonCode].filter(Boolean).join(" · ")}</code>
         </details>
       </div>)}
     </section>
     <section>
       <h3 className="mb-2 font-semibold">Điều chỉnh Adaptive</h3>
+      {audit.sourceStatus && <p className="muted mb-2 text-sm">
+        Lần kiểm tra cửa sổ gần nhất · {formatDate(audit.sourceStatus.checkedAtUtc)} ·{" "}
+        {adaptiveReasons[audit.sourceStatus.reasonCode] ?? audit.sourceStatus.reasonCode}
+      </p>}
       {decisions.length === 0 && <p className="muted text-sm">Chưa có quyết định v0.2 trong sổ theo dõi.</p>}
       {audit.hostEvidenceUnavailable && <p className="muted mb-2 text-sm">Tạm thời không đọc được telemetry của các revision đang chờ.</p>}
       {decisions.map((item) => <details key={item.decisionId} className="mb-2 rounded border border-[var(--line)] p-3 text-sm">
@@ -74,6 +81,7 @@ export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAud
           <p className="muted">Pha {item.phaseOrdinal} · {formatDate(item.createdAtUtc)} · {item.policyVersion} · {item.catalogVersion}</p>
           {adaptiveReasons[item.reasonCode] && <p>{adaptiveReasons[item.reasonCode]}</p>}
           <p>Revision trước đó {item.expectedPlanRevision} · Host đã áp dụng {item.hostAppliedRevision ?? "chưa có bằng chứng"}</p>
+          {item.changes.length > 0 && <p>{item.applyReceipt ? "Thay đổi đã có biên nhận áp dụng" : item.approvalStatus === "HOLD" ? "Đề xuất bị giữ lại" : "Đề xuất chưa có biên nhận áp dụng"}</p>}
           {item.changes.length > 0
             ? <ul className="list-disc pl-5">{item.changes.map((change) => <li key={change.key}>
               {adaptiveParameterLabels[change.key] ?? change.key} · {change.before} → {change.after}

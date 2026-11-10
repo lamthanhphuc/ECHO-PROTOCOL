@@ -375,6 +375,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ResolutionMode).HasMaxLength(16);
             entity.Property(e => e.BalanceSource).HasMaxLength(20);
             entity.Property(e => e.BalanceBuildVersion).HasMaxLength(80);
+            entity.Property(e => e.AdaptivePolicyConfigVersion).HasMaxLength(80);
             entity.Property(e => e.BalanceProtocolVersion).HasMaxLength(20);
             entity.Property(e => e.BalanceVersion).HasMaxLength(80);
             entity.Property(e => e.BalanceHash).HasMaxLength(64);

@@ -13,8 +13,12 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
-    [Fact]
-    public async Task AdaptiveAdmin_PreviewAndResolveSharePolicyAndPinPublishedVersion()
+    [Theory]
+    [InlineData(true, false, 6.75, 1)]
+    [InlineData(false, false, 7.5, 0)]
+    [InlineData(true, true, 7.5, 1)]
+    public async Task AdaptiveAdmin_PreviewAndResolveSharePolicyAndPinPublishedVersion(
+        bool supportsRelativeRelief, bool configuredDetection, double expectedChase, int expectedTools)
     {
         await using var f = await Fixture.CreateAsync();
         await f.EnableApprovedReliefAsync();
@@ -59,6 +63,8 @@ public sealed partial class ScenarioServiceTests
         var normal = AEDV02Plan.Normal();
         var parameters = Enum.GetValues<AEDV02Key>().ToDictionary(key => key.ToString(),
             key => new AdaptiveParameter(normal.Get(key), AEDV02Plan.AllowedValues(key).ToArray()));
+        if (configuredDetection)
+            parameters[nameof(AEDV02Key.DetectionAcquireSeconds)] = new(1.5, [1, 1.25, 1.5]);
         var configToPublish = new AdaptiveConfiguration(true, 30, 70, 30, 70, 2, 2, true,
             new(alternateFixed.ScenarioConfigId, alternateFixed.ScenarioConfigVersion),
             new(relief.ScenarioConfigId, relief.ScenarioConfigVersion), null, parameters, AdaptiveConfigurationService.DefaultPilot);
@@ -81,6 +87,13 @@ public sealed partial class ScenarioServiceTests
         var published = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish), default);
         Assert.True(published.IsSuccess, published.Message);
         var version = (await AdaptiveConfigurationService.LatestAsync(f.Db, compatibility, default))!.Version;
+        f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId).AdaptivePolicyConfigVersion = version;
+        await f.Db.SaveChangesAsync();
+        var stale = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish), default);
+        Assert.Equal(ErrorCodes.Conflict, stale.ErrorCode);
+        var disabled = await service.PublishAsync(f.HostId, new(compatibility, version, configToPublish with { Enabled = false }), default);
+        Assert.True(disabled.IsSuccess, disabled.Message);
+
         var request = AdaptiveRequest();
         var resolved = await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, request);
         Assert.True(resolved.IsSuccess, resolved.Message);
@@ -88,13 +101,36 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal(AEDPreMatchPolicyV1.SurvivalRelief, resolved.Data.PreMatchRule);
         Assert.Equal(version, resolved.Data.PolicyConfigVersion);
 
-        var stale = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish), default);
-        Assert.Equal(ErrorCodes.Conflict, stale.ErrorCode);
-        var disabled = await service.PublishAsync(f.HostId, new(compatibility, version, configToPublish with { Enabled = false }), default);
-        Assert.True(disabled.IsSuccess, disabled.Message);
         Assert.True((await AdaptiveConfigurationService.ForMatchAsync(f.Db, f.MatchId, default))!.Enabled);
         var replay = await f.Service.ResolvePreMatchAsync(f.HostId, f.MatchId, request);
         Assert.Equal(version, replay.Data!.PolicyConfigVersion);
+
+        var (_, sourceRequest) = await V02WorldEvidence(f);
+        var match = f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId);
+        match.Status = MatchAuthorityStatus.Lobby;
+        match.BalanceBuildVersion = compatibility;
+        match.BalanceSource = "LOCAL";
+        match.BalanceProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion;
+        match.MapId = "SciFi";
+        match.Difficulty = "NORMAL";
+        match.ResolutionMode = "ADAPTIVE";
+        await f.Db.SaveChangesAsync();
+        var evidence = new AcceptedEvidenceRepository([]);
+        var clock = new FixedClock(Now);
+        var decisions = new AEDV02DecisionService(f.Db, new AEDV02SourceVerifier(f.Db, evidence, clock), evidence, clock,
+            Options.Create(new AEDV02PilotSettings { Enabled = true, ChaseSpeedVerifiedCompatibilityVersions = [compatibility] }));
+        var reliefPlan = AdaptiveConfigurationService.Baseline(configToPublish)
+            .With(AEDV02Key.ChaseSpeed, expectedChase < 7.5 ? AEDV02Plan.PreMatchReliefChaseTier : 7.5)
+            .With(AEDV02Key.OptionalToolBudget, relief.SupportItemBudget);
+        var approval = await decisions.SubmitAsync(f.HostId, f.MatchId,
+            V02Request(f, resolved.Data, sourceRequest.SceneManifestFingerprint, reliefPlan, 0, null, 0) with { SupportsRelativePreMatchRelief = supportsRelativeRelief });
+        Assert.True(approval.IsSuccess, approval.Message);
+        Assert.Equal("APPROVED", approval.Data!.ApprovalStatus);
+        var row = f.Db.AEDV02Decisions.Single();
+        Assert.Equal(7.5, row.PreviousChaseSpeed);
+        var values = JsonSerializer.Deserialize<double[]>(row.StalkerValuesJson!)!;
+        Assert.Equal(expectedChase, values[(int)AEDV02Key.ChaseSpeed]);
+        Assert.Equal(expectedTools, values[(int)AEDV02Key.OptionalToolBudget]);
 
         var fallbackRequest = AdaptiveRequest();
         fallbackRequest.FallbackFromDecisionId = request.DecisionId.ToString("D");

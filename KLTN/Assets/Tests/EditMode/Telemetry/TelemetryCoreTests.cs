@@ -70,6 +70,25 @@ namespace EchoProtocol.Telemetry.Tests
         }
 
         [Test]
+        public void EventFactory_NewAuthoritativeMatchPreservesPreviousBufferedEvents()
+        {
+            var fixture = new Fixture();
+            fixture.Factory.BeginMatch();
+            Assert.That(fixture.Emit(TelemetryEventTypes.MatchStarted, "start"), Is.True);
+            var previous = fixture.Allocator.MatchId;
+
+            fixture.Authority.MatchId = Guid.NewGuid();
+            fixture.Factory.BeginMatch(replacePreviousMatch: true);
+            Assert.That(fixture.Emit(TelemetryEventTypes.MatchStarted, "start"), Is.True);
+
+            var batch = fixture.Buffer.GetReadyBatch(2, DateTime.UtcNow);
+            Assert.That(batch.Count, Is.EqualTo(2));
+            Assert.That(batch[0].Event.MatchId, Is.EqualTo(previous));
+            Assert.That(batch[1].Event.MatchId, Is.EqualTo(fixture.Authority.MatchId));
+            Assert.That(fixture.Allocator.LastAllocatedSequence, Is.EqualTo(1));
+        }
+
+        [Test]
         public void EventFactory_RequiresMatchStartedAsFirstEvent()
         {
             var fixture = new Fixture();
@@ -736,11 +755,11 @@ namespace EchoProtocol.Telemetry.Tests
 
         private sealed class FakeAuthority : ITelemetryAuthorityContext
         {
-            private readonly Guid _matchId;
+            public Guid MatchId { get; set; }
 
             public FakeAuthority(Guid matchId, bool hasAuthority)
             {
-                _matchId = matchId;
+                MatchId = matchId;
                 HasStateAuthority = hasAuthority;
             }
 
@@ -749,7 +768,7 @@ namespace EchoProtocol.Telemetry.Tests
 
             public bool TryGetMatchId(out Guid matchId)
             {
-                matchId = _matchId;
+                matchId = MatchId;
                 return true;
             }
         }
