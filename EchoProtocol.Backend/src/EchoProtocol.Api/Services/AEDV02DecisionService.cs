@@ -365,7 +365,8 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             return Fail("HOLD_STALKER_CONSUMER_NOT_OBSERVED");
         var supportInstances = await sources.AcceptedSupportInstances(matchId, events, ct);
         int requiredOptionalMask = 0;
-        if (decision.ChangedKey == nameof(AEDV02Key.OptionalToolBudget) && OptionalMask(resolved) is { } toolMask)
+        if (!(decision.DecisionPoint == "PRE_MATCH" && decision.ExpectedPlanRevision == 0) &&
+            decision.ChangedKey == nameof(AEDV02Key.OptionalToolBudget) && OptionalMask(resolved) is { } toolMask)
         {
             var prior = await db.AEDV02Decisions.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.MatchId == matchId && x.PlanRevision == decision.ExpectedPlanRevision, ct);
