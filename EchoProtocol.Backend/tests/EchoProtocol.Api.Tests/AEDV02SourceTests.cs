@@ -12,6 +12,48 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed partial class ScenarioServiceTests
 {
+    [Theory, Trait("Category", "AEDV02")]
+    [InlineData("solo", null)]
+    [InlineData("legacy", "HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING")]
+    [InlineData("multiplayer", "HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING")]
+    [InlineData("spawn", "HOLD_SOLO_TEAM_SUPPLY_DISABLED")]
+    [InlineData("ledger", "HOLD_SOLO_TEAM_SUPPLY_DISABLED")]
+    [InlineData("missing-stalker", "HOLD_STALKER_CENSUS_MISSING")]
+    public async Task V02_AutomaticSoloVerifiesWithoutTeamSupply(string scenario, string? hold)
+    {
+        await using var f = await ValidV02Fixture();
+        var match = f.Db.MatchAuthorityBindings.Single();
+        match.StartedAtUtc = Now.AddMinutes(-2);
+        match.BalanceBuildVersion = scenario == "legacy" ? null : "0.1.0";
+        var players = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).ToArray();
+        if (scenario != "multiplayer")
+            f.Db.MatchPlayerBindings.RemoveRange(players.Where(x => x.UserId != f.HostId));
+        foreach (var player in players)
+            player.Participated = true;
+        await f.Db.SaveChangesAsync();
+
+        var (events, request) = await V02WorldEvidence(f, spawnTeamTools: scenario == "spawn", pilot: true);
+        foreach (var sample in events.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"))
+        {
+            var world = sample.ValueJson["data"]["world"];
+            if (scenario == "ledger") world["Supply"] = new BsonDocument();
+            if (scenario == "missing-stalker") world["Stalkers"] = new BsonArray();
+        }
+        var result = await new AEDV02SourceVerifier(f.Db, new AcceptedEvidenceRepository(events), new FixedClock(Now))
+            .VerifyAsync(f.MatchId, request);
+
+        if (hold != null)
+        {
+            Assert.False(result.IsSuccess);
+            Assert.Equal(hold, result.Message);
+            return;
+        }
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True(result.Data!.SafeWindow);
+        Assert.True(result.Data.PressureComplete);
+        Assert.Null(result.Data.Supply);
+    }
+
     [Fact, Trait("Category", "AEDV02")]
     public async Task V02_ScenePlacedSupplyDoesNotSubstituteRequiredRuntimeSpawnBudget()
     {
@@ -203,7 +245,7 @@ public sealed partial class ScenarioServiceTests
         Assert.Empty(f.Db.AEDV02VerifiedSources);
     }
 
-    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0, bool pilot = false)
+    private static async Task<(TelemetryEventDocument[] Events, AEDV02SourceRequest Request)> V02WorldEvidence(Fixture f, bool geometry = false, int planRevision = 0, bool pilot = false, bool spawnTeamTools = true)
     {
         f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId).Status = MatchAuthorityStatus.InMatch;
         var users = f.Db.MatchPlayerBindings.Where(x => x.MatchId == f.MatchId).Select(x => x.UserId).ToArray();
@@ -245,7 +287,7 @@ public sealed partial class ScenarioServiceTests
         await f.Db.SaveChangesAsync();
         var events = new List<TelemetryEventDocument> { V02Event(f.MatchId, "PHASE_STARTED", 1, Now.AddSeconds(-60), "1.1",
             new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION" }, ["data"] = new BsonDocument() }) };
-        foreach (var id in ids)
+        foreach (var id in spawnTeamTools ? ids : [])
             events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, Now.AddSeconds(-31), "1.2",
                 new BsonDocument { ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 599, ["occurrenceKey"] = "spawn:" + id },
                     ["data"] = new BsonDocument { ["action"] = "SPAWN", ["instanceId"] = "tool:" + id, ["toolId"] = id, ["zone"] = 1, ["origin"] = "WorldSpawn" } }));
@@ -257,7 +299,7 @@ public sealed partial class ScenarioServiceTests
                 Players = users.Select(x => new AEDV02PlayerSource { UserId = x, LifeState = "ALIVE" }).ToArray(),
                 Stalkers = new[] { new AEDV02ThreatSource { NetworkId = "stalker", State = "PATROL", Zone = 1,
                     ConsumerValues = Enumerable.Range(0, 6).Select(index => AEDV02Plan.Normal().Get((AEDV02Key)index)).ToArray() } },
-                Tools = ids.Select(x => new AEDV02ToolSource { InstanceId = "tool:" + x, ToolId = x, Zone = 1, Origin = "WorldSpawn", Location = "World", MarkerId = "marker:" + x, RouteEdgeIds = new[] { "edge:" + x } }).ToArray(),
+                Tools = (spawnTeamTools ? ids : []).Select(x => new AEDV02ToolSource { InstanceId = "tool:" + x, ToolId = x, Zone = 1, Origin = "WorldSpawn", Location = "World", MarkerId = "marker:" + x, RouteEdgeIds = new[] { "edge:" + x } }).ToArray(),
                 Doors = new[] { new AEDV02DoorSource { DoorId = "door", State = "CLOSED_UNLOCKED" } } };
             var value = JsonSerializer.SerializeToElement(new { context = new { authorityTick = sample.Tick, phase = sample.PhaseName, occurrenceKey = "world:" + sample.Tick }, data = new { world = sample } });
             events.Add(V02Event(f.MatchId, "AED_V02_WORLD_SAMPLE", events.Count + 1, Now.AddSeconds(i - 30), "1.3", BsonDocument.Parse(value.GetRawText())));

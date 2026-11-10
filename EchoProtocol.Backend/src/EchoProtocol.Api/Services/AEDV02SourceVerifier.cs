@@ -26,8 +26,15 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         catch (JsonException) { return Hold("HOLD_UNTRUSTED_SCENE_MANIFEST"); }
         if (manifest == null || !manifest.IsValid()) return Hold("HOLD_UNTRUSTED_SCENE_MANIFEST");
         var geometryResults = new Dictionary<string, bool?>(StringComparer.Ordinal);
-        var users = await db.MatchPlayerBindings.AsNoTracking().Where(x => x.MatchId == matchId).Select(x => x.UserId).ToArrayAsync(ct);
-        if (users.Length == 0 || await db.MatchPlayerBindings.AnyAsync(x => x.MatchId == matchId && x.DisconnectedAtUtc != null, ct)) return Hold("HOLD_ROSTER_NOT_CURRENT");
+        bool automaticStarted = await db.MatchAuthorityBindings.AnyAsync(x => x.MatchId == matchId &&
+            x.StartedAtUtc != null && x.BalanceBuildVersion != null, ct);
+        var bindings = await db.MatchPlayerBindings.AsNoTracking().Where(x => x.MatchId == matchId)
+            .Select(x => new { x.UserId, x.Participated, x.DisconnectedAtUtc }).ToArrayAsync(ct);
+        var participants = bindings.Where(x => x.Participated).ToArray();
+        bool solo = automaticStarted && participants.Length == 1;
+        var rosterBindings = solo ? participants : bindings;
+        if (rosterBindings.Length == 0 || rosterBindings.Any(x => x.DisconnectedAtUtc != null)) return Hold("HOLD_ROSTER_NOT_CURRENT");
+        var users = rosterBindings.Select(x => x.UserId).ToArray();
         var roster = AEDV02Plan.Hash(matchId.ToString("D") + "|" + string.Join(',', users.Order().Select(x => x.ToString("D"))));
         var accepted = await telemetry.LoadAcceptedMatchEventsAsync(matchId, ct);
         if (accepted.Any(x => x.MatchId == matchId && (x.EventType == "AED_V02_CAPTURE_EXCLUDED" ||
@@ -68,6 +75,12 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
         }
         if (frames.Count < 2 || frames[0].Sample.Tick != request.StartTick || frames[^1].Sample.Tick != request.EndTick) return Hold("HOLD_SOURCE_RANGE_MISSING");
         var last = frames[^1]; var tickRate = last.Sample.TickRate;
+        var worldSpawns = accepted.Where(x => x.MatchId == matchId && x.EventSequence < last.Event.EventSequence &&
+            x.EventType == "TEAM_TOOL_LIFECYCLE").Select(x => (x.EventSequence, Data: x.ValueJson["data"].AsBsonDocument))
+            .Where(x => x.Data["action"] == "SPAWN" && x.Data.GetValue("origin", BsonNull.Value) == "WorldSpawn").ToArray();
+        if (solo && (worldSpawns.Length != 0 ||
+            frames.Any(x => x.Sample.Supply != null || x.Sample.Tools.Any(tool => tool.Origin == "WorldSpawn"))))
+            return Hold("HOLD_SOLO_TEAM_SUPPLY_DISABLED");
         var planRow = last.Sample.PlanRevision == 0 ? null : await db.AEDV02Decisions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.MatchId == matchId && x.PlanRevision == last.Sample.PlanRevision && x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED", ct);
         var observedPlan = planRow == null ? AEDV02Plan.Normal() : new AEDV02Plan(JsonSerializer.Deserialize<double[]>(planRow.PlanValuesJson)!);
@@ -128,11 +141,12 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
                 (i > 0 && (sample.Tick <= frames[i - 1].Sample.Tick || sample.Tick - frames[i - 1].Sample.Tick > tickRate * 2))) return Hold("HOLD_SOURCE_COVERAGE_GAP");
             if (!AEDPhase8LifecycleReconcilerV1.TryReconstruct(accepted, matchId, frame.Event.EventSequence, users.ToHashSet(), false,
                 out var tools, out var minions, out _)) return Hold("HOLD_LIFECYCLE_RECONCILIATION");
-            var required = accepted.Where(x => x.MatchId == matchId && x.EventSequence < frame.Event.EventSequence && x.EventType == "TEAM_TOOL_LIFECYCLE")
-                .Select(x => x.ValueJson["data"].AsBsonDocument).Where(x => x["action"].AsString == "SPAWN" && x["zone"].AsInt32 == sample.Zone &&
-                    x.TryGetValue("origin", out var origin) && origin == "WorldSpawn")
-                .Select(x => x["toolId"].AsInt32).ToHashSet();
-            if (!new[] { 1, 2, 3, 4, 6 }.All(required.Contains)) return Hold("HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING");
+            if (!solo)
+            {
+                var required = worldSpawns.Where(x => x.EventSequence < frame.Event.EventSequence && x.Data["zone"].AsInt32 == sample.Zone)
+                    .Select(x => x.Data["toolId"].AsInt32).ToHashSet();
+                if (!new[] { 1, 2, 3, 4, 6 }.All(required.Contains)) return Hold("HOLD_REQUIRED_SUPPLY_RECEIPTS_MISSING");
+            }
             if (minions.Count != sample.Minions.Length || sample.Minions.Any(x => !minions.TryGetValue(x.NetworkId, out var zone) || zone != x.Zone)) return Hold("HOLD_MINION_CENSUS_MISMATCH");
             if (tools.Count != sample.Tools.Length || sample.Tools.Any(x => !tools.TryGetValue(x.InstanceId, out var tool) ||
                 tool.ToolId != x.ToolId || tool.Zone != x.Zone || tool.Location != x.Location || tool.Owner != x.OwnerUserId ||
