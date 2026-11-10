@@ -69,7 +69,8 @@ public static class ErrorCodes
     public const string AIProfilePolicyNotConfigured = "AI_PROFILE_POLICY_NOT_CONFIGURED";
     public const string AIProfileSourcePending = "AI_PROFILE_SOURCE_PENDING";
     public const string AIProfileSourceInvalid = "AI_PROFILE_SOURCE_INVALID";
-    public const string AIProfileApplyConflict = "AI_PROFILE_APPLY_CONFLICT";
+    public const string AIProfileLineageVersionConflict = "AI_PROFILE_LINEAGE_VERSION_CONFLICT";
+    public const string AIProfileImmutableScoreConflict = "AI_PROFILE_IMMUTABLE_SCORE_CONFLICT";
     public const string AIProfileSourceChanged = "AI_PROFILE_SOURCE_CHANGED";
     public const string TeamProfileMatchNotFound = "TEAM_PROFILE_MATCH_NOT_FOUND";
     public const string TeamProfileSourceChanged = "TEAM_PROFILE_SOURCE_CHANGED";

@@ -387,7 +387,7 @@ public sealed class PlayerAIProfileTests
         var result = await updater.ProcessAsync(fixture.MatchId, fixture.UserId);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal("AI_PROFILE_APPLY_CONFLICT", result.ErrorCode);
+        Assert.Equal("AI_PROFILE_LINEAGE_VERSION_CONFLICT", result.ErrorCode);
     }
 
     [Fact, Trait("Category", "M4PlayerAIProfile")]
@@ -557,7 +557,7 @@ public sealed class PlayerAIProfileTests
         var result = await updater.ProcessAsync(fixture.MatchId, fixture.UserId);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal("AI_PROFILE_APPLY_CONFLICT", result.ErrorCode);
+        Assert.Equal("AI_PROFILE_LINEAGE_VERSION_CONFLICT", result.ErrorCode);
         Assert.Empty(await fixture.Db.MatchScores.ToArrayAsync());
     }
 

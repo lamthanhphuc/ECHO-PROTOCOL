@@ -131,7 +131,7 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
         {
             return ServiceResult<PlayerAIProfileUpdateResult>.Failure(
                 "Configured formula versions do not match the existing profile lineage",
-                ErrorCodes.AIProfileApplyConflict);
+                ErrorCodes.AIProfileLineageVersionConflict);
         }
 
         // MongoDB is deliberately outside the PostgreSQL transaction. Re-read immediately
@@ -196,7 +196,7 @@ public sealed class PlayerAIProfileUpdater : IPlayerAIProfileUpdater
                 {
                     return ServiceResult<PlayerAIProfileUpdateResult>.Failure(
                         "The dimension apply key already has a different immutable score",
-                        ErrorCodes.AIProfileApplyConflict);
+                        ErrorCodes.AIProfileImmutableScoreConflict);
                 }
 
                 continue;

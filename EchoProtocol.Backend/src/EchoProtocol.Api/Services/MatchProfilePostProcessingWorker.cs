@@ -1,3 +1,4 @@
+using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.Entities;
@@ -118,7 +119,8 @@ public sealed class MatchProfilePostProcessingWorker(
     private async Task RetryAsync(AppDbContext db, Guid matchId, DateTime leaseUntil, int attempts, string error, CancellationToken ct)
     {
         // shortcut: retry ends after 20 attempts, add an operator replay path before raising this ceiling.
-        var dead = attempts >= 20;
+        var dead = attempts >= 20 || error is ErrorCodes.AIProfileLineageVersionConflict
+            or ErrorCodes.AIProfileImmutableScoreConflict;
         await db.MatchProfileProcessingJobs.Where(item => item.MatchId == matchId && item.Status == "PROCESSING" &&
             item.LeaseExpiresAtUtc == leaseUntil)
             .ExecuteUpdateAsync(update => update
