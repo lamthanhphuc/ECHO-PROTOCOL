@@ -106,7 +106,7 @@ namespace EchoProtocol.UI.Result
                 string status = PlayerStatus(entry.LifeStatus, entry.HasLifeState, disconnected,
                     state.HuntReady, state.Result == NetworkMatchResult.Win);
                 players.Add(new ResultPlayerSnapshot(name, status, disconnected,
-                    entry.DownCount, entry.ReviveCount));
+                    entry.DownCount, entry.RescuesPerformed));
             }
 
             // Older or partially initialized match objects may have no replicated roster.
@@ -125,8 +125,9 @@ namespace EchoProtocol.UI.Result
                     string status = PlayerStatus(life != null ? life.Status : default, life != null,
                         disconnected, state.HuntReady, state.Result == NetworkMatchResult.Win);
                     players.Add(new ResultPlayerSnapshot(name, status, disconnected,
-                        life != null ? Mathf.Max(0, life.DownCount) : -1,
-                        life != null ? Mathf.Max(0, life.ReviveCount) : -1));
+                        life != null ? Mathf.Max(0, life.MatchDownCount) : -1,
+                        player.TryGetComponent<NetworkPlayerInteractor>(out var interactor)
+                            ? Mathf.Max(0, interactor.FirstAidRevivesUsedThisMatch) : -1));
                 }
             }
 

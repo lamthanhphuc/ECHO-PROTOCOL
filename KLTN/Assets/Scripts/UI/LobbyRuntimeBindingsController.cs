@@ -337,7 +337,7 @@ namespace EchoProtocol.UI
                 {
                     readyText.text = EchoProtocol.Settings.GameLanguage.Choose(
                         _room.IsReady ? "HỦY SẴN SÀNG" : "SẴN SÀNG",
-                        _room.IsReady ? "NOT READY" : "READY");
+                        _room.IsReady ? "CANCEL READY" : "READY");
                 }
             }
 

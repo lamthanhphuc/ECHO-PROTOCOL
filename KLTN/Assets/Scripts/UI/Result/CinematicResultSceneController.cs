@@ -222,7 +222,7 @@ namespace EchoProtocol.UI.Result
                 }
                 SetText($"TeamStatus{i}", player.Status);
                 SetText($"TeamMeta{i}", player.DownedCount >= 0 && player.ReviveCount >= 0
-                    ? $"LAST ZONE: DOWN {player.DownedCount} / REVIVE {player.ReviveCount}"
+                    ? $"DOWN {player.DownedCount} / RESCUES {player.ReviveCount}"
                     : "PERSONNEL STATUS RECORDED");
                 var status = Find<Text>($"TeamStatus{i}");
                 if (status != null) status.color = player.Status == "SURVIVED"

@@ -63,7 +63,8 @@ namespace EchoProtocol.UI
             if (string.IsNullOrWhiteSpace(name))
             {
                 name =
-                    $"Player {_playerState.Object.InputAuthority.PlayerId}";
+                    GameLanguage.Choose($"Người chơi {_playerState.Object.InputAuthority.PlayerId}",
+                        $"Player {_playerState.Object.InputAuthority.PlayerId}");
             }
 
             string displayName = name;
@@ -182,6 +183,7 @@ namespace EchoProtocol.UI
             _nameText =
                 textObject.GetComponent<TextMeshProUGUI>();
 
+            UiTypographyTheme.Apply(_nameText);
             _nameText.alignment =
                 TextAlignmentOptions.Center;
 
@@ -232,11 +234,10 @@ namespace EchoProtocol.UI
             _stateText =
                 textObject.GetComponent<TextMeshProUGUI>();
 
+            UiTypographyTheme.Apply(_stateText);
             _stateText.alignment =
-                TextAlignmentOptions.Top;
-
-            _stateText.text =
-                "NOT READY";
+                TextAlignmentOptions.Center;
+            _stateText.text = string.Empty;
 
             _stateText.color =
                 NotReadyColor;
@@ -245,7 +246,10 @@ namespace EchoProtocol.UI
             _stateText.fontStyle =
                 FontStyles.Bold;
 
-            _stateText.characterSpacing = 2f;
+            _stateText.characterSpacing = 0f;
+            _stateText.enableAutoSizing = true;
+            _stateText.fontSizeMin = 8f;
+            _stateText.fontSizeMax = 10.5f;
 
             _stateText.textWrappingMode =
                 TextWrappingModes.NoWrap;

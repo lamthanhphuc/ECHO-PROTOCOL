@@ -1581,7 +1581,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "E C H O _ P R O T O C O L"
+  m_Text: "E C H O  P R O T O C O L"
 --- !u!222 &3100000063
 CanvasRenderer:
   m_ObjectHideFlags: 0

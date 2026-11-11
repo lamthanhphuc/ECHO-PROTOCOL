@@ -990,7 +990,7 @@ int petId = 0;
                 readyButton.interactable = inLobby;
                 var label = readyButton.GetComponentInChildren<TMP_Text>();
                 if (label != null) label.text = EchoProtocol.Settings.GameLanguage.Choose(
-                    _room.IsReady ? "HỦY SẴN SÀNG" : "SẴN SÀNG", _room.IsReady ? "NOT READY" : "READY");
+                    _room.IsReady ? "HỦY SẴN SÀNG" : "SẴN SÀNG", _room.IsReady ? "CANCEL READY" : "READY");
             }
             if (startButton != null) startButton.interactable = inLobby && _room.IsHost && _room.CanStartMatch;
             if (leaveButton != null) leaveButton.interactable = Connected && !Busy;
