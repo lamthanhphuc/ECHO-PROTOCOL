@@ -79,9 +79,10 @@ namespace EchoProtocol.AI.AED
 
         public void RecordToolSpawn(string instanceId, int toolId, int zone, long tick, string occurrenceKey) =>
             RecordToolSpawnWithCharges(instanceId, toolId, zone, tick, occurrenceKey, null);
-        public void RecordToolSpawnWithCharges(string instanceId, int toolId, int zone, long tick, string occurrenceKey, int? remainingCharges)
+        public void RecordToolSpawnWithCharges(string instanceId, int toolId, int zone, long tick, string occurrenceKey, int? remainingCharges, bool medkitSupply = false)
         {
-            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey, "WorldSpawn", remainingCharges);
+            RecordOriginToolSpawn(instanceId, toolId, zone, tick, occurrenceKey,
+                medkitSupply ? "MedkitSupply" : "WorldSpawn", remainingCharges);
         }
 
         public void RecordSceneToolSpawn(string instanceId, int toolId, long tick, string occurrenceKey) =>

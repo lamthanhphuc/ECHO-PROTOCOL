@@ -656,7 +656,7 @@ namespace EchoProtocol.Telemetry
         {
             ValidateTool(toolId, zone);
             MatchTelemetryAdapter.RequireText(instanceId, nameof(instanceId));
-            MatchTelemetryAdapter.RequireOneOf(origin, nameof(origin), "WorldSpawn", "ScenePlaced");
+            MatchTelemetryAdapter.RequireOneOf(origin, nameof(origin), "WorldSpawn", "ScenePlaced", "MedkitSupply");
             if (remainingCharges.HasValue && (toolId is not (2 or 4) || remainingCharges.Value is < 1 or > 3)) throw new ArgumentException("AED_P8_SPAWN_CHARGES_INVALID");
             var data = new TelemetryJsonObject().AddString("instanceId", instanceId).AddInteger("toolId", toolId)
                 .AddInteger("zone", zone).AddString("action", "SPAWN").AddString("origin", origin);

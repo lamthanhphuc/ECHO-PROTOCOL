@@ -446,6 +446,51 @@ namespace EchoProtocol.TeamTools
             return plans.Count == targetCount;
         }
 
+        internal static int MaintainZoneMedkits(NetworkRunner runner, TeamToolPickupCatalog catalog,
+            int zone, int targetCount, int maximumSpawns, float spacing)
+        {
+            const int toolId = LobbyPlayerState.FirstAidKitToolId;
+            if (catalog == null || !EchoProtocol.AI.AED.AEDV02SceneSource.TryLoad(out var manifest, out _) ||
+                !UnityEngine.SceneManagement.SceneManager.GetSceneByPath(manifest.ScenePath).isLoaded)
+                return -1;
+
+            var markers = manifest.Markers.Where(x => x.Kind == "TOOL" && x.Zone == zone &&
+                x.AllowedToolIds.Contains(toolId)).ToDictionary(x => x.Id, StringComparer.Ordinal);
+            int available = UnityEngine.Object.FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Exclude)
+                .Count(pickup => pickup.Runner == runner && pickup.Object != null && pickup.Object.IsValid &&
+                    pickup.ToolId == toolId && pickup.IsAvailableWorldSource && !pickup.MonsterToolCarrierId.IsValid &&
+                    markers.ContainsKey(pickup.V02SourceMarkerId ?? EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(pickup.transform)));
+            if (available >= targetCount || maximumSpawns == 0) return available;
+            var entry = manifest.Markers.SingleOrDefault(x => x.Id == $"Z{zone}_ENTRY");
+            if (entry == null || !EchoProtocol.AI.AED.AEDV02SceneSource.TryGetDoorSources(runner, NetworkMatchState.Instance, out var doors))
+                return available;
+            var entryPosition = new Vector3((float)entry.X, (float)entry.Y, (float)entry.Z);
+
+            var points = UnityEngine.Object.FindObjectsByType<TeamToolSpawnPoint>(FindObjectsInactive.Exclude)
+                .Where(point => point.gameObject.scene.path == manifest.ScenePath && point.Zone == (TeamToolSpawnZone)zone &&
+                    markers.TryGetValue(EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(point.transform), out var marker) &&
+                    point.TryGetSpawnPosition(out var position) &&
+                    manifest.TryIsInsideSafeRoom(marker.X, marker.Y, marker.Z, out var markerInside) && !markerInside &&
+                    manifest.TryIsInsideSafeRoom(position.x, position.y, position.z, out var positionInside) && !positionInside &&
+                    Math.Pow(position.x - marker.X, 2) + Math.Pow(position.z - marker.Z, 2) <= .75 * .75 &&
+                    Math.Abs(position.y - marker.Y) <= 1 &&
+                    TryV02EntryPath(entryPosition, position, out var path) &&
+                    manifest.TryValidatePlacementPath(path, doors, out _)).ToArray();
+            var usedPoints = new HashSet<TeamToolSpawnPoint>();
+            var positions = new List<Vector3>();
+            var roomUse = new Dictionary<int, int>();
+            for (int i = 0; i < maximumSpawns && available < targetCount; i++)
+            {
+                if (!TryPlanTool(catalog, points, (TeamToolSpawnZone)zone, toolId, usedPoints, positions, roomUse, spacing, out var plan))
+                    break;
+                var spawned = SpawnPlannedTool(runner, plan);
+                if (spawned == null) break;
+                MatchAuthorityRuntime.Instance.RecordPhase8ToolSpawn(spawned.Id, toolId, zone, runner.Tick.Raw, medkitSupply: true);
+                available++;
+            }
+            return available;
+        }
+
         private static bool TryPlanTool(
             TeamToolPickupCatalog catalog,
             TeamToolSpawnPoint[] points,

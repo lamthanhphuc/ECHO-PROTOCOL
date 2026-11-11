@@ -393,7 +393,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
             x.MatchId == matchId && x.Participated, ct) == 1;
         if (solo)
         {
-            samples = samples.Where(world => world.Supply == null && !world.Tools.Any(tool => tool.Origin == "WorldSpawn")).ToArray();
+            samples = samples.Where(world => world.Supply == null && !world.Tools.Any(tool => tool.Origin is "WorldSpawn" or "MedkitSupply")).ToArray();
             if (samples.Length == 0) return Fail("HOLD_SOLO_TEAM_SUPPLY_DISABLED");
         }
         bool requireStalker = decision.DecisionPoint == "PRE_MATCH" || effect.Consumer == "StalkerFusionRuntime";

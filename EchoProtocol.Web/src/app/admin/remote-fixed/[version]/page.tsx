@@ -1,7 +1,7 @@
 import { RemoteFixedActivation } from "@/components/admin/remote-fixed-activation";
 import Link from "next/link";
 import { MatchContentSummary } from "@/components/admin/match-content-summary";
-import { difficultyLabel, gameplayLabel, mapLabel } from "@/lib/utils/game-labels";
+import { difficultyLabel, gameplayLabel, mapLabel, minionAttackDamage } from "@/lib/utils/game-labels";
 import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
@@ -29,7 +29,7 @@ export default async function RemoteFixedDetailPage({ params }: { params: Promis
   const groups = [
     { title: "Người chơi", key: "player", fields: [["maxHealth", "Máu tối đa"], ["walkSpeed", "Tốc độ đi"], ["sprintSpeed", "Tốc độ chạy"], ["maxStamina", "Thể lực tối đa"]] },
     { title: "Kẻ săn đuổi", key: "stalker", fields: [["patrolSpeed", "Tốc độ tuần tra"], ["chaseSpeed", "Tốc độ truy đuổi"]] },
-    { title: "Quái phụ", key: "minion", fields: [["roamSpeed", "Tốc độ lang thang"], ["trackSpeed", "Tốc độ theo dấu"], ["attackDamage", "Sát thương tấn công"]] },
+    { title: "Quái phụ", key: "minion", fields: [["roamSpeed", "Tốc độ lang thang"], ["trackSpeed", "Tốc độ theo dấu"]] },
   ];
   const scope = queryString({ mapId: detail.mapId, difficulty: detail.difficulty, page: 1, pageSize: 100 });
   const history = await adminApi.remoteFixedHistory(scope);
@@ -53,6 +53,7 @@ export default async function RemoteFixedDetailPage({ params }: { params: Promis
       <Panel><h2 className="admin-section-title mb-3">Thông số cân bằng</h2>
         {content && <div className="mb-4"><MatchContentSummary map={detail.mapId} {...content} difficulty={detail.difficulty} /></div>}
         {snapshot ? groups.map((group) => <div key={group.key} className="mb-4"><h3 className="mb-2 font-semibold">{group.title}</h3><dl className="grid gap-2 sm:grid-cols-2">{group.fields.map(([key, label]) => <div key={key} className="flex justify-between gap-3 border-b border-[var(--line)] py-1 text-sm"><dt className="muted">{label}</dt><dd>{(snapshot?.[group.key] as Record<string, number> | undefined)?.[key] ?? "—"}</dd></div>)}</dl></div>) : <p role="alert" className="text-rose-300">Không đọc được thông số cấu hình.</p>}
+        <p className="muted mb-3 text-sm">Sát thương Minion trong bản game mới cố định {minionAttackDamage} HP mỗi đòn.</p>
         {overrides.length > 0 && <div>
           <h3 className="mb-2 font-semibold">Thông số RFB-2</h3>
           <dl className="grid gap-2 sm:grid-cols-2">{overrides.map((entry) => <div className="flex justify-between gap-2 text-sm" key={entry.key}>

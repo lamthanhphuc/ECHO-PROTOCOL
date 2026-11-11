@@ -8,6 +8,7 @@ namespace EchoProtocol.Api.Services;
 public static class RemoteFixedBalanceContract
 {
     public const string ProtocolVersion = "RFB-1";
+    public const int MinionAttackDamage = 10;
     public const string GameplaySchema = "RFB-2";
     public const string Standard = "STANDARD";
     public const string TestOnly = "TEST_ONLY";
@@ -108,6 +109,9 @@ public static class RemoteFixedBalanceContract
                     ("roamSpeed", 0.5m, 20),
                     ("trackSpeed", 0.5m, 25),
                     ("attackDamage", 1, 100)))
+                return false;
+
+            if (!allowRetiredFields && root.GetProperty("minion").GetProperty("attackDamage").GetDecimal() != MinionAttackDamage)
                 return false;
 
             var player = root.GetProperty("player");

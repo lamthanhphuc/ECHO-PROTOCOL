@@ -181,7 +181,6 @@ MonoBehaviour:
   meleeRange: 2.2
   shootRange: 10
   stealToolRange: 3
-  attackDamage: 20
   attackKnockbackSpeed: 10
   attackKnockbackSeconds: 0.2
   attackCooldownSeconds: 0.65

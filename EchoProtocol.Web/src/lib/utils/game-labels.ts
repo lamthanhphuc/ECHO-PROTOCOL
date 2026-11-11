@@ -26,3 +26,5 @@ export const gameplayLabel = (label: string) => label
   .replace(/\bconvoy\b/gi, "xe hộ tống")
   .replace("Nhịp spawn Purge", "Thời gian giữa hai lượt Fishcat xuất hiện")
   .replace("Số chặng chạy được sau mỗi lần nạp", "Số chặng sau mỗi lần nạp");
+
+export const minionAttackDamage = 10;

@@ -109,7 +109,8 @@ internal static class TelemetryV12LifecycleValidator
             if (data.TryGetProperty("remainingCharges", out var spawnCharges) && spawnCharges.ValueKind != JsonValueKind.Null &&
                 (toolId is not (2 or 4) || !spawnCharges.TryGetInt32(out var spawnUses) || spawnUses is < 1 or > 3)) return false;
             return !data.TryGetProperty("origin", out _) ||
-                   StringIn(data, "origin", "WorldSpawn", "ScenePlaced");
+                   StringIn(data, "origin", "WorldSpawn", "ScenePlaced") ||
+                   toolId == 3 && zone >= 1 && StringIn(data, "origin", "MedkitSupply");
         }
 
         if (data.TryGetProperty("origin", out _)) return false;

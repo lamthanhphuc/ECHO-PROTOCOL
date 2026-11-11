@@ -15,6 +15,7 @@ public sealed partial class ScenarioServiceTests
 {
     [Theory, Trait("Category", "AEDV02")]
     [InlineData("valid")]
+    [InlineData("extra-medkit")]
     [InlineData("missing-source")]
     [InlineData("split-evidence")]
     [InlineData("missing-required")]
@@ -33,6 +34,12 @@ public sealed partial class ScenarioServiceTests
         manifest.Markers = manifest.Markers.Concat(Enumerable.Range(2, 2).SelectMany(zone => ids.Select(id =>
             new AEDV02SceneMarker { Id = $"z{zone}:tool:{id}", Zone = zone, Kind = "TOOL", AllowedToolIds = [id] })))
             .Append(new AEDV02SceneMarker { Id = "optional-marker", Zone = 1, Kind = "TOOL", AllowedToolIds = [3], X = 3 }).ToArray();
+        if (mutation == "extra-medkit")
+            manifest.Markers = manifest.Markers.Append(new AEDV02SceneMarker
+                { Id = "medkit-marker", Zone = 1, Kind = "TOOL", AllowedToolIds = [3], X = 4 }).ToArray();
+        if (mutation == "extra-medkit")
+            manifest.Edges = manifest.Edges.Append(new AEDV02RouteEdge
+                { Id = "medkit-edge", From = "Z1_ENTRY", To = "medkit-marker", PathMeters = 4 }).ToArray();
         manifest.Edges = manifest.Edges.Append(new AEDV02RouteEdge { Id = "optional-edge", From = "Z1_ENTRY", To = "optional-marker", PathMeters = 3 }).ToArray();
         f.Db.AEDV02SceneContents.Remove(content);
         var json = JsonSerializer.Serialize(manifest); var scene = AEDV02Plan.Hash(json);
@@ -52,6 +59,10 @@ public sealed partial class ScenarioServiceTests
         events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, Now.AddSeconds(2), "1.2", new BsonDocument {
             ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 599 },
             ["data"] = new BsonDocument { ["action"] = "SPAWN", ["instanceId"] = "optional:1", ["toolId"] = 3, ["zone"] = 1, ["origin"] = "WorldSpawn" } }));
+        if (mutation == "extra-medkit")
+            events.Add(V02Event(f.MatchId, "TEAM_TOOL_LIFECYCLE", events.Count + 1, Now.AddSeconds(2), "1.2", new BsonDocument {
+                ["context"] = new BsonDocument { ["phase"] = "CORE_COLLECTION", ["authorityTick"] = 599 },
+                ["data"] = new BsonDocument { ["action"] = "SPAWN", ["instanceId"] = "medkit:1", ["toolId"] = 3, ["zone"] = 1, ["origin"] = "MedkitSupply" } }));
         var effect = V02Effect(f, events, approval.Data, "AEDPolicyEnvelope", AEDV02Key.CabinetAmbushEnabled, 600, events.Count + 1, Now.AddSeconds(3));
         events.Add(effect);
         int ordinal = 0;
@@ -61,6 +72,9 @@ public sealed partial class ScenarioServiceTests
             world.PlanRevision = 1; world.PlanFingerprint = plan.Fingerprint(); world.SceneManifestFingerprint = scene;
             world.Tools = world.Tools.Append(new AEDV02ToolSource { InstanceId = "optional:1", ToolId = 3, Zone = 1,
                 Origin = "WorldSpawn", Location = "World", MarkerId = "optional-marker", RouteEdgeIds = ["optional-edge"], X = 3 }).ToArray();
+            if (mutation == "extra-medkit")
+                world.Tools = world.Tools.Append(new AEDV02ToolSource { InstanceId = "medkit:1", ToolId = 3, Zone = 1,
+                    Origin = "MedkitSupply", Location = "World", MarkerId = "medkit-marker", RouteEdgeIds = ["medkit-edge"], X = 4 }).ToArray();
             world.Supply = new AEDV02SupplySource { InitialOptionalBudget = 1, OptionalBudget = 1, OptionalMaterialized = 1, SpawnedZones = [1],
                 Reservations = manifest.Markers.Where(x => x.Zone > 1 && x.Kind == "TOOL").Select(x => new AEDV02SupplyReservation
                 { Zone = x.Zone, ToolId = x.AllowedToolIds.Single(), MarkerId = x.Id }).ToArray() };
@@ -84,7 +98,7 @@ public sealed partial class ScenarioServiceTests
         events.Clear(); events.AddRange(accepted);
         var receipt = new AEDV02ReceiptRequest(Guid.NewGuid(), effect.Id, 1, plan.Fingerprint(), 600);
         var confirmed = await service.ConfirmAsync(f.HostId, f.MatchId, approval.Data.DecisionId, receipt);
-        if (mutation != "valid")
+        if (mutation is not ("valid" or "extra-medkit"))
         { Assert.False(confirmed.IsSuccess); Assert.Equal("HOLD_SUPPLY_RESERVATION_SOURCE_REQUIRED", confirmed.Message); return; }
         Assert.True(confirmed.IsSuccess, confirmed.Message); Assert.Equal("APPLIED", confirmed.Data!.ApplyStatus);
         Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, approval.Data.DecisionId, receipt)).Data!.IsReplay);
@@ -93,7 +107,7 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal(1, source.Data.Supply!.InitialOptionalBudget); Assert.Equal(1, source.Data.Supply.OptionalMaterialized);
         Assert.Equal(0, source.Data.Zone3MinionPopulation);
         Assert.All(events.Where(x => x.EventType == "AED_V02_WORLD_SAMPLE"), x =>
-            Assert.Equal(6, JsonSerializer.Deserialize<AEDV02WorldSample>(x.ValueJson["data"]["world"].ToJson())!.Tools.Length));
+            Assert.Equal(mutation == "extra-medkit" ? 7 : 6, JsonSerializer.Deserialize<AEDV02WorldSample>(x.ValueJson["data"]["world"].ToJson())!.Tools.Length));
     }
 
     [Theory, Trait("Category", "AEDV02")]

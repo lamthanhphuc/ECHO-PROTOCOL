@@ -5,18 +5,17 @@ import { useRouter } from "next/navigation";
 import type { RemoteGameplayField } from "@/lib/types/profile-tuning";
 import type { MatchContent } from "@/lib/types/operations";
 import { MatchContentSummary } from "./match-content-summary";
-import { difficultyLabel, gameplayGroupLabel, gameplayLabel, mapLabel } from "@/lib/utils/game-labels";
+import { difficultyLabel, gameplayGroupLabel, gameplayLabel, mapLabel, minionAttackDamage } from "@/lib/utils/game-labels";
 
 const initial = {
   maxHealth: 100, walkSpeed: 4, sprintSpeed: 7, maxStamina: 100,
-  patrolSpeed: 3, chaseSpeed: 6, roamSpeed: 3, trackSpeed: 5, attackDamage: 10,
+  patrolSpeed: 3, chaseSpeed: 6, roamSpeed: 3, trackSpeed: 5,
 };
 const fields = [
   ["maxHealth", "Máu tối đa", 1, 500], ["walkSpeed", "Tốc độ đi", .5, 15],
   ["sprintSpeed", "Tốc độ chạy", .5, 25], ["maxStamina", "Thể lực tối đa", 1, 500],
   ["patrolSpeed", "Tốc độ tuần tra", .5, 20], ["chaseSpeed", "Tốc độ truy đuổi", .5, 25],
   ["roamSpeed", "Tốc độ lang thang", .5, 20], ["trackSpeed", "Tốc độ theo dấu", .5, 25],
-  ["attackDamage", "Sát thương tấn công", 1, 100],
 ] as const;
 
 export function RemoteFixedCreateForm({ gameplayFields, content }: { gameplayFields: RemoteGameplayField[]; content: MatchContent }) {
@@ -53,7 +52,7 @@ export function RemoteFixedCreateForm({ gameplayFields, content }: { gameplayFie
       schemaVersion: "RFB-2",
       player: { maxHealth: values.maxHealth, walkSpeed: values.walkSpeed, sprintSpeed: values.sprintSpeed, maxStamina: values.maxStamina },
       stalker: { patrolSpeed: values.patrolSpeed, chaseSpeed: values.chaseSpeed },
-      minion: { roamSpeed: values.roamSpeed, trackSpeed: values.trackSpeed, attackDamage: values.attackDamage },
+      minion: { roamSpeed: values.roamSpeed, trackSpeed: values.trackSpeed, attackDamage: minionAttackDamage },
       gameplay,
       content: { gameVersion, mode: variant.mode, monster: variant.monster, route: variant.route },
     });
@@ -85,10 +84,10 @@ export function RemoteFixedCreateForm({ gameplayFields, content }: { gameplayFie
       </select></label>
     </div>
     {variant && <MatchContentSummary {...variant} gameVersion={gameVersion} difficulty={difficulty} />}
-    {[{ title: "Người chơi", start: 0, end: 4 }, { title: "Kẻ săn đuổi", start: 4, end: 6 }, { title: "Quái phụ", start: 6, end: 9 }].map((group) =>
+    {[{ title: "Người chơi", start: 0, end: 4 }, { title: "Kẻ săn đuổi", start: 4, end: 6 }, { title: "Quái phụ", start: 6, end: 8 }].map((group) =>
       <fieldset key={group.title} className="rounded border border-[var(--line)] p-4"><legend className="px-2 font-semibold">{group.title}</legend><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {fields.slice(group.start, group.end).map(([key, label, min, max]) => <label className="admin-field" key={key}>{label}<input className="input" type="number" required step="any" min={min} max={max} value={values[key]} onChange={(e) => setValues({ ...values, [key]: e.target.valueAsNumber })} /></label>)}
-      </div></fieldset>)}
+      </div>{group.start === 6 && <p className="muted mt-3 text-sm">Sát thương Minion cố định {minionAttackDamage} HP mỗi đòn.</p>}</fieldset>)}
     <details className="rounded border border-[var(--line)] p-4">
       <summary className="cursor-pointer font-semibold">Cân bằng gameplay mở rộng</summary>
       <p className="muted my-3 text-sm">Để trống để dùng mặc định của bản đồ và độ khó. Trận dùng tùy chỉnh cần build hỗ trợ RFB-2.</p>

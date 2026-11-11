@@ -158,7 +158,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.DoesNotContain("|| !movement.TryApplySlowAuthoritative", attack);
             StringAssert.Contains("CommitAttack(CreepMinionAttackKind.MeleeSlow)", attack);
             Assert.That(attack.IndexOf("CommitAttack(CreepMinionAttackKind.MeleeSlow)", System.StringComparison.Ordinal),
-                Is.LessThan(attack.IndexOf("life.TryApplyAuthoritativeDamage(attackDamage, \"MINION_DISRUPTOR\"", System.StringComparison.Ordinal)));
+                Is.LessThan(attack.IndexOf("life.TryApplyAuthoritativeDamage(AttackDamage, \"MINION_DISRUPTOR\"", System.StringComparison.Ordinal)));
             StringAssert.Contains(": CreepMinionAttackKind.ShootSlow", dive);
             StringAssert.Contains("CommitAttack(attackKind)", dive);
 
@@ -209,8 +209,8 @@ namespace EchoProtocol.Networking.Tests
                 "private void BeginToolDive",
                 "public void GetToolCarryPose");
 
-            StringAssert.Contains("life.TryApplyAuthoritativeDamage(attackDamage", attack);
-            StringAssert.Contains("life.TryApplyAuthoritativeDamage(attackDamage, \"MINION\"", dive);
+            StringAssert.Contains("life.TryApplyAuthoritativeDamage(AttackDamage", attack);
+            StringAssert.Contains("life.TryApplyAuthoritativeDamage(AttackDamage, \"MINION\"", dive);
             StringAssert.Contains("TryApplyKnockbackAuthoritative", attack);
             StringAssert.Contains("TryApplyKnockbackAuthoritative", dive);
             StringAssert.Contains("public bool TryApplyKnockbackAuthoritative", movement);
@@ -228,8 +228,8 @@ namespace EchoProtocol.Networking.Tests
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
             var runtime = FindComponentByTypeName(prefab, "EchoProtocol.AI.Minions.CreepMinionRuntime");
-            Assert.That(new SerializedObject(runtime).FindProperty("attackDamage").floatValue,
-                Is.EqualTo(20f));
+            StringAssert.Contains("private const float AttackDamage = 10f;", source);
+            Assert.That(new SerializedObject(runtime).FindProperty("attackDamage"), Is.Null);
             Assert.That(new SerializedObject(runtime).FindProperty("attackKnockbackSpeed").floatValue,
                 Is.EqualTo(10f));
             Assert.That(new SerializedObject(runtime).FindProperty("attackKnockbackSeconds").floatValue,

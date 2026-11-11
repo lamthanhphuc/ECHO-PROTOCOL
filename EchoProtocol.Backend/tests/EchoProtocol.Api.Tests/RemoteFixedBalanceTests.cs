@@ -11,11 +11,20 @@ public sealed class RemoteFixedBalanceTests
           "schemaVersion": "RFB-1",
           "player": { "maxHealth": 100, "walkSpeed": 4, "sprintSpeed": 7, "maxStamina": 100 },
           "stalker": { "patrolSpeed": 6, "chaseSpeed": 7 },
-          "minion": { "roamSpeed": 5.5, "trackSpeed": 8, "attackDamage": 20 }
+          "minion": { "roamSpeed": 5.5, "trackSpeed": 8, "attackDamage": 10 }
         }
         """;
 
     [Fact] public void ValidSnapshot_IsAccepted() => Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(ValidSnapshot));
+    [Fact]
+    public void OldMinionDamageRemainsReadableButCannotBePublished()
+    {
+        var legacy = ValidSnapshot.Replace("\"attackDamage\": 10", "\"attackDamage\": 20");
+        Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(legacy));
+        Assert.False(RemoteFixedBalanceContract.IsValidSnapshot(legacy, allowRetiredFields: false));
+        Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(ValidSnapshot, allowRetiredFields: false));
+    }
+
     [Fact] public void InvalidJson_IsRejected() => Assert.False(RemoteFixedBalanceContract.IsValidSnapshot("{invalid}"));
 
     [Fact]

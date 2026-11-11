@@ -56,6 +56,7 @@ namespace EchoProtocol.Networking
         public NetworkPlayerLifeStatus LifeStatus;
         public int DownCount;
         public int ReviveCount;
+        public int RescuesPerformed;
         public NetworkBool HasObjectiveContribution;
     }
 
@@ -767,6 +768,7 @@ namespace EchoProtocol.Networking
             }
 
             TickV02Supply();
+            TickMultiplayerMedkitSupply();
 
             if (MatchTimer.Expired(Runner))
             {
@@ -3243,8 +3245,10 @@ namespace EchoProtocol.Networking
                 Disconnected = player.Disconnected,
                 HasLifeState = life != null,
                 LifeStatus = life != null ? life.Status : NetworkPlayerLifeStatus.Alive,
-                DownCount = life != null ? Mathf.Max(0, life.DownCount) : -1,
+                DownCount = life != null ? Mathf.Max(0, life.MatchDownCount) : -1,
                 ReviveCount = life != null ? Mathf.Max(0, life.ReviveCount) : -1,
+                RescuesPerformed = player.TryGetComponent<NetworkPlayerInteractor>(out var interactor)
+                    ? Mathf.Max(0, interactor.FirstAidRevivesUsedThisMatch) : -1,
                 HasObjectiveContribution = player.HasObjectiveContribution
             };
 
@@ -3257,6 +3261,7 @@ namespace EchoProtocol.Networking
                 && previous.LifeStatus == entry.LifeStatus
                 && previous.DownCount == entry.DownCount
                 && previous.ReviveCount == entry.ReviveCount
+                && previous.RescuesPerformed == entry.RescuesPerformed
                 && (bool)previous.HasObjectiveContribution == (bool)entry.HasObjectiveContribution)
                 return;
 

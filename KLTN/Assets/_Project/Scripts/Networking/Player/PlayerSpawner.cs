@@ -78,7 +78,10 @@ namespace EchoProtocol.Networking
         private bool _zone3MonsterSpawned;
         private bool _zone3SpawnFailureLogged;
         private readonly List<NetworkObject> _creepMinionInstances = new List<NetworkObject>();
+        private const float MinionSpawnDelaySeconds = 25f;
         private float _nextMinionSpawnCheckAt;
+        private RegionSemanticZone _minionSpawnZone;
+        private float? _minionSpawnDueAt;
         private bool _zone2MinionsActive;
 
         private bool _missingMinionPrefabLogged;
@@ -1485,18 +1488,31 @@ namespace EchoProtocol.Networking
             }
             int count = originalCount + disruptorCount;
             bool disruptor = disruptorCount < originalCount;
-            if (count >= cap) return;
+            if (_minionSpawnZone != zone)
+            {
+                _minionSpawnZone = zone;
+                _minionSpawnDueAt = null;
+            }
+
+            if (count >= cap)
+            {
+                _minionSpawnDueAt = null;
+                return;
+            }
+
+            _minionSpawnDueAt ??= Time.time + MinionSpawnDelaySeconds;
+            if (Time.time < _minionSpawnDueAt.Value) return;
 
             if (map2 && disruptor)
             {
                 if (TryFindCatfishSpawnPosition(runner, out var catfishPosition))
                 {
-                    SpawnCreepMinion(runner, catfishPosition, zone, true);
+                    SpawnScheduledCreepMinion(runner, catfishPosition, zone, true, count + 1 >= cap);
                     return;
                 }
                 if (TryGetCreepMinionSpawnAnchor(zone, out var fallbackStalker)
                     && TryFindCreepMinionSpawnPosition(runner, fallbackStalker, out var landPosition))
-                    SpawnCreepMinion(runner, landPosition, zone, true);
+                    SpawnScheduledCreepMinion(runner, landPosition, zone, true, count + 1 >= cap);
                 return;
             }
 
@@ -1512,7 +1528,13 @@ namespace EchoProtocol.Networking
                     !manifest.HasReachableGeometry(new[] { (double)stalker.transform.position.x, stalker.transform.position.y, stalker.transform.position.z },
                         new[] { (double)position.x, position.y, position.z }, doors)) return;
             }
-            SpawnCreepMinion(runner, position, zone, map2 ? false : disruptor);
+            SpawnScheduledCreepMinion(runner, position, zone, !map2 && disruptor, count + 1 >= cap);
+        }
+
+        private void SpawnScheduledCreepMinion(NetworkRunner runner, Vector3 position, RegionSemanticZone zone, bool disruptor, bool reachesCap)
+        {
+            if (SpawnCreepMinion(runner, position, zone, disruptor) != null)
+                _minionSpawnDueAt = reachesCap ? null : Time.time + MinionSpawnDelaySeconds;
         }
 
         private sealed class PurgeActivityGroup
@@ -2748,6 +2770,7 @@ var toolId =
             _zone2MinionsActive = false;
 
             _nextMinionSpawnCheckAt = 0f;
+            _minionSpawnDueAt = null;
             _nextCreepMinionVisualVariant = 0;
             _purgeRefillSchedule.Reset();
             _nextPurgeEncounterAt = 0f;

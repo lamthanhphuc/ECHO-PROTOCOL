@@ -56,6 +56,63 @@ namespace EchoProtocol.Networking
         private int _v02SupplyZone;
         private float V02SupplySpacing => RemoteFixedBalanceSnapshot.GameplayValue("toolSpawnSpacing", _teamToolSpawnMinimumSpacing);
 
+        private const int ZoneMedkitTarget = 8;
+        private const int ZoneMedkitRefillThreshold = 2;
+        private const float ZoneMedkitRefillSeconds = 30f;
+        [Networked] private int InitializedMedkitZones { get; set; }
+        [Networked] private int RefillingMedkitZones { get; set; }
+        [Networked] private TickTimer MedkitRefillTimer { get; set; }
+        [Networked] private int MedkitSupplyZone { get; set; }
+        private int _nextMedkitSupplyCheck;
+
+        private void TickMultiplayerMedkitSupply()
+        {
+            var authority = MatchAuthorityRuntime.Instance;
+            if (authority == null || authority.StartedRosterCount < 2 || IsAutomaticSoloMatch ||
+                Status != NetworkMatchStatus.Running || AlienHuntMission.Instance != null ||
+                !TeamToolWorldSpawnInitialized || !EchoProtocol.UI.LobbyGameplaySettings.Enabled("medkits")) return;
+
+            int zone = AEDV02PhaseMap.LogicalPhase(PhaseName(CurrentPhase));
+            if (zone is < 1 or > 3) return;
+            if (AEDV02PlanRevision > 0 && EchoProtocol.TeamTools.TeamToolWorldSpawn.ReadV02Supply(Runner, authority.MatchId)
+                ?.SpawnedZones.Contains(zone) != true) return;
+            if (MedkitSupplyZone != zone)
+            {
+                MedkitSupplyZone = zone;
+                MedkitRefillTimer = default;
+                _nextMedkitSupplyCheck = 0;
+            }
+            if (Runner.Tick.Raw < _nextMedkitSupplyCheck) return;
+            _nextMedkitSupplyCheck = Runner.Tick.Raw + Runner.TickRate;
+
+            int bit = 1 << (zone - 1);
+            bool initial = (InitializedMedkitZones & bit) == 0;
+            bool refilling = (RefillingMedkitZones & bit) != 0;
+            if (!initial && refilling && !MedkitRefillTimer.IsRunning)
+                MedkitRefillTimer = TickTimer.CreateFromSeconds(Runner, ZoneMedkitRefillSeconds);
+            int spawnCount = initial ? ZoneMedkitTarget : refilling && MedkitRefillTimer.Expired(Runner) ? 1 : 0;
+            int available = EchoProtocol.TeamTools.TeamToolWorldSpawn.MaintainZoneMedkits(Runner,
+                _teamToolPickupCatalog, zone, ZoneMedkitTarget, spawnCount, V02SupplySpacing);
+            if (available < 0) return;
+
+            if (initial)
+            {
+                InitializedMedkitZones |= bit;
+                if (available < ZoneMedkitTarget) RefillingMedkitZones |= bit;
+                return;
+            }
+            if (available >= ZoneMedkitTarget)
+            {
+                RefillingMedkitZones &= ~bit;
+                MedkitRefillTimer = default;
+            }
+            else if (!refilling && available <= ZoneMedkitRefillThreshold || refilling && spawnCount > 0)
+            {
+                RefillingMedkitZones |= bit;
+                MedkitRefillTimer = TickTimer.CreateFromSeconds(Runner, ZoneMedkitRefillSeconds);
+            }
+        }
+
         private void TickV02Supply()
         {
             var authority = MatchAuthorityRuntime.Instance;

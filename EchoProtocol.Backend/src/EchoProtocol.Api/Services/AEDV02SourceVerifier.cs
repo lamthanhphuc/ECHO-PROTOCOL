@@ -79,7 +79,7 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
             x.EventType == "TEAM_TOOL_LIFECYCLE").Select(x => (x.EventSequence, Data: x.ValueJson["data"].AsBsonDocument))
             .Where(x => x.Data["action"] == "SPAWN" && x.Data.GetValue("origin", BsonNull.Value) == "WorldSpawn").ToArray();
         if (solo && (worldSpawns.Length != 0 ||
-            frames.Any(x => x.Sample.Supply != null || x.Sample.Tools.Any(tool => tool.Origin == "WorldSpawn"))))
+            frames.Any(x => x.Sample.Supply != null || x.Sample.Tools.Any(tool => tool.Origin is "WorldSpawn" or "MedkitSupply"))))
             return Hold("HOLD_SOLO_TEAM_SUPPLY_DISABLED");
         var planRow = last.Sample.PlanRevision == 0 ? null : await db.AEDV02Decisions.AsNoTracking()
             .SingleOrDefaultAsync(x => x.MatchId == matchId && x.PlanRevision == last.Sample.PlanRevision && x.ApprovalStatus == "APPROVED" && x.ApplyStatus != "ABORTED", ct);
@@ -181,8 +181,8 @@ public sealed partial class AEDV02SourceVerifier(AppDbContext db, ITelemetryEven
             {
                 if (tool.CarrierMinionId.Length != 0) continue;
                 var marker = manifest.Markers.SingleOrDefault(x => x.Id == tool.MarkerId && x.Kind == "TOOL");
-                if (tool.Origin is "WorldSpawn" or "ScenePlaced" && (marker == null || !marker.AllowedToolIds.Contains(tool.ToolId))) return Hold("HOLD_TOOL_PLACEMENT_WHITELIST");
-                if (tool.Origin == "WorldSpawn")
+                if (tool.Origin is "WorldSpawn" or "ScenePlaced" or "MedkitSupply" && (marker == null || !marker.AllowedToolIds.Contains(tool.ToolId))) return Hold("HOLD_TOOL_PLACEMENT_WHITELIST");
+                if (tool.Origin is "WorldSpawn" or "MedkitSupply")
                 {
                     if (marker == null ||
                         marker.Zone != tool.Zone ||

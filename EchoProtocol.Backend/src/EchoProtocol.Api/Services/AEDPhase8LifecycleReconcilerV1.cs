@@ -152,7 +152,8 @@ public static class AEDPhase8LifecycleReconcilerV1
         if (action == "SPAWN")
         {
             if (tools.ContainsKey(id) || charges.HasValue && !ValidInitialCharges(toolId, charges) || data.Contains("ownerUserId") || data.Contains("parentInstanceId")) return false;
-            if (data.Contains("origin") && (!Text(data, "origin", out var origin) || origin is not ("WorldSpawn" or "ScenePlaced"))) return false;
+            if (data.Contains("origin") && (!Text(data, "origin", out var origin) || origin is not ("WorldSpawn" or "ScenePlaced") &&
+                (origin != "MedkitSupply" || toolId != 3 || zone < 1 || roster.Count < 2))) return false;
             tools.Add(id, new Tool(toolId, zone, "World", null, charges, tick,
                 data.Contains("origin") ? data["origin"].AsString : "WorldSpawn")); return true;
         }

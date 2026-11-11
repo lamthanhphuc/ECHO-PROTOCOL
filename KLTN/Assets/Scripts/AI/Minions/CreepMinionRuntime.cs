@@ -190,7 +190,7 @@ namespace EchoProtocol.AI.Minions
         [SerializeField, Min(0.5f)] private float meleeRange = 2.2f;
         [SerializeField] private float shootRange = 10f;
         [SerializeField] private float stealToolRange = 3f;
-        [SerializeField, Min(1f)] private float attackDamage = 20f;
+        private const float AttackDamage = 10f;
         [SerializeField, Min(0f)] private float attackKnockbackSpeed = 10f;
         [SerializeField, Min(0.05f)] private float attackKnockbackSeconds = 0.3f;
         [SerializeField, Min(0.1f)] private float attackCooldownSeconds = 0.65f;
@@ -365,12 +365,11 @@ namespace EchoProtocol.AI.Minions
 
             roamSpeed = snapshot.minion.roamSpeed;
             trackSpeed = snapshot.minion.trackSpeed;
-            attackDamage = snapshot.minion.attackDamage;
 
             Debug.Log(
                 $"[RemoteFixed] Minion applied: " +
                 $"roam={roamSpeed}, track={trackSpeed}, " +
-                $"damage={attackDamage}");
+                $"damage={AttackDamage}");
 
             return true;
         }
@@ -1831,7 +1830,7 @@ namespace EchoProtocol.AI.Minions
                     _spearContactTimer = TickTimer.CreateFromSeconds(Runner, SpearContactSeconds());
                     return;
                 }
-                bool damaged = life.TryApplyAuthoritativeDamage(attackDamage, "MINION_DISRUPTOR", transform.position);
+                bool damaged = life.TryApplyAuthoritativeDamage(AttackDamage, "MINION_DISRUPTOR", transform.position);
                 bool slowed = damaged && disruptorMovement.TryApplySlowAuthoritative(
                     slowMultiplier, slowDurationSeconds);
                 RecordAEDSlowAttempt(slowed);
@@ -2072,7 +2071,7 @@ namespace EchoProtocol.AI.Minions
                         {
                             RecordAEDSlowAttempt(movement.TryApplySlowAuthoritative(
                                 slowMultiplier, slowDurationSeconds));
-                            life.TryApplyAuthoritativeDamage(attackDamage, "MINION", transform.position);
+                            life.TryApplyAuthoritativeDamage(AttackDamage, "MINION", transform.position);
                             movement.TryApplyKnockbackAuthoritative(
                                 target.transform.position - transform.position,
                                 attackKnockbackSpeed,

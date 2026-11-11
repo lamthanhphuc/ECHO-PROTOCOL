@@ -456,7 +456,7 @@ namespace EchoProtocol.Networking.Authority
         }
 
         public void RecordPhase8ToolSpawn(
-            NetworkId instanceId, int toolId, int zone, long tick)
+            NetworkId instanceId, int toolId, int zone, long tick, bool medkitSupply = false)
         {
             if (!HasStateAuthority) return;
             int? charges = null;
@@ -465,11 +465,11 @@ namespace EchoProtocol.Networking.Authority
                     toolObject.TryGetComponent<EchoProtocol.Tools.Scanner.NetworkToolPickup>(out var scannerPickup) ? scannerPickup.RemainingUses : (int?)null;
             if (!_telemetryMatchActive)
             {
-                if (!TryQueueInitialSpawn(() => PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges)))
+                if (!TryQueueInitialSpawn(() => PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges, medkitSupply)))
                     MarkPhase8InventoryEvidenceIncomplete("LIFECYCLE_BEFORE_TELEMETRY_MATCH_START");
                 return;
             }
-            PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges);
+            PublishPhase8ToolSpawn(instanceId, toolId, zone, tick, charges, medkitSupply);
         }
 
         private bool TryQueueInitialSpawn(Action publish)
@@ -480,19 +480,19 @@ namespace EchoProtocol.Networking.Authority
             return true;
         }
 
-        private void PublishPhase8ToolSpawn(NetworkId instanceId, int toolId, int zone, long tick, int? charges)
+        private void PublishPhase8ToolSpawn(NetworkId instanceId, int toolId, int zone, long tick, int? charges, bool medkitSupply)
         {
             try
             {
                 var occurrenceKey = $"p8:tool:{instanceId}:spawn";
                 _aedPhase8Source.RecordToolSpawnWithCharges(
                     instanceId.ToString(), toolId, zone, tick,
-                    occurrenceKey, charges);
+                    occurrenceKey, charges, medkitSupply);
                 TryPublishPhase8Lifecycle(
                     occurrenceKey,
                     () => _telemetry.Phase8LifecycleAdapter.EmitToolSpawnWithCharges(
                         occurrenceKey, DateTime.UtcNow, _currentTelemetryPhase,
-                        instanceId.ToString(), toolId, zone, "WorldSpawn", out _, out _, charges));
+                        instanceId.ToString(), toolId, zone, medkitSupply ? "MedkitSupply" : "WorldSpawn", out _, out _, charges));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 Debug.Log($"[AED_P8][TOOL_SOURCE] action=SPAWN id={instanceId} tool={toolId} zone={zone} tick={tick}");
 #endif
@@ -1214,6 +1214,7 @@ namespace EchoProtocol.Networking.Authority
                                 participant.disconnected;
                     }
 
+                    StartedRosterCount = _migratedResultRoster.Count;
                     break;
                 }
 
@@ -3157,7 +3158,7 @@ namespace EchoProtocol.Networking.Authority
                     survived = NetworkPlayerLifeStateRules.SurvivedMatch(
                         lifeState.Status, matchState != null && matchState.HuntReady,
                         _pendingBackendOutcome == "WIN", disconnected);
-                    downedCount = Mathf.Max(0, lifeState.DownCount);
+                    downedCount = Mathf.Max(0, lifeState.MatchDownCount);
                     reviveCount = Mathf.Max(0, lifeState.ReviveCount);
                 }
 

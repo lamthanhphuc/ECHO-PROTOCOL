@@ -20,6 +20,7 @@ namespace EchoProtocol.AI.AED
                 .AddString("sceneManifestFingerprint", request.sceneManifestFingerprint).AddString("policyVersion", request.policyVersion)
                 .AddString("catalogVersion", request.catalogVersion).AddString("resolutionMode", request.resolutionMode)
                 .AddString("difficulty", request.difficulty).AddString("targetPhaseName", request.targetPhaseName);
+            if (request.supportsRelativePreMatchRelief) json.AddBoolean("supportsRelativePreMatchRelief", true);
             if (request.proposedReservations == null) json.AddNull("proposedReservations");
             else json.AddArray("proposedReservations", request.proposedReservations.Select(x => new TelemetryJsonObject()
                 .AddInteger("zone", x.zone).AddInteger("toolId", x.toolId).AddString("markerId", x.markerId)));

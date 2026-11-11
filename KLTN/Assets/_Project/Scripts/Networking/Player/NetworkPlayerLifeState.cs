@@ -132,6 +132,7 @@ namespace EchoProtocol.Networking
         public NetworkBool IsCrawling { get; private set; }
 
         [Networked] public int DownCount { get; private set; }
+        [Networked] public int MatchDownCount { get; private set; }
         [Networked] public int ReviveCount { get; private set; }
         [Networked] public int AEDv2ReviveBonus { get; private set; }
         [Networked] public uint TransitionOrdinal { get; private set; }
@@ -230,6 +231,7 @@ namespace EchoProtocol.Networking
                 Reviver = PlayerRef.None;
                 IsCrawling = false;
                 DownCount = 0;
+                MatchDownCount = 0;
                 ReviveCount = 0;
                 AEDv2ReviveBonus = 0;
                 RefreshAEDv2ReviveBonusAuthoritative();
@@ -312,6 +314,7 @@ namespace EchoProtocol.Networking
             Reviver = PlayerRef.None;
             IsCrawling = false;
             DownCount = 0;
+            MatchDownCount = 0;
             ReviveCount = 0;
             AEDv2ReviveBonus = 0;
             RefreshAEDv2ReviveBonusAuthoritative();
@@ -609,6 +612,7 @@ namespace EchoProtocol.Networking
             IsCrawling = true;
             DownCount = nextDownCount;
             DropHeldItemsForForcedTransition("DOWN");
+            MatchDownCount++;
             CommitStatus(NetworkPlayerLifeStatus.Downed, NetworkPlayerLifeTransitionCause.Damage);
             MatchAuthorityRuntime.Instance?.RecordPlayerDowned(
                 Object.InputAuthority,
@@ -695,7 +699,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             PausedBleedoutRemainingSeconds = 0f;
             IsCrawling = false;
-            Health = Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
+            Health = usedFirstAidKit ? EffectiveMaximumHealth : Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
             ReviveCount++;
             ProtectionTimer = _reviveProtectionSeconds > 0f
                 ? TickTimer.CreateFromSeconds(Runner, _reviveProtectionSeconds)
