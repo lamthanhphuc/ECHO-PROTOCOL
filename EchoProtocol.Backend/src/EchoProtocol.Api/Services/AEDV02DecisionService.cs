@@ -116,7 +116,7 @@ public sealed partial class AEDV02DecisionService(AppDbContext db, AEDV02SourceV
                     RemoteFixedBalanceContract.ComputeHash(snapshot) != authority.BalanceHash)
                     return Fail("HOLD_LOCKED_BALANCE_INVALID");
             }
-            var (patrol, basis) = RemoteFixedBalanceContract.AdaptiveBasis(snapshot);
+            var (patrol, basis) = RemoteFixedBalanceContract.AdaptiveBasis(snapshot, authority.BalanceBuildVersion);
             bool chaseVerified = settings.Value.ChaseSpeedVerifiedCompatibilityVersions.Contains(authority.BalanceBuildVersion!, StringComparer.Ordinal);
             canResolve = (key, tier) => (key != AEDV02Key.ChaseSpeed || chaseVerified || tier == AEDV02Plan.Normal().Get(key)) &&
                 AEDV02Plan.TryResolveRelative(key, patrol, basis[(int)key], tier, out _);

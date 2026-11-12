@@ -1455,7 +1455,7 @@ namespace EchoProtocol.Networking
                 profile = AEDv2GameplayBridge.ToNormalDifficultyProfile(plan);
             bool map2 = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
             float zone3Cap = RemoteFixedBalanceSnapshot.GameplayValue("minionCapZone3", -1);
-            var zone = _zone3MonsterSpawned && (HasAdaptiveV02Plan() || zone3Cap >= 0)
+            var zone = _zone3MonsterSpawned && (HasAdaptiveV02Plan() || zone3Cap >= 0 || (!map2 && profile.Zone3MinionCap > 0))
                 ? RegionSemanticZone.Zone03 : (_zone2MinionsActive ? RegionSemanticZone.Zone02 : RegionSemanticZone.Zone01);
             int cap = zone == RegionSemanticZone.Zone01 ? profile.Zone1MinionCap : zone == RegionSemanticZone.Zone02 ? profile.Zone2MinionCap : profile.Zone3MinionCap;
             if (zone == RegionSemanticZone.Zone03 && zone3Cap >= 0) cap = (int)zone3Cap;

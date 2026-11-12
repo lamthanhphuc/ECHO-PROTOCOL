@@ -1180,14 +1180,16 @@ namespace EchoProtocol.Networking.Authority
                     }
                     else
                     {
-                        if ((context.balanceSource != null &&
+                        if ((!string.IsNullOrEmpty(context.balanceSource) &&
                              context.balanceSource != "LOCAL")
                             || !string.IsNullOrEmpty(context.balanceVersion)
                             || !string.IsNullOrEmpty(context.balanceHash)
                             || context.matchDataPolicy != "STANDARD")
                         {
                             Debug.LogError(
-                                "[MatchAuthority] Invalid non-remote takeover context.");
+                                $"[MatchAuthority] Invalid non-remote takeover context. Status={context.status}, " +
+                                $"Source={context.balanceSource ?? "<null>"}, Policy={context.matchDataPolicy ?? "<null>"}, " +
+                                $"HasVersion={!string.IsNullOrEmpty(context.balanceVersion)}, HasHash={!string.IsNullOrEmpty(context.balanceHash)}.");
                             return false;
                         }
 
@@ -3159,7 +3161,7 @@ namespace EchoProtocol.Networking.Authority
                         lifeState.Status, matchState != null && matchState.HuntReady,
                         _pendingBackendOutcome == "WIN", disconnected);
                     downedCount = Mathf.Max(0, lifeState.MatchDownCount);
-                    reviveCount = Mathf.Max(0, lifeState.ReviveCount);
+                    reviveCount = Mathf.Max(0, lifeState.MatchReviveCount);
                 }
 
                 players.Add(new SubmitMatchResultPlayerDto

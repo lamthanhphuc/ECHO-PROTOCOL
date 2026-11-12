@@ -15,6 +15,25 @@ public sealed class RemoteFixedBalanceTests
         }
         """;
 
+    [Theory]
+    [InlineData("0.1.0", 0)]
+    [InlineData("0.1.1", 1)]
+    public void AdaptiveBasisKeepsZoneThreeCapForTheLockedGameVersion(string gameVersion, int expected)
+    {
+        Assert.Equal(expected, RemoteFixedBalanceContract.AdaptiveBasis(null, gameVersion).Values[8]);
+        Assert.Equal(expected, RemoteFixedBalanceContract.AdaptiveBasis(ValidSnapshot, gameVersion).Values[8]);
+    }
+
+    [Fact]
+    public void AdaptiveBasisPreservesExplicitWebZoneThreeCap()
+    {
+        const string snapshot = """
+            {"schemaVersion":"RFB-2","stalker":{"patrolSpeed":6,"chaseSpeed":7},
+             "gameplay":[{"key":"minionCapZone3","value":0}]}
+            """;
+        Assert.Equal(0, RemoteFixedBalanceContract.AdaptiveBasis(snapshot, "0.1.1").Values[8]);
+    }
+
     [Fact] public void ValidSnapshot_IsAccepted() => Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(ValidSnapshot));
     [Fact]
     public void OldMinionDamageRemainsReadableButCannotBePublished()

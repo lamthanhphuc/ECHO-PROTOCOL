@@ -31,11 +31,12 @@ public static class RemoteFixedBalanceContract
         return document.RootElement.TryGetProperty("content", out var content) ? content.GetProperty("gameVersion").GetString() : null;
     }
 
-    public static (double Patrol, double[] Values) AdaptiveBasis(string? validatedJson)
+    public static (double Patrol, double[] Values) AdaptiveBasis(string? validatedJson, string? gameVersion)
     {
         var values = AEDV02Plan.Normal().ToArray().Concat(new double[1]).ToArray();
         values[(int)AEDV02Key.Zone1MinionCap] = 3;
         values[(int)AEDV02Key.Zone2MinionCap] = 5;
+        values[(int)AEDV02Key.Zone3AdaptiveMinionCap] = gameVersion == "0.1.1" ? 1 : 0;
         if (validatedJson is null) return (6.5, values);
         using var document = JsonDocument.Parse(validatedJson);
         var root = document.RootElement;

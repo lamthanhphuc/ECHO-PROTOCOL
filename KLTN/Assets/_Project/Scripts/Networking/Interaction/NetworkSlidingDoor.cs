@@ -602,6 +602,8 @@ namespace EchoProtocol.Networking
             return jammer.IsActive;
         }
 
+        internal void RefreshAfterSnapshotRestore() => ApplyReplicatedStateImmediate();
+
         private void ApplyReplicatedStateImmediate()
         {
             ApplyReplicatedState();

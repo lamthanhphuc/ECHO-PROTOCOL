@@ -61,6 +61,7 @@ namespace EchoProtocol.UI
                     deadline = Time.unscaledTime + 15f;
                     while (Valid() && Time.unscaledTime < deadline
                         && (_state.CharacterOutfitId != saved.Outfit || _state.PetSkinId != saved.Skin || _state.ToolId != saved.Tool)) yield return null;
+                    if (!Valid()) yield break;
                     if (_state.CharacterId != saved.Character || _state.PetId != saved.Pet
                         || _state.CharacterOutfitId != saved.Outfit || _state.PetSkinId != saved.Skin
                         || _state.ToolId != saved.Tool)
@@ -75,7 +76,7 @@ namespace EchoProtocol.UI
             _restoring = false;
             _restored = true;
         }
-        private bool Valid() => _state != null && _state.Object != null && _state.Object.IsValid
+        private bool Valid() => _state != null && _state.HasSpawnedState && _state.Object != null && _state.Object.IsValid
             && _state.Object.HasInputAuthority && !_state.IsGameplayPlayer && SceneManager.GetActiveScene().name == "Lobby";
         private void Update()
         {

@@ -446,8 +446,11 @@ namespace EchoProtocol.Networking
         private bool _pendingReadyRequest;
         private NetworkBool _pendingReadyValue;
 
+        internal bool HasSpawnedState { get; private set; }
+
         public override void Spawned()
         {
+            HasSpawnedState = true;
             _pet = GetComponent<PetCompanionController>();
             if (_pet == null) _pet = gameObject.AddComponent<PetCompanionController>();
             AnyStateChanged?.Invoke();
@@ -522,6 +525,7 @@ namespace EchoProtocol.Networking
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            HasSpawnedState = false;
             _pendingReadyRequest = false;
 
             if (_pet != null) Destroy(_pet);

@@ -18,7 +18,7 @@ MonoBehaviour:
     AppIdQuantum: 
     AppIdChat: 
     AppIdVoice: 82f86e16-5185-483d-9b81-c2340032aa0b
-    AppVersion: 
+    AppVersion: 0.1.1
     UseNameServer: 1
     FixedRegion: asia
     Server: 

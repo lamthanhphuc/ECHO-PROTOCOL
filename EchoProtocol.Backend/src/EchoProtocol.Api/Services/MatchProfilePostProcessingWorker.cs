@@ -82,8 +82,9 @@ public sealed class MatchProfilePostProcessingWorker(
                         .Select(x => new { x.AlphaConfigVersion }).SingleOrDefaultAsync(ct);
                     var policyVersion = await ProfileTuningService.ReadAsync(db, lineage == null
                         ? job.ProfileTuningVersion : lineage.AlphaConfigVersion, ct);
-                    var policy = policyVersion is null ? scope.ServiceProvider.GetRequiredService<IPlayerAIProfilePolicy>()
-                        : tuning.PlayerPolicy(policyVersion);
+                    var policy = policyVersion is not null ? tuning.PlayerPolicy(policyVersion)
+                        : lineage?.AlphaConfigVersion == "DEV_PROFILE_ALPHA_V1" ? LegacyDevelopmentPlayerPolicy
+                        : scope.ServiceProvider.GetRequiredService<IPlayerAIProfilePolicy>();
                     var updater = new PlayerAIProfileUpdater(db, new MatchTelemetryAggregator(db, repository, policy), policy, clock);
                     var updated = await updater.ProcessAsync(job.MatchId, userId, ct);
                     if (!updated.IsSuccess)
@@ -115,6 +116,25 @@ public sealed class MatchProfilePostProcessingWorker(
             await RetryAsync(db, job.MatchId, leaseUntil, job.Attempts + 1, exception.GetType().Name, ct);
         }
     }
+
+    // This policy was originally shipped in appsettings.Development.json. Retain its
+    // exact scoring inputs for profiles that already accumulated samples under it.
+    private static readonly IPlayerAIProfilePolicy LegacyDevelopmentPlayerPolicy =
+        new ConfiguredPlayerAIProfilePolicy(Microsoft.Extensions.Options.Options.Create(
+            new EchoProtocol.Api.Configurations.PlayerAIProfileSettings
+            {
+                AlphaConfigVersion = "DEV_PROFILE_ALPHA_V1",
+                NormalizationConfigVersion = "DEV_NOISE_NORM_0_200_V1",
+                ProfileNoiseFilterVersion = "DEV_NOISE_SPRINT_ONLY_V1",
+                SurvivalAlpha = .5m,
+                NoiseAlpha = .5m,
+                ObjectiveAlpha = .3m,
+                ToolUsageAlpha = .3m,
+                ToolUsageCountMax = 5,
+                ProfileNoiseCountMin = 0,
+                ProfileNoiseCountMax = 200,
+                NoisePenaltyTypes = ["SPRINT"]
+            }));
 
     private async Task RetryAsync(AppDbContext db, Guid matchId, DateTime leaseUntil, int attempts, string error, CancellationToken ct)
     {

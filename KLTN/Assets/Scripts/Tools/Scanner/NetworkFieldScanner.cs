@@ -80,6 +80,7 @@ namespace EchoProtocol.Tools.Scanner
         }
 
         private InputAction _switchModeAction;
+        private bool _hadLocalControl;
         private uint _nextSequence;
         private uint _lastProcessedSequence;
         private float _localResultTimer;
@@ -324,6 +325,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _hadLocalControl = false;
             V02LastScan = null;
             _switchModeAction?.Disable();
             ClearLocalResult();
@@ -369,6 +371,20 @@ namespace EchoProtocol.Tools.Scanner
             }
 
             bool isLocal = IsLocalControllingPlayer();
+            if (isLocal != _hadLocalControl)
+            {
+                _hadLocalControl = isLocal;
+                if (isLocal)
+                {
+                    if (Object != null && Object.IsValid) HandleModeChanged();
+                    _switchModeAction?.Enable();
+                }
+                else
+                {
+                    _switchModeAction?.Disable();
+                    ClearLocalResult();
+                }
+            }
             if (isLocal)
             {
                 bool equipped = CanUseScannerLocally();

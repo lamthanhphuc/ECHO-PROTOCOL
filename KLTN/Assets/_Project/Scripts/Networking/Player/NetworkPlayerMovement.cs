@@ -724,6 +724,20 @@ namespace EchoProtocol.Networking
             DeactivateLocalInput();
         }
 
+        private float _nextMovementDiagnosticAt;
+
+        private void TraceMovementBlock(string reason)
+        {
+            if (!Debug.isDebugBuild || !Object.HasInputAuthority || !Object.HasStateAuthority ||
+                Time.unscaledTime < _nextMovementDiagnosticAt) return;
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard == null || !(keyboard.wKey.isPressed || keyboard.aKey.isPressed ||
+                keyboard.sKey.isPressed || keyboard.dKey.isPressed || keyboard.spaceKey.isPressed)) return;
+
+            _nextMovementDiagnosticAt = Time.unscaledTime + 2f;
+            Debug.LogWarning($"[MovementRecovery] reason={reason} tick={Runner.Tick} position={transform.position}");
+        }
+
         public override void FixedUpdateNetwork()
         {
             if (NetworkBootstrap.IsHostMigrationReconciliationPending)
@@ -750,6 +764,7 @@ namespace EchoProtocol.Networking
 
             if (lifeState != null && !lifeState.CanMove)
             {
+                TraceMovementBlock($"life-state-{lifeState.Status}");
                 AnimationMoveX = AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
                 AnimationPushHeld = false;
@@ -760,6 +775,7 @@ namespace EchoProtocol.Networking
             var hidingController = GetComponent<PlayerHidingController>();
             if (IsHidden || (hidingController != null && hidingController.IsHidden))
             {
+                TraceMovementBlock("hiding");
                 AnimationMoveX = 0f;
                 AnimationMoveY = 0f;
                 AnimationSprintHeld = false;
@@ -770,10 +786,12 @@ namespace EchoProtocol.Networking
 
             if (!GetInput(out NetworkPlayerInput input))
             {
+                TraceMovementBlock("missing-network-input");
                 UpdateStaminaAuthoritative(false);
                 return;
             }
 
+            if (input.Move.sqrMagnitude == 0f) TraceMovementBlock("empty-movement-input");
             var localDirection = new Vector3(input.Move.x, 0f, input.Move.y);
             if (localDirection.sqrMagnitude > 1f)
             {

@@ -3246,7 +3246,7 @@ namespace EchoProtocol.Networking
                 HasLifeState = life != null,
                 LifeStatus = life != null ? life.Status : NetworkPlayerLifeStatus.Alive,
                 DownCount = life != null ? Mathf.Max(0, life.MatchDownCount) : -1,
-                ReviveCount = life != null ? Mathf.Max(0, life.ReviveCount) : -1,
+                ReviveCount = life != null ? Mathf.Max(0, life.MatchReviveCount) : -1,
                 RescuesPerformed = player.TryGetComponent<NetworkPlayerInteractor>(out var interactor)
                     ? Mathf.Max(0, interactor.FirstAidRevivesUsedThisMatch) : -1,
                 HasObjectiveContribution = player.HasObjectiveContribution

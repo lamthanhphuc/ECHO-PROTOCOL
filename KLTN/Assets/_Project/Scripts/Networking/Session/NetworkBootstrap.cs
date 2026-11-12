@@ -2852,12 +2852,17 @@ namespace EchoProtocol.Networking
                 retainedPlayers++;
             }
 
-            foreach (var sceneObject in
-                     migrationRunner
-                         .GetResumeSnapshotNetworkSceneObjects())
+            var sceneObjects = System.Linq.Enumerable.ToArray(migrationRunner.GetResumeSnapshotNetworkSceneObjects());
+            foreach (var sceneObject in sceneObjects)
             {
-                sceneObject.Item1.CopyStateFrom(
-                    sceneObject.Item2);
+                sceneObject.Item1.CopyStateFrom(sceneObject.Item2);
+            }
+
+            // Doors can spawn before their state and jammer references have been restored.
+            foreach (var sceneObject in sceneObjects)
+            {
+                sceneObject.Item1.GetComponent<NetworkDoor>()?.RefreshAfterSnapshotRestore();
+                sceneObject.Item1.GetComponent<NetworkSlidingDoor>()?.RefreshAfterSnapshotRestore();
             }
 
             var lifecycle =

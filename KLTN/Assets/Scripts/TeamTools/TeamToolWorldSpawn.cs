@@ -456,10 +456,11 @@ namespace EchoProtocol.TeamTools
 
             var markers = manifest.Markers.Where(x => x.Kind == "TOOL" && x.Zone == zone &&
                 x.AllowedToolIds.Contains(toolId)).ToDictionary(x => x.Id, StringComparer.Ordinal);
-            int available = UnityEngine.Object.FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Exclude)
-                .Count(pickup => pickup.Runner == runner && pickup.Object != null && pickup.Object.IsValid &&
+            var existingMedkits = UnityEngine.Object.FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Exclude)
+                .Where(pickup => pickup.Runner == runner && pickup.Object != null && pickup.Object.IsValid &&
                     pickup.ToolId == toolId && pickup.IsAvailableWorldSource && !pickup.MonsterToolCarrierId.IsValid &&
-                    markers.ContainsKey(pickup.V02SourceMarkerId ?? EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(pickup.transform)));
+                    markers.ContainsKey(pickup.V02SourceMarkerId ?? EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(pickup.transform))).ToArray();
+            int available = existingMedkits.Length;
             if (available >= targetCount || maximumSpawns == 0) return available;
             var entry = manifest.Markers.SingleOrDefault(x => x.Id == $"Z{zone}_ENTRY");
             if (entry == null || !EchoProtocol.AI.AED.AEDV02SceneSource.TryGetDoorSources(runner, NetworkMatchState.Instance, out var doors))
@@ -477,8 +478,18 @@ namespace EchoProtocol.TeamTools
                     TryV02EntryPath(entryPosition, position, out var path) &&
                     manifest.TryValidatePlacementPath(path, doors, out _)).ToArray();
             var usedPoints = new HashSet<TeamToolSpawnPoint>();
-            var positions = new List<Vector3>();
+            var positions = existingMedkits.Select(pickup => pickup.transform.position).ToList();
             var roomUse = new Dictionary<int, int>();
+            var medkitMarkers = existingMedkits.ToLookup(pickup =>
+                pickup.V02SourceMarkerId ?? EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(pickup.transform));
+            foreach (var point in points)
+            {
+                int existingInRoom = medkitMarkers[EchoProtocol.AI.AED.AEDV02SceneSource.MarkerId(point.transform)].Count();
+                if (existingInRoom == 0) continue;
+                roomUse.TryGetValue(point.RoomId, out int count);
+                roomUse[point.RoomId] = count + existingInRoom;
+                usedPoints.Add(point);
+            }
             for (int i = 0; i < maximumSpawns && available < targetCount; i++)
             {
                 if (!TryPlanTool(catalog, points, (TeamToolSpawnZone)zone, toolId, usedPoints, positions, roomUse, spacing, out var plan))

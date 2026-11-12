@@ -132,6 +132,8 @@ namespace EchoProtocol.Networking
                 && matchObject.TryGetComponent(out matchState);
         }
 
+        internal void RefreshAfterSnapshotRestore() => ApplyReplicatedState();
+
         private void ApplyReplicatedState()
         {
             var visual = _doorVisual != null ? _doorVisual : transform;

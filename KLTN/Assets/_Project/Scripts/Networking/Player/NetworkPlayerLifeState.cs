@@ -133,6 +133,7 @@ namespace EchoProtocol.Networking
 
         [Networked] public int DownCount { get; private set; }
         [Networked] public int MatchDownCount { get; private set; }
+        [Networked] public int MatchReviveCount { get; private set; }
         [Networked] public int ReviveCount { get; private set; }
         [Networked] public int AEDv2ReviveBonus { get; private set; }
         [Networked] public uint TransitionOrdinal { get; private set; }
@@ -232,6 +233,7 @@ namespace EchoProtocol.Networking
                 IsCrawling = false;
                 DownCount = 0;
                 MatchDownCount = 0;
+                MatchReviveCount = 0;
                 ReviveCount = 0;
                 AEDv2ReviveBonus = 0;
                 RefreshAEDv2ReviveBonusAuthoritative();
@@ -315,6 +317,7 @@ namespace EchoProtocol.Networking
             IsCrawling = false;
             DownCount = 0;
             MatchDownCount = 0;
+            MatchReviveCount = 0;
             ReviveCount = 0;
             AEDv2ReviveBonus = 0;
             RefreshAEDv2ReviveBonusAuthoritative();
@@ -701,6 +704,7 @@ namespace EchoProtocol.Networking
             IsCrawling = false;
             Health = usedFirstAidKit ? EffectiveMaximumHealth : Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
             ReviveCount++;
+            MatchReviveCount++;
             ProtectionTimer = _reviveProtectionSeconds > 0f
                 ? TickTimer.CreateFromSeconds(Runner, _reviveProtectionSeconds)
                 : TickTimer.None;
@@ -712,7 +716,7 @@ namespace EchoProtocol.Networking
                 ReviveCount,
                 usedFirstAidKit,
                 TransitionOrdinal);
-            Debug.Log($"[LifeState] {Object.InputAuthority} revived by {completedReviver}; protection={_reviveProtectionSeconds:0.##}s.");
+            Debug.Log($"[LifeState] {Object.InputAuthority} revived by {completedReviver}; firstAid={usedFirstAidKit}; hp={Health:0.##}/{EffectiveMaximumHealth:0.##}; protection={_reviveProtectionSeconds:0.##}s.");
         }
 
         private bool CommitEliminated(NetworkPlayerLifeTransitionCause cause, string reason,

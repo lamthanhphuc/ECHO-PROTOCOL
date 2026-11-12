@@ -67,7 +67,8 @@ public sealed class AdaptiveMatchAuditService(AppDbContext db, ITelemetryEventRe
             ? await db.RemoteFixedBalanceVersions.AsNoTracking().Where(x => x.Version == match.BalanceVersion)
                 .Select(x => x.SnapshotJson).SingleOrDefaultAsync(ct) : null;
         var locked = RemoteFixedBalanceContract.AdaptiveBasis(
-            snapshot != null && RemoteFixedBalanceContract.ComputeHash(snapshot) == match.BalanceHash ? snapshot : null).Values;
+            snapshot != null && RemoteFixedBalanceContract.ComputeHash(snapshot) == match.BalanceHash ? snapshot : null,
+            match.BalanceBuildVersion).Values;
         var keys = Enum.GetNames<AEDV02Key>();
         var decisions = ledger.Select(x =>
         {

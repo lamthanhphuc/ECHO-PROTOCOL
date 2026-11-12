@@ -104,7 +104,7 @@ namespace EchoProtocol.AI.AED
                     : decision.resolutionResult != "ADAPTIVE_CONFIG_ISSUED" || decision.usedFixedFallback ||
                       decision.candidateValidationStatus != "VALID" || decision.config.configSource != "ADAPTIVE") ||
                 decision.decisionStatus != "COMMITTED" ||
-                decision.config.unityCompatibilityVersion != Application.version)
+                decision.config.unityCompatibilityVersion != (Application.version == "0.1.1" ? "0.1.0" : Application.version))
             {
                 return false;
             }

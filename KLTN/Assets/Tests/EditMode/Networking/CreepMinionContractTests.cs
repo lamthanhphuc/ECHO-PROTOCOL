@@ -302,7 +302,7 @@ namespace EchoProtocol.Networking.Tests
                 null, new[] { System.Enum.Parse(difficultyType, "Normal") });
             Assert.That((int)normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(3));
             Assert.That((int)normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(5));
-            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(0));
+            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(1));
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
@@ -434,7 +434,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("int count = originalCount + disruptorCount", spawner);
             StringAssert.Contains("TryFindCatfishSpawnPosition(runner, out var catfishPosition)", spawner);
             StringAssert.Contains("if (map2 && disruptor)", spawner);
-            StringAssert.Contains("SpawnCreepMinion(runner, catfishPosition, zone, true)", spawner);
+            StringAssert.Contains("SpawnScheduledCreepMinion(runner, catfishPosition, zone, true,", spawner);
             StringAssert.Contains("playerPositions[attempt % playerPositions.Count]", spawner);
             StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var fallbackStalker)", spawner);
             StringAssert.Contains("SpawnCreepMinion(runner, landPosition, zone, true)", spawner);

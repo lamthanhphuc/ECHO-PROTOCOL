@@ -80,7 +80,7 @@ public sealed class ScenarioService(
             if (useFixedAfterV02Hold && (current is null || current.DecisionId != fallbackFrom || current.HostUserId != callerUserId ||
                 current.UsedFixedFallback || current.ApplyReceipt is not null ||
                 current.PolicyConfigVersion?.StartsWith(AdaptiveConfigurationService.VersionPrefix, StringComparison.Ordinal) != true ||
-                current.ScenarioConfig.UnityCompatibilityVersion != request.UnityCompatibilityVersion ||
+                current.ScenarioConfig.UnityCompatibilityVersion != ScenarioConfigRegistry.RegistryCompatibility(request.UnityCompatibilityVersion) ||
                 current.ExperimentCondition != request.ExperimentCondition?.Trim() ||
                 current.Snapshot.RosterIdentity != snapshotResult.Snapshot.RosterIdentity))
                 return Fail("Adaptive candidate can no longer fall back", ErrorCodes.ScenarioDecisionConflict);

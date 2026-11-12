@@ -10,6 +10,9 @@ namespace EchoProtocol.Api.Services;
 
 public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigRegistry
 {
+    // The 0.1.1 gameplay build still uses the 0.1.0 authored scenario registry.
+    internal static string RegistryCompatibility(string gameVersion) => gameVersion == "0.1.1" ? "0.1.0" : gameVersion;
+
     public async Task<ServiceResult<ScenarioConfigDefinition>> GetActiveAsync(
         string scenarioConfigId,
         string scenarioConfigVersion,
@@ -45,10 +48,11 @@ public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigReg
             return ServiceResult<ScenarioConfigResolution>.Success(
                 new(requested!, false, Array.Empty<string>()));
 
+        var registryVersion = RegistryCompatibility(unityCompatibilityVersion);
         var fallbacks = await db.ScenarioConfigs.AsNoTracking()
             .Where(item => item.ConfigSource == ScenarioConfigSource.Fixed
                 && item.IsFixedFallback && item.IsActive && item.IsProductionApproved
-                && item.UnityCompatibilityVersion == unityCompatibilityVersion)
+                && item.UnityCompatibilityVersion == registryVersion)
             .OrderBy(item => item.ScenarioConfigId)
             .ThenBy(item => item.ScenarioConfigVersion)
             .ToArrayAsync(cancellationToken);
@@ -71,10 +75,11 @@ public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigReg
         string unityCompatibilityVersion,
         CancellationToken cancellationToken = default)
     {
+        var registryVersion = RegistryCompatibility(unityCompatibilityVersion);
         var fallbacks = await db.ScenarioConfigs.AsNoTracking()
             .Where(item => item.ConfigSource == ScenarioConfigSource.Fixed
                 && item.IsFixedFallback && item.IsActive && item.IsProductionApproved
-                && item.UnityCompatibilityVersion == unityCompatibilityVersion)
+                && item.UnityCompatibilityVersion == registryVersion)
             .ToArrayAsync(cancellationToken);
         if (fallbacks.Length != 1)
             return ServiceResult<ScenarioConfigDefinition>.Failure(
@@ -92,13 +97,14 @@ public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigReg
             string unityCompatibilityVersion,
             CancellationToken cancellationToken = default)
     {
+        var registryVersion = RegistryCompatibility(unityCompatibilityVersion);
         var candidates = await db.ScenarioConfigs.AsNoTracking()
             .Where(x =>
                 x.ConfigSource == ScenarioConfigSource.Adaptive &&
                 x.IsActive &&
                 x.IsProductionApproved &&
                 !x.IsFixedFallback &&
-                x.UnityCompatibilityVersion == unityCompatibilityVersion)
+                x.UnityCompatibilityVersion == registryVersion)
             .OrderBy(x => x.ScenarioConfigId)
             .ThenBy(x => x.ScenarioConfigVersion)
             .ToArrayAsync(cancellationToken);
@@ -152,6 +158,6 @@ public sealed class ScenarioConfigRegistry(AppDbContext db) : IScenarioConfigReg
         var content = await db.ScenarioContentDefinitions.AsNoTracking()
             .Where(item => item.ContentWhitelistVersion == config.ContentWhitelistVersion)
             .ToArrayAsync(cancellationToken);
-        return ScenarioConfigValidator.Validate(config, content, unityCompatibilityVersion);
+        return ScenarioConfigValidator.Validate(config, content, RegistryCompatibility(unityCompatibilityVersion));
     }
 }

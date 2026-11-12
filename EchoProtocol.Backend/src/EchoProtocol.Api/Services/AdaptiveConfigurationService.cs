@@ -54,7 +54,10 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
                 Source = x.ConfigSource, x.IsFixedFallback, x.FallbackConfigId, x.FallbackConfigVersion, x.SupportItemBudget, x.ChaseSpeed })
             .ToArray();
         var compatibilities = options.Select(x => x.UnityCompatibilityVersion).Distinct().ToArray();
+        if (compatibilities.Contains("0.1.0") && !compatibilities.Contains("0.1.1"))
+            compatibilities = [.. compatibilities, "0.1.1"];
         compatibility ??= compatibilities.LastOrDefault();
+        var registryCompatibility = compatibility is null ? null : ScenarioConfigRegistry.RegistryCompatibility(compatibility);
         bool chaseVerified = compatibility is not null && ChaseSpeedVerified(compatibility);
         var row = compatibility is null ? null : await LatestAsync(db, compatibility, ct);
         var normal = AEDV02Plan.Normal();
@@ -65,7 +68,7 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
                 || key == AEDV02Key.ChaseSpeed && !chaseVerified
         });
         var s = defaults.Value;
-        var fixedChoices = options.Where(x => x.UnityCompatibilityVersion == compatibility && x.Source == ScenarioConfigSource.Fixed).ToArray();
+        var fixedChoices = options.Where(x => x.UnityCompatibilityVersion == registryCompatibility && x.Source == ScenarioConfigSource.Fixed).ToArray();
         var defaultFixed = fixedChoices.FirstOrDefault(x => x.IsFixedFallback) ?? (fixedChoices.Length == 1 ? fixedChoices[0] : null);
         var configuration = row is not null ? Read(row) : new AdaptiveConfiguration(s.Enabled, s.SurvivalLowThreshold, s.SurvivalHighThreshold,
             s.NoiseLowThreshold, s.NoiseHighThreshold, s.MinimumSurvivalSampleCountPerObservedPlayer,
@@ -75,7 +78,7 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
         return ServiceResult<object>.Success(new
         {
             compatibility, compatibilities, Version = row?.Version, row?.PublishedAtUtc, configuration, catalog,
-            options = options.Where(x => x.UnityCompatibilityVersion == compatibility),
+            options = options.Where(x => x.UnityCompatibilityVersion == registryCompatibility),
             ChaseSpeedAdminVerified = chaseVerified, PilotEnabled = pilotSettings.Value.Enabled,
             safety = new
             {
