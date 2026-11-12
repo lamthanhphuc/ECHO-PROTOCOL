@@ -663,11 +663,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                     selected.ContentHash, StringComparison.Ordinal))
                 return Failure<MatchAuthorityResponse>("Remote Fixed Balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
             var snapshotBuild = RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson);
-            if (autoSource && snapshotBuild is not null &&
+            bool gameplayTestDisabled = !_settings.EnableRemoteFixedGameplayTest &&
+                RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson);
+            bool differentSupportedBuild = snapshotBuild is not null && snapshotBuild != buildVersion &&
                 _settings.RemoteFixedGameVersions.Contains(snapshotBuild, StringComparer.Ordinal) &&
-                _settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal) &&
-                (snapshotBuild != buildVersion || (!_settings.EnableRemoteFixedGameplayTest &&
-                    RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson))))
+                _settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal);
+            if (autoSource && (gameplayTestDisabled || differentSupportedBuild))
             {
                 selected = null;
                 source = "LOCAL";

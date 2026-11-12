@@ -412,14 +412,16 @@ public sealed class MatchAuthorityServiceTests
     [InlineData("REMOTE_FIXED", "0.1.1", true, false)]
     [InlineData("AUTO", "0.1.0", false, true)]
     [InlineData("REMOTE_FIXED", "0.1.0", false, false)]
+    [InlineData("AUTO", "0.1.0", false, true, true)]
+    [InlineData("REMOTE_FIXED", "0.1.0", false, false, true)]
     public async Task UnavailableGameplayBalanceDoesNotBlockAutomaticMatch(
-        string source, string build, bool gameplayTestEnabled, bool succeeds)
+        string source, string build, bool gameplayTestEnabled, bool succeeds, bool legacy = false)
     {
         await using var db = CreateDb();
         var service = CreateService(db, remoteEnabled: true, gameplayTestEnabled: gameplayTestEnabled);
         var active = SeedBalance(db);
         active.SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
-            ""","gameplay":[],"content":{"gameVersion":"0.1.0","mode":"EXPEDITION","monster":"STALKER","route":"DEFAULT_ROUTE"}}""";
+            (legacy ? ""","gameplay":[{"key":"minionCapZone3","value":1}]}""" : ""","gameplay":[],"content":{"gameVersion":"0.1.0","mode":"EXPEDITION","monster":"STALKER","route":"DEFAULT_ROUTE"}}""");
         active.ContentHash = RemoteFixedBalanceContract.ComputeHash(active.SnapshotJson);
         await db.SaveChangesAsync();
 
