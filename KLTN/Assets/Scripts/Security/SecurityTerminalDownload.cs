@@ -131,7 +131,7 @@ public class SecurityTerminalDownload : MonoBehaviour, IHoldInteractable
                 string code = AuthorizationCode;
                 return string.IsNullOrEmpty(code)
                     ? completePrompt
-                    : $"XÁC THỰC BẢO MẬT HOÀN TẤT [MÃ: {code}] - NHẤN [E] ĐỂ XEM";
+                    : "XÁC THỰC BẢO MẬT HOÀN TẤT - NHẤN [E] ĐỂ XEM MÃ";
             }
 
             if (!EmergencyNetworkState.AreRelaysOnline())

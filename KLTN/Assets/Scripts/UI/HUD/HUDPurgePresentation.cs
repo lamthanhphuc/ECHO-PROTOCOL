@@ -303,12 +303,15 @@ namespace EchoProtocol.UI.HUD
                 if (down == null) { Fade(row, false); continue; }
                 var identity = down.GetComponent<LobbyPlayerState>();
                 string name = identity != null && identity.Object != null && identity.Object.IsValid ? identity.OperatorName.ToString() : L("Đồng đội", "Teammate");
+                var networkLife = down.GetComponent<NetworkPlayerLifeState>();
+                bool escaped = networkLife != null && networkLife.Object != null && networkLife.Object.IsValid
+                    && networkLife.Status == NetworkPlayerLifeStatus.Escaped;
                 bool critical = down.IsDowned || down.State == PlayerLifeState.Caught;
                 row.Icon.Kind = down.IsDowned ? PurgeIcon.Downed : PurgeIcon.Team;
-                row.Label.text = name + "  ·  " + (down.IsDowned ? L("Cần cứu", "Downed") + $" {Mathf.CeilToInt(down.BleedoutRemaining)}s"
+                row.Label.text = name + "  ·  " + (escaped ? L("Đã sơ tán", "Evacuated") : down.IsDowned ? L("Cần cứu", "Downed") + $" {Mathf.CeilToInt(down.BleedoutRemaining)}s"
                     : down.IsEliminated ? L("Đã bị loại", "Eliminated") : down.State == PlayerLifeState.Caught ? L("Bị bắt", "Caught") : L("Đang hoạt động", "Active"));
                 row.Icon.color = critical ? HUDPresentationStyle.Danger : HUDPresentationStyle.Muted;
-                signature += down.GetEntityId() + ":" + down.State + ";";
+                signature += down.GetEntityId() + ":" + down.State + ":" + escaped + ";";
             }
             if (signature != _teamSignature) { _teamSignature = signature; _teamUntil = now + 3f; }
             for (int i = 0; i < _teamRows.Count && i < _teammates.Count; i++)

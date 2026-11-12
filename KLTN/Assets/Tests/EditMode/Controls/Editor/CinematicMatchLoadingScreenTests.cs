@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EchoProtocol.Networking.Loading;
+using EchoProtocol.Settings;
 using EchoProtocol.UI.Loading;
 using EchoProtocol.UI;
 using NUnit.Framework;
@@ -104,7 +105,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
         {
             Preview(MatchLoadingPhase.SceneLoading, -1f);
 
-            Assert.That(Label("Percentage").text, Is.EqualTo("--"));
+            Assert.That(Label("Percentage").text, Is.Empty);
             Assert.That(Find<Image>("FullscreenInputBlocker/ProgressTrack/MeasuredSceneProgress")
                 .gameObject.activeInHierarchy, Is.False);
             Assert.That(Find<Image>("FullscreenInputBlocker/ProgressTrack/IndeterminateSignal")
@@ -116,10 +117,9 @@ namespace EchoProtocol.Tests.EditMode.Controls
         {
             Preview(MatchLoadingPhase.GameplayReadiness, 1f, true, 2, 4);
 
-            Assert.That(Label("Phase").text, Is.EqualTo("WAITING FOR OTHER PLAYERS"));
-            Assert.That(Label("Detail").text, Does.Contain("LOCAL LOAD COMPLETE"));
-            Assert.That(Label("Detail").text, Does.Contain("2 / 4"));
-            Assert.That(Label("Percentage").text, Is.EqualTo("2 / 4"));
+            Assert.That(Label("Phase").text, Is.EqualTo(GameLanguage.Choose("Đang chờ đồng đội…", "Waiting for teammates…")));
+            Assert.That(Label("Detail").text, Does.Contain("2/4"));
+            Assert.That(Label("Percentage").text, Is.Empty);
             foreach (var label in _root.GetComponentsInChildren<TMP_Text>(true))
                 Assert.That(label.text, Does.Not.Contain("100%"));
             Assert.That(Find<Image>("FullscreenInputBlocker/ProgressTrack/MeasuredSceneProgress")
@@ -133,9 +133,9 @@ namespace EchoProtocol.Tests.EditMode.Controls
         {
             Preview(MatchLoadingPhase.SceneLoading, 1f);
 
-            Assert.That(Label("Percentage").text, Is.EqualTo("READY"));
-            Assert.That(Label("Detail").text, Does.Contain("Waiting for gameplay initialization"));
-            Assert.That(Label("Phase").text, Is.Not.EqualTo("PROTOCOL SYNCHRONIZED"));
+            Assert.That(Label("Percentage").text, Is.Empty);
+            Assert.That(Label("Detail").text, Is.Empty);
+            Assert.That(Label("Phase").text, Is.EqualTo(GameLanguage.Choose("Đang chuẩn bị nhiệm vụ…", "Preparing the mission…")));
         }
 
         [Test]
@@ -150,7 +150,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 new object[] { MatchLoadingPhase.Complete, "Scene_A", 1f, true, 4, 4, "", 5f });
 
             Assert.That(Label("Percentage").text, Is.EqualTo("100%"));
-            Assert.That(Label("Phase").text, Is.EqualTo("PROTOCOL SYNCHRONIZED"));
+            Assert.That(Label("Phase").text, Is.EqualTo(GameLanguage.Choose("Sẵn sàng vào trận", "Ready to enter the match")));
             var fill = Find<Image>("FullscreenInputBlocker/ProgressTrack/MeasuredSceneProgress");
             Assert.That(fill.gameObject.activeInHierarchy, Is.True);
             Assert.That(fill.type, Is.EqualTo(Image.Type.Filled));
@@ -160,21 +160,21 @@ namespace EchoProtocol.Tests.EditMode.Controls
         }
 
         [Test]
-        public void Failure_PreservesReasonAndOffersVisibleInteractableReturnTarget()
+        public void Failure_ShowsPlayerMessageAndOffersVisibleInteractableReturnTarget()
         {
             const string reason = "Host disconnected while loading the research sector.";
             _screen.Preview(null, MatchLoadingPhase.Failed, 0.67f, false, 1, 2, reason);
             Canvas.ForceUpdateCanvases();
 
-            Assert.That(Label("Detail").text, Is.EqualTo(reason));
-            Assert.That(Label("Percentage").text, Is.EqualTo("OFFLINE"));
+            Assert.That(Label("Detail").text, Is.EqualTo(GameLanguage.Choose("Vui lòng quay lại và thử lại.", "Please go back and try again.")));
+            Assert.That(Label("Percentage").text, Is.Empty);
             var button = Find<Button>("FullscreenInputBlocker/ReturnToMenu");
             Assert.That(button.gameObject.activeInHierarchy, Is.True);
             Assert.That(button.IsInteractable(), Is.True);
             Assert.That(button.targetGraphic, Is.Not.Null);
             Assert.That(button.targetGraphic.raycastTarget, Is.True);
             Assert.That(button.GetComponentInChildren<TMP_Text>().text,
-                Is.EqualTo("RETURN TO MAIN MENU"));
+                Is.EqualTo(GameLanguage.Choose("Về menu chính", "Return to main menu")));
             RenderForRaycasting();
             Assert.That(button.targetGraphic.depth, Is.GreaterThanOrEqualTo(0),
                 "The recovery graphic must be rendered before pointer hit testing.");
@@ -202,24 +202,12 @@ namespace EchoProtocol.Tests.EditMode.Controls
         }
 
         [Test]
-        public void ReferenceChecklist_ContainsFiveReadableStagesAndTheirVisualStatusIndicators()
+        public void LoadingShowsOneStatusAndLocalizedFooter()
         {
             Preview(MatchLoadingPhase.SceneLoading, 0.67f);
-            string[] labels =
-            {
-                "Connecting to server...", "Syncing player data...", "Loading map data...",
-                "Preparing game session...", "Finalizing..."
-            };
-            for (int i = 0; i < labels.Length; i++)
-            {
-                var label = Find<TMP_Text>("FullscreenInputBlocker/PhaseChecklist/Phase" + i);
-                var status = Find<HorrorLoadingStatusGraphic>("FullscreenInputBlocker/PhaseChecklist/Status" + i);
-                Assert.That(label.text, Is.EqualTo(labels[i]));
-                Assert.That(label.gameObject.activeInHierarchy && status.gameObject.activeInHierarchy, Is.True);
-                Assert.That(label.font, Is.Not.Null);
-                Assert.That(status.raycastTarget, Is.False,
-                    "Decorative status graphics must not intercept the recovery button.");
-            }
+            Assert.That(Label("Phase").text, Is.EqualTo(GameLanguage.Choose("Đang tải bản đồ…", "Loading the map…")));
+            Assert.That(Label("Footer").text, Is.EqualTo(GameLanguage.Choose("ĐỪNG TIN NHỮNG TÍN HIỆU KỲ LẠ", "DO NOT TRUST STRANGE SIGNALS")));
+            Assert.That(_root.transform.Find("FullscreenInputBlocker/PhaseChecklist"), Is.Null);
         }
 
         [Test]
@@ -273,7 +261,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 "Presenting a saved prefab must reuse its authored hierarchy and bindings.");
             Assert.That(theme.ProgressFillMaterial.GetFloat("_EffectTime"), Is.EqualTo(assetTime),
                 "Animation must never mutate a shared project material.");
-            Assert.That(Label("Phase").text, Is.EqualTo("WAITING FOR OTHER PLAYERS"));
+            Assert.That(Label("Phase").text, Is.EqualTo(GameLanguage.Choose("Đang chờ đồng đội…", "Waiting for teammates…")));
         }
 
         private void Preview(MatchLoadingPhase phase, float progress, bool localReady = false,

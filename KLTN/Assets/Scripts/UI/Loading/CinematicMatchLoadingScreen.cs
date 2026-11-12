@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Loading;
+using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -16,11 +17,6 @@ namespace EchoProtocol.UI.Loading
     public sealed class CinematicMatchLoadingScreen : MonoBehaviour
     {
         private static CinematicMatchLoadingScreen _instance;
-        private static readonly string[] StepLabels =
-        {
-            "Connecting to server...", "Syncing player data...", "Loading map data...",
-            "Preparing game session...", "Finalizing..."
-        };
         private readonly PlayerInteractionControlLock _inputLock = new PlayerInteractionControlLock();
         private readonly LoadingUiNavigationLock _navigationLock = new LoadingUiNavigationLock();
         [SerializeField] private CinematicMatchLoadingTheme _theme;
@@ -28,8 +24,6 @@ namespace EchoProtocol.UI.Loading
         [SerializeField, HideInInspector] private CanvasGroup _group;
         [SerializeField, HideInInspector] private Image _fill, _indeterminate, _logo, _background, _atmosphere, _handprint;
         [SerializeField, HideInInspector] private TMP_Text _phase, _detail, _percent, _footer, _recoveryText, _title;
-        [SerializeField, HideInInspector] private TMP_Text[] _steps = new TMP_Text[5];
-        [SerializeField, HideInInspector] private HorrorLoadingStatusGraphic[] _status = new HorrorLoadingStatusGraphic[5];
         [SerializeField, HideInInspector] private CinematicLoadingSignalGraphic _signal;
         [SerializeField, HideInInspector] private Button _recovery;
         private readonly List<Material> _ownedMaterials = new List<Material>();
@@ -37,7 +31,6 @@ namespace EchoProtocol.UI.Loading
         private Vector2 _logoPosition, _backgroundPosition;
         private Vector3 _backgroundScale;
         private float _displayedProgress;
-        private int _lastActiveStep;
         private bool _preview;
         private bool _positionsCached;
         private Sprite _fallbackProgressSprite;
@@ -74,10 +67,8 @@ namespace EchoProtocol.UI.Loading
             _detail.gameObject.SetActive(lineBreak >= 0);
             _recovery.interactable = !_recovering;
             _percent.text = ""; // Connection/recovery has no measured scene percentage.
-            foreach (var step in _steps) step.gameObject.SetActive(false);
-            foreach (var status in _status) status.gameObject.SetActive(false);
             _recovery.gameObject.SetActive(_sessionCancel != null);
-            _recoveryText.text = EchoProtocol.Settings.GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
+            _recoveryText.text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
             if (_sessionCancel != null && Keyboard.current != null
                 && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
                 Recover();
@@ -120,8 +111,6 @@ namespace EchoProtocol.UI.Loading
                 else SetVisible(false);
                 return;
             }
-            foreach (var step in _steps) step.gameObject.SetActive(true);
-            foreach (var status in _status) status.gameObject.SetActive(true);
             var snapshot = coordinator.Snapshot;
             SetVisible(true);
             MaintainInputBlock();
@@ -170,7 +159,6 @@ namespace EchoProtocol.UI.Loading
                 _group.alpha = 0;
                 _recovering = false;
                 _displayedProgress = 0;
-                _lastActiveStep = 0;
             }
             _visible = visible;
             _content.SetActive(visible);
@@ -211,7 +199,7 @@ namespace EchoProtocol.UI.Loading
             }
             _recovering = true;
             _recovery.interactable = false;
-            _recoveryText.text = "RETURNING...";
+            _recoveryText.text = GameLanguage.Choose("Đang quay lại…", "Returning…");
             try
             {
                 var coordinator = MatchLoadingCoordinator.Instance;
@@ -220,7 +208,7 @@ namespace EchoProtocol.UI.Loading
             catch (Exception exception)
             {
                 Debug.LogException(exception);
-                if (this != null) _detail.text = "Could not return to the menu. Please try again.";
+                if (this != null) _detail.text = GameLanguage.Choose("Không thể quay về menu. Vui lòng thử lại.", "Could not return to the menu. Please try again.");
             }
             finally
             {
@@ -228,7 +216,7 @@ namespace EchoProtocol.UI.Loading
                 {
                     _recovering = false;
                     _recovery.interactable = true;
-                    _recoveryText.text = "RETURN TO MAIN MENU";
+                    _recoveryText.text = GameLanguage.Choose("Về menu chính", "Return to main menu");
                 }
             }
         }
@@ -240,27 +228,24 @@ namespace EchoProtocol.UI.Loading
             bool failed = phase == MatchLoadingPhase.Failed;
             bool waiting = phase == MatchLoadingPhase.GameplayReadiness && localReady;
             bool measured = phase == MatchLoadingPhase.SceneLoading && progress >= 0 && progress < 1;
-            _phase.text = failed ? "TRANSMISSION INTERRUPTED" : complete ? "PROTOCOL SYNCHRONIZED"
-                : waiting ? "WAITING FOR OTHER PLAYERS" : "CONNECTING TO MATCH...";
+            _phase.text = failed ? GameLanguage.Choose("Không thể vào trận", "Unable to enter the match")
+                : complete ? GameLanguage.Choose("Sẵn sàng vào trận", "Ready to enter the match")
+                : waiting ? GameLanguage.Choose("Đang chờ đồng đội…", "Waiting for teammates…")
+                : phase == MatchLoadingPhase.SceneLoading && progress < 1
+                    ? GameLanguage.Choose("Đang tải bản đồ…", "Loading the map…")
+                    : GameLanguage.Choose("Đang chuẩn bị nhiệm vụ…", "Preparing the mission…");
             _phase.color = failed ? Accent : Foreground;
             if (_handprint != null)
                 _handprint.gameObject.SetActive(!waiting && !failed && !complete && _handprint.sprite != null);
-            _detail.text = failed ? (string.IsNullOrWhiteSpace(error) ? "The session could not be loaded. Return to the menu and try again." : error)
-                : complete ? "All required operators are ready. Entering the facility."
-                : waiting ? $"LOCAL LOAD COMPLETE  //  OPERATORS READY {ready} / {required}"
-                : phase switch
-                {
-                    MatchLoadingPhase.BackendAuthorization => "Awaiting backend match authorization.",
-                    MatchLoadingPhase.NetworkSynchronization => "Establishing the shared scene and synchronizing operators.",
-                    MatchLoadingPhase.SceneLoading => progress >= 1 ? "Scene assets are loaded. Waiting for gameplay initialization."
-                        : measured ? "Reading scene assets and activating the facility." : "Waiting for scene progress from Fusion.",
-                    _ => $"Verifying local player, camera and session readiness  //  {ready} / {required}"
-                };
-            _percent.text = complete ? "100%" : failed ? "OFFLINE"
-                : phase == MatchLoadingPhase.GameplayReadiness && required > 0 ? $"{ready} / {required}"
-                : phase == MatchLoadingPhase.SceneLoading && progress >= 1 ? "READY"
-                : measured ? $"{Mathf.FloorToInt(progress * 100)}%" : "--";
-            _detail.gameObject.SetActive(failed || waiting || complete);
+            _detail.text = failed
+                ? GameLanguage.Choose("Vui lòng quay lại và thử lại.", "Please go back and try again.")
+                : waiting && required > 0
+                    ? GameLanguage.Choose($"{ready}/{required} người đã sẵn sàng", $"{ready}/{required} players ready")
+                    : string.Empty;
+            _detail.gameObject.SetActive(_detail.text.Length > 0);
+            _percent.text = complete ? "100%" : measured ? $"{Mathf.FloorToInt(progress * 100)}%" : string.Empty;
+            _content.transform.Find("Subtitle")?.gameObject.SetActive(false);
+            _content.transform.Find("PhaseChecklist")?.gameObject.SetActive(false);
             float target = complete ? 1f : measured ? progress : 0;
             // Visual easing can lag an observed operation, but can never invent forward progress.
             _displayedProgress = complete || _preview || target < _displayedProgress ? target
@@ -277,24 +262,13 @@ namespace EchoProtocol.UI.Loading
                 marker.offsetMin = new Vector2(0, 8);
                 marker.offsetMax = new Vector2(0, -8);
             }
-            int activeStep = phase == MatchLoadingPhase.BackendAuthorization ? 0
-                : phase == MatchLoadingPhase.NetworkSynchronization ? 1
-                : phase == MatchLoadingPhase.SceneLoading ? 2 : localReady ? 4 : 3;
-            if (!failed) _lastActiveStep = activeStep;
-            for (int i = 0; i < _steps.Length; i++)
-            {
-                bool done = complete || i < (failed ? _lastActiveStep : activeStep);
-                bool active = !complete && i == (failed ? _lastActiveStep : activeStep);
-                _steps[i].color = active ? Accent : done ? Foreground : Muted;
-                _steps[i].text = StepLabels[i];
-                _status[i].Configure(done ? 2 : active ? 1 : 0, time, Accent, Muted);
-            }
             _recovery.gameObject.SetActive(failed);
             _recovery.interactable = !_recovering;
             if (failed && !_recovering)
                 _recoveryText.text = MatchLoadingCoordinator.Instance != null
-                    && MatchLoadingCoordinator.Instance.RecoveryReturnsToLobby ? "RETURN TO LOBBY" : "RETURN TO MAIN MENU";
-            _footer.text = "DO NOT TRUST THE SIGNAL";
+                    && MatchLoadingCoordinator.Instance.RecoveryReturnsToLobby ? GameLanguage.Choose("Về phòng chờ", "Return to lobby") : GameLanguage.Choose("Về menu chính", "Return to main menu");
+            _footer.characterSpacing = 4;
+            _footer.text = GameLanguage.Choose("ĐỪNG TIN NHỮNG TÍN HIỆU KỲ LẠ", "DO NOT TRUST STRANGE SIGNALS");
             _signal.SetSignal(time, _theme != null ? _theme.StaticIntensity : 0.035f, _theme != null ? _theme.GlitchIntensity : 0.22f);
             UpdateAtmosphere(time);
         }
@@ -359,9 +333,6 @@ namespace EchoProtocol.UI.Loading
             _title.lineSpacing = -35;
             _title.characterSpacing = 10;
             _title.gameObject.SetActive(_logo.sprite == null);
-            var subtitle = Label("Subtitle", 960, 385, 1160, 34,
-                "SOME EXPERIMENTS SHOULD HAVE STAYED BURIED", 18, new Color(0.62f, 0.31f, 0.31f, 1));
-            subtitle.characterSpacing = 5;
             _phase = Label("Phase", 960, 480, 1180, 52, string.Empty, 32, Foreground);
             _phase.characterSpacing = 4;
             _handprint = Graphic<Image>("Handprint", _content.transform);
@@ -372,7 +343,7 @@ namespace EchoProtocol.UI.Loading
             _handprint.gameObject.SetActive(_handprint.sprite != null);
             _detail = Label("Detail", 960, 873, 1180, 60, string.Empty, 18, Foreground, telemetry: true);
             _detail.textWrappingMode = TextWrappingModes.Normal;
-            _percent = Label("Percentage", 1458, 562, 136, 54, "--", 40, Foreground, telemetry: true);
+            _percent = Label("Percentage", 1458, 562, 136, 54, string.Empty, 40, Foreground, telemetry: true);
             var track = Graphic<HorrorLoadingProgressFrameGraphic>("ProgressTrack", _content.transform);
             ReferenceRect(track.rectTransform, 960, 562, 850, 52);
             track.Configure(Accent);
@@ -389,27 +360,9 @@ namespace EchoProtocol.UI.Loading
             _indeterminate = Graphic<Image>("IndeterminateSignal", track.transform);
             _indeterminate.sprite = WhiteProgressSprite;
             _indeterminate.color = Accent;
-            var row = new GameObject("PhaseChecklist", typeof(RectTransform));
-            row.transform.SetParent(_content.transform, false);
-            Stretch(row.GetComponent<RectTransform>());
-            for (int i = 0; i < _steps.Length; i++)
-            {
-                _status[i] = Graphic<HorrorLoadingStatusGraphic>("Status" + i, row.transform);
-                ReferenceRect(_status[i].rectTransform, 660, 635 + i * 47, 35, 35);
-                _steps[i] = Graphic<TextMeshProUGUI>("Phase" + i, row.transform);
-                ReferenceRect(_steps[i].rectTransform, 1033, 635 + i * 47, 660, 38);
-                _steps[i].font = TelemetryFont;
-                _steps[i].fontSize = 23;
-                _steps[i].enableAutoSizing = true;
-                _steps[i].fontSizeMin = 17;
-                _steps[i].fontSizeMax = 23;
-                _steps[i].alignment = TextAlignmentOptions.Left;
-                _steps[i].text = StepLabels[i];
-                _steps[i].richText = false;
-            }
-            _footer = Label("Footer", 960, 936, 980, 34, "DO NOT TRUST THE SIGNAL", 19,
+            _footer = Label("Footer", 960, 936, 980, 34, GameLanguage.Choose("ĐỪNG TIN NHỮNG TÍN HIỆU KỲ LẠ", "DO NOT TRUST STRANGE SIGNALS"), 19,
                 new Color(0.68f, 0.15f, 0.16f, 1));
-            _footer.characterSpacing = 9;
+            _footer.characterSpacing = 4;
             FooterRule();
             var buttonOwner = new GameObject("ReturnToMenu", typeof(RectTransform), typeof(CanvasRenderer), typeof(HorrorFrameGraphic), typeof(Button));
             buttonOwner.transform.SetParent(_content.transform, false);
@@ -426,7 +379,7 @@ namespace EchoProtocol.UI.Loading
             _recoveryText.fontSize = 20;
             _recoveryText.color = Foreground;
             _recoveryText.alignment = TextAlignmentOptions.Center;
-            _recoveryText.text = "RETURN TO MAIN MENU";
+            _recoveryText.text = GameLanguage.Choose("Về menu chính", "Return to main menu");
             _recovery.gameObject.SetActive(false);
         }
 
@@ -450,11 +403,10 @@ namespace EchoProtocol.UI.Loading
             if (Application.isPlaying) return;
             Build(theme);
             ApplyMaterials(false);
-            _phase.text = "CONNECTING TO MATCH...";
-            _percent.text = "--";
+            _phase.text = GameLanguage.Choose("Đang chuẩn bị nhiệm vụ…", "Preparing the mission…");
+            _percent.text = string.Empty;
             _detail.gameObject.SetActive(false);
             _recovery.gameObject.SetActive(false);
-            for (int i = 0; i < _status.Length; i++) _status[i].Configure(i == 0 ? 1 : 0, 0, Accent, Muted);
             _group.alpha = 0;
             _content.SetActive(false);
         }

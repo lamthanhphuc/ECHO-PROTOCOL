@@ -245,7 +245,7 @@ namespace EchoProtocol.UI
                     $"Reconnecting…\nAttempt {network.ReconnectAttempt} · {Mathf.CeilToInt(network.ReconnectSecondsRemaining)} seconds remaining\nCheck your network, or cancel to return to the menu.");
                 _progressCancel.GetComponentInChildren<TMP_Text>().text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
             }
-            else _progressText.text = migration ? GameLanguage.Choose("Đang khôi phục phiên…\nVui lòng chờ.", "Restoring session…\nPlease wait.")
+            else _progressText.text = migration ? GameLanguage.Choose("Đang khôi phục trận đấu…", "Restoring the match…")
                 : _startup ? GameLanguage.Choose("Đang khởi động…\nVui lòng chờ.", "Starting…\nPlease wait.")
                 : _returning || leaving ? GameLanguage.Choose("Đang rời phòng…", "Leaving room…")
                 : loading ? GameLanguage.Choose("Đang tải khu vực…\nVui lòng chờ.", "Loading area…\nPlease wait.")

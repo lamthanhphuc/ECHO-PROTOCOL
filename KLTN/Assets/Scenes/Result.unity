@@ -2540,7 +2540,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "AUTHENTICATED MISSION RECORD"
+  m_Text: ""
 --- !u!222 &3100000117
 CanvasRenderer:
   m_ObjectHideFlags: 0

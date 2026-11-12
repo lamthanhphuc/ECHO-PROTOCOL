@@ -424,7 +424,7 @@ namespace EchoProtocol.UI.Result
                 {
                     SetText("RewardXp", $"+{reward.ExperienceAwarded.Value:N0} XP");
                     SetText("RewardCredits", $"+{reward.CreditsAwarded.Value:N0} CREDITS");
-                    SetText("RewardStatus", "SERVER REWARD CONFIRMED");
+                    SetText("RewardStatus", string.Empty);
                     return;
                 }
                 SetText("RewardStatus", reward.Status switch
