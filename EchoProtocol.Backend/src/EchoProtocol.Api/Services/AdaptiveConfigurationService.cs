@@ -59,7 +59,9 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
         compatibility ??= compatibilities.LastOrDefault();
         var registryCompatibility = compatibility is null ? null : ScenarioConfigRegistry.RegistryCompatibility(compatibility);
         bool chaseVerified = compatibility is not null && ChaseSpeedVerified(compatibility);
-        var row = compatibility is null ? null : await LatestAsync(db, compatibility, ct);
+        var recentVersions = compatibility is null ? [] : await db.AdaptiveConfigurationVersions.AsNoTracking()
+            .Where(x => x.Compatibility == compatibility).OrderByDescending(x => x.Revision).Take(10).ToArrayAsync(ct);
+        var row = recentVersions.FirstOrDefault();
         var normal = AEDV02Plan.Normal();
         var catalog = Enum.GetValues<AEDV02Key>().ToDictionary(key => key.ToString(), key => new
         {
@@ -78,6 +80,7 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
         return ServiceResult<object>.Success(new
         {
             compatibility, compatibilities, Version = row?.Version, row?.PublishedAtUtc, configuration, catalog,
+            History = recentVersions.Select(version => new { version.Version, version.Revision, version.PublishedAtUtc }),
             options = options.Where(x => x.UnityCompatibilityVersion == registryCompatibility),
             ChaseSpeedAdminVerified = chaseVerified, PilotEnabled = pilotSettings.Value.Enabled,
             safety = new
@@ -95,6 +98,8 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
         var current = await LatestAsync(db, request.Compatibility, ct);
         if (request.ExpectedVersion != current?.Version)
             return ServiceResult<object>.Failure("ADAPTIVE_CONFIGURATION_STALE", ErrorCodes.Conflict);
+        if (request.PreviewFingerprint != PreviewFingerprint(request.Compatibility, request.Configuration, current?.Version))
+            return Invalid("ADAPTIVE_PREVIEW_REQUIRED");
         var row = new AdaptiveConfigurationVersion
         {
             Version = VersionPrefix + Guid.NewGuid().ToString("N"), Compatibility = request.Compatibility,
@@ -125,8 +130,16 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
                 (key != AEDV02Key.ChaseSpeed || ChaseSpeedVerified(request.Compatibility)) &&
                 request.Configuration.Parameters[key.ToString()].Tiers.Contains(tier)) == AEDV02Plan.PreMatchReliefChaseTier ? .9 : 1
             : null;
-        return ServiceResult<object>.Success(new { rule, selected, UsedFixedFallback = choice is null, reason, reliefChaseFactor });
+        var current = await LatestAsync(db, request.Compatibility, ct);
+        return ServiceResult<object>.Success(new
+        {
+            rule, selected, UsedFixedFallback = choice is null, reason, reliefChaseFactor,
+            PreviewFingerprint = PreviewFingerprint(request.Compatibility, request.Configuration, current?.Version)
+        });
     }
+
+    private static string PreviewFingerprint(string compatibility, AdaptiveConfiguration configuration, string? version) =>
+        ScenarioFingerprint.Hash(compatibility, version, JsonSerializer.Serialize(configuration));
 
     public static (string? Rule, AdaptiveConfigRef? Choice, string? Reason) Evaluate(
         AdaptiveConfiguration config, IReadOnlyCollection<AdaptiveSample> players)

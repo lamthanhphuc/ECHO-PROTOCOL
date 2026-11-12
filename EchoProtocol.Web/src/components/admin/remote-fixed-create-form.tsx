@@ -18,16 +18,35 @@ const fields = [
   ["roamSpeed", "Tốc độ lang thang", .5, 20], ["trackSpeed", "Tốc độ theo dấu", .5, 25],
 ] as const;
 
-export function RemoteFixedCreateForm({ gameplayFields, content }: { gameplayFields: RemoteGameplayField[]; content: MatchContent }) {
+export function RemoteFixedCreateForm({ gameplayFields, content, initialScope, copySnapshot }: { gameplayFields: RemoteGameplayField[]; content: MatchContent; initialScope?: { mapId: string; difficulty: string; gameVersion: string }; copySnapshot?: string }) {
   const router = useRouter();
+  const [copy] = useState(() => {
+    if (!copySnapshot) return null;
+    try {
+      return JSON.parse(copySnapshot) as {
+        content?: { gameVersion: string };
+        player?: Partial<typeof initial>;
+        stalker?: Partial<typeof initial>;
+        minion?: Partial<typeof initial>;
+        gameplay?: { key: string; value: number }[];
+      };
+    } catch {
+      return null;
+    }
+  });
+  const initialBuild = copy?.content?.gameVersion ?? initialScope?.gameVersion;
   const [version, setVersion] = useState("");
-  const [variantIndex, setVariantIndex] = useState(0);
+  const [variantIndex, setVariantIndex] = useState(Math.max(0, content.entries.findIndex((entry) => entry.map === initialScope?.mapId)));
   const variant = content.entries[variantIndex];
   const mapId = variant?.map;
-  const [gameVersion, setGameVersion] = useState(content.gameVersions[0] ?? "");
-  const [difficulty, setDifficulty] = useState("NORMAL");
-  const [values, setValues] = useState(initial);
-  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [gameVersion, setGameVersion] = useState(initialBuild && content.gameVersions.includes(initialBuild)
+    ? initialBuild : content.gameVersions[0] ?? "");
+  const [difficulty, setDifficulty] = useState(initialScope?.difficulty && content.difficulties.includes(initialScope.difficulty)
+    ? initialScope.difficulty : "NORMAL");
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map(([key]) => [
+    key, copy?.player?.[key] ?? copy?.stalker?.[key] ?? copy?.minion?.[key] ?? initial[key],
+  ])) as typeof initial);
+  const [overrides, setOverrides] = useState<Record<string, string>>(() => Object.fromEntries((copy?.gameplay ?? []).map(({ key, value }) => [key, String(value)])));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const visibleFields = gameplayFields.filter((field) => !field.map || field.map === mapId);
@@ -64,16 +83,20 @@ export function RemoteFixedCreateForm({ gameplayFields, content }: { gameplayFie
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.message || "Không tạo được cấu hình.");
-      setVersion(""); setOverrides({}); setMessage(`Đã tạo ${payload.data.version}. Cấu hình chưa được kích hoạt.`); router.refresh();
+      setVersion(""); setOverrides({}); setMessage(`Đã tạo ${payload.data.version}. Cấu hình chưa được kích hoạt.`); router.push(`/admin/remote-fixed/${encodeURIComponent(payload.data.version)}`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Không kết nối được máy chủ."); }
     finally { setBusy(false); }
   }
 
-  return <form onSubmit={submit} className="grid gap-5">
+  return <form onSubmit={submit} className="grid gap-5" onInvalidCapture={(event) => {
+    const section = event.target instanceof HTMLElement ? event.target.closest("details") : null;
+    if (section) section.open = true;
+  }}>
+    {copy && <p className="muted text-sm">Đã sao chép thông số. Hãy nhập mã mới và xác nhận phạm vi trước khi lưu.</p>}
     <div className="grid gap-3 md:grid-cols-3">
       <label className="admin-field">Mã cấu hình<input className="input" required maxLength={80} value={version} onChange={(e) => setVersion(e.target.value)} /></label>
       <label className="admin-field">Bản đồ<select className="input" value={variantIndex}
-        onChange={(e) => setVariantIndex(Number(e.target.value))}>
+        onChange={(e) => { setVariantIndex(Number(e.target.value)); setOverrides({}); }}>
         {content.entries.map((entry, index) => <option key={index} value={index}>{mapLabel(entry.map)}</option>)}
       </select></label>
       <label className="admin-field">Độ khó<select className="input" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>

@@ -14,6 +14,18 @@ export function formatDate(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+export function formatAdminDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "medium", timeStyle: "short", timeZone: "UTC",
+  }).format(new Date(value)) + " UTC";
+}
+
+export function paymentProductLabel(reference: string): string {
+  const credits = /^WALLET_COIN_(\d+)$/.exec(reference);
+  return credits ? "Gói " + formatNumber(Number(credits[1])) + " xu" : "Sản phẩm khác";
+}
+
 export function queryString(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

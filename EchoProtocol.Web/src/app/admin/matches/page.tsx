@@ -5,7 +5,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
 import type { SearchParams } from "@/lib/types/common";
-import { formatDate, param, queryString } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, param, queryString } from "@/lib/utils/format";
 import { difficultyLabel, mapLabel } from "@/lib/utils/game-labels";
 
 const outcomeNames: Record<string, string> = { WIN: "Thắng", LOSE: "Thua" };
@@ -31,12 +31,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
       <button className="button justify-self-start md:col-span-2 xl:col-span-3" type="submit">Tra cứu</button>
     </form></Panel>
     {invalid ? <EmptyState title="Mã tra cứu không hợp lệ" /> : result?.items.length === 0 ? <EmptyState title="Không có trận đấu phù hợp" /> :
-      <div className="table-wrap rounded-lg"><table><thead><tr><th>Phòng</th><th>Chủ phòng</th><th>Bản đồ</th><th>Độ khó</th><th>Chưa báo rời</th><th>Trạng thái phòng</th><th>Xác nhận kết quả</th><th>Bắt đầu</th><th>Kết thúc</th></tr></thead><tbody>
+      <div className="table-wrap rounded-lg"><table><thead><tr><th>Phòng</th><th>Chủ phòng</th><th>Bản đồ</th><th>Độ khó</th><th>Người chơi</th><th>Trạng thái phòng</th><th>Xác nhận kết quả</th><th>Bắt đầu</th><th>Kết thúc</th></tr></thead><tbody>
         {result?.items.map((item) => <tr key={item.matchId}>
-          <td><Link className="code text-xs text-red-300 hover:underline" href={`/admin/matches/${item.matchId}`}>{item.matchId}</Link>{item.isFlagged && <p className="mt-1 text-xs text-amber-300">Cần kiểm tra</p>}</td>
+          <td><Link className="code text-xs text-red-300 hover:underline" href={`/admin/matches/${item.matchId}`} title={item.matchId}>{item.matchId.slice(0, 8)}…</Link>{item.isFlagged && <p className="mt-1 text-xs text-amber-300">Cần kiểm tra</p>}</td>
           <td><Link className="hover:underline" href={`/admin/users/${item.hostUserId}`}>{item.hostUsername || item.hostUserId.slice(0, 8)}</Link></td>
           <td>{mapLabel(item.mapId)}</td><td>{difficultyLabel(item.difficulty)}</td>
-          <td>{item.connectedCount} / {item.playerCount || item.connectedCount}</td><td><StatusBadge status={item.status} /></td>
+          <td>{item.playerCount || item.connectedCount}</td><td><StatusBadge status={item.status} /></td>
           <td>{item.outcome ? <>{outcomeNames[item.outcome] ?? item.outcome}<p className="muted text-xs">Đã lưu kết quả trận</p></> : "Chưa có kết quả từ máy chủ"}</td>
           <td>{formatDate(item.startedAtUtc)}</td><td>{formatDate(item.endedAtUtc)}</td>
         </tr>)}

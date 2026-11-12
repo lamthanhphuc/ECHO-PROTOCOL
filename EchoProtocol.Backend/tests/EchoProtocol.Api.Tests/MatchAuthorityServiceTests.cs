@@ -408,6 +408,40 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Theory]
+    [InlineData("AUTO", "0.1.1", true, true)]
+    [InlineData("REMOTE_FIXED", "0.1.1", true, false)]
+    [InlineData("AUTO", "0.1.0", false, true)]
+    [InlineData("REMOTE_FIXED", "0.1.0", false, false)]
+    public async Task UnavailableGameplayBalanceDoesNotBlockAutomaticMatch(
+        string source, string build, bool gameplayTestEnabled, bool succeeds)
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, remoteEnabled: true, gameplayTestEnabled: gameplayTestEnabled);
+        var active = SeedBalance(db);
+        active.SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd()[..^1] +
+            ""","gameplay":[],"content":{"gameVersion":"0.1.0","mode":"EXPEDITION","monster":"STALKER","route":"DEFAULT_ROUTE"}}""";
+        active.ContentHash = RemoteFixedBalanceContract.ComputeHash(active.SnapshotJson);
+        await db.SaveChangesAsync();
+
+        var host = Guid.NewGuid();
+        var matchId = await CreateBoundHostMatch(service, host, "unavailable-gameplay-balance");
+        var request = V2Request(source);
+        request.PrepareBalance = succeeds;
+        request.GameVersion = build;
+        request.SupportsGameplayTuning = true;
+        var result = await service.StartV2Async(host, matchId, request, CancellationToken.None);
+
+        Assert.Equal(succeeds, result.IsSuccess);
+        if (succeeds)
+        {
+            Assert.Equal("LOCAL", result.Data!.BalanceSource);
+            Assert.Null(result.Data.BalanceVersion);
+            Assert.Equal("STANDARD", result.Data.MatchDataPolicy);
+        }
+        Assert.True(active.IsActive);
+    }
+
+    [Theory]
     [InlineData(7.5, 7, 6.75)]
     [InlineData(10, 7, 9)]
     [InlineData(10, 7.5, 10)]
@@ -1800,7 +1834,8 @@ public sealed class MatchAuthorityServiceTests
         return new AppDbContext(options);
     }
 
-    private static MatchAuthorityService CreateService(AppDbContext db, bool remoteEnabled = false, AEDV02PilotSettings? pilot = null)
+    private static MatchAuthorityService CreateService(AppDbContext db, bool remoteEnabled = false, AEDV02PilotSettings? pilot = null,
+        bool? gameplayTestEnabled = null)
     {
         var time = new FixedTimeProvider(Now);
         var settings = Options.Create(new MatchAuthoritySettings
@@ -1810,7 +1845,7 @@ public sealed class MatchAuthorityServiceTests
             LeaseLifetimeSeconds = 45,
             TelemetryDelegationRetentionHours = 24,
             EnableRemoteFixed = remoteEnabled,
-            EnableRemoteFixedGameplayTest = remoteEnabled
+            EnableRemoteFixedGameplayTest = gameplayTestEnabled ?? remoteEnabled
         });
         return new MatchAuthorityService(
             db,

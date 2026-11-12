@@ -5,7 +5,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
 import type { SearchParams } from "@/lib/types/common";
-import { formatDate, formatNumber, param, queryString } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, formatNumber, param, queryString } from "@/lib/utils/format";
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const raw = await searchParams;
@@ -23,7 +23,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </form>
     </Panel>
     {result.items.length === 0 ? <EmptyState title="Không tìm thấy người dùng" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Số dư</th><th>Trận / Thắng</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((user) => <tr key={user.userId}><td><Link className="text-red-300 hover:underline" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link><p className="muted text-xs">{user.email}</p></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
+      {result.items.map((user) => <tr key={user.userId}><td><Link className="text-red-300 hover:underline" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/users" params={params} />
   </>;

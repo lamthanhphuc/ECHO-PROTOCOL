@@ -74,6 +74,7 @@ public sealed partial class ScenarioServiceTests
         Assert.True(preview.IsSuccess, preview.Message);
         var shown = JsonSerializer.SerializeToElement(preview.Data);
         Assert.Equal(relief.ScenarioConfigId, shown.GetProperty("selected").GetProperty("Id").GetString());
+        var fingerprint = shown.GetProperty("PreviewFingerprint").GetString()!;
         var partial = AdaptiveConfigurationService.Evaluate(configToPublish, [new(10, 20, 2, 2), new(null, null, 0, 0)]);
         Assert.Equal("INPUT_INVALID", partial.Reason);
         var partialRelief = AdaptiveConfigurationService.Evaluate(configToPublish with { RequireFullRoster = false },
@@ -81,17 +82,25 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal(configToPublish.Relief, partialRelief.Choice);
 
         var lockedParameters = new Dictionary<string, AdaptiveParameter>(parameters) { ["ChaseSpeed"] = new(8, [7, 7.5, 8]) };
-        var locked = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish with { Parameters = lockedParameters }), default);
+        var locked = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish with { Parameters = lockedParameters }, fingerprint), default);
         Assert.Equal("ADAPTIVE_CHASE_SPEED_BUILD_VERIFICATION_REQUIRED", locked.Message);
 
-        var published = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish), default);
+        var changed = await service.PublishAsync(f.HostId,
+            new(compatibility, null, configToPublish with { Enabled = false }, fingerprint), default);
+        Assert.Equal("ADAPTIVE_PREVIEW_REQUIRED", changed.Message);
+
+        var published = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish, fingerprint), default);
         Assert.True(published.IsSuccess, published.Message);
         var version = (await AdaptiveConfigurationService.LatestAsync(f.Db, compatibility, default))!.Version;
         f.Db.MatchAuthorityBindings.Single(x => x.MatchId == f.MatchId).AdaptivePolicyConfigVersion = version;
         await f.Db.SaveChangesAsync();
-        var stale = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish), default);
+        var stale = await service.PublishAsync(f.HostId, new(compatibility, null, configToPublish, fingerprint), default);
         Assert.Equal(ErrorCodes.Conflict, stale.ErrorCode);
-        var disabled = await service.PublishAsync(f.HostId, new(compatibility, version, configToPublish with { Enabled = false }), default);
+        var disabledConfig = configToPublish with { Enabled = false };
+        var disabledPreview = await service.PreviewAsync(new(compatibility, disabledConfig, [new(10, 20, 2, 2)]), default);
+        Assert.True(disabledPreview.IsSuccess, disabledPreview.Message);
+        var disabledFingerprint = JsonSerializer.SerializeToElement(disabledPreview.Data).GetProperty("PreviewFingerprint").GetString()!;
+        var disabled = await service.PublishAsync(f.HostId, new(compatibility, version, disabledConfig, disabledFingerprint), default);
         Assert.True(disabled.IsSuccess, disabled.Message);
 
         var request = AdaptiveRequest();

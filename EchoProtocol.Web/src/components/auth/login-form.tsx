@@ -26,7 +26,8 @@ export function LoginForm() {
         next === "/wallet/payment/return" || next === "/wallet/payment/cancel"
           ? next
           : null;
-      router.replace(payload.data.user.role === "ADMIN" ? "/admin" : paymentReturnPath ?? "/dashboard");
+      const adminPath = next && /^\/admin(?:\/[^?#\\]*)?(?:\?[^#\\]*)?$/.test(next) ? next : "/admin";
+      router.replace(payload.data.user.role === "ADMIN" ? adminPath : paymentReturnPath ?? "/dashboard");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại.");
     } finally { setLoading(false); }

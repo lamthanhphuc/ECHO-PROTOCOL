@@ -82,6 +82,7 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       BACKEND_API_URL: http://backend:5042
+      WEB_PUBLIC_ORIGIN: "https://${WEB_DOMAIN}"
 
   caddy:
     image: caddy:2

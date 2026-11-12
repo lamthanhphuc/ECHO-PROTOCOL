@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { formatAdminDate } from "@/lib/utils/format";
 import { useState } from "react";
 import { Panel } from "@/components/ui/panel";
 import { adaptiveParameterLabels, adaptiveReasons } from "@/lib/types/adaptive";
@@ -109,20 +111,30 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const publish = submitter?.getAttribute("value") === "publish";
+    if (publish && !preview) return;
+    if (publish && !window.confirm(`Xuất bản quy tắc cho các trận mới dùng bản game ${compatibility}?`)) return;
     setBusy(true);
     setMessage("");
     setPreview(null);
     try {
       const response = await fetch(publish ? "/api/bff/admin/adaptive" : "/api/bff/admin/adaptive/preview", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ compatibility, configuration, ...(publish ? { expectedVersion: data.version } : { players }) }),
+        body: JSON.stringify({ compatibility, configuration, ...(publish ? { expectedVersion: data.version, previewFingerprint: preview?.previewFingerprint } : { players }) }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.message || "Không lưu được kết quả.");
-      if (publish) router.refresh();
+      if (publish) {
+        setMessage("Đã xuất bản quy tắc cho trận mới.");
+        router.refresh();
+      }
       else setPreview(payload.data);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Không kết nối được máy chủ.");
+      const reason = error instanceof Error ? error.message : "";
+      setMessage(reason === "ADAPTIVE_PREVIEW_REQUIRED"
+        ? "Cấu hình hoặc phiên bản đã thay đổi. Hãy tải lại trang và chạy thử lại."
+        : reason === "ADAPTIVE_CONFIGURATION_STALE"
+          ? "Có phiên bản mới hơn. Hãy tải lại trang trước khi xuất bản."
+          : adaptiveReasons[reason] ?? (reason && !/^[A-Z0-9_]+$/.test(reason) ? reason : "Chưa thể xử lý quy tắc. Hãy kiểm tra thông số và thử lại."));
     } finally {
       setBusy(false);
     }
@@ -138,12 +150,36 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           (fixed.chaseSpeed === 9 && option.chaseSpeed === 10 || fixed.chaseSpeed === 7.5 && option.chaseSpeed === 8)));
   }
 
-  return <form className="grid gap-5" onSubmit={submit}>
+  return <form className="grid gap-4" onSubmit={submit} onInvalidCapture={(event) => {
+    let section = (event.target as HTMLElement).closest("details");
+    while (section) {
+      section.open = true;
+      section = section.parentElement?.closest("details") ?? null;
+    }
+  }}>
     <Panel>
-      <h2 className="text-lg font-semibold">Adaptive trước trận</h2>
-      <p className="muted my-3 break-all text-sm">{data.version ? `Bản đang dùng · ${data.version}` : "Đang dùng cấu hình mặc định."}</p>
+      <p className="text-sm font-semibold">Bản game {compatibility} · {data.version ? "Đã xuất bản quy tắc" : "Quy tắc mặc định"}</p>
+      <p className="muted mt-1 text-sm">Trước trận: {data.configuration.enabled ? "Đang bật" : "Đang tắt"} · Giữa trận: {data.pilotEnabled ? "Máy chủ cho phép thử nghiệm" : "Đang tắt"}</p>
+      <div className="mt-3 flex flex-wrap gap-3 text-sm">
+        <a className="underline" href="#adaptive-sample">Chạy thử</a>
+        <Link className="underline" href="/admin/remote-fixed">Xem cấu hình trận</Link>
+        <Link className="underline" href="/admin/balance-analytics">Xem báo cáo trận đấu</Link>
+      </div>
+    </Panel>
+    <details className="panel rounded-lg p-4 sm:p-5">
+      <summary className="admin-section-title">Lịch sử xuất bản</summary>
+      <p className="muted mt-3 text-sm">{data.publishedAtUtc ? "Xuất bản lúc " + formatAdminDate(data.publishedAtUtc) : "Đang dùng quy tắc mặc định."}</p>
+      {!!data.history?.length && <ul className="mt-3 space-y-2 text-sm">
+        {data.history.map((entry) => <li key={entry.version}><details>
+          <summary>Lần xuất bản {entry.revision} · {formatAdminDate(entry.publishedAtUtc)}{entry.version === data.version ? " · Đang dùng cho trận mới" : ""}</summary>
+          <code className="code">{entry.version}</code>
+        </details></li>)}
+      </ul>}
+      {data.version && !data.history?.length && <details className="mt-2 text-sm"><summary>Mã phiên bản đang dùng</summary><code className="code">{data.version}</code></details>}
+    </details>
+    <details className="panel rounded-lg p-4 sm:p-5"><summary className="admin-section-title">Quy tắc trước trận</summary><div className="mt-3">
       <fieldset disabled={busy} className="grid gap-4">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={configuration.enabled} onChange={(e) => update({ ...configuration, enabled: e.target.checked })} /> Bật policy trước trận</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={configuration.enabled} onChange={(e) => update({ ...configuration, enabled: e.target.checked })} /> Bật điều chỉnh trước trận</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={configuration.requireFullRoster} onChange={(e) => update({ ...configuration, requireFullRoster: e.target.checked })} /> Yêu cầu hồ sơ đủ điều kiện của toàn đội</label>
         <p className="muted text-sm">Khi thiếu hồ sơ, chỉ được xét giảm áp lực nếu tắt yêu cầu đủ đội. Tăng áp lực luôn cần đủ đội.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -153,7 +189,7 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           </label>)}
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          {([["fixed", "Cấu hình dự phòng"], ["relief", "Ứng viên giảm áp lực"], ["increase", "Ứng viên tăng áp lực"]] as const).map(([field, label]) =>
+          {([["fixed", "Cấu hình dự phòng"], ["relief", "Cấu hình giảm áp lực"], ["increase", "Cấu hình tăng áp lực"]] as const).map(([field, label]) =>
             <label className="admin-field" key={field}>{label}
               <select className="input" required={field === "fixed"} value={optionKey(configuration[field])} onChange={(e) => {
                 const selected = data.options.find((option) => optionKey(option) === e.target.value);
@@ -161,19 +197,18 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
                 update(field === "fixed" ? { ...configuration, fixed: reference, relief: null, increase: null }
                   : { ...configuration, [field]: reference });
               }}>
-                <option value="">{field === "fixed" ? "Chọn cấu hình đã duyệt" : "Dùng Fixed"}</option>
+                <option value="">{field === "fixed" ? "Chọn cấu hình đã duyệt" : "Dùng cấu hình cố định"}</option>
                 {options(field).map((option) => <option key={optionKey(option)} value={optionKey(option)}>{option.id} · {option.version}</option>)}
               </select>
             </label>)}
         </div>
       </fieldset>
-    </Panel>
-    <Panel>
-      <h2 className="mb-3 text-lg font-semibold">Adaptive v0.2 giữa trận</h2>
-      <p className="muted mb-2 text-sm">Pilot trên backend · {data.pilotEnabled ? "Đang bật" : "Đang tắt"}</p>
+    </div></details>
+    <details className="panel rounded-lg p-4 sm:p-5"><summary className="admin-section-title">Quy tắc giữa trận</summary><div className="mt-3">
+      <p className="muted mb-2 text-sm">Thử nghiệm trên máy chủ · {data.pilotEnabled ? "Đang bật" : "Đang tắt"}</p>
       <div className="mb-4 space-y-3 rounded border border-[var(--line)] p-3 text-sm">
         <h3 className="font-medium">Xem thử điều chỉnh · Cơ sở nghiên cứu / Thường</h3>
-        <p className="muted">Nhập giá trị nền đã khóa và giá trị đang áp dụng. Nấc mới luôn tính từ nền. Khi policy giữ nguyên, trận tiếp tục dùng giá trị đang áp dụng.</p>
+        <p className="muted">Nhập giá trị nền đã khóa và giá trị đang áp dụng. Nấc mới luôn tính từ nền. Khi AI giữ nguyên, trận tiếp tục dùng giá trị đang áp dụng.</p>
         <label className="admin-field">Thông số
           <select className="input" value={relativeKey} onChange={(event) => {
             const key = event.target.value;
@@ -229,7 +264,7 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           {relativeKey === "CabinetAmbushEnabled" && <p>Tắt → không tạo phục kích mới. Bật → đủ điều kiện để game xét phục kích tại cửa sổ an toàn.</p>}
         </>}
       </div>
-      <p className="muted mb-4 text-sm">Các nấc dưới đây là giá trị policy. Trong luồng tự động, chúng chọn hướng điều chỉnh quanh nền của trận. Relay và xe hộ tống dùng giá trị nền.</p>
+      <p className="muted mb-4 text-sm">Các nấc dưới đây giới hạn mức điều chỉnh. Trong luồng tự động, chúng chọn hướng điều chỉnh quanh nền của trận. Relay và xe hộ tống dùng giá trị nền.</p>
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Object.entries(data.catalog).map(([key, approved]) => {
           const value = configuration.parameters[key];
@@ -258,9 +293,8 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           </fieldset>;
         })}
       </fieldset>
-    </Panel>
-    <Panel>
-      <h2 className="mb-3 text-lg font-semibold">Policy và chốt an toàn</h2>
+    </div></details>
+    <details className="panel rounded-lg p-4 sm:p-5"><summary className="admin-section-title">Giới hạn an toàn</summary><div className="mt-3">
       <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {pilotFields.map(([key, label, min, max, step]) => <label className="admin-field" key={key}>{label}
           <input className="input" type="number" required min={min} max={max} step={step} value={configuration.pilot[key]}
@@ -276,22 +310,22 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
         </label>)}
       </fieldset>
       <details className="mt-5 text-sm">
-        <summary className="cursor-pointer font-semibold">Chốt chỉ xem và lý do Hold</summary>
+        <summary className="cursor-pointer font-semibold">Điều kiện hệ thống giữ nguyên</summary>
         <dl className="my-3 grid gap-2 sm:grid-cols-2">
           {Object.entries(data.safety).map(([key, value]) => <div key={key}><dt className="muted">{safetyLabels[key] ?? key}</dt><dd>{value}</dd></div>)}
         </dl>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Final Phase khóa mọi thay đổi tăng áp lực. Một lần đổi giữa trận chỉ được đổi một thông số và đi một nấc.</li>
+          <li>Giai đoạn cuối trận khóa mọi thay đổi tăng áp lực. Một lần đổi giữa trận chỉ được đổi một thông số và đi một nấc.</li>
           <li>Mỗi kế hoạch có tối đa một thay đổi tăng áp lực. Khi chuyển nguồn gây áp lực, hệ thống kiểm tra hiệu ứng cũ đã được gỡ.</li>
-          <li>Quyết định chờ áp dụng có thể hủy. Nếu Host đã commit nhưng hiệu ứng lỗi, hệ thống giữ revision để đối soát và chỉ hoàn tác qua cửa sổ an toàn.</li>
+          <li>Quyết định chờ áp dụng có thể hủy. Nếu Chủ phòng đã ghi nhận thay đổi nhưng hiệu ứng lỗi, hệ thống lưu phiên bản điều chỉnh để đối soát và chỉ hoàn tác qua cửa sổ an toàn.</li>
           {Object.entries(adaptiveReasons).filter(([code]) => code.startsWith("HOLD_")).map(([code, label]) =>
-            <li key={code}><code>{code}</code> · {label}</li>)}
+            <li key={code}>{label}</li>)}
         </ul>
       </details>
-    </Panel>
+    </div></details>
     <Panel>
-      <h2 className="mb-3 text-lg font-semibold">Chạy thử với hồ sơ mẫu</h2>
-      <p className="muted mb-3 text-sm">Bỏ trống điểm để mô phỏng thiếu hồ sơ. Chạy thử dùng nội dung đang nhập và không lưu trận. Các chốt v0.2 được kiểm tra khi Host bắt đầu trận.</p>
+      <h2 id="adaptive-sample" className="mb-3 text-lg font-semibold">Chạy thử với hồ sơ mẫu</h2>
+      <p className="muted mb-3 text-sm">Bỏ trống điểm để mô phỏng thiếu hồ sơ. Chạy thử dùng nội dung đang nhập và không lưu trận. Các điều kiện giữa trận được kiểm tra khi trận chạy.</p>
       <fieldset disabled={busy} className="grid gap-3">
         <div className="flex flex-wrap gap-2">
           <button className="button button-secondary" type="button" onClick={() => loadSample("complete")}>Đủ dữ liệu</button>
@@ -318,16 +352,17 @@ export function AdaptiveConfigurationForm({ data, compatibility }: { data: Adapt
           <button className="button button-secondary" type="submit" value="preview">Chạy thử</button>
         </div>
       {preview && <div role="status" className="space-y-1 rounded border border-[var(--line)] p-3 text-sm">
-        <p>{preview.usedFixedFallback ? "Cấu hình dự phòng" : "Ứng viên được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
+        <p>{preview.usedFixedFallback ? "Cấu hình dự phòng" : "Cấu hình được chọn"} · {preview.selected.id} · {preview.selected.version}</p>
         {preview.rule && <details className="muted"><summary className="cursor-pointer">Chi tiết kỹ thuật</summary><code>{preview.rule}</code></details>}
         {preview.reliefChaseFactor === 0.9 && <p>Dự kiến giảm tốc độ truy đuổi 10% nếu giá trị nền cho phép.</p>}
-        {preview.reliefChaseFactor === 1 && <p>Dự kiến giữ tốc độ nền theo nấc được phép và quota Stalker.</p>}
-        {preview.reason && <p>{adaptiveReasons[preview.reason] ?? preview.reason}</p>}
+        {preview.reliefChaseFactor === 1 && <p>Dự kiến giữ tốc độ nền theo nấc được phép và giới hạn của Stalker.</p>}
+        {preview.reason && <p>{adaptiveReasons[preview.reason] ?? "Chưa có diễn giải cho kết quả này."}</p>}
       </div>}
       </fieldset>
     </Panel>
     <div>
-      <button className="button" type="submit" value="publish" disabled={busy}>{busy ? "Đang xử lý…" : "Xuất bản cho trận mới"}</button>
+      <button className="button" type="submit" value="publish" disabled={busy || !preview}>{busy ? "Đang xử lý…" : "Xuất bản cho trận mới"}</button>
+      {!preview && <p className="muted mt-2 text-sm">Chạy thử nội dung đang nhập để mở nút xuất bản.</p>}
       {message && <p role="alert" className="mt-3 text-sm text-red-300">{message}</p>}
     </div>
   </form>;

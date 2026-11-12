@@ -5,7 +5,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
 import type { SearchParams } from "@/lib/types/common";
-import { formatDate, formatMoney, param, queryString } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, formatMoney, paymentProductLabel, param, queryString } from "@/lib/utils/format";
 
 const statuses = ["CREATED", "PENDING_PAYMENT", "PAID", "FULFILLED", "FAILED", "CANCELLED", "EXPIRED"];
 
@@ -17,6 +17,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   };
   const page = Math.max(1, Number(param(raw.page)) || 1);
   const result = await adminApi.payments(queryString({ page, pageSize: 20, ...values }));
+  const filterQuery = queryString({ ...values, page });
   const pageParams = Object.fromEntries(Object.entries(values).filter(([, value]) => value));
 
   return <>
@@ -31,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <button className="button justify-self-start md:col-span-2 2xl:col-span-3" type="submit">Áp dụng bộ lọc</button>
     </form></Panel>
     {result.items.length === 0 ? <EmptyState title="Không có đơn thanh toán phù hợp" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Đơn hàng</th><th>Người dùng</th><th>Sản phẩm</th><th>Số tiền</th><th>Trạng thái</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((item) => <tr key={item.paymentOrderId}><td><Link className="code text-red-300 hover:underline" href={`/admin/payments/${item.paymentOrderId}`}>{item.paymentOrderId.slice(0, 8)}…</Link><p className="muted text-xs">{item.provider}</p></td><td><Link className="hover:underline" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td className="code">{item.productReference}</td><td>{formatMoney(item.amount, item.currency)}</td><td><StatusBadge status={item.status} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
+      {result.items.map((item) => <tr key={item.paymentOrderId}><td><Link className="code text-red-300 hover:underline" href={"/admin/payments/" + item.paymentOrderId + queryString({ filters: filterQuery.slice(1) })}>{item.paymentOrderId.slice(0, 8)}…</Link><p className="muted text-xs">{item.provider}</p></td><td><Link className="hover:underline" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td title={item.productReference}>{paymentProductLabel(item.productReference)}</td><td>{formatMoney(item.amount, item.currency)}</td><td><StatusBadge status={item.status} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/payments" params={pageParams} />
   </>;

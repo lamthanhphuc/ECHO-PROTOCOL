@@ -1,4 +1,5 @@
 import "server-only";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAccessToken } from "@/lib/auth/session";
 import { backendRequest } from "./backend-client";
@@ -31,7 +32,10 @@ async function authorized<T>(path: string, init?: { method?: string; body?: unkn
   try {
     return await backendRequest<T>(path, { ...init, token });
   } catch (error) {
-    if (error instanceof BackendApiError && error.status === 401) redirect("/login?expired=1");
+    if (error instanceof BackendApiError && error.status === 401) {
+      const next = path.startsWith("/api/admin/") ? (await headers()).get("x-echo-admin-return") : null;
+      redirect(next ? "/login?expired=1&next=" + next : "/login?expired=1");
+    }
     throw error;
   }
 }

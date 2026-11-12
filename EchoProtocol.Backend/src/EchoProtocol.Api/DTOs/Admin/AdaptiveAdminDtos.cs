@@ -23,7 +23,8 @@ public sealed record AdaptiveConfiguration(
 public sealed record PublishAdaptiveConfiguration(
     [Required, StringLength(80)] string Compatibility,
     string? ExpectedVersion,
-    [Required] AdaptiveConfiguration Configuration);
+    [Required] AdaptiveConfiguration Configuration,
+    [Required, StringLength(64)] string PreviewFingerprint);
 
 public sealed record AdaptiveSample(
     [Range(0, 100)] decimal? Survival,

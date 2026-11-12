@@ -662,6 +662,20 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 !string.Equals(RemoteFixedBalanceContract.ComputeHash(selected.SnapshotJson),
                     selected.ContentHash, StringComparison.Ordinal))
                 return Failure<MatchAuthorityResponse>("Remote Fixed Balance snapshot is invalid", ErrorCodes.BalanceSnapshotInvalid);
+            var snapshotBuild = RemoteFixedBalanceContract.GameVersion(selected.SnapshotJson);
+            if (autoSource && snapshotBuild is not null &&
+                _settings.RemoteFixedGameVersions.Contains(snapshotBuild, StringComparer.Ordinal) &&
+                _settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal) &&
+                (snapshotBuild != buildVersion || (!_settings.EnableRemoteFixedGameplayTest &&
+                    RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson))))
+            {
+                selected = null;
+                source = "LOCAL";
+            }
+        }
+
+        if (selected is not null)
+        {
             if (RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson) &&
                 (!_settings.EnableRemoteFixedGameplayTest || v2Request?.SupportsGameplayTuning != true))
                 return Failure<MatchAuthorityResponse>("This balance version requires an enabled RFB-2 test environment and compatible build", ErrorCodes.BalanceSnapshotInvalid);

@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Panel } from "@/components/ui/panel";
 import type { EconomyData } from "@/lib/types/operations";
-import { formatDate } from "@/lib/utils/format";
+import { formatAdminDate as formatDate } from "@/lib/utils/format";
 
 const itemCategories = [
   { value: "CHARACTER", label: "Nhân vật gốc" },
@@ -35,6 +35,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
   const filteredItems = data.items.filter((row) =>
     row.category === category && row.itemName.toLocaleLowerCase("vi").includes(query));
   const item = filteredItems.find((row) => row.itemId === itemId);
+  const itemsById = new Map(data.items.map((row) => [row.itemId, row]));
   const pending = data.proposals.filter((proposal) => proposal.status === "PENDING");
   const history = data.proposals.filter((proposal) => proposal.status !== "PENDING");
 
@@ -112,9 +113,13 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
       {[{ title: "Chờ duyệt", proposals: pending }, { title: "Lịch sử", proposals: history }].map((group) => <section className="mt-4" key={group.title}>
         <h3 className="mb-2 font-semibold">{group.title} ({group.proposals.length})</h3>
         {group.proposals.length === 0 && <p className="muted text-sm">Chưa có đề xuất.</p>}
-        {group.proposals.map((proposal) => <details className="mb-2 rounded border border-[var(--line)] p-3 text-sm" key={proposal.id}>
-        <summary className="cursor-pointer">{data.items.find((row) => row.itemId === proposal.itemId)?.itemName ?? proposal.itemId}
-          {" · "}{proposal.previousPrice} → {proposal.proposedPrice} xu · {proposalStatuses[proposal.status] ?? proposal.status}</summary>
+        {group.proposals.map((proposal) => {
+          const current = itemsById.get(proposal.itemId);
+          const priceChanged = proposal.status === "PENDING" && current && current.price !== proposal.previousPrice;
+          return <details className="mb-2 rounded border border-[var(--line)] p-3 text-sm" key={proposal.id}>
+        <summary className="cursor-pointer">{current?.itemName ?? "Mặt hàng không còn trong danh sách"}
+          {" · "}{proposal.previousPrice} → {proposal.proposedPrice} xu · {priceChanged ? "Cần đề xuất lại vì giá đã đổi" : proposalStatuses[proposal.status] ?? "Chưa rõ trạng thái"}</summary>
+        {priceChanged && <p className="muted mt-2">Giá hiện tại là {current.price} xu. Hãy gửi đề xuất mới với giá hiện tại.</p>}
         <p className="mt-2">Lý do đề xuất · {proposal.reason}</p>
         {proposal.reviewReason && <p>Lý do xử lý · {proposal.reviewReason}</p>}
         <details className="muted mt-2">
@@ -122,13 +127,15 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
           <p className="break-all">Người gửi · {proposal.proposedByUserId} · {formatDate(proposal.proposedAtUtc)}</p>
           {proposal.reviewedAtUtc && <p className="break-all">Người xử lý · {proposal.reviewedByUserId} · {formatDate(proposal.reviewedAtUtc)}</p>}
         </details>
+        {proposal.status === "PENDING" && proposal.proposedByUserId === data.adminId && <p className="muted mt-2">Một quản trị viên khác có quyền duyệt cần xử lý đề xuất này.</p>}
         {data.canReview && proposal.status === "PENDING" && proposal.proposedByUserId !== data.adminId && <form
           className="mt-3 grid gap-2" onSubmit={(event) => submit(event, proposal.id)}>
           <label className="admin-field">Lý do duyệt hoặc từ chối<textarea className="input" name="reason" required minLength={10} maxLength={500} /></label>
-          <div className="flex gap-2"><button className="button" type="submit" value="approve" disabled={busy}>Duyệt giá</button>
+          <div className="flex gap-2"><button className="button" type="submit" value="approve" disabled={busy || !!priceChanged}>Duyệt giá</button>
             <button className="button button-secondary" type="submit" value="reject" disabled={busy}>Từ chối</button></div>
         </form>}
-        </details>)}
+        </details>;
+        })}
       </section>)}
     </Panel>
     {message && <p role="status" className="text-sm">{message}</p>}

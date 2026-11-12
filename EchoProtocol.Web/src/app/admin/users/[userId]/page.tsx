@@ -4,7 +4,7 @@ import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
 import { AdminCreditGrant } from "@/components/admin/admin-credit-grant";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
 import { adminApi } from "@/lib/api/server-api";
-import { formatDate, formatNumber, param } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, formatNumber, param } from "@/lib/utils/format";
 import type { SearchParams } from "@/lib/types/common";
 
 export default async function UserDetailPage({ params, searchParams }: { params: Promise<{ userId: string }>; searchParams: Promise<SearchParams> }) {
@@ -16,20 +16,18 @@ export default async function UserDetailPage({ params, searchParams }: { params:
   const dimensions: Record<string, string> = { Survival: "Sinh tồn", Noise: "Tiếng ồn", Objective: "Mục tiêu", ToolUsage: "Dùng công cụ" };
   const flagged = history.find((item) => item.action === "FLAG_USER" || item.action === "CLEAR_USER")?.action === "FLAG_USER";
   return <>
-    <PageHeader title={user.displayName ?? user.username} description={user.email} />
+    <PageHeader title={user.displayName ?? user.username} description={"Tài khoản " + user.username} />
+    <nav aria-label="Mục tài khoản" className="mb-4 flex flex-wrap gap-4 text-sm text-red-300"><a href="#ai-history">Hồ sơ AI</a><a href="#transactions">Giao dịch</a><a href="#intervention">Can thiệp</a></nav>
     <div className="grid gap-4 sm:grid-cols-3">
       <StatCard label="Số dư" value={formatNumber(user.walletBalance)} />
       <StatCard label="Tổng số trận" value={formatNumber(user.totalMatches)} />
       <StatCard label="Số trận thắng" value={formatNumber(user.totalWins)} />
     </div>
-    <AdminCreditGrant
-      userId={user.userId}
-      currentBalance={user.walletBalance ?? 0}
-    />
+
     <Panel className="mt-5" >
       <h2 id="ai-history" className="admin-section-title mb-2">Hồ sơ AI và lịch sử điểm</h2>
       {profile ? <>
-        <p className="muted mb-2 text-sm">Công thức {profile.profileFormulaVersion} · Revision {profile.profileRevision}</p>
+        <p className="muted mb-2 text-sm">Công thức {profile.profileFormulaVersion} · Lần cập nhật {profile.profileRevision}</p>
         <ul className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
           {([
             ["Sinh tồn", profile.survivalScore, profile.survivalStatus, profile.survivalSampleCount],
@@ -57,6 +55,7 @@ export default async function UserDetailPage({ params, searchParams }: { params:
       </div>
     </Panel>
     <Panel className="mt-5">
+      <h2 id="transactions" className="admin-section-title mb-3">Tài khoản và giao dịch</h2>
       <dl className="grid gap-4 sm:grid-cols-2">
         <div><dt className="eyebrow">Mã người dùng</dt><dd className="code mt-1 break-all">{user.userId}</dd></div>
         <div><dt className="eyebrow">Tên tài khoản</dt><dd className="mt-1">{user.username}</dd></div>
@@ -71,7 +70,10 @@ export default async function UserDetailPage({ params, searchParams }: { params:
         <Link className="button button-secondary" href={`/admin/purchases?userId=${user.userId}`}>Giao dịch mua</Link>
       </div>
     </Panel>
+    <section id="intervention"><h2 className="admin-section-title mt-5">Can thiệp tài khoản</h2>
+    <AdminCreditGrant userId={user.userId} recipient={user.displayName ?? user.username} currentBalance={user.walletBalance ?? 0} />
     {user.role === "PLAYER" && <ModerationPanel key={`${user.status}-${flagged}`} targetId={userId}
       actions={[flagged ? "CLEAR_USER" : "FLAG_USER", user.status === "LOCKED" ? "UNLOCK_USER" : "LOCK_USER"]} history={history} />}
+    </section>
   </>;
 }

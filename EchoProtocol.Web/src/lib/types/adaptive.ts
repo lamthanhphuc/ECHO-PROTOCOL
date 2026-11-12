@@ -53,9 +53,11 @@ export interface AdaptiveAdminData {
   chaseSpeedAdminVerified: boolean;
   pilotEnabled: boolean;
   safety: Record<string, number>;
+  history?: { version: string; revision: number; publishedAtUtc: string }[];
 }
 
 export interface AdaptivePreview {
+  previewFingerprint: string;
   rule: string | null;
   selected: AdaptiveConfigRef;
   reliefChaseFactor?: number | null;

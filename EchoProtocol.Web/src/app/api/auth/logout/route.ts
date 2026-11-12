@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { sessionCookieName } from "@/lib/auth/session";
 
-export async function POST(request: Request): Promise<NextResponse> {
-  const response = NextResponse.redirect(new URL("/login", request.url), 303);
+export async function POST(): Promise<NextResponse> {
+  const response = new NextResponse(null, { status: 303, headers: { Location: "/login" } });
   response.cookies.set(sessionCookieName, "", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

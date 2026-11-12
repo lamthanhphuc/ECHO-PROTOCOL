@@ -94,6 +94,11 @@ tbody tr:hover { background: rgba(173, 44, 45, .08); }
 .admin-shell .panel { box-shadow: none; }
 .admin-shell th { letter-spacing: .04em; text-transform: none; font-size: .8125rem; }
 .admin-shell td { font-size: .875rem; }
+.admin-shell main, .admin-shell main > *, .admin-shell fieldset { min-width: 0; }
+.admin-shell .table-wrap { max-width: 100%; }
+.admin-shell .code { overflow-wrap: anywhere; }
+.admin-shell .portal-nav-link { padding: .48rem .75rem; }
+.admin-shell details > summary { cursor: pointer; }
 .brand-mark { color: #f3e9dd; font-family: Georgia, "Times New Roman", serif; font-weight: 700; letter-spacing: .15em; }
 .page-title { font-family: Georgia, "Times New Roman", serif; }
 

@@ -24,9 +24,11 @@ interface GrantCreditsResponse {
 export function AdminCreditGrant({
   userId,
   currentBalance,
+  recipient,
 }: {
   userId: string;
   currentBalance: number;
+  recipient: string;
 }) {
   const router = useRouter();
 
@@ -71,13 +73,20 @@ export function AdminCreditGrant({
       return;
     }
 
-    if (reason.length > 200) {
+    if (!reason.trim() || reason.length > 200) {
       setSuccess(false);
       setMessage(
-        "Lý do tối đa 200 ký tự.",
+        "Nhập lý do từ 1 đến 200 ký tự.",
       );
       return;
     }
+
+    const summary = [
+      "Cộng xu cho " + recipient,
+      "Số dư dự kiến: " + balance.toLocaleString("vi-VN") + " → " + (balance + numericAmount).toLocaleString("vi-VN") + " xu",
+      "Lý do: " + reason.trim(),
+    ];
+    if (!window.confirm(summary.join("\n"))) return;
 
     setSubmitting(true);
     setSuccess(false);
@@ -212,6 +221,7 @@ export function AdminCreditGrant({
                 )
               }
               placeholder="Nhập lý do cộng xu"
+              required
               value={reason}
             />
           </label>

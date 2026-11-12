@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type { AdminModerationAction } from "@/lib/types/admin";
-import { formatDate } from "@/lib/utils/format";
+import { formatAdminDate as formatDate } from "@/lib/utils/format";
 
 const labels: Record<AdminModerationAction["action"], string> = {
   FLAG_MATCH: "Đánh dấu cần kiểm tra",

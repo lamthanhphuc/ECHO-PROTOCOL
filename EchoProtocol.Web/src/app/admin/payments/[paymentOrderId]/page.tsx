@@ -1,15 +1,19 @@
+import Link from "next/link";
+import { CopyReference } from "@/components/admin/copy-reference";
 import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
 import { adminApi } from "@/lib/api/server-api";
-import { formatDate, formatMoney, formatNumber } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, formatMoney, formatNumber, paymentProductLabel } from "@/lib/utils/format";
 import { PaymentRecoveryButton } from "@/components/admin/payment-recovery-button";
 
-export default async function PaymentDetailPage({ params }: { params: Promise<{ paymentOrderId: string }> }) {
+export default async function PaymentDetailPage({ params, searchParams }: { params: Promise<{ paymentOrderId: string }>; searchParams: Promise<{ filters?: string }> }) {
   const { paymentOrderId } = await params;
+  const filters = new URLSearchParams((await searchParams).filters).toString();
   const detail = await adminApi.payment(paymentOrderId);
   const order = detail.order;
   return <>
-    <PageHeader title="Chi tiết đơn thanh toán" description={order.paymentOrderId} />
+    <Link className="mb-4 inline-block text-sm text-red-300 hover:underline" href={"/admin/payments" + (filters ? "?" + filters : "")}>← Danh sách thanh toán</Link>
+    <PageHeader title="Chi tiết đơn thanh toán" description={paymentProductLabel(order.productReference)} />
     <div className="grid gap-4 sm:grid-cols-3">
       <StatCard label="Số tiền" value={formatMoney(order.amount, order.currency)} />
       <StatCard label="Trạng thái" value={<StatusBadge status={order.status} />} />
@@ -17,7 +21,7 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
     </div>
     <div className="mt-5 grid gap-5 xl:grid-cols-2">
       <Panel><h2 className="mb-4 text-lg text-white">Thông tin đơn hàng</h2><dl className="grid gap-3 text-sm sm:grid-cols-2">
-        <Field label="Người dùng" value={`${order.displayName ?? order.username} (${order.email})`} />
+        <Field label="Người dùng" value={order.displayName ?? order.username} />
         <Field label="Mã sản phẩm" value={order.productReference} code />
         <Field label="Mục đích" value={statusLabel(order.purpose)} />
         <Field label="Mã đơn tại cổng thanh toán" value={order.providerOrderId} code />
@@ -27,11 +31,12 @@ export default async function PaymentDetailPage({ params }: { params: Promise<{ 
         <Field label="Hết hạn" value={formatDate(order.expiresAtUtc)} />
         <Field label="Đã thanh toán lúc" value={formatDate(order.paidAtUtc)} />
         <Field label="Đã cấp xu lúc" value={formatDate(order.fulfilledAtUtc)} />
-      </dl></Panel>
+      </dl><div className="mt-4"><CopyReference label="Mã đơn thanh toán" value={order.paymentOrderId} /></div></Panel>
       <Panel><h2 className="mb-4 text-lg text-white">Thanh toán và cấp xu</h2>
         {detail.checkout ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Trạng thái thanh toán" value={statusLabel(detail.checkout.status)} /><Field label="Lần tạo liên kết" value={String(detail.checkout.checkoutSequenceId)} /><Field label="Mã liên kết thanh toán" value={detail.checkout.providerPaymentLinkId} code /><Field label="Liên kết sẵn sàng lúc" value={formatDate(detail.checkout.readyAtUtc)} /></dl> : <p className="muted text-sm">Chưa tạo liên kết thanh toán.</p>}
         <hr className="my-5 border-[#1d3942]" />
         {detail.fulfillment ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Loại cấp phát" value={statusLabel(detail.fulfillment.kind)} /><Field label="Mã tham chiếu" value={detail.fulfillment.fulfillmentReference} code /><Field label="Mã giao dịch số dư" value={detail.fulfillment.walletTransactionId} code /><Field label="Hoàn tất lúc" value={formatDate(detail.fulfillment.completedAtUtc)} /></dl> : <p className="muted text-sm">Chưa cấp xu hoặc vật phẩm.</p>}
+        {detail.fulfillment?.walletTransactionId && <Link className="mt-3 inline-block text-sm text-red-300 hover:underline" href={"/admin/wallet-transactions?reference=" + order.paymentOrderId}>Xem giao dịch cộng xu</Link>}
         {order.status === "PAID" && !detail.fulfillment && <PaymentRecoveryButton orderId={order.paymentOrderId} />}
       </Panel>
     </div>

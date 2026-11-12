@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <section className="panel login-card w-full rounded-sm p-7 shadow-[0_24px_90px_rgba(0,0,0,.55)] md:p-10">
         <h2 className="page-title text-3xl text-[#f5eee6]">Đăng nhập</h2>
         <p className="muted mt-3 text-sm leading-relaxed">
-          Nhập tài khoản và mật khẩu để tiếp tục.
+          {expired === "1" ? "Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục." : "Nhập tài khoản và mật khẩu để tiếp tục."}
         </p>
         <LoginForm />
       </section>
