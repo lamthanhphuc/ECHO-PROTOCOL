@@ -69,7 +69,7 @@ namespace EchoProtocol.AI.AED.Tests
                 fallbackConfigId = baseline.FallbackConfigId,
                 fallbackConfigVersion = FixedDirector.FixedBaselineScenarioVersion,
                 contentWhitelistVersion = FixedDirector.FixedBaselineContentWhitelistVersion,
-                unityCompatibilityVersion = Application.version
+                unityCompatibilityVersion = "0.1.0"
             };
             config.contentFingerprint = Fingerprint(config);
             var matchId = Guid.NewGuid();

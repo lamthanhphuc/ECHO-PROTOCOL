@@ -53,10 +53,8 @@ public sealed class AdaptiveConfigurationService(AppDbContext db, IScenarioConfi
             .Select(x => new { x.UnityCompatibilityVersion, Id = x.ScenarioConfigId, Version = x.ScenarioConfigVersion,
                 Source = x.ConfigSource, x.IsFixedFallback, x.FallbackConfigId, x.FallbackConfigVersion, x.SupportItemBudget, x.ChaseSpeed })
             .ToArray();
-        var compatibilities = options.Select(x => x.UnityCompatibilityVersion).Distinct().ToArray();
-        if (compatibilities.Contains("0.1.0") && !compatibilities.Contains("0.1.1"))
-            compatibilities = [.. compatibilities, "0.1.1"];
-        compatibility ??= compatibilities.LastOrDefault();
+        string[] compatibilities = [MatchAuthoritySettings.CurrentGameVersion];
+        compatibility = MatchAuthoritySettings.CurrentGameVersion;
         var registryCompatibility = compatibility is null ? null : ScenarioConfigRegistry.RegistryCompatibility(compatibility);
         bool chaseVerified = compatibility is not null && ChaseSpeedVerified(compatibility);
         var recentVersions = compatibility is null ? [] : await db.AdaptiveConfigurationVersions.AsNoTracking()

@@ -641,6 +641,11 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 await _db.ScenarioDecisions.AnyAsync(x => x.MatchId == matchId && x.IsCurrent && x.UsedFixedFallback, cancellationToken)))
                 return Failure<MatchAuthorityResponse>("Locked resolution mode differs from the request", ErrorCodes.MatchSessionConflict);
         }
+        else if ((prepare || !string.IsNullOrEmpty(buildVersion)) &&
+                 !_settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal))
+        {
+            return Failure<MatchAuthorityResponse>("Unity build is no longer supported", ErrorCodes.BalanceSnapshotInvalid);
+        }
         else if (source == "REMOTE_FIXED" || autoSource)
         {
             if (!_settings.EnableRemoteFixed && !autoSource)
@@ -666,7 +671,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             bool gameplayTestDisabled = !_settings.EnableRemoteFixedGameplayTest &&
                 RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson);
             bool differentSupportedBuild = snapshotBuild is not null && snapshotBuild != buildVersion &&
-                _settings.RemoteFixedGameVersions.Contains(snapshotBuild, StringComparer.Ordinal) &&
+                (snapshotBuild == "0.1.0" || _settings.RemoteFixedGameVersions.Contains(snapshotBuild, StringComparer.Ordinal)) &&
                 _settings.RemoteFixedGameVersions.Contains(buildVersion!, StringComparer.Ordinal);
             if (autoSource && (gameplayTestDisabled || differentSupportedBuild))
             {

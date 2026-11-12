@@ -10,6 +10,7 @@ public sealed class MatchAuthoritySettings
     public int TelemetryDelegationRetentionHours { get; set; } = 24;
     public bool EnableRemoteFixed { get; set; } = false;
     public bool EnableRemoteFixedGameplayTest { get; set; } = false;
-    public string[] RemoteFixedGameVersions { get; set; } = ["0.1.0", "0.1.1"];
+    public const string CurrentGameVersion = "0.1.1";
+    public string[] RemoteFixedGameVersions { get; set; } = [CurrentGameVersion];
     public string? UnityBalanceDefaultsManifestPath { get; set; }
 }

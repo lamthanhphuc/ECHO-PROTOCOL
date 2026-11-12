@@ -18,9 +18,9 @@ export function PortalShell({ session, items, children, mode }: {
   return <div className={`min-h-screen ${admin ? "admin-shell lg:grid lg:grid-cols-[224px_minmax(0,1fr)]" : "md:grid md:grid-cols-[250px_1fr]"}`}>
     <aside className={admin ? "panel sticky top-0 hidden h-dvh min-h-0 flex-col rounded-none border-y-0 border-l-0 p-4 lg:flex" : "panel desktop-nav sticky top-0 h-screen border-y-0 border-l-0 p-5 pt-9"}>
       <Brand mode={mode} />
-      <nav className={admin ? "mt-5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" : "mt-8 grid gap-1"} aria-label={admin ? "Điều hướng quản trị" : "Điều hướng người chơi"}>
+      <nav className={admin ? "mt-5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:var(--line)_transparent]" : "mt-8 grid gap-1"} aria-label={admin ? "Điều hướng quản trị" : "Điều hướng người chơi"}>
         {items.map((item, index) => <div key={item.href}>
-          {item.group && item.group !== items[index - 1]?.group && <p className="muted px-3 pb-1 pt-3 text-xs font-semibold">{item.group}</p>}
+          {item.group && item.group !== items[index - 1]?.group && <p className="muted pb-1 pt-3 text-xs font-semibold uppercase tracking-wider">{item.group}</p>}
           <Link href={item.href}
           aria-current={activeHref === item.href ? "page" : undefined}
           className="portal-nav-link block">

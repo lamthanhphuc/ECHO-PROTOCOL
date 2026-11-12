@@ -106,6 +106,7 @@ namespace EchoProtocol.Networking.Tests
                 {
                     "Zone1MinionCap" => (int)AEDV02Plan.Normal().Get(AEDV02Key.Zone1MinionCap),
                     "Zone2MinionCap" => (int)AEDV02Plan.Normal().Get(AEDV02Key.Zone2MinionCap),
+                    "Zone3MinionCap" => (int)AEDV02Plan.Normal().Get(AEDV02Key.Zone3AdaptiveMinionCap),
                     _ => property.GetValue(normal)
                 };
                 Assert.That(property.GetValue(profile), Is.EqualTo(expected), property.Name);

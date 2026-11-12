@@ -1846,6 +1846,7 @@ public sealed class MatchAuthorityServiceTests
             JoinProofLifetimeSeconds = 120,
             LeaseLifetimeSeconds = 45,
             TelemetryDelegationRetentionHours = 24,
+            RemoteFixedGameVersions = ["0.1.0", MatchAuthoritySettings.CurrentGameVersion],
             EnableRemoteFixed = remoteEnabled,
             EnableRemoteFixedGameplayTest = gameplayTestEnabled ?? remoteEnabled
         });

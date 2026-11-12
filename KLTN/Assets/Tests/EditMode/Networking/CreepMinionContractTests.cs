@@ -437,7 +437,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("SpawnScheduledCreepMinion(runner, catfishPosition, zone, true,", spawner);
             StringAssert.Contains("playerPositions[attempt % playerPositions.Count]", spawner);
             StringAssert.Contains("TryGetCreepMinionSpawnAnchor(zone, out var fallbackStalker)", spawner);
-            StringAssert.Contains("SpawnCreepMinion(runner, landPosition, zone, true)", spawner);
+            StringAssert.Contains("SpawnScheduledCreepMinion(runner, landPosition, zone, true,", spawner);
             StringAssert.Contains("FloodedWaterBoundary.TryGetWaterBounds(out var water)", spawner);
             StringAssert.Contains("Object.FindObjectsByType<Collider>(FindObjectsSortMode.None)", spawner);
             StringAssert.Contains("IsInsideBlockerBoundary(blockers, candidate, surfaceY", spawner);

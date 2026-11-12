@@ -78,12 +78,16 @@ public sealed class AdminController(
     [HttpPost("adaptive")]
     public Task<IActionResult> PublishAdaptiveConfiguration(PublishAdaptiveConfiguration request,
         [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
-        WithAdmin(id => adaptive.PublishAsync(id, request, ct), ct);
+        request.Compatibility == Configurations.MatchAuthoritySettings.CurrentGameVersion
+            ? WithAdmin(id => adaptive.PublishAsync(id, request, ct), ct)
+            : Task.FromResult<IActionResult>(BadRequest(ApiResponse<object>.Fail("Unsupported Unity build", ErrorCodes.ValidationError)));
 
     [HttpPost("adaptive/preview")]
     public Task<IActionResult> PreviewAdaptiveConfiguration(PreviewAdaptiveConfiguration request,
         [FromServices] AdaptiveConfigurationService adaptive, CancellationToken ct) =>
-        Execute(() => adaptive.PreviewAsync(request, ct), ct);
+        request.Compatibility == Configurations.MatchAuthoritySettings.CurrentGameVersion
+            ? Execute(() => adaptive.PreviewAsync(request, ct), ct)
+            : Task.FromResult<IActionResult>(BadRequest(ApiResponse<object>.Fail("Unsupported Unity build", ErrorCodes.ValidationError)));
 
     [HttpGet("matches/{matchId:guid}/adaptive")]
     public Task<IActionResult> MatchAdaptive(Guid matchId, [FromServices] AdaptiveMatchAuditService audit, CancellationToken ct) =>
