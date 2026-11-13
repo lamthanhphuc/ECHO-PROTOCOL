@@ -23,7 +23,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </form>
     </Panel>
     {result.items.length === 0 ? <EmptyState title="Không tìm thấy người dùng" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Số dư</th><th>Trận / Thắng</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((user) => <tr key={user.userId}><td><Link className="text-red-300 hover:underline" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
+      {result.items.map((user) => <tr key={user.userId}><td><Link className="admin-link" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/users" params={params} />
   </>;

@@ -33,7 +33,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
   const overview = [mapLabel(match.mapId), difficultyLabel(match.difficulty),
     locked?.buildVersion && "Bản game " + locked.buildVersion, configuration, resolution].filter(Boolean).join(" · ");
   return <>
-    <Link className="mb-5 inline-block text-sm text-red-300 hover:underline" href="/admin/matches">← Phòng và trận đấu</Link>
+    <Link className="mb-5 inline-block admin-link" href="/admin/matches">← Phòng và trận đấu</Link>
     <PageHeader title="Chi tiết phòng" description={overview} />
     <div className="grid gap-4 sm:grid-cols-3">
       <StatCard label="Trạng thái phòng" value={<StatusBadge status={status} />} />
@@ -42,7 +42,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
     </div>
     <AdaptiveMatchPanel audit={adaptive} matchId={matchId} />
     <Panel className="mt-5"><CopyReference label="Mã trận" value={match.matchId} /><dl className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      <div><dt className="eyebrow">Chủ phòng</dt><dd className="mt-1"><Link className="text-red-300 hover:underline" href={`/admin/users/${match.hostUserId}`}>{match.hostUsername || match.hostUserId}</Link></dd></div>
+      <div><dt className="eyebrow">Chủ phòng</dt><dd className="mt-1"><Link className="admin-link" href={`/admin/users/${match.hostUserId}`}>{match.hostUsername || match.hostUserId}</Link></dd></div>
       <div><dt className="eyebrow">Bản đồ</dt><dd className="mt-1">{mapLabel(match.mapId)}
         {match.mapId && <details className="muted mt-1 text-xs"><summary className="cursor-pointer">Mã bản đồ</summary><code>{match.mapId}</code></details>}
       </dd></div>
@@ -55,7 +55,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
       <p className="muted mb-4 text-sm">Trạng thái do chủ phòng báo về lần gần nhất.</p>
       {players.length === 0 ? <p className="muted">Chưa có người chơi.</p> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người chơi</th><th>Vai trò</th><th>Trạng thái</th><th>Tham gia trận</th><th>Gián đoạn trong trận</th><th>Vào phòng</th><th>Cập nhật cuối</th><th>Rời phòng</th></tr></thead><tbody>
         {players.map((player) => <tr key={player.userId}>
-          <td><Link className="text-red-300 hover:underline" href={`/admin/users/${player.userId}`}>{player.displayName || player.username}</Link></td>
+          <td><Link className="admin-link" href={`/admin/users/${player.userId}`}>{player.displayName || player.username}</Link></td>
           <td>{player.userId === match.hostUserId ? "Chủ phòng" : "Người chơi"}</td>
           <td>{player.disconnectedAtUtc ? "Đã rời" : "Chưa báo rời"}</td>
           <td>{player.participated ? "Có" : "Chưa"}</td>

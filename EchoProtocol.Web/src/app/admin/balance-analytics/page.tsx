@@ -57,7 +57,7 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
         <tbody>{data.cohorts.map((row) => <tr key={row.group}>
           <td>{labels[row.group] ?? row.group}</td><td>{row.matches}</td><td>{ratio(row.wins, row.matches)}</td>
           <td>{(row.averageSeconds / 60).toFixed(1)} phút</td><td>{ratio(row.survivors, row.players)}</td>
-          <td>{row.recentMatchIds.map((id) => <Link key={id} className="mr-2 text-red-300 hover:underline" href={`/admin/matches/${id}`}>{id.slice(0, 8)}</Link>)}</td>
+          <td>{row.recentMatchIds.map((id) => <Link key={id} className="mr-2 admin-link" href={`/admin/matches/${id}`}>{id.slice(0, 8)}</Link>)}</td>
         </tr>)}</tbody>
       </table></div>}
     </Panel>

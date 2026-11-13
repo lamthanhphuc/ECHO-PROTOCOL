@@ -12,7 +12,7 @@ export default async function PaymentDetailPage({ params, searchParams }: { para
   const detail = await adminApi.payment(paymentOrderId);
   const order = detail.order;
   return <>
-    <Link className="mb-4 inline-block text-sm text-red-300 hover:underline" href={"/admin/payments" + (filters ? "?" + filters : "")}>← Danh sách thanh toán</Link>
+    <Link className="mb-4 inline-block admin-link" href={"/admin/payments" + (filters ? "?" + filters : "")}>← Danh sách thanh toán</Link>
     <PageHeader title="Chi tiết đơn thanh toán" description={paymentProductLabel(order.productReference)} />
     <div className="grid gap-4 sm:grid-cols-3">
       <StatCard label="Số tiền" value={formatMoney(order.amount, order.currency)} />
@@ -36,7 +36,7 @@ export default async function PaymentDetailPage({ params, searchParams }: { para
         {detail.checkout ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Trạng thái thanh toán" value={statusLabel(detail.checkout.status)} /><Field label="Lần tạo liên kết" value={String(detail.checkout.checkoutSequenceId)} /><Field label="Mã liên kết thanh toán" value={detail.checkout.providerPaymentLinkId} code /><Field label="Liên kết sẵn sàng lúc" value={formatDate(detail.checkout.readyAtUtc)} /></dl> : <p className="muted text-sm">Chưa tạo liên kết thanh toán.</p>}
         <hr className="my-5 border-[#1d3942]" />
         {detail.fulfillment ? <dl className="grid gap-3 text-sm sm:grid-cols-2"><Field label="Loại cấp phát" value={statusLabel(detail.fulfillment.kind)} /><Field label="Mã tham chiếu" value={detail.fulfillment.fulfillmentReference} code /><Field label="Mã giao dịch số dư" value={detail.fulfillment.walletTransactionId} code /><Field label="Hoàn tất lúc" value={formatDate(detail.fulfillment.completedAtUtc)} /></dl> : <p className="muted text-sm">Chưa cấp xu hoặc vật phẩm.</p>}
-        {detail.fulfillment?.walletTransactionId && <Link className="mt-3 inline-block text-sm text-red-300 hover:underline" href={"/admin/wallet-transactions?reference=" + order.paymentOrderId}>Xem giao dịch cộng xu</Link>}
+        {detail.fulfillment?.walletTransactionId && <Link className="mt-3 inline-block admin-link" href={"/admin/wallet-transactions?reference=" + order.paymentOrderId}>Xem giao dịch cộng xu</Link>}
         {order.status === "PAID" && !detail.fulfillment && <PaymentRecoveryButton orderId={order.paymentOrderId} />}
       </Panel>
     </div>

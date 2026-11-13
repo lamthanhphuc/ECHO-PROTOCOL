@@ -94,7 +94,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
         </details>)}
       </div>
       {result.items.length === 0 ? <EmptyState title="Chưa có cấu hình phù hợp" /> : <div className="table-wrap"><table><thead><tr><th>Mã cấu hình</th><th>Bản đồ</th><th>Độ khó</th><th>Kích hoạt trên Web</th><th>Ngày tạo</th></tr></thead><tbody>
-        {result.items.map((item) => <tr key={item.version}><td><Link className="code text-red-300 hover:underline" href={`/admin/remote-fixed/${encodeURIComponent(item.version)}`}>{item.version}</Link></td><td>{mapLabel(item.mapId)}</td><td>{difficultyLabel(item.difficulty)}</td><td><StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
+        {result.items.map((item) => <tr key={item.version}><td><Link className="code admin-link" href={`/admin/remote-fixed/${encodeURIComponent(item.version)}`}>{item.version}</Link></td><td>{mapLabel(item.mapId)}</td><td>{difficultyLabel(item.difficulty)}</td><td><StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} /></td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
       </tbody></table></div>}
       <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/remote-fixed" params={{ ...(mapId && { mapId }), ...(difficulty && { difficulty }), ...(gameVersion && { gameVersion }) }} />
     </Panel>

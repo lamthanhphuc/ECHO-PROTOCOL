@@ -145,3 +145,22 @@ tbody tr:hover { background: rgba(173, 44, 45, .08); }
 @media (prefers-reduced-motion: reduce) {
   .button { transition: none; }
 }
+
+
+.admin-shell .admin-link {
+  color: #ffb5ab;
+  text-decoration: underline;
+  text-decoration-color: #c97f78;
+  text-underline-offset: .2em;
+}
+.admin-shell .admin-link:hover { color: #ffe0da; text-decoration-color: currentColor; }
+.admin-shell td .code { white-space: nowrap; }
+.admin-shell .button { font-size: .875rem; }
+.admin-shell .muted.text-xs { font-size: .8125rem; }
+.admin-shell summary { cursor: pointer; padding-block: .375rem; }
+.admin-shell summary::marker { color: #ffb5ab; }
+.admin-shell :is(.admin-link, .button, summary):focus-visible {
+  outline: 2px solid #ffb5ab;
+  outline-offset: 3px;
+}
+.admin-shell tbody tr:hover { background: transparent; }

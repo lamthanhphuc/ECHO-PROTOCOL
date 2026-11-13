@@ -37,13 +37,13 @@ export default async function AdminDashboard() {
       </div>
       <h2 className="admin-section-title mb-2 mt-5">Trận có ghi nhận điều chỉnh</h2>
       {matchIds.length ? <ul className="space-y-2 text-sm">{matchIds.map((id) =>
-        <li key={id}><Link className="text-red-300 hover:underline" href={"/admin/matches/" + id}>Xem chi tiết trận {id.slice(0, 8)}</Link></li>
+        <li key={id}><Link className="admin-link" href={"/admin/matches/" + id}>Xem chi tiết trận {id.slice(0, 8)}</Link></li>
       )}</ul> : <p className="muted text-sm">Chưa có trận thường có xác nhận điều chỉnh trong 30 ngày.</p>}
     </Panel>
     <p className="muted mt-7 text-sm">Vận hành · {users.totalItems} người dùng · {payments.totalItems} đơn thanh toán</p>
     <div className="mt-3 grid gap-5 xl:grid-cols-2">
       <Panel>
-        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Thanh toán gần đây</h2><Link className="text-sm text-red-300 hover:underline" href="/admin/payments">Xem tất cả</Link></div>
+        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Thanh toán gần đây</h2><Link className="admin-link" href="/admin/payments">Xem tất cả</Link></div>
         {payments.items.length === 0 ? <EmptyState title="Chưa có thanh toán" /> : <div className="space-y-3">
           {payments.items.map((item) => <Link key={item.paymentOrderId} href={`/admin/payments/${item.paymentOrderId}`} className="block rounded border border-[#4a2b2b] p-3 hover:border-red-700">
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm text-white">{item.username}</p><p className="muted mt-1 text-xs" title={item.productReference}>{paymentProductLabel(item.productReference)}</p></div><StatusBadge status={item.status} /></div>
@@ -52,7 +52,7 @@ export default async function AdminDashboard() {
         </div>}
       </Panel>
       <Panel>
-        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Giao dịch mua gần đây</h2><Link className="text-sm text-red-300 hover:underline" href="/admin/purchases">Xem tất cả</Link></div>
+        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Giao dịch mua gần đây</h2><Link className="admin-link" href="/admin/purchases">Xem tất cả</Link></div>
         {recentPurchases.items.length === 0 ? <EmptyState title="Chưa có giao dịch mua" /> : <div className="space-y-3">
           {recentPurchases.items.map((item) => <div key={item.purchaseId} className="rounded border border-[#4a2b2b] p-3">
             <div className="flex justify-between gap-3"><p className="text-sm text-white">{item.shopItemName}</p><StatusBadge status={item.status} /></div>

@@ -41,7 +41,7 @@ export default async function UserDetailPage({ params, searchParams }: { params:
       {ai.rows.length === 0 ? <p className="muted text-sm">Trang này chưa có điểm trận.</p> : <div className="table-wrap"><table>
         <thead><tr><th>Trận</th><th>Chỉ số</th><th>Điểm</th><th>Công thức và cấu hình</th><th>Đóng góp</th></tr></thead>
         <tbody>{ai.rows.map((row) => <tr key={row.id}>
-          <td><Link className="text-red-300 hover:underline" href={`/admin/matches/${row.matchId}`}>{formatDate(row.matchEndTs)}</Link></td>
+          <td><Link className="admin-link" href={`/admin/matches/${row.matchId}`}>{formatDate(row.matchEndTs)}</Link></td>
           <td>{dimensions[row.dimension] ?? row.dimension}</td><td>{row.score}</td>
           <td>{row.matchScoreFormulaVersion} · {row.normalizationConfigVersion} · {row.alphaConfigVersion}</td>
           <td>{row.status === "Contributing" ? "Đang tính" : "Đã rút"}{row.retractionReason && ` · ${row.retractionReason}`}

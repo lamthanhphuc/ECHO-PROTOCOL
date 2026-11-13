@@ -56,7 +56,7 @@ export default async function RemoteFixedDetailPage({ params }: { params: Promis
       ? `Build Unity ${content.gameVersion} chưa có trong danh sách tương thích.`
       : null;
   return <>
-    <Link className="mb-4 inline-block text-sm text-red-300 hover:underline" href={"/admin/remote-fixed" + queryString(scopeParams)}>← Quay lại danh sách</Link>
+    <Link className="mb-4 inline-block admin-link" href={"/admin/remote-fixed" + queryString(scopeParams)}>← Quay lại danh sách</Link>
     <PageHeader title={detail.version} description={scopeLabel} />
     <Link className="button button-secondary mb-4" href={"/admin/remote-fixed" + queryString({ ...scopeParams, create: 1, copy: detail.version })}>Sao chép thành bản mới</Link>
     <div className="grid gap-4 sm:grid-cols-3">
@@ -93,7 +93,7 @@ export default async function RemoteFixedDetailPage({ params }: { params: Promis
     </div>
     <Panel className="mt-5"><h2 className="admin-section-title mb-4">Lịch sử thay đổi trong phạm vi</h2>
       {history.items.length === 0 ? <p className="muted text-sm">Chưa có thao tác.</p> : <div className="table-wrap"><table><thead><tr><th>Thao tác</th><th>Trước đó</th><th>Áp dụng</th><th>Người thực hiện</th><th>Lý do</th><th>Thời gian</th></tr></thead><tbody>
-        {history.items.map((item) => <tr key={item.id} className={item.targetVersion === detail.version || item.previousVersion === detail.version ? "bg-white/5" : undefined}><td>{item.action === "CREATE" ? "Tạo" : item.action === "ACTIVATE" ? "Kích hoạt" : "Ngừng kích hoạt"}</td><td className="code">{item.previousVersion ?? "—"}</td><td className="code">{item.targetVersion ?? "—"}</td><td><Link className="text-red-300 hover:underline" href={"/admin/users/" + item.adminUserId}>Tài khoản {item.adminUserId.slice(0, 8)}</Link></td><td>{item.reason}</td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
+        {history.items.map((item) => <tr key={item.id} className={item.targetVersion === detail.version || item.previousVersion === detail.version ? "bg-white/5" : undefined}><td>{item.action === "CREATE" ? "Tạo" : item.action === "ACTIVATE" ? "Kích hoạt" : "Ngừng kích hoạt"}</td><td className="code">{item.previousVersion ?? "—"}</td><td className="code">{item.targetVersion ?? "—"}</td><td><Link className="admin-link" href={"/admin/users/" + item.adminUserId}>Tài khoản {item.adminUserId.slice(0, 8)}</Link></td><td>{item.reason}</td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
       </tbody></table></div>}
     </Panel>
   </>;
