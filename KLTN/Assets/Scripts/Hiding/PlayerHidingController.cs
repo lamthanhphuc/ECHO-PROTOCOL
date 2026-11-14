@@ -424,7 +424,8 @@ public class PlayerHidingController : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        if (IsHidden && Time.frameCount > _enteredFrame)
+        if (IsHidden && Time.frameCount > _enteredFrame
+            && !PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject))
         {
             ExitHiding();
         }

@@ -20,6 +20,7 @@ namespace EchoProtocol.UI
         private readonly Queue<string> _messages = new();
         private int _openedFrame;
         private int _closedFrame = -1;
+        private float _lastMessageTime;
         private string _composition = string.Empty;
         private int _compositionFrame = -1;
 
@@ -101,6 +102,10 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
+            if (!_lock.IsLocked && history.transform.parent.gameObject.activeSelf
+                && Time.unscaledTime - _lastMessageTime >= 10f)
+                history.transform.parent.gameObject.SetActive(false);
+
             var keyboard = Keyboard.current;
             if (keyboard == null || !Application.isFocused)
                 return;
@@ -212,7 +217,8 @@ namespace EchoProtocol.UI
                 inputPanel.SetActive(false);
 
             if (history != null)
-                history.transform.parent.gameObject.SetActive(_messages.Count > 0);
+                history.transform.parent.gameObject.SetActive(_messages.Count > 0
+                    && Time.unscaledTime - _lastMessageTime < 10f);
 
             _lock.Release();
         }
@@ -241,6 +247,7 @@ namespace EchoProtocol.UI
                 _messages.Dequeue();
 
             history.text = string.Join("\n", _messages);
+            _lastMessageTime = Time.unscaledTime;
             history.transform.parent.gameObject.SetActive(true);
         }
     }
