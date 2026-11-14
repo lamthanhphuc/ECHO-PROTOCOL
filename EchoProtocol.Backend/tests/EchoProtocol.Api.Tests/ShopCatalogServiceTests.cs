@@ -127,18 +127,18 @@ public sealed class ShopCatalogServiceTests
             NullLogger.Instance);
 
         // 4 production Team Tools
-        // + 1 Jammo Character
+        // + 2 production Characters
         // + 6 production Character Outfits
         // + 4 Pets
         // + 12 alternate Pet Skins
         // + 2 development-only items
-        // = 29 unique catalog entries.
+        // = 30 unique catalog entries.
         Assert.Equal(
-            29,
+            30,
             await harness.Db.ShopItems.CountAsync());
 
         Assert.Equal(
-            29,
+            30,
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .Distinct()
@@ -148,6 +148,9 @@ public sealed class ShopCatalogServiceTests
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .ToListAsync();
+
+        var priestId = Guid.Parse("13000000-0000-0000-0000-000000000002");
+        Assert.Equal(1000, (await harness.Db.ShopItems.SingleAsync(item => item.ItemId == priestId)).Price);
 
         // Existing production Team Tools.
         Assert.Contains(
