@@ -32,9 +32,11 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         return HeldItemWorldOffset + (IsJammo ? transform.up * extra : Vector3.zero)
             + (IsJammo && (toolId == 1 || toolId == 6) ? (_gripAimForward.sqrMagnitude > 0.001f ? _gripAimForward : transform.forward) * (toolId == 6 ? 0.10f : 0.05f) : Vector3.zero);
     }
+    private Quaternion _priestRightPalm, _priestLeftPalm;
+    public bool IsPriest => _applied == 2;
     public bool IsJammo => _applied == 1;
     public Quaternion RightHandGripCorrection => IsJammo
-        ? _jammoRightPalm * Quaternion.Inverse(_defaultRightPalm) : Quaternion.identity;
+        ? _jammoRightPalm * Quaternion.Inverse(_defaultRightPalm) : IsPriest ? _priestRightPalm * Quaternion.Inverse(_defaultRightPalm) : Quaternion.identity;
 
     private static Quaternion PalmBasis(Animator rig, bool left)
     {
@@ -67,7 +69,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         Vector3 right=Vector3.Cross(up,forward).normalized;
         if(right.sqrMagnitude<.01f)return;
         hand.rotation=Quaternion.LookRotation(forward,left ? right:-right)
-            * Quaternion.Inverse(left ? _defaultLeftPalm:_defaultRightPalm);
+            * Quaternion.Inverse(left ? (IsPriest ? _priestLeftPalm : _defaultLeftPalm) : (IsPriest ? _priestRightPalm : _defaultRightPalm));
     }
     public Vector3 FuelCellWristTarget(Transform hand, bool left, Vector3 handle, Vector3 forward, Vector3 up)
     {
@@ -270,7 +272,10 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         }
 
         var root = Instantiate(prefab, animator.transform);
-        root.GetComponent<Animator>().enabled = false;
+        var priestRig = root.GetComponent<Animator>();
+        _priestRightPalm = PalmBasis(priestRig, false);
+        _priestLeftPalm = PalmBasis(priestRig, true);
+        priestRig.enabled = false;
         var height = MeasureVisualHeight(root);
         _priestScale = _defaultVisualHeight > 0f && height > 0f ? _defaultVisualHeight / height : 1f;
         while (root.transform.childCount > 0)

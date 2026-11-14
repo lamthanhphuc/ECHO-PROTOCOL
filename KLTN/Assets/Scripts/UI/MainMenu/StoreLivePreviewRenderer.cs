@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -213,6 +213,8 @@ namespace EchoProtocol.UI.MainMenu
             // and gameplay scripts from moving individual child objects
             // while the common spin root is rotating.
             PrepareCurrentModelForPreview();
+            foreach (var renderer in _currentModel.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (renderer.name.StartsWith("FirstPersonArms_", System.StringComparison.Ordinal)) renderer.enabled = false;
 
             // STORE_TEAM_TOOL_PREVIEW_STABILIZE
             StabilizeTeamToolPreviewRendering();

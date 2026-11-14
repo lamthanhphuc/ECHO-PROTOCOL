@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEditor;
@@ -195,7 +195,7 @@ namespace EchoProtocol.Player.Tests
         }
 
         [Test]
-        public void PLAYER_CROUCH_CameraMovesForwardAndNonJammoSkipsUpperBodyAim()
+        public void PLAYER_CROUCH_CameraMovesForwardAndDefaultRigSkipsUpperBodyAim()
         {
             var camera = File.ReadAllText("Assets/Scripts/Player/PlayerCamera.cs");
             var upperBodyAim = File.ReadAllText("Assets/Scripts/Player/PlayerUpperBodyAim.cs");
@@ -203,7 +203,7 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("crouchCameraForwardOffset = 0.25f", camera);
             StringAssert.Contains("? crouchCameraForwardOffset", camera);
             StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
-            StringAssert.Contains("if (animator.GetBool(IsCrouchingHash) && !jammo)", upperBodyAim);
+            StringAssert.Contains("if (animator.GetBool(IsCrouchingHash) && !jammo && !priest)", upperBodyAim);
         }
 
         [Test]
