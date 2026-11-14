@@ -1,5 +1,6 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data;
+using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,66 @@ namespace EchoProtocol.Api.Services;
 
 public sealed class AdminModerationService(AppDbContext db)
 {
+    public async Task<ServiceResult<IReadOnlyList<KickDecisionResponse>>> GetKicksForHostAsync(
+        Guid hostUserId, Guid matchId, CancellationToken ct)
+    {
+        var match = await db.MatchAuthorityBindings.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.MatchId == matchId, ct);
+        if (match is null || match.HostUserId != hostUserId || match.Status != MatchAuthorityStatus.InMatch
+            || match.LeaseExpiresAtUtc <= DateTime.UtcNow)
+            return ServiceResult<IReadOnlyList<KickDecisionResponse>>.Failure("Host authority required", ErrorCodes.MatchAuthorityForbidden);
+        var decisions = await db.AdminModerationActions.AsNoTracking()
+            .Where(item => item.TargetId == matchId && item.Action == "KICK_PLAYER" && item.TargetUserId != null)
+            .OrderBy(item => item.CreatedAtUtc)
+            .Select(item => new KickDecisionResponse(item.Id, item.TargetUserId!.Value, item.Reason, item.CreatedAtUtc))
+            .ToArrayAsync(ct);
+        return ServiceResult<IReadOnlyList<KickDecisionResponse>>.Success(decisions);
+    }
+
+    public async Task<ServiceResult<AdminModerationAction>> KickPlayerAsync(
+        Guid adminId, Guid matchId, Guid targetUserId, Guid actionId, string reason, CancellationToken ct)
+    {
+        reason = reason?.Trim() ?? "";
+        if (adminId == Guid.Empty || matchId == Guid.Empty || targetUserId == Guid.Empty
+            || actionId == Guid.Empty || reason.Length is < 10 or > 500)
+            return ServiceResult<AdminModerationAction>.Failure("Invalid kick request", ErrorCodes.ValidationError);
+        if (!await db.Users.AnyAsync(user => user.Id == adminId && user.Role == UserRole.ADMIN && user.Status == UserStatus.ACTIVE, ct))
+            return ServiceResult<AdminModerationAction>.Failure("Admin access required", ErrorCodes.MatchAuthorityForbidden);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var match = db.Database.IsNpgsql()
+            ? await db.MatchAuthorityBindings.FromSqlInterpolated($"SELECT * FROM \"MatchAuthorityBindings\" WHERE \"MatchId\" = {matchId} FOR UPDATE").SingleOrDefaultAsync(ct)
+            : await db.MatchAuthorityBindings.SingleOrDefaultAsync(item => item.MatchId == matchId, ct);
+        if (match is null)
+            return ServiceResult<AdminModerationAction>.Failure("Match not found", ErrorCodes.NotFound);
+
+        var existing = await db.AdminModerationActions.SingleOrDefaultAsync(
+            item => item.TargetId == matchId && item.TargetUserId == targetUserId && item.Action == "KICK_PLAYER", ct);
+        if (existing is not null)
+            return existing.Id == actionId && existing.AdminUserId == adminId && existing.Reason == reason
+                ? ServiceResult<AdminModerationAction>.Success(existing)
+                : ServiceResult<AdminModerationAction>.Failure("Player already kicked", ErrorCodes.Conflict);
+        if (match.Status != MatchAuthorityStatus.InMatch || match.HostUserId == targetUserId)
+            return ServiceResult<AdminModerationAction>.Failure("Only a non-host player in an active match can be kicked", ErrorCodes.Conflict);
+
+        var player = await db.MatchPlayerBindings.SingleOrDefaultAsync(
+            item => item.MatchId == matchId && item.UserId == targetUserId && item.Participated, ct);
+        if (player is null)
+            return ServiceResult<AdminModerationAction>.Failure("Player is not in the started roster", ErrorCodes.NotFound);
+
+        var now = DateTime.UtcNow;
+        player.KickedAtUtc = now;
+        var entry = new AdminModerationAction
+        {
+            Id = actionId, TargetId = matchId, TargetUserId = targetUserId,
+            Action = "KICK_PLAYER", AdminUserId = adminId, Reason = reason, CreatedAtUtc = now
+        };
+        db.AdminModerationActions.Add(entry);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return ServiceResult<AdminModerationAction>.Success(entry);
+    }
+
     public async Task<ServiceResult<AdminModerationAction>> ApplyAsync(
         Guid adminId, Guid targetId, string action, string reason, CancellationToken ct)
     {

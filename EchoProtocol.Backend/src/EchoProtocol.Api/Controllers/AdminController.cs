@@ -256,7 +256,8 @@ public sealed class AdminController(
                 HadGameplayDisconnect = item.HadGameplayDisconnect,
                 BoundAtUtc = item.BoundAtUtc,
                 LastSeenAtUtc = item.LastSeenAtUtc,
-                DisconnectedAtUtc = item.DisconnectedAtUtc
+                DisconnectedAtUtc = item.DisconnectedAtUtc,
+                KickedAtUtc = item.KickedAtUtc
             }).ToArrayAsync(ct);
         return Ok(ApiResponse<AdminMatchDetailResponse>.Ok(new() { Match = match, Players = players }));
     }
@@ -269,6 +270,11 @@ public sealed class AdminController(
     public Task<IActionResult> Moderate(Guid targetId, [FromBody] AdminModerationRequest request,
         [FromServices] AdminModerationService moderation, CancellationToken ct) =>
         WithAdmin(adminId => moderation.ApplyAsync(adminId, targetId, request.Action, request.Reason, ct), ct);
+
+    [HttpPost("matches/{matchId:guid}/players/{userId:guid}/kick")]
+    public Task<IActionResult> KickPlayer(Guid matchId, Guid userId, [FromBody] AdminKickPlayerRequest request,
+        [FromServices] AdminModerationService moderation, CancellationToken ct) =>
+        WithAdmin(adminId => moderation.KickPlayerAsync(adminId, matchId, userId, request.ActionId, request.Reason, ct), ct);
     [HttpPost("matches/{matchId:guid}/recover-result")]
     public async Task<IActionResult> RecoverResult(Guid matchId, [FromBody] RecoverMatchResultRequest request,
         [FromServices] MatchResultService results, [FromServices] IRewardService rewards,

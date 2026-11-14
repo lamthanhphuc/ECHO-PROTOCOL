@@ -3,6 +3,8 @@ using EchoProtocol.Api.Enums;
 
 namespace EchoProtocol.Api.DTOs.MatchAuthority;
 
+public sealed record KickDecisionResponse(Guid ActionId, Guid UserId, string Reason, DateTime CreatedAtUtc);
+
 public sealed class CreateMatchAuthorityRequest
 {
     [Required, StringLength(128, MinimumLength = 1)]
@@ -36,6 +38,7 @@ public sealed class MatchRosterPlayerResponse
 {
     public Guid UserId { get; set; }
     public bool Disconnected { get; set; }
+    public bool Kicked { get; set; }
 }
 
 public sealed class StartMatchAuthorityRequest

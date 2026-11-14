@@ -102,10 +102,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         if (match!.Status == MatchAuthorityStatus.InMatch)
         {
             var existingMember = await _db.MatchPlayerBindings.AsNoTracking()
-                .AnyAsync(item => item.MatchId == matchId
-                    && item.UserId == userId && item.Participated, cancellationToken);
+                .SingleOrDefaultAsync(item => item.MatchId == matchId && item.UserId == userId, cancellationToken);
 
-            if (!existingMember)
+            if (existingMember?.KickedAtUtc is not null)
+                return Failure<JoinProofResponse>("Player access was revoked", ErrorCodes.MatchAuthorityForbidden);
+
+            if (existingMember?.Participated != true)
             {
                 return Failure<JoinProofResponse>(
                     "Only existing roster members may reconnect",
@@ -163,6 +165,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 && item.DisconnectedAtUtc == null);
         var userBinding = match.Players.SingleOrDefault(
             item => item.UserId == proof.UserId);
+        if (userBinding?.KickedAtUtc is not null)
+            return Failure<MatchPlayerBindingResponse>("Player access was revoked", ErrorCodes.MatchAuthorityForbidden);
         if (match.Status == MatchAuthorityStatus.InMatch && userBinding?.Participated != true)
             return Failure<MatchPlayerBindingResponse>("Player is not in the started roster", ErrorCodes.MatchPlayerBindingConflict);
 
@@ -253,7 +257,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         var candidate = match.Players.SingleOrDefault(item =>
             item.UserId == newHostUserId
-            && item.DisconnectedAtUtc == null);
+            && item.DisconnectedAtUtc == null
+            && item.KickedAtUtc == null);
 
         if (candidate is null)
         {
@@ -1059,7 +1064,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         Players = match.Players.Where(player => match.Status != MatchAuthorityStatus.InMatch || player.Participated).Select(player => new MatchRosterPlayerResponse
         {
             UserId = player.UserId,
-            Disconnected = player.DisconnectedAtUtc.HasValue
+            Disconnected = player.DisconnectedAtUtc.HasValue,
+            Kicked = player.KickedAtUtc.HasValue
         }).ToArray()
     };
 

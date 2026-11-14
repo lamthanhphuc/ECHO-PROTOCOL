@@ -326,6 +326,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Action).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
             entity.HasIndex(e => new { e.TargetId, e.CreatedAtUtc });
+            entity.HasIndex(e => new { e.TargetId, e.TargetUserId, e.Action }).IsUnique()
+                .HasFilter("\"Action\" = 'KICK_PLAYER'");
         });
 
         modelBuilder.Entity<MatchAuthorityBinding>(entity =>

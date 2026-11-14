@@ -82,6 +82,13 @@ public sealed class AdminMatchPlayerResponse
     public DateTime BoundAtUtc { get; init; }
     public DateTime LastSeenAtUtc { get; init; }
     public DateTime? DisconnectedAtUtc { get; init; }
+    public DateTime? KickedAtUtc { get; init; }
+}
+
+public sealed class AdminKickPlayerRequest
+{
+    public Guid ActionId { get; init; }
+    public string Reason { get; init; } = string.Empty;
 }
 
 public sealed class AdminGrantCreditsRequest

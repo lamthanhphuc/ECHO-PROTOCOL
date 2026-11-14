@@ -771,9 +771,16 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<Guid>("TargetId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TargetUserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TargetId", "CreatedAtUtc");
+
+                    b.HasIndex("TargetId", "TargetUserId", "Action")
+                        .IsUnique()
+                        .HasFilter("\"Action\" = 'KICK_PLAYER'");
 
                     b.ToTable("AdminModerationActions", (string)null);
                 });
@@ -957,6 +964,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<Guid>("JoinProofId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("KickedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("LastSeenAtUtc")
                         .HasColumnType("timestamp with time zone");

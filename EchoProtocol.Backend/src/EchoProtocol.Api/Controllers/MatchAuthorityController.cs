@@ -2,6 +2,7 @@ using System.Security.Claims;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.Services.Interfaces;
+using EchoProtocol.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,6 +39,11 @@ public sealed class MatchAuthorityController : ControllerBase
         [FromBody] BindMatchPlayerRequest request,
         CancellationToken cancellationToken) =>
         Respond(await _service.BindPlayerAsync(UserId(), matchId, request, cancellationToken));
+
+    [HttpGet("{matchId:guid}/kick-decisions")]
+    public async Task<IActionResult> GetKickDecisions(Guid matchId,
+        [FromServices] AdminModerationService moderation, CancellationToken cancellationToken) =>
+        Respond(await moderation.GetKicksForHostAsync(UserId(), matchId, cancellationToken));
 
     [HttpGet("{matchId:guid}/players/{fusionActorNumber:int}/entitlements")]
     public async Task<IActionResult> GetPlayerEntitlements(
