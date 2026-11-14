@@ -215,9 +215,9 @@ public sealed class ShopCatalogServiceTests
                     item.Category ==
                     ShopItemCategories.PetSkin));
 
-        // Jammo + development Test Explorer.
+        // Jammo and Cursed Priest + development Test Explorer.
         Assert.Equal(
-            2,
+            3,
             await harness.Db.ShopItems.CountAsync(
                 item =>
                     item.Category ==
