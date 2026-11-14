@@ -22,8 +22,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
   const result = invalid ? null : await adminApi.matches(queryString({ page, pageSize: 20, matchId, userId, status, flaggedOnly: flaggedOnly ? "true" : "" }));
 
   return <>
-    <PageHeader title="Phòng và trận đấu" />
-    <Panel className="mb-5"><form action="/admin/matches" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <PageHeader title="Phòng và trận đấu" description="Tra cứu phòng, xem trạng thái người chơi và mở chi tiết trận cần xử lý." />
+    <Panel className="mb-5"><h2 className="admin-section-title mb-3">Tra cứu phòng</h2><form action="/admin/matches" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <label className="admin-field">Trạng thái<select className="input" name="status" defaultValue={status}><option value="">Tất cả</option><option value="Lobby">Phòng chờ</option><option value="InMatch">Đang diễn ra</option><option value="Ended">Đã kết thúc hoặc dừng</option></select></label>
       <label className="admin-field">Mã trận đấu<input className="input" name="matchId" defaultValue={matchId} placeholder="Nhập mã trận đấu" /></label>
       <label className="admin-field">Mã người chơi<input className="input" name="userId" defaultValue={userId} placeholder="Nhập mã người chơi" /></label>

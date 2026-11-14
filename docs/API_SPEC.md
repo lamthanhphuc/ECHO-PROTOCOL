@@ -829,6 +829,8 @@ to the approved deterministic fixed baseline with `FIXED_FALLBACK`, `NOT_EVALUAT
 **Auth:** Bearer JWT, role `ADMIN`  
 **Status:** Read-only dashboard APIs implemented; shop mutation APIs remain planned
 
+Chat word policy: `GET /api/chat/words` requires a signed-in player and returns `{ words, updatedAtUtc }` in the standard envelope. `GET /api/admin/chat-words` and `POST /api/admin/chat-words` require `ADMIN`; POST replaces the full blocked-word list with `{ "words": ["word", "phrase"] }` (at most 256 unique items, 50 characters each). Before the first admin save, the API displays the starting list and Unity uses its local filter. After saving, running clients replace that filter with the admin list on their next 60-second refresh; if the API is unavailable they retain their last known list.
+
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/admin/users` | Paginated users; optional `search` |

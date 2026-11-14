@@ -144,6 +144,11 @@ export interface AdminModerationAction {
   createdAtUtc: string;
 }
 
+export interface ChatWordsData {
+  words: string[];
+  updatedAtUtc: string | null;
+}
+
 export interface RemoteFixedVersion {
   version: string;
   mapId: "SciFi" | "Scene_A";

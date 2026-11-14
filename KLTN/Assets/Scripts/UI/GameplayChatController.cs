@@ -1,6 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
+using EchoProtocol.Api;
+using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using Fusion;
 using TMPro;
 using UnityEngine;
@@ -23,6 +26,12 @@ namespace EchoProtocol.UI
         private float _lastMessageTime;
         private string _composition = string.Empty;
         private int _compositionFrame = -1;
+        private Coroutine _wordRefresh;
+
+        [System.Serializable]
+        private sealed class ChatWordsEnvelope { public ChatWordsData data; }
+        [System.Serializable]
+        private sealed class ChatWordsData { public string[] words; public string updatedAtUtc; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize()
@@ -34,7 +43,7 @@ namespace EchoProtocol.UI
 
         private static void OnSceneChanged(Scene previous, Scene current)
         {
-            if (!LobbyMapCatalog.IsGameplayScene(current.name))
+            if (!LobbyMapCatalog.IsChatScene(current.name))
                 return;
 
             if (FindAnyObjectByType<GameplayChatController>() != null)
@@ -87,6 +96,7 @@ namespace EchoProtocol.UI
             input.onSubmit.AddListener(Submit);
             if (Keyboard.current != null)
                 Keyboard.current.onIMECompositionChange += OnCompositionChanged;
+            _wordRefresh = StartCoroutine(RefreshChatWords());
         }
 
         private void OnDisable()
@@ -96,6 +106,7 @@ namespace EchoProtocol.UI
                 input.onSubmit.RemoveListener(Submit);
             if (Keyboard.current != null)
                 Keyboard.current.onIMECompositionChange -= OnCompositionChanged;
+            if (_wordRefresh != null) StopCoroutine(_wordRefresh);
 
             Close();
         }
@@ -119,6 +130,11 @@ namespace EchoProtocol.UI
 
             if (PlayerInteractionControlLock.HasModal
                 || PlayerInteractionControlLock.IsGameplayInputBlocked())
+                return;
+
+            var selected = EventSystem.current?.currentSelectedGameObject;
+            if (selected != null && (selected.GetComponent<TMP_InputField>() != null
+                || selected.GetComponent<UnityEngine.UI.InputField>() != null))
                 return;
 
             if (Time.frameCount != _closedFrame
@@ -180,6 +196,14 @@ namespace EchoProtocol.UI
             var runner = NetworkBootstrap.Instance?.Runner;
             string message = GameplayChatRpc.Normalize(value);
 
+            if (GameplayChatRpc.ContainsBlockedLanguage(message))
+            {
+                AppendHistory(GameLanguage.Choose("Hệ thống: Tin nhắn có từ ngữ không phù hợp.",
+                    "System: Message contains inappropriate language."));
+                Close();
+                return;
+            }
+
             if (runner != null && runner.IsRunning
                 && !NetworkBootstrap.IsHostMigrationReconciliationPending
                 && message.Length > 0)
@@ -197,6 +221,21 @@ namespace EchoProtocol.UI
         {
             _composition = composition.ToString();
             _compositionFrame = Time.frameCount;
+        }
+
+        private IEnumerator RefreshChatWords()
+        {
+            while (true)
+            {
+                AuthRuntime.EnsureExists().Client.GetJson<ChatWordsEnvelope>("/api/chat/words", true,
+                    result =>
+                    {
+                        if (result.IsSuccess && result.Data?.data?.words != null)
+                            GameplayChatRpc.SetAdminBlockedWords(result.Data.data.words,
+                                !string.IsNullOrEmpty(result.Data.data.updatedAtUtc));
+                    });
+                yield return new WaitForSecondsRealtime(60f);
+            }
         }
 
         private void Close()
@@ -241,7 +280,12 @@ namespace EchoProtocol.UI
                     senderName = name;
             }
 
-            _messages.Enqueue(senderName + ": " + message);
+            AppendHistory(senderName + ": " + message);
+        }
+
+        private void AppendHistory(string line)
+        {
+            _messages.Enqueue(line);
 
             while (_messages.Count > 6)
                 _messages.Dequeue();

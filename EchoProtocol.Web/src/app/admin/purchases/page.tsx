@@ -14,8 +14,8 @@ export default async function PurchasesPage({ searchParams }: { searchParams: Pr
   const result = await adminApi.purchases(queryString({ page, pageSize: 20, ...values }));
   const pageParams = Object.fromEntries(Object.entries(values).filter(([, value]) => value));
   return <>
-    <PageHeader title="Mua vật phẩm" />
-    <Panel className="mb-5"><form action="/admin/purchases" className="grid gap-4 md:grid-cols-2">
+    <PageHeader title="Mua vật phẩm" description="Tra cứu giao dịch mua và trạng thái cấp vật phẩm." />
+    <Panel className="mb-5"><h2 className="admin-section-title mb-3">Lọc giao dịch mua</h2><form action="/admin/purchases" className="grid gap-4 md:grid-cols-2">
       <label className="admin-field">Mã người dùng<input className="input" name="userId" defaultValue={values.userId} /></label>
       <label className="admin-field">Mã vật phẩm<input className="input" name="shopItemId" defaultValue={values.shopItemId} /></label>
       <label className="admin-field">Từ ngày (UTC)<input className="input" type="datetime-local" name="fromUtc" defaultValue={values.fromUtc} /></label>

@@ -15,6 +15,7 @@ import type {
   AdminMatchesPage,
   AdminMatchDetail,
   AdminModerationAction,
+  ChatWordsData,
   AdminPaymentsPage,
   AdminPurchasesPage,
   AdminUser,
@@ -52,6 +53,7 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  chatWords: () => authorized<ChatWordsData>("/api/admin/chat-words"),
   balanceAnalytics: (query: string) => authorized<BalanceAnalytics>(`/api/admin/balance-analytics${query}`),
   playerAIHistory: (id: string, page: number) => authorized<PlayerAIHistory>(`/api/admin/users/${encodeURIComponent(id)}/ai-history?page=${page}`),
   matchContent: () => authorized<MatchContent>("/api/admin/match-content"),

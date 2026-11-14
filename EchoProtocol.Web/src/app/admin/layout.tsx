@@ -7,6 +7,7 @@ const items = [
   { href: "/admin/matches", label: "Phòng và trận đấu", group: "Vận hành" },
   { href: "/admin/users", label: "Người dùng", group: "Vận hành" },
   { href: "/admin/remote-fixed", label: "Cấu hình trận", group: "Cấu hình trò chơi" },
+  { href: "/admin/chat-words", label: "Từ cấm chat", group: "Cấu hình trò chơi" },
   { href: "/admin/adaptive", label: "Điều chỉnh độ khó", group: "Adaptive AI" },
   { href: "/admin/ai-profile", label: "Cách tính hồ sơ", group: "Adaptive AI" },
   { href: "/admin/balance-analytics", label: "Báo cáo trận đấu", group: "Adaptive AI" },

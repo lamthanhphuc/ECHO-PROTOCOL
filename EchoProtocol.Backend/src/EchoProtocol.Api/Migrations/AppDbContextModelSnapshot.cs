@@ -778,6 +778,29 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("AdminModerationActions", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ChatWordPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WordsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ChatWordPolicies", (string)null);
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
                 {
                     b.Property<Guid>("InventoryItemId")

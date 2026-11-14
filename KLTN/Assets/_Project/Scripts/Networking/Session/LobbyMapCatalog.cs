@@ -20,6 +20,7 @@ namespace EchoProtocol.Networking
         private static NetworkRunner _hostRunner;
         private static int _hostSelection;
         public static bool IsGameplayScene(string name) => name == LobbyManager.GameSceneName || name == ExplorationScene || name == AlienHuntMission.SceneName;
+        public static bool IsChatScene(string name) => name == NetworkBootstrap.LobbySceneName || IsGameplayScene(name);
         public static int Selected(NetworkRunner runner)
         {
             if (MapLocked(runner)) return 2;

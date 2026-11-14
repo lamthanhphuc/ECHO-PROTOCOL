@@ -23,25 +23,27 @@ export default async function AdminDashboard() {
     : "Mặc định";
   return <>
     <PageHeader title="Tổng quan"
-      description="Theo dõi cấu hình, cách AI điều chỉnh trận và kết quả được ghi nhận." />
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      description="Theo dõi hoạt động gần đây và mở nhanh các công việc quản trị." />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatCard label="Người dùng" value={users.totalItems} detail="Tài khoản đã đăng ký" />
       <StatCard label="Trận đã ghi kết quả" value={analytics.total} detail="Trận thường trong 30 ngày" />
-      <StatCard label="Điều chỉnh có xác nhận từ chủ phòng" value={analytics.applied} detail="Số quyết định đã có biên nhận áp dụng" />
-      <StatCard label="Cấu hình nền trên Web" value={balanceLabel} detail={balanceLabel === "Mặc định" ? "Dùng cấu hình trong game khi chọn nguồn tự động" : "Số bản đã kích hoạt. Xem phạm vi có hiệu lực ở Cấu hình trận."} />
+      <StatCard label="Đơn thanh toán" value={payments.totalItems} detail="Tổng đơn đã ghi nhận" />
+      <StatCard label="Cấu hình trận" value={balanceLabel} detail={balanceLabel === "Mặc định" ? "Đang dùng cấu hình trong game" : "Bản cấu hình đang kích hoạt"} />
     </div>
     <Panel className="mt-5">
-      <div className="flex flex-wrap gap-3">
-        <Link className="button button-secondary" href="/admin/remote-fixed">Xem cấu hình trận</Link>
-        <Link className="button button-secondary" href="/admin/adaptive#adaptive-sample">Chạy thử Adaptive AI</Link>
-        <Link className="button button-secondary" href="/admin/balance-analytics">Xem báo cáo trận đấu</Link>
+      <h2 className="admin-section-title mb-3">Đi đến công việc</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Link className="admin-action-card" href="/admin/matches"><strong>Phòng và trận đấu</strong><span>Tra cứu trận, xem người chơi và xử lý vấn đề.</span></Link>
+        <Link className="admin-action-card" href="/admin/users"><strong>Người dùng</strong><span>Tìm tài khoản và kiểm tra trạng thái.</span></Link>
+        <Link className="admin-action-card" href="/admin/chat-words"><strong>Từ cấm chat</strong><span>Thêm, tìm hoặc bỏ chặn từ ngữ.</span></Link>
+        <Link className="admin-action-card" href="/admin/remote-fixed"><strong>Cấu hình trận</strong><span>Xem phiên bản và phạm vi đang áp dụng.</span></Link>
       </div>
-      <h2 className="admin-section-title mb-2 mt-5">Trận có ghi nhận điều chỉnh</h2>
+      <h2 className="admin-section-title mb-2 mt-6">Trận có ghi nhận điều chỉnh</h2>
       {matchIds.length ? <ul className="space-y-2 text-sm">{matchIds.map((id) =>
         <li key={id}><Link className="admin-link" href={"/admin/matches/" + id}>Xem chi tiết trận {id.slice(0, 8)}</Link></li>
       )}</ul> : <p className="muted text-sm">Chưa có trận thường có xác nhận điều chỉnh trong 30 ngày.</p>}
     </Panel>
-    <p className="muted mt-7 text-sm">Vận hành · {users.totalItems} người dùng · {payments.totalItems} đơn thanh toán</p>
-    <div className="mt-3 grid gap-5 xl:grid-cols-2">
+    <div className="mt-5 grid gap-5 xl:grid-cols-2">
       <Panel>
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg text-white">Thanh toán gần đây</h2><Link className="admin-link" href="/admin/payments">Xem tất cả</Link></div>
         {payments.items.length === 0 ? <EmptyState title="Chưa có thanh toán" /> : <div className="space-y-3">

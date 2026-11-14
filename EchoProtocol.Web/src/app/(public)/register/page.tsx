@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { getSession } from "@/lib/auth/session";
 import { RegisterForm } from "@/components/auth/register-form";
 
@@ -11,7 +12,7 @@ export default async function RegisterPage() {
   return (
     <main className="login-stage mx-auto grid min-h-screen w-full max-w-[1480px] items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-16">
       <div className="max-w-2xl">
-        <div className="login-emblem" aria-hidden="true">E</div>
+        <Image src="/echo-logo.webp" alt="Biểu tượng ECHO PROTOCOL" width={132} height={132} className="login-logo" priority />
         <h1 className="login-title mt-10 text-5xl leading-[.95] text-[#f5eee6] sm:text-7xl xl:text-8xl">
           ECHO<br />
           <span className="text-[#bd4542]">PROTOCOL</span>

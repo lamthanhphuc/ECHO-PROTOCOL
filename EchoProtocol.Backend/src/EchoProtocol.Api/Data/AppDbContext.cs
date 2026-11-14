@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<RemoteFixedBalanceVersion> RemoteFixedBalanceVersions => Set<RemoteFixedBalanceVersion>();
     public DbSet<RemoteFixedBalanceAuditEntry> RemoteFixedBalanceAuditEntries => Set<RemoteFixedBalanceAuditEntry>();
     public DbSet<AdminModerationAction> AdminModerationActions => Set<AdminModerationAction>();
+    public DbSet<ChatWordPolicy> ChatWordPolicies => Set<ChatWordPolicy>();
     public DbSet<MatchPlayerBinding> MatchPlayerBindings => Set<MatchPlayerBinding>();
     public DbSet<MatchResult> MatchResults => Set<MatchResult>();
     public DbSet<MatchResultPlayer> MatchResultPlayers => Set<MatchResultPlayer>();
@@ -56,6 +57,12 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ChatWordPolicy>(entity =>
+        {
+            entity.ToTable("ChatWordPolicies");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.WordsJson).IsRequired().HasColumnType("jsonb");
+        });
         modelBuilder.Entity<ShopPriceProposal>(entity =>
         {
             entity.HasKey(x => x.Id);
