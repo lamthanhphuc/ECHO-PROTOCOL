@@ -70,7 +70,7 @@ namespace EchoProtocol.Networking.Tests
                 new[] { Enum.Parse(difficultyType, "Normal") });
             Assert.That(normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(3));
             Assert.That(normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(5));
-            Assert.That(normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(1));
+            Assert.That(normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(3));
             StringAssert.Contains("CanApplyAEDv2Gameplay(", File.ReadAllText(Match));
         }
 

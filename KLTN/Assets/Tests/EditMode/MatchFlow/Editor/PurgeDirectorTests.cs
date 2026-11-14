@@ -366,7 +366,7 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [TestCase(0, 35f)] [TestCase(2, 35f)] [TestCase(3, 28f)] [TestCase(5, 28f)]
-        [TestCase(6, 22f)] [TestCase(7, 22f)] [TestCase(8, 16f)]
+        [TestCase(6, 18f)] [TestCase(7, 18f)] [TestCase(8, 14f)]
         public void RefillCooldownChangesOnlyAtApprovedProgressBoundaries(int burned, float expected)
         {
             Assert.That(PurgeFishcatBalance.SpawnCooldown(burned), Is.EqualTo(expected));

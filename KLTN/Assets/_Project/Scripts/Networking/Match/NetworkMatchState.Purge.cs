@@ -17,7 +17,7 @@ namespace EchoProtocol.Networking
             float scale = difficulty == MatchDifficulty.Easy ? .75f : difficulty == MatchDifficulty.Hard ? 1.25f : 1f;
             return Mathf.Max(1, Mathf.CeilToInt(normal * scale));
         }
-        public static float SpawnCooldown(int burned) => Tier(burned) == 3 ? 16f : Tier(burned) == 2 ? 22f : Tier(burned) == 1 ? 28f : 35f;
+        public static float SpawnCooldown(int burned) => Tier(burned) == 3 ? 14f : Tier(burned) == 2 ? 18f : Tier(burned) == 1 ? 28f : 35f;
         public static float UvDeathSeconds(int partySize, MatchDifficulty difficulty) => 1f;
         public const int HuntersPerPlayer = 2;
     }

@@ -21,7 +21,7 @@ public static class RemoteGameplayTuning
         new("hideInspectSeconds", "Stalker", "Thời gian Stalker kiểm tra chỗ trốn (giây)", .1m, 5, Help: "Thời gian dành cho một lần kiểm tra chỗ trốn."),
         new("hideReinspectCooldown", "Stalker", "Thời gian chờ kiểm tra lại chỗ trốn (giây)", 1, 60, Help: "Tăng giá trị để Stalker kiểm tra lại ít thường xuyên hơn."),
         new("minionCapZone1", "Minion", "Giới hạn Zone 1", 0, 3, true, "SciFi"),
-        new("minionCapZone2", "Minion", "Giới hạn Zone 2", 0, 4, true, "SciFi"),
+        new("minionCapZone2", "Minion", "Giới hạn Zone 2", 0, 5, true, "SciFi"),
         new("minionCapZone3", "Minion", "Giới hạn Zone 3", 0, 4, true, "SciFi"),
         new("toolsPerZone", "Công cụ", "Ngân sách công cụ mỗi Zone", 5, 6, true, "SciFi"),
         new("zone1ToolBudget", "Công cụ", "Phân bổ công cụ Zone 1", 5, 6, true, "SciFi"),

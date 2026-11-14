@@ -17,7 +17,7 @@ public sealed class RemoteFixedBalanceTests
 
     [Theory]
     [InlineData("0.1.0", 0)]
-    [InlineData("0.1.1", 1)]
+    [InlineData("0.1.1", 3)]
     public void AdaptiveBasisKeepsZoneThreeCapForTheLockedGameVersion(string gameVersion, int expected)
     {
         Assert.Equal(expected, RemoteFixedBalanceContract.AdaptiveBasis(null, gameVersion).Values[8]);

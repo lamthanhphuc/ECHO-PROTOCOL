@@ -158,8 +158,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.AI.Minions.CreepMinionRuntime
   _EncounterDutyValue: 0
   roamSpeed: 5.5
-  trackSpeed: 8
-  harassSpeed: 10
+  trackSpeed: 7.2
+  harassSpeed: 9
   fleeSpeed: 12
   roamRadius: 28
   roamMinPathDistance: 10

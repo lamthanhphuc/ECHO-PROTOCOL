@@ -302,7 +302,7 @@ namespace EchoProtocol.Networking.Tests
                 null, new[] { System.Enum.Parse(difficultyType, "Normal") });
             Assert.That((int)normal.GetType().GetProperty("Zone1MinionCap").GetValue(normal), Is.EqualTo(3));
             Assert.That((int)normal.GetType().GetProperty("Zone2MinionCap").GetValue(normal), Is.EqualTo(5));
-            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(1));
+            Assert.That((int)normal.GetType().GetProperty("Zone3MinionCap").GetValue(normal), Is.EqualTo(3));
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 "Assets/Resources/PF_CreepMinionNetwork.prefab");
@@ -312,8 +312,8 @@ namespace EchoProtocol.Networking.Tests
             Assert.That(minion, Is.Not.Null);
             var serialized = new SerializedObject(minion);
             Assert.That(serialized.FindProperty("visionRange").floatValue, Is.EqualTo(20f));
-            Assert.That(serialized.FindProperty("trackSpeed").floatValue, Is.EqualTo(8f));
-            Assert.That(serialized.FindProperty("harassSpeed").floatValue, Is.EqualTo(10f));
+            Assert.That(serialized.FindProperty("trackSpeed").floatValue, Is.EqualTo(7.2f));
+            Assert.That(serialized.FindProperty("harassSpeed").floatValue, Is.EqualTo(9f));
             Assert.That(serialized.FindProperty("attackCooldownSeconds").floatValue, Is.EqualTo(0.65f));
             Assert.That(serialized.FindProperty("alertCooldownSeconds").floatValue, Is.EqualTo(4f));
             Assert.That(serialized.FindProperty("stealToolRange").floatValue, Is.EqualTo(3f));
@@ -476,7 +476,7 @@ namespace EchoProtocol.Networking.Tests
             StringAssert.Contains("if (CrossesMap2Water(hit.position))", minion);
             StringAssert.Contains("_catfishOnLand = false", minion);
             StringAssert.Contains("_catfishWasInWater = false", minion);
-            StringAssert.Contains("map2 ? false : disruptor", spawner);
+            StringAssert.Contains("SpawnScheduledCreepMinion(runner, position, zone, !map2 && disruptor,", spawner);
             StringAssert.Contains("(minion.transform.position - hit.position).sqrMagnitude < 4f", spawner);
 
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(

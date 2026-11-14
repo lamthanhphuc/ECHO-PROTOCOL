@@ -1516,8 +1516,16 @@ namespace EchoProtocol.Networking
                 return;
             }
 
-            if (!TryGetCreepMinionSpawnAnchor(zone, out var stalker)) return;
-            if (!TryFindCreepMinionSpawnPosition(runner, stalker, out var position)) return;
+            if (!TryGetCreepMinionSpawnAnchor(zone, out var stalker))
+            {
+                ReportZone3MinionSpawnWait(zone, count, cap, "missing Stalker anchor");
+                return;
+            }
+            if (!TryFindCreepMinionSpawnPosition(runner, stalker, out var position))
+            {
+                ReportZone3MinionSpawnWait(zone, count, cap, "no valid spawn position");
+                return;
+            }
             if (zone == RegionSemanticZone.Zone03 && _v02ObservedMinionRevision > 0 &&
                 (authority?.HasAutomaticBalance != true || count >= authority.V02Baseline(AEDV02Key.Zone3AdaptiveMinionCap)))
             {
@@ -1562,10 +1570,24 @@ namespace EchoProtocol.Networking
                         && path.status == NavMeshPathStatus.PathComplete)
                     { group = candidate; break; }
                 if (group == null) groups.Add(new PurgeActivityGroup { Position = position, Members = 1 });
-                else group.Members++;
+                else
+                {
+                    group.Position += (position - group.Position) / ++group.Members;
+                }
             }
             return groups;
         }
+
+        private float _nextZone3SpawnWarningAt;
+
+        private void ReportZone3MinionSpawnWait(RegionSemanticZone zone, int count, int cap, string reason)
+        {
+            if (!Debug.isDebugBuild || zone != RegionSemanticZone.Zone03 || Time.time < _nextZone3SpawnWarningAt) return;
+            _nextZone3SpawnWarningAt = Time.time + 15f;
+            Debug.LogWarning($"[MinionSpawn] Zone03 population={count}/{cap}: {reason}");
+        }
+
+        private float _nextPurgeSpawnWarningAt;
 
         private void MaintainPurgeFishcatPopulation(NetworkRunner runner)
         {
@@ -1615,6 +1637,11 @@ namespace EchoProtocol.Networking
                 spawned.GetComponent<CreepMinionRuntime>().SetPurgeEncounter((FishcatEncounterDuty)(fish.Count % 3), group.Position);
                 _purgeRefillSchedule.Spawned(Time.time);
                 return; // Never fill a whole tier in one check.
+            }
+            if (Debug.isDebugBuild && Time.time >= _nextPurgeSpawnWarningAt)
+            {
+                _nextPurgeSpawnWarningAt = Time.time + 15f;
+                Debug.LogWarning($"[Purge] No valid Fishcat spawn. Burned={match.HuntBurned}, groups={groups.Count}, population={fish.Count}/{match.PurgeMinionCap}");
             }
         }
 

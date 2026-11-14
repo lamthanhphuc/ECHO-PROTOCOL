@@ -153,8 +153,8 @@ namespace EchoProtocol.AI.Minions
 
         [Header("Movement")]
         [SerializeField] private float roamSpeed = 5.5f;
-        [SerializeField] private float trackSpeed = 8f;
-        [SerializeField] private float harassSpeed = 10f;
+        [SerializeField] private float trackSpeed = 7.2f;
+        [SerializeField] private float harassSpeed = 9f;
         [SerializeField] private float fleeSpeed = 12f;
 
         [SerializeField, Min(5f)]
@@ -1568,7 +1568,7 @@ namespace EchoProtocol.AI.Minions
         private PlayerRef FindBestVisibleTarget()
         {
             if (TryGetEligiblePlayer(TargetPlayer, out var current, out _, out _)
-                && (!IsPurgeCatfish || OtherHunters(TargetPlayer) < PurgeFishcatBalance.HuntersPerPlayer)
+                && (!IsPurgeCatfish || OtherHunters(TargetPlayer) == 0)
                 && HasLineOfSight(current))
                 return TargetPlayer;
 
@@ -1579,7 +1579,7 @@ namespace EchoProtocol.AI.Minions
                 if (!TryGetEligiblePlayer(player, out var obj, out var lobby, out _) || !CanSeePlayer(obj)) continue;
                 if (IsPurgeCatfish && OtherHunters(player) >= PurgeFishcatBalance.HuntersPerPlayer) continue;
                 float score = -Vector3.Distance(transform.position, obj.transform.position);
-                if (IsPurgeCatfish) score -= OtherHunters(player) * 12f;
+                if (IsPurgeCatfish) score -= OtherHunters(player) * 24f;
                 if (!IsPurgeCatfish && lobby.CarriedCoreId.IsValid)
                     score += 500f;
                 else if (!IsPurgeCatfish && lobby.ToolId >= 1 && lobby.ToolId <= 6)
@@ -1608,7 +1608,9 @@ namespace EchoProtocol.AI.Minions
             foreach (var player in Runner.ActivePlayers)
             {
                 if (!TryGetEligiblePlayer(player, out var obj, out _, out _)) continue;
-                float distance = (obj.transform.position - transform.position).sqrMagnitude;
+                int otherHunters = IsPurgeCatfish ? OtherHunters(player) : 0;
+                if (IsPurgeCatfish && otherHunters >= PurgeFishcatBalance.HuntersPerPlayer) continue;
+                float distance = Vector3.Distance(obj.transform.position, transform.position) + otherHunters * 24f;
                 if (distance >= bestDistance) continue;
                 bestDistance = distance;
                 best = player;

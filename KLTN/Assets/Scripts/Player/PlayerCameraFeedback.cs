@@ -73,7 +73,7 @@ public sealed class PlayerCameraFeedback : MonoBehaviour
         float shake = PlayerCameraSettings.ReduceMotion || blocked || !alive ? 0 : impact * impact * PlayerCameraSettings.Intensity;
         // Roll keeps transform.forward unchanged: interaction and scanner rays use this camera too.
         transform.rotation *= Quaternion.Euler(0, 0,
-            Mathf.Sin(_phase * .5f) * _amplitude * 12 + Mathf.Sin(_hit * 55) * shake * 1.1f);
+            Mathf.Sin(_phase * .5f) * _amplitude * 12 + Mathf.Sin(_hit * 55) * shake * 1.65f);
         UpdateEdge(blocked, health / Mathf.Max(1, _life != null ? _life.MaxHealth : 100), _life != null && _life.IsDowned, dt);
     }
 
