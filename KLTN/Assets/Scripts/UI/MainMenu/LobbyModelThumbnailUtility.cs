@@ -107,6 +107,8 @@ namespace EchoProtocol.UI.MainMenu
             if (characterId == 1)
                 return "Shop/LobbyPortraits/jammo-hero";
 
+            if (characterId == 2) return "Shop/LobbyPortraits/Cursed Priest";
+
             return GetCharacterBaseResource(
                 characterId);
         }

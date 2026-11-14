@@ -563,11 +563,7 @@ namespace EchoProtocol.UI.MainMenu
             CharacterShopAssets.Item definition,
             ShopItem item)
         {
-            string thumbnailResource =
-                definition.CharacterId
-                    == CharacterShopAssets.JammoCharacterId
-                    ? "Shop/LobbyVariants/Characters/character-1-outfit-0"
-                    : "Shop/LobbyVariants/Characters/character-0-outfit-0";
+            string thumbnailResource = definition.ThumbnailResource;
 
             GameObject card =
                 StoreV2PrefabCardFactory

@@ -103,7 +103,7 @@ public sealed class PlayerColorPresenter : MonoBehaviour
 
     public void ApplyColor(int outfitId)
     {
-        if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CharacterId == 1) return;
+        if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CharacterId != 0) return;
         EnsureColorSetsLoaded();
 
         if (colorSets == null || colorSets.Length == 0)

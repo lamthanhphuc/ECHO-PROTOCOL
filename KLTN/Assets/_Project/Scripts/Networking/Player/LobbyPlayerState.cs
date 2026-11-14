@@ -979,7 +979,7 @@ namespace EchoProtocol.Networking
             }
 
             if (error == LobbySelectionError.None
-                && (characterId < 0 || characterId > 1))
+                && (characterId < 0 || characterId > 2))
             {
                 error =
                     LobbySelectionError.InvalidSelection;
@@ -1056,14 +1056,14 @@ namespace EchoProtocol.Networking
             }
 
             if (error == LobbySelectionError.None
-                && (CharacterId < 0 || CharacterId > 1))
+                && (CharacterId < 0 || CharacterId > 2))
             {
                 error =
                     LobbySelectionError.InvalidSelection;
             }
 
             if (error == LobbySelectionError.None
-                && (outfitId < 0 || outfitId > 3))
+                && (outfitId < 0 || outfitId > (CharacterId == 2 ? 0 : 3)))
             {
                 error =
                     LobbySelectionError.InvalidSelection;

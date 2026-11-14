@@ -46,7 +46,10 @@ public static class ShopCatalogSeeder
             "CHARACTER",
             600,
             "Compact expedition unit configured for hazardous operations.",
-            "Assets/Resources/Characters/PF_JammoVisual.prefab")
+            "Assets/Resources/Characters/PF_JammoVisual.prefab"),
+
+        new(Guid.Parse("13000000-0000-0000-0000-000000000002"), "Cursed Priest", "CHARACTER", 1000,
+            "A cursed priest joins the expedition.", "Assets/Resources/Characters/PF_CursedPriestVisual.prefab")
     ];
 
     // Cosmetic pets and purchasable alternate skins.

@@ -13,7 +13,12 @@ namespace EchoProtocol.Editor
     public static class CharacterShopPreviewBuilder
     {
         [MenuItem("ECHO Protocol/Shop/Bake Character Thumbnails")]
-        public static void BakeCharacterThumbnails()
+        public static void BakeCharacterThumbnails() => BakeCharacterThumbnails(null);
+
+        [MenuItem("ECHO Protocol/Shop/Bake Cursed Priest Thumbnail")]
+        public static void BakeCursedPriestThumbnail() => BakeCharacterThumbnails(2);
+
+        private static void BakeCharacterThumbnails(int? characterId)
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -23,6 +28,8 @@ namespace EchoProtocol.Editor
 
             foreach (var item in CharacterShopAssets.Items)
             {
+                if (characterId.HasValue && item.CharacterId != characterId.Value) continue;
+
                 var prefab =
                     AssetDatabase.LoadAssetAtPath<GameObject>(
                         item.PrefabPath);
@@ -121,6 +128,28 @@ namespace EchoProtocol.Editor
                 model.transform.position =
                     Vector3.zero;
 
+                if (AssetDatabase.GetAssetPath(prefab).EndsWith("/PF_CursedPriestVisual.prefab", StringComparison.Ordinal) && model.GetComponent<Animator>() is Animator animator
+                    && animator.runtimeAnimatorController != null)
+                {
+                    animator.applyRootMotion = false;
+                    var clips = Resources.LoadAll<AnimationClip>("Characters/Sad Idle1");
+                    if (clips.Length == 0) throw new InvalidOperationException("Missing Sad Idle 1.");
+                    clips[0].SampleAnimation(model, clips[0].length * 0.35f);
+
+                }
+
+                if (AssetDatabase.GetAssetPath(prefab).EndsWith("/PF_JammoVisual.prefab", StringComparison.Ordinal)
+                    && model.GetComponent<Animator>() is Animator jammo)
+                {
+                    jammo.runtimeAnimatorController = Resources.Load<RuntimeAnimatorController>("Characters/AOC_JammoPlayer");
+                    jammo.applyRootMotion = false;
+                    var idle = Resources.Load<AnimationClip>("Characters/a_Idle_Jammo_Humanoid");
+                    if (idle != null) idle.SampleAnimation(model, idle.length * 0.25f);
+
+                }
+
+                model.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
                 // Character shop portrait must not render
                 // first-person arms/meshes.
                 foreach (var renderer in
@@ -167,7 +196,7 @@ namespace EchoProtocol.Editor
 
                 foreach (var renderer in renderers)
                 {
-                    if (!renderer.enabled)
+                    if (!renderer.enabled || !renderer.gameObject.activeInHierarchy)
                         continue;
 
                     if (!found)
@@ -278,20 +307,11 @@ namespace EchoProtocol.Editor
 
                 // Aim slightly above geometric center so the portrait
                 // keeps a little more visual space above the head.
-                Vector3 targetPoint =
-                    bounds.center +
-                    Vector3.up *
-                    bounds.size.y *
-                    0.025f;
+                Vector3 targetPoint = bounds.center;
+                Vector3 viewDirection = Vector3.back;
 
-                // Slight three-quarter angle like the existing shop portrait.
-                Vector3 viewDirection =
-                    new Vector3(
-                        0.28f,
-                        0.04f,
-                        -1f)
-                    .normalized;
-
+                camera.orthographic = true;
+                camera.orthographicSize = Mathf.Max(bounds.extents.y, bounds.extents.x) * 1.18f;
                 camera.transform.position =
                     targetPoint +
                     viewDirection *
@@ -372,6 +392,34 @@ namespace EchoProtocol.Editor
                         0,
                         0);
 
+                    var pixels = image.GetPixels32();
+                    var background = pixels[0];
+                    int left = 512, right = -1, bottom = 512, top = -1;
+                    for (int y = 0; y < 512; y++)
+                    for (int x = 0; x < 512; x++)
+                    {
+                        var pixel = pixels[y * 512 + x];
+                        if (Mathf.Abs(pixel.r - background.r) + Mathf.Abs(pixel.g - background.g)
+                            + Mathf.Abs(pixel.b - background.b) < 12) continue;
+                        left = Mathf.Min(left, x);
+                        right = Mathf.Max(right, x);
+                        bottom = Mathf.Min(bottom, y);
+                        top = Mathf.Max(top, y);
+                    }
+                    if (right >= left)
+                    {
+                        int dx = (511 - left - right) / 2;
+                        int dy = (511 - bottom - top) / 2;
+                        var centered = new Color32[pixels.Length];
+                        for (int y = 0; y < 512; y++)
+                        for (int x = 0; x < 512; x++)
+                        {
+                            int sx = x - dx, sy = y - dy;
+                            centered[y * 512 + x] = sx >= 0 && sx < 512 && sy >= 0 && sy < 512
+                                ? pixels[sy * 512 + sx] : background;
+                        }
+                        image.SetPixels32(centered);
+                    }
                     image.Apply();
 
                     File.WriteAllBytes(

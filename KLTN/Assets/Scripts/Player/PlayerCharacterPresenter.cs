@@ -143,6 +143,10 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private Avatar _jammoAvatar;
     private float _jammoScale = 1f;
     private RuntimeAnimatorController _jammoController;
+    private readonly List<GameObject> _priestChildren = new List<GameObject>();
+    private Avatar _priestAvatar;
+    private RuntimeAnimatorController _priestController;
+    private float _priestScale = 1f;
     private int _applied = -1;
     private int _appliedOutfit = -1;
     private MaterialPropertyBlock _teamTint;
@@ -222,11 +226,13 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         int id = _state != null && _state.Object != null && _state.Object.IsValid ? _state.CharacterId : offlineCharacterId;
         if (_applied == id || animator == null) return;
         if (id == 1 && !EnsureJammo()) return;
+        if (id == 2 && !EnsurePriest()) return;
+        foreach (var child in _priestChildren) if (child != null) child.SetActive(id == 2);
         foreach (var child in _defaultChildren) if (child.Key != null) child.Key.SetActive(id == 0 && child.Value);
         foreach (var child in _jammoChildren) if (child != null) child.SetActive(id == 1);
-        animator.avatar = id == 1 ? _jammoAvatar : _defaultAvatar;
-        animator.runtimeAnimatorController = id == 1 ? _jammoController : _defaultController;
-        animator.transform.localScale = id == 1 ? _defaultScale * _jammoScale : _defaultScale;
+        animator.avatar = id == 2 ? _priestAvatar : id == 1 ? _jammoAvatar : _defaultAvatar;
+        animator.runtimeAnimatorController = id == 2 ? _priestController : id == 1 ? _jammoController : _defaultController;
+        animator.transform.localScale = _defaultScale * (id == 2 ? _priestScale : id == 1 ? _jammoScale : 1f);
         animator.applyRootMotion = false;
         animator.Rebind();
         animator.Update(0f);
@@ -249,6 +255,33 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
             maximum = Mathf.Max(maximum, renderer.bounds.max.y);
         }
         return float.IsInfinity(minimum) ? 0f : maximum - minimum;
+    }
+
+    private bool EnsurePriest()
+    {
+        if (_priestAvatar != null) return true;
+        var prefab = Resources.Load<GameObject>("Characters/PF_CursedPriestVisual");
+        _priestController = Resources.Load<RuntimeAnimatorController>("Characters/AOC_CursedPriestPlayer");
+        var avatar = prefab != null ? prefab.GetComponent<Animator>()?.avatar : null;
+        if (avatar == null || !avatar.isValid || !avatar.isHuman || _priestController == null)
+        {
+            Debug.LogError("[Character] Cursed Priest requires a valid Humanoid avatar and Jammo controller.");
+            return false;
+        }
+
+        var root = Instantiate(prefab, animator.transform);
+        root.GetComponent<Animator>().enabled = false;
+        var height = MeasureVisualHeight(root);
+        _priestScale = _defaultVisualHeight > 0f && height > 0f ? _defaultVisualHeight / height : 1f;
+        while (root.transform.childCount > 0)
+        {
+            var child = root.transform.GetChild(0);
+            child.SetParent(animator.transform, false);
+            _priestChildren.Add(child.gameObject);
+        }
+        _priestAvatar = avatar;
+        Destroy(root);
+        return true;
     }
 
     private bool EnsureJammo()

@@ -85,7 +85,13 @@ namespace EchoProtocol.UI.MainMenu
                 "Shop/LivePreview/Character_Jammo",
                 600,
                 4,
-                false)
+                false),
+
+            new Item(
+                2, "13000000-0000-0000-0000-000000000002",
+                "CURSED PRIEST", "A cursed priest joins the expedition.",
+                "Assets/Resources/Characters/PF_CursedPriestVisual.prefab",
+                "Shop/LobbyVariants/Characters/character-2-outfit-0", "Characters/PF_CursedPriestVisual", 1000, 1, false)
         };
 
         public static bool TryGetByCharacterId(

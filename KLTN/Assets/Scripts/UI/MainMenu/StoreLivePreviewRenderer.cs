@@ -101,6 +101,11 @@ namespace EchoProtocol.UI.MainMenu
                 false;
         }
 
+        private static bool IsCharacterPreview(string resourcePath) =>
+            resourcePath.Contains("Character_") || resourcePath == "Characters/PF_CursedPriestVisual";
+
+        private UnityEngine.Playables.PlayableGraph _priestPreviewGraph;
+
         public bool Show(
             string resourcePath,
             RawImage target)
@@ -197,7 +202,7 @@ namespace EchoProtocol.UI.MainMenu
             _currentModel.transform.localPosition =
                 Vector3.zero;
 
-            _currentModel.transform.localRotation = resourcePath.StartsWith("Pets/") || resourcePath.Contains("Character_")
+            _currentModel.transform.localRotation = resourcePath.StartsWith("Pets/") || IsCharacterPreview(resourcePath)
                 ? Quaternion.Euler(0f,180f,0f) : Quaternion.identity;
 
             _currentResource =
@@ -220,7 +225,25 @@ namespace EchoProtocol.UI.MainMenu
                      _currentModel.GetComponentsInChildren<
                          Animator>(true))
             {
-                if (resourcePath.Contains("Character_Jammo") && animator.runtimeAnimatorController == null)
+                if (resourcePath == "Characters/PF_CursedPriestVisual" && !_priestPreviewGraph.IsValid())
+                {
+                    var clips = Resources.LoadAll<AnimationClip>("Characters/Sad Idle1");
+                    if (clips.Length > 0)
+                    {
+                        animator.enabled = true;
+                        animator.applyRootMotion = false;
+                        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                        _priestPreviewGraph = UnityEngine.Playables.PlayableGraph.Create("Priest Shop Idle");
+                        var idle = UnityEngine.Animations.AnimationClipPlayable.Create(_priestPreviewGraph, clips[0]);
+                        var output = UnityEngine.Animations.AnimationPlayableOutput.Create(_priestPreviewGraph, "Idle", animator);
+                        UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(output, idle);
+                        _priestPreviewGraph.Play();
+                        _priestPreviewGraph.Evaluate(0f);
+                        continue;
+                    }
+                }
+
+                if ((resourcePath.Contains("Character_Jammo") || resourcePath == "Characters/PF_CursedPriestVisual") && animator.runtimeAnimatorController == null)
                     animator.runtimeAnimatorController=Resources.Load<RuntimeAnimatorController>("Characters/AOC_JammoPlayer");
                 if (animator.runtimeAnimatorController != null)
                 {
@@ -228,7 +251,7 @@ namespace EchoProtocol.UI.MainMenu
                     animator.cullingMode=AnimatorCullingMode.AlwaysAnimate;
                     animator.applyRootMotion=false;
                     animator.Rebind();
-                    if(resourcePath.Contains("Character_"))animator.Play("Locomotion",0,0.15f);
+                    if(IsCharacterPreview(resourcePath))animator.Play("Locomotion",0,0.15f);
                     else if(resourcePath.StartsWith("Pets/"))animator.Play("Idle",0,0.15f);
                     animator.Update(1f/60f);
                 }
@@ -867,12 +890,13 @@ namespace EchoProtocol.UI.MainMenu
                 return false;
 
             float radius = Mathf.Max(0.15f, bounds.extents.magnitude);
-            Vector3 viewDirection = (_currentResource != null && _currentResource.Contains("Character_")
+            Vector3 viewDirection = (_currentResource != null && IsCharacterPreview(_currentResource)
                 ? new Vector3(0.04f,0.02f,-1f) : new Vector3(0.32f,0.10f,-1f)).normalized;
             Vector3 targetPoint = _spinRoot.position + Vector3.up * bounds.size.y * 0.015f;
             Quaternion view = Quaternion.LookRotation(-viewDirection,Vector3.up);
             Vector3 right=view*Vector3.right, up=view*Vector3.up, forward=view*Vector3.forward;
             float fill = _currentResource != null && _currentResource.Contains("Tool_") ? 0.72f : 0.92f;
+            if (_currentResource == "Characters/PF_CursedPriestVisual") fill = 0.98f;
             float tangent=Mathf.Tan(_camera.fieldOfView*0.5f*Mathf.Deg2Rad);
             float distance=0.1f;
             // Fit each visible mesh in camera space. Deep tails and wide rest bounds no longer
@@ -1151,6 +1175,7 @@ namespace EchoProtocol.UI.MainMenu
 
         private void DestroyCurrentModel()
         {
+            if (_priestPreviewGraph.IsValid()) _priestPreviewGraph.Destroy();
             _currentResource =
                 null;
 

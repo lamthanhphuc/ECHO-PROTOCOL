@@ -749,12 +749,7 @@ namespace EchoProtocol.UI
 
             if (characterPortrait != null)
             {
-                string resource =
-                    previewId
-                        == CharacterShopAssets
-                            .JammoCharacterId
-                        ? "Shop/Characters/jammo"
-                        : "Shop/Characters/astronaut";
+                string resource = LobbyCharacterSelector.GetThumbnailResource(previewId);
 
                 var texture =
                     Resources.Load<Texture2D>(

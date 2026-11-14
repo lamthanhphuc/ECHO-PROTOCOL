@@ -65,21 +65,24 @@ namespace EchoProtocol.UI
         {
             "ASTRONAUT",
             "JAMMO",
+            "CURSED PRIEST",
         };
 
         private static readonly string[] Descriptions =
         {
             "STANDARD EXPEDITION OPERATOR",
             "COMPACT HAZARD EXPEDITION UNIT",
+            "A PRIEST CURSED IN AN ABANDONED CHAPEL",
         };
 
         private readonly CharacterView[] _views =
-            new CharacterView[2];
+            new CharacterView[CharacterShopAssets.Items.Length];
 
         private RectTransform _root;
         private RectTransform _window;
 
         private RawImage _preview;
+        private StoreLivePreviewRenderer _priestPreview;
         private TMP_Text _previewName;
         private TMP_Text _previewDescription;
         private TMP_Text _status;
@@ -99,6 +102,7 @@ namespace EchoProtocol.UI
         public static string GetThumbnailResource(
             int characterId)
         {
+            if (characterId == 2) return "Shop/LobbyPortraits/Cursed Priest";
             return characterId == 1
                 ? "Shop/Characters/jammo"
                 : "Shop/Characters/astronaut";
@@ -242,7 +246,7 @@ namespace EchoProtocol.UI
                 Mathf.Clamp(
                     state.CharacterId,
                     0,
-                    1);
+                    _views.Length - 1);
 
             _open =
                 true;
@@ -362,9 +366,9 @@ namespace EchoProtocol.UI
             if (characterId == 0)
                 return true;
 
-            return TeamToolOwnershipSession.IsLoaded
-                && TeamToolOwnershipSession.OwnsItem(
-                    CharacterShopAssets.JammoItemId);
+            return CharacterShopAssets.TryGetByCharacterId(characterId, out var item)
+                && TeamToolOwnershipSession.IsLoaded
+                && TeamToolOwnershipSession.OwnsItem(item.ItemId);
         }
 
 
@@ -444,7 +448,7 @@ namespace EchoProtocol.UI
                     0f,
                     0f,
                     850f,
-                    520f,
+                    620f,
                     WindowColor,
                     true);
 
@@ -613,6 +617,8 @@ namespace EchoProtocol.UI
                 408f,
                 220f);
 
+            CreateCharacterCard(2, 408f, 320f);
+
 
             // =================================================
             // OUTFIT COLOR SELECTOR
@@ -623,7 +629,7 @@ namespace EchoProtocol.UI
                 _window,
                 "OUTFIT",
                 408f,
-                334f,
+                434f,
                 410f,
                 22f,
                 11,
@@ -638,7 +644,7 @@ namespace EchoProtocol.UI
                 CreateOutfitCard(
                     i,
                     408f + i * 103f,
-                    364f);
+                    464f);
             }
 
 
@@ -648,7 +654,7 @@ namespace EchoProtocol.UI
                     _window,
                     string.Empty,
                     408f,
-                    440f,
+                    540f,
                     410f,
                     48f,
                     10,
@@ -966,7 +972,7 @@ namespace EchoProtocol.UI
             }
 
             if (_selectedCharacterId < 0
-                || _selectedCharacterId > 1)
+                || _selectedCharacterId >= _views.Length)
             {
                 return;
             }
@@ -1112,8 +1118,8 @@ namespace EchoProtocol.UI
             }
 
 
-            _preview.texture =
-                Resources.Load<Texture2D>(
+            if (_selectedCharacterId != 2 || _priestPreview == null)
+                _preview.texture = Resources.Load<Texture2D>(
                     GetThumbnailResource(
                         _selectedCharacterId));
 
@@ -1122,6 +1128,13 @@ namespace EchoProtocol.UI
                     ? Color.white
                     : Color.clear;
 
+
+            if (_selectedCharacterId != 2 && _priestPreview != null) _priestPreview.Clear();
+            if (_selectedCharacterId == 2 && _preview.texture == null)
+            {
+                if (_priestPreview == null) _priestPreview = gameObject.AddComponent<StoreLivePreviewRenderer>();
+                _priestPreview.Show(CharacterShopAssets.Items[2].LivePreviewResource, _preview);
+            }
 
             _previewName.text =
                 Names[_selectedCharacterId];
@@ -1143,6 +1156,9 @@ namespace EchoProtocol.UI
 
                 if (outfit == null)
                     continue;
+
+                outfit.Button.gameObject.SetActive(_selectedCharacterId != 2);
+                if (_selectedCharacterId == 2) continue;
 
                 string outfitName =
                     CharacterOutfitLibrary.GetName(

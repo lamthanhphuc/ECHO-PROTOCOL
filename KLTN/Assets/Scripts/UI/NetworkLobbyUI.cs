@@ -320,7 +320,7 @@ RefreshMemberList();
                     if (member.IsLocal) list.Append(EchoProtocol.Settings.GameLanguage.Choose(_room.IsHost ? " [BẠN / CHỦ PHÒNG]" : " [BẠN]", _room.IsHost ? " [YOU / HOST]" : " [YOU]"));
                     list.AppendLine().Append("  ").Append(EchoProtocol.Settings.GameLanguage.Choose(member.IsReady ? "SẴN SÀNG" : "CHƯA SẴN SÀNG", member.IsReady ? "READY" : "NOT READY"))
                         .Append(EchoProtocol.Settings.GameLanguage.Choose("  |  CÔNG CỤ: ", "  |  TOOL: ")).Append(MemberToolName(member.ToolId))
-                        .Append("  |  ").Append(member.CharacterId == 1 ? "JAMMO" : EchoProtocol.Settings.GameLanguage.Choose("PHI HÀNH GIA", "ASTRONAUT"))
+                        .Append("  |  ").Append(member.CharacterId == 2 ? "CURSED PRIEST" : member.CharacterId == 1 ? "JAMMO" : EchoProtocol.Settings.GameLanguage.Choose("PHI HÀNH GIA", "ASTRONAUT"))
                         .AppendLine().Append(EchoProtocol.Settings.GameLanguage.Choose("  THÚ ĐỒNG HÀNH: ", "  PET: ")).Append(member.PetId == 0 ? EchoProtocol.Settings.GameLanguage.Choose("Không có", "None") : PetCatalog.Name(member.PetId));
                 }
             if (emptyMemberText != null) emptyMemberText.gameObject.SetActive(list.Length == 0);
@@ -537,6 +537,8 @@ RefreshMemberList();
             {
                 return;
             }
+
+            if (state.CharacterId == 2) return;
 
             var selector =
                 GetComponent<LobbyOutfitSelector>();
@@ -943,7 +945,7 @@ int petId = 0;
                 string character = "ASTRONAUT";
                 if (lobbyManager != null && lobbyManager.TryGetLocalPlayerState(out var local, false))
                 {
-                    character = local.CharacterId == 1 ? "JAMMO" : "ASTRONAUT";
+                    character = local.CharacterId == 2 ? "CURSED PRIEST" : local.CharacterId == 1 ? "JAMMO" : "ASTRONAUT";
                     characterButton.interactable = inLobby && !local.IsReady;
                 }
                 var characterLabel = characterButton.GetComponentInChildren<TMP_Text>();
