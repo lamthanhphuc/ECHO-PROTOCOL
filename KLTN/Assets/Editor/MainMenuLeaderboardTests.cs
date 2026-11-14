@@ -184,14 +184,14 @@ namespace EchoProtocol.UI.Tests
         {
             var panel = _archive.OverlayRoot.Find("ArchivePanel");
             var heading = panel.Find("Heading").GetComponent<Text>();
-            var subtitle = panel.Find("Subtitle").GetComponent<Text>();
+            var filterLabel = panel.Find("MapFilter/Label").GetComponent<Text>();
             var accent = panel.Find("HeadingAccent").GetComponent<Image>();
 
             Assert.That(heading.text, Is.EqualTo("BẢNG XẾP HẠNG"));
             Assert.That(heading.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
             Assert.That(heading.rectTransform.anchorMin.x, Is.EqualTo(0.5f));
             Assert.That(heading.rectTransform.anchorMax.x, Is.EqualTo(0.5f));
-            Assert.That(heading.font, Is.SameAs(subtitle.font),
+            Assert.That(heading.font, Is.SameAs(filterLabel.font),
                 "The leaderboard title must use the complete lobby/body glyph set.");
             Assert.That(accent.color.a, Is.GreaterThan(0f));
         }

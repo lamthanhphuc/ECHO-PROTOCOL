@@ -321,10 +321,6 @@ namespace EchoProtocol.UI.MainMenu
             var topRule = NewRect("BloodRule", _panel);
             TopStretch(topRule, 0f, 3f, 0f, 0f);
             topRule.gameObject.AddComponent<Image>().color = Blood;
-            var fileCode = NewText("ArchiveIndex", _panel,
-                "ECHO PROTOCOL  //  CLASSIFIED RECORDS  /  EXTRACTION ARCHIVE",
-                12, Bronze, TextAnchor.MiddleLeft);
-            TopLeft(fileCode.rectTransform, 28f, 16f, 770f, 24f);
             _heading = NewText("Heading", _panel, "LEADERBOARD", 36, Pale,
                 TextAnchor.MiddleCenter, FontStyle.Bold);
             _heading.font = _font;
@@ -346,14 +342,6 @@ namespace EchoProtocol.UI.MainMenu
             headingAccentImage.color = Blood;
             headingAccentImage.raycastTarget = false;
 
-            var subtitle = NewText("Subtitle", _panel,
-                "EXTRACTION RECORDS  //  FASTEST COMPLETION TIMES",
-                13, Muted, TextAnchor.MiddleCenter);
-            var subtitleRect = subtitle.rectTransform;
-            subtitleRect.anchorMin = subtitleRect.anchorMax = new Vector2(0.5f, 1f);
-            subtitleRect.pivot = new Vector2(0.5f, 1f);
-            subtitleRect.anchoredPosition = new Vector2(0f, -99f);
-            subtitleRect.sizeDelta = new Vector2(760f, 23f);
             BuildEvidenceDetails();
             _closeButton = NewButton("CloseButton", _panel, "X", 15, 42f, 42f);
             var closeRect = (RectTransform)_closeButton.transform;
@@ -371,8 +359,8 @@ namespace EchoProtocol.UI.MainMenu
             _soloTabAccent = CreateTabAccent(_soloTab);
             _teamTabAccent = CreateTabAccent(_teamTab);
 
-            var modeButton = NewButton("GameModeFilter", _panel, "", 13, 250f, 37f);
-            TopLeft((RectTransform)modeButton.transform, 28f, 194f, 250f, 37f);
+            var modeButton = NewFilterButton("GameModeFilter", 250f);
+            TopLeft((RectTransform)modeButton.transform, 28f, 194f, 250f, 42f);
             _gameModeLabel = modeButton.GetComponentInChildren<Text>();
             modeButton.onClick.AddListener(() =>
             {
@@ -383,12 +371,12 @@ namespace EchoProtocol.UI.MainMenu
                 RefreshFilters();
                 Fetch();
             });
-            var mapButton = NewButton("MapFilter", _panel, "", 13, 240f, 37f);
-            TopLeft((RectTransform)mapButton.transform, 288f, 194f, 320f, 37f);
+            var mapButton = NewFilterButton("MapFilter", 320f);
+            TopLeft((RectTransform)mapButton.transform, 288f, 194f, 320f, 42f);
             _mapLabel = mapButton.GetComponentInChildren<Text>();
             mapButton.onClick.AddListener(CycleMap);
-            var difficultyButton = NewButton("DifficultyFilter", _panel, "", 13, 205f, 37f);
-            TopLeft((RectTransform)difficultyButton.transform, 618f, 194f, 205f, 37f);
+            var difficultyButton = NewFilterButton("DifficultyFilter", 205f);
+            TopLeft((RectTransform)difficultyButton.transform, 618f, 194f, 205f, 42f);
             _difficultyLabel = difficultyButton.GetComponentInChildren<Text>();
             difficultyButton.onClick.AddListener(CycleDifficulty);
 
@@ -863,11 +851,7 @@ namespace EchoProtocol.UI.MainMenu
             if (_panel == null) return;
             SetLabel(_tooltip != null ? _tooltip.transform.Find("Label") : null,
                 L("BẢNG XẾP HẠNG", "LEADERBOARD"));
-            SetLabel(_panel.Find("ArchiveIndex"),
-                L("ECHO PROTOCOL  //  HỒ SƠ MẬT  /  LƯU TRỮ", "ECHO PROTOCOL  //  CLASSIFIED RECORDS  /  EXTRACTION ARCHIVE"));
             if (_heading != null) _heading.text = L("BẢNG XẾP HẠNG", "LEADERBOARD");
-            SetLabel(_panel.Find("Subtitle"),
-                L("THÀNH TÍCH  //  THỜI GIAN HOÀN THÀNH NHANH NHẤT", "EXTRACTION RECORDS  //  FASTEST COMPLETION TIMES"));
             SetButtonLabel(_soloTab, L("CÁ NHÂN", "SOLO RANKING"));
             SetButtonLabel(_teamTab, L("ĐỘI", "TEAM RANKING"));
             SetButtonLabel(_retryButton, L("TẢI LẠI", "REFRESH"));
@@ -1043,6 +1027,25 @@ namespace EchoProtocol.UI.MainMenu
             text.raycastTarget = false;
             text.supportRichText = false;
             return text;
+        }
+
+        private Button NewFilterButton(string name, float width)
+        {
+            var button = NewButton(name, _panel, "", 13, width, 42f);
+            button.GetComponent<Image>().color = Hex("303632", 1f);
+            var colors = button.colors;
+            // A white normal tint preserves both the background and border colors.
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.55f, 1.4f, 1.15f, 1f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.pressedColor = new Color(0.72f, 0.65f, 0.58f, 1f);
+            button.colors = colors;
+
+            var border = button.gameObject.AddComponent<Outline>();
+            border.effectColor = Bronze;
+            border.effectDistance = new Vector2(1f, -1f);
+            border.useGraphicAlpha = false;
+            return button;
         }
 
         private Button NewButton(string name, Transform parent, string label,
