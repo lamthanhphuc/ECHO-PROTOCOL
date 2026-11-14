@@ -20,6 +20,7 @@ public class PlayerInteractionControlLock
     private bool _networkPromptWasSuppressed;
     private bool _unlockCursor = true;
     private bool _allowWhileDowned;
+    private bool _allowWhileSpectating;
 
     public GameObject Player => _player;
     public bool IsLocked => Locks.Contains(this);
@@ -46,7 +47,7 @@ public class PlayerInteractionControlLock
     }
 
     public void Acquire(GameObject player, Action onInterrupted = null, bool unlockCursor = true,
-        bool allowWhileDowned = false)
+        bool allowWhileDowned = false, bool allowWhileSpectating = false)
     {
         Release();
         if (player == null) return;
@@ -57,6 +58,7 @@ public class PlayerInteractionControlLock
         _onInterrupted = onInterrupted;
         _unlockCursor = unlockCursor;
         _allowWhileDowned = allowWhileDowned;
+        _allowWhileSpectating = allowWhileSpectating;
         _interaction = player.GetComponentInParent<PlayerInteraction>();
         _networkInteractor = player.GetComponentInParent<NetworkPlayerInteractor>();
         _promptWasSuppressed = _interaction != null && _interaction.IsInteractionPromptSuppressed;
@@ -94,7 +96,9 @@ public class PlayerInteractionControlLock
 
     public bool ShouldAutoRelease()
     {
-        return !IsLocked || !IsPlayerStateValid(_player, _allowWhileDowned);
+        return !IsLocked || !(_allowWhileSpectating && _player != null && _player.activeInHierarchy
+            && _player.GetComponentInChildren<PlayerSpectateController>()?.IsSpectating == true
+            || IsPlayerStateValid(_player, _allowWhileDowned));
     }
 
     // Settings may stay open while downed; inventory and interactions still require an active player.

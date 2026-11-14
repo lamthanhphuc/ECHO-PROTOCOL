@@ -992,6 +992,9 @@ namespace EchoProtocol.Networking.Authority
             _leaseRequestInProgress = false;
             if (!IsSuccessful(result))
             {
+                if (_bootstrap?.State == NetworkSessionState.InLobby &&
+                    string.Equals(result?.ErrorCode, "MATCH_LEASE_EXPIRED", StringComparison.Ordinal))
+                    RequireFreshLobbyBinding();
                 Debug.LogError($"[MatchAuthority] Lease renewal failed: {Describe(result)}");
             }
         }

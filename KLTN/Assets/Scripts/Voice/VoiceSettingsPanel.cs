@@ -370,7 +370,7 @@ namespace EchoProtocol.Voice
         private bool Open(GameObject player)
         {
             EnsureEventSystem();
-            _controlLock.Acquire(player, Close, allowWhileDowned: true);
+            _controlLock.Acquire(player, Close, allowWhileDowned: true, allowWhileSpectating: _parentMenuLock != null);
             if (!_controlLock.IsLocked) return false;
             try
             {

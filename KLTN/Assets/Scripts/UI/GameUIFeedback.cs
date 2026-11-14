@@ -119,7 +119,7 @@ namespace EchoProtocol.UI
             SceneManager.activeSceneChanged += SceneChanged;
         }
 
-        public void Confirm(string title, Func<string> body, Action accepted, string acceptLabel = null, Action cancelled = null)
+        public void Confirm(string title, Func<string> body, Action accepted, string acceptLabel = null, Action cancelled = null, bool allowWhileSpectating = false)
         {
             if (_modal.activeSelf) return;
             EnsureEventSystem();
@@ -129,7 +129,7 @@ namespace EchoProtocol.UI
             LayoutConfirmation();
             _acceptText.text = acceptLabel ?? GameLanguage.Choose("Xác nhận", "Confirm");
             _cancelText.text = GameLanguage.Choose("Hủy", "Cancel");
-            _lock.Acquire(LocalPlayer(), () => Complete(false), allowWhileDowned: true);
+            _lock.Acquire(LocalPlayer(), () => Complete(false), allowWhileDowned: true, allowWhileSpectating: allowWhileSpectating);
             _modal.SetActive(true);
             _cancel.Select();
         }

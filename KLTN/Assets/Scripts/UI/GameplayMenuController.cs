@@ -83,10 +83,15 @@ namespace EchoProtocol.UI
         {
             var camera = FindAnyObjectByType<PlayerCamera>();
             if (camera == null || camera.Target == null) return;
-            var player = camera.Target.gameObject;
+            var runner = NetworkBootstrap.Instance?.Runner;
+            var player = runner != null && runner.IsRunning
+                ? runner.TryGetPlayerObject(runner.LocalPlayer, out var localPlayer) && localPlayer
+                    ? localPlayer.gameObject : null
+                : camera.Target.gameObject;
+            if (player == null) return;
             var networkObject = player.GetComponentInParent<Fusion.NetworkObject>();
             if (networkObject != null && networkObject.IsValid && !networkObject.HasInputAuthority) return;
-            _lock.Acquire(player, Close, allowWhileDowned: true);
+            _lock.Acquire(player, Close, allowWhileDowned: true, allowWhileSpectating: true);
             if (!_lock.IsLocked) return;
             if (_overlay == null) BuildMenu();
             RefreshLanguage();
@@ -128,7 +133,7 @@ namespace EchoProtocol.UI
                     : IsHost ? GameLanguage.Choose("Bạn rời phòng. Quyền chủ phòng chuyển cho người còn lại; nếu không còn ai, phòng sẽ đóng.",
                     "You leave. Host authority transfers to a remaining player; an empty room closes.")
                     : GameLanguage.Choose("Bạn rời trận. Đồng đội vẫn tiếp tục chơi.", "You leave the match. Teammates continue playing."),
-                () => Exit(lobby));
+                () => Exit(lobby), allowWhileSpectating: true);
         }
 
         private async void Exit(bool lobby)

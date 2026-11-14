@@ -509,6 +509,8 @@ namespace EchoProtocol.Networking
                     $"BootstrapState={_bootstrap?.State}");
                 if (!accepted)
                 {
+                    if (error?.StartsWith("MATCH_LEASE_EXPIRED:", StringComparison.Ordinal) == true)
+                        authority.RequireFreshLobbyBinding();
                     ReportError($"Backend rejected match start: {error}");
                     return;
                 }

@@ -192,10 +192,9 @@ public class PlayerSpectateController : MonoBehaviour
         var lobbyState = target.GetComponent<EchoProtocol.Networking.LobbyPlayerState>();
         if (lobbyState != null)
         {
-            if (lobbyState.TeamId > 0) return $"PLAYER {lobbyState.TeamId}";
-
             var operatorName = lobbyState.OperatorName.ToString();
             if (!string.IsNullOrWhiteSpace(operatorName)) return operatorName.ToUpperInvariant();
+            if (lobbyState.TeamId > 0) return $"PLAYER {lobbyState.TeamId}";
         }
 
         var networkObject = target.GetComponent<NetworkObject>();

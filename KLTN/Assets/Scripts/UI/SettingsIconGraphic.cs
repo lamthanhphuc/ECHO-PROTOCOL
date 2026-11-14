@@ -9,7 +9,7 @@ namespace EchoProtocol.UI
     public enum SettingsIcon
     {
         Gear, Microphone, Mouse, Audio, Keyboard, Monitor, Team, Interact, Run, Crouch,
-        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio, Warning, Age18
+        Flashlight, Inventory, Up, Down, Left, Right, Play, Exit, Dot, Pill, Shop, Web, Profile, Trophy, Radio, Warning, Age18, Credits
     }
 
     /// <summary>Small vector icons, independent of installed fonts and texture resolution.</summary>
@@ -146,6 +146,11 @@ namespace EchoProtocol.UI
                     Stroke(18, 33, 30, 33, 3);
                     Stroke(70, 45, 82, 45, 3);
                     break;
+                case SettingsIcon.Credits:
+                    Arc(50, 50, 43, 0, 360, 5);
+                    Arc(50, 50, 32, 0, 360, 3);
+                    Stroke(50, 30, 50, 70, 6);
+                    break;
                 case SettingsIcon.Dot: Disc(50, 50, 48); break;
                 case SettingsIcon.Pill:
                     float radius = _bounds.height / _bounds.width * 50;
@@ -221,9 +226,9 @@ namespace EchoProtocol.UI
         public const string WebsiteUrl = "https://web.3.1.238.6.sslip.io/";
 
         private static readonly Color Background = new(0.035f, 0.047f, 0.051f, 0.96f);
-        private static readonly Color Border = new(0.22f, 0.26f, 0.27f, 0.92f);
-        private static readonly Color IconColor = new(0.835f, 0.839f, 0.82f, 1f);
-        private static readonly Color CreditsColor = IndustrialUiStyle.Text;
+        private static readonly Color Border = new Color32(151, 137, 94, 235);
+        private static readonly Color IconColor = IndustrialUiStyle.Accent;
+        private static readonly Color CreditsColor = IndustrialUiStyle.Accent;
 
         public static void MainMenu(RectTransform root)
         {
@@ -321,9 +326,9 @@ namespace EchoProtocol.UI
             button.transition = Selectable.Transition.ColorTint;
             var colors = button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.4f, 1.4f, 1.4f, 1f);
+            colors.highlightedColor = new Color(1.5f, 1.35f, 0.85f, 1f);
             colors.selectedColor = colors.highlightedColor;
-            colors.pressedColor = new Color(1f, 0.65f, 0.62f, 1f);
+            colors.pressedColor = new Color(1.15f, 1f, 0.65f, 1f);
             colors.fadeDuration = 0.08f;
             button.colors = colors;
             var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
@@ -412,9 +417,9 @@ namespace EchoProtocol.UI
                 button.targetGraphic = image;
                 var colors = button.colors;
                 colors.normalColor = Color.white;
-                colors.highlightedColor = new Color(1.4f, 1.4f, 1.4f, 1f);
+                colors.highlightedColor = new Color(1.5f, 1.35f, 0.85f, 1f);
                 colors.selectedColor = colors.highlightedColor;
-                colors.pressedColor = new Color(1f, 0.65f, 0.62f, 1f);
+                colors.pressedColor = new Color(1.15f, 1f, 0.65f, 1f);
                 button.colors = colors;
             }
             var outline = rect.GetComponent<Outline>() ?? rect.gameObject.AddComponent<Outline>();
@@ -434,9 +439,18 @@ namespace EchoProtocol.UI
             mark.anchoredPosition = new Vector2(12f, 0f);
             mark.sizeDelta = new Vector2(28f, 28f);
             var markImage = mark.GetComponent<Image>();
-            markImage.sprite = null;
-            markImage.color = CreditsColor;
-            markImage.raycastTarget = false;
+            if (markImage != null) markImage.enabled = false;
+            var symbol = mark.Find("CreditSymbol") as RectTransform;
+            if (symbol == null)
+            {
+                symbol = new GameObject("CreditSymbol", typeof(RectTransform),
+                    typeof(SettingsIconGraphic)).GetComponent<RectTransform>();
+                symbol.SetParent(mark, false);
+                symbol.anchorMin = Vector2.zero;
+                symbol.anchorMax = Vector2.one;
+                symbol.offsetMin = symbol.offsetMax = Vector2.zero;
+            }
+            symbol.GetComponent<SettingsIconGraphic>().Configure(SettingsIcon.Credits, CreditsColor);
             mark.SetAsFirstSibling();
             var sharedFont = UiTypographyTheme.BodyTmp;
             var legacyFont = UiTypographyTheme.BodyLegacy;
