@@ -246,7 +246,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         bool jammo = character != null && character.IsJammo;
-        bool priest = character != null && character.IsPriest;
+        bool humanoidGrip = character != null && character.UsesHumanoidGrip;
         var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
         if (fuelCell != null)
         {
@@ -280,14 +280,14 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 rightHandPos = chestOrigin + aimForward * (carryForwardOffset + (jammo ? jammoGripForwardClearance : 0f)) + aimRight * (carryLateralOffset + (jammo ? jammoCarryLateralClearance : 0f) + twoHandSpread) + aimUp * (carryVerticalOffset + (jammo ? jammoGripHeightOffset : 0f));
             Vector3 leftHandPos  = chestOrigin + aimForward * (carryForwardOffset + (jammo ? jammoGripForwardClearance : 0f)) - aimRight * (carryLateralOffset + (jammo ? jammoCarryLateralClearance : 0f) + twoHandSpread) + aimUp * (carryVerticalOffset + (jammo ? jammoGripHeightOffset : 0f));
 
-            float priestCarryDrop = isHoldingCoreStabilizer && !isCarryingCore ? 0.19f : 0.24f;
-            if (priest)
+            float humanoidCarryDrop = isHoldingCoreStabilizer && !isCarryingCore ? 0.19f : 0.24f;
+            if (humanoidGrip)
             {
-                rightHandPos -= aimUp * priestCarryDrop;
-                leftHandPos -= aimUp * priestCarryDrop;
+                rightHandPos -= aimUp * humanoidCarryDrop;
+                leftHandPos -= aimUp * humanoidCarryDrop;
             }
 
-            float minCarryY = chestOrigin.y - (priest ? 0.25f + priestCarryDrop : 0.25f);
+            float minCarryY = chestOrigin.y - (humanoidGrip ? 0.25f + humanoidCarryDrop : 0.25f);
             float maxCarryY = chestOrigin.y + (jammo ? 0.50f : 0.35f);
             rightHandPos.y = Mathf.Clamp(rightHandPos.y, minCarryY, maxCarryY);
             leftHandPos.y  = Mathf.Clamp(leftHandPos.y,  minCarryY, maxCarryY);
@@ -301,13 +301,13 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, twoHandIKWeight);
             SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  twoHandIKWeight);
 
-            if (priest) character.ApplyCarryGrip(rightHandBone, false, aimForward, aimUp); else character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
-            if (priest) character.ApplyCarryGrip(leftHandBone, true, aimForward, aimUp); else character?.ApplyJammoGrip(leftHandBone, true, aimForward, aimUp);
+            if (humanoidGrip) character.ApplyCarryGrip(rightHandBone, false, aimForward, aimUp); else character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
+            if (humanoidGrip) character.ApplyCarryGrip(leftHandBone, true, aimForward, aimUp); else character?.ApplyJammoGrip(leftHandBone, true, aimForward, aimUp);
             UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
             return;
         }
 
-        if (priest && animator.GetBool(IsCrouchingHash)
+        if (humanoidGrip && animator.GetBool(IsCrouchingHash)
             && leftUpperArm != null && leftForeArm != null && leftHandBone != null)
         {
             Vector3 restingWrist = leftUpperArm.position - Vector3.up * 0.35f
@@ -317,7 +317,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         }
 
 
-        if (animator.GetBool(IsCrouchingHash) && !jammo && !priest)
+        if (animator.GetBool(IsCrouchingHash) && !jammo && !humanoidGrip)
         {
             return;
         }
@@ -334,14 +334,14 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
                 + aimRight * (handForwardOffset.x + (jammo ? jammoToolLateralClearance : 0f))
                 + aimUp * (handForwardOffset.y + (jammo ? jammoGripHeightOffset : 0f));
 
-            float maxHandY = jammo || priest ? chestOrigin.y + 0.55f : transform.position.y + 1.60f;
-            float minHandY = jammo || priest ? chestOrigin.y - 0.10f : transform.position.y + 1.05f;
+            float maxHandY = jammo || humanoidGrip ? chestOrigin.y + 0.55f : transform.position.y + 1.60f;
+            float minHandY = jammo || humanoidGrip ? chestOrigin.y - 0.10f : transform.position.y + 1.05f;
             handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
 
             Vector3 rightElbowPole = rightUpperArm.position + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
 
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, handTarget, rightElbowPole, rightHandPosWeight);
-            if (priest) character.ApplyCarryGrip(rightHandBone, false, aimForward, aimUp); else character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
+            if (humanoidGrip) character.ApplyCarryGrip(rightHandBone, false, aimForward, aimUp); else character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
         }
     }
 

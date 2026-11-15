@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using EchoProtocol.Networking;
+using EchoProtocol.UI.MainMenu;
 using UnityEngine;
 
 /// <summary>Swaps the visual rig on the existing Animator, preserving all gameplay component references.</summary>
@@ -7,7 +8,7 @@ using UnityEngine;
 public sealed class PlayerCharacterPresenter : MonoBehaviour
 {
     [SerializeField] private Animator animator;
-    [SerializeField, Range(0, 1)] private int offlineCharacterId;
+    [SerializeField, Range(0, CharacterShopAssets.MercenaryCharacterId)] private int offlineCharacterId;
     private LobbyPlayerState _state;
     private Avatar _defaultAvatar;
     private RuntimeAnimatorController _defaultController;
@@ -33,10 +34,13 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
             + (IsJammo && (toolId == 1 || toolId == 6) ? (_gripAimForward.sqrMagnitude > 0.001f ? _gripAimForward : transform.forward) * (toolId == 6 ? 0.10f : 0.05f) : Vector3.zero);
     }
     private Quaternion _priestRightPalm, _priestLeftPalm;
-    public bool IsPriest => _applied == 2;
+    public bool UsesHumanoidGrip => _applied == 2 || _applied == CharacterShopAssets.MercenaryCharacterId;
+    private bool IsMercenary => _applied == CharacterShopAssets.MercenaryCharacterId;
+    private Quaternion LeftPalm => IsMercenary ? _mercenaryLeftPalm : _priestLeftPalm;
+    private Quaternion RightPalm => IsMercenary ? _mercenaryRightPalm : _priestRightPalm;
     public bool IsJammo => _applied == 1;
     public Quaternion RightHandGripCorrection => IsJammo
-        ? _jammoRightPalm * Quaternion.Inverse(_defaultRightPalm) : IsPriest ? _priestRightPalm * Quaternion.Inverse(_defaultRightPalm) : Quaternion.identity;
+        ? _jammoRightPalm * Quaternion.Inverse(_defaultRightPalm) : UsesHumanoidGrip ? RightPalm * Quaternion.Inverse(_defaultRightPalm) : Quaternion.identity;
 
     private static Quaternion PalmBasis(Animator rig, bool left)
     {
@@ -69,7 +73,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         Vector3 right=Vector3.Cross(up,forward).normalized;
         if(right.sqrMagnitude<.01f)return;
         hand.rotation=Quaternion.LookRotation(forward,left ? right:-right)
-            * Quaternion.Inverse(left ? (IsPriest ? _priestLeftPalm : _defaultLeftPalm) : (IsPriest ? _priestRightPalm : _defaultRightPalm));
+            * Quaternion.Inverse(left ? (UsesHumanoidGrip ? LeftPalm : _defaultLeftPalm) : (UsesHumanoidGrip ? RightPalm : _defaultRightPalm));
     }
     public Vector3 FuelCellWristTarget(Transform hand, bool left, Vector3 handle, Vector3 forward, Vector3 up)
     {
@@ -149,6 +153,11 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private Avatar _priestAvatar;
     private RuntimeAnimatorController _priestController;
     private float _priestScale = 1f;
+    private readonly List<GameObject> _mercenaryChildren = new List<GameObject>();
+    private Avatar _mercenaryAvatar;
+    private RuntimeAnimatorController _mercenaryController;
+    private float _mercenaryScale = 1f;
+    private Quaternion _mercenaryLeftPalm, _mercenaryRightPalm;
     private int _applied = -1;
     private int _appliedOutfit = -1;
     private MaterialPropertyBlock _teamTint;
@@ -228,13 +237,18 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         int id = _state != null && _state.Object != null && _state.Object.IsValid ? _state.CharacterId : offlineCharacterId;
         if (_applied == id || animator == null) return;
         if (id == 1 && !EnsureJammo()) return;
-        if (id == 2 && !EnsurePriest()) return;
+        if (id == 2 && !EnsureHumanoid("Characters/PF_CursedPriestVisual", "Characters/AOC_CursedPriestPlayer",
+            _priestChildren, ref _priestAvatar, ref _priestController, ref _priestScale, ref _priestLeftPalm, ref _priestRightPalm)) return;
+        bool mercenary = id == CharacterShopAssets.MercenaryCharacterId;
+        if (mercenary && !EnsureHumanoid("Characters/PF_MercenaryVisual", "Characters/AC_MercenaryPlayer",
+            _mercenaryChildren, ref _mercenaryAvatar, ref _mercenaryController, ref _mercenaryScale, ref _mercenaryLeftPalm, ref _mercenaryRightPalm)) return;
+        foreach (var child in _mercenaryChildren) if (child != null) child.SetActive(mercenary);
         foreach (var child in _priestChildren) if (child != null) child.SetActive(id == 2);
         foreach (var child in _defaultChildren) if (child.Key != null) child.Key.SetActive(id == 0 && child.Value);
         foreach (var child in _jammoChildren) if (child != null) child.SetActive(id == 1);
-        animator.avatar = id == 2 ? _priestAvatar : id == 1 ? _jammoAvatar : _defaultAvatar;
-        animator.runtimeAnimatorController = id == 2 ? _priestController : id == 1 ? _jammoController : _defaultController;
-        animator.transform.localScale = _defaultScale * (id == 2 ? _priestScale : id == 1 ? _jammoScale : 1f);
+        animator.avatar = mercenary ? _mercenaryAvatar : id == 2 ? _priestAvatar : id == 1 ? _jammoAvatar : _defaultAvatar;
+        animator.runtimeAnimatorController = mercenary ? _mercenaryController : id == 2 ? _priestController : id == 1 ? _jammoController : _defaultController;
+        animator.transform.localScale = _defaultScale * (mercenary ? _mercenaryScale : id == 2 ? _priestScale : id == 1 ? _jammoScale : 1f);
         animator.applyRootMotion = false;
         animator.Rebind();
         animator.Update(0f);
@@ -259,33 +273,36 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         return float.IsInfinity(minimum) ? 0f : maximum - minimum;
     }
 
-    private bool EnsurePriest()
+    private bool EnsureHumanoid(string prefabPath, string controllerPath, List<GameObject> children,
+        ref Avatar avatar, ref RuntimeAnimatorController controller, ref float scale,
+        ref Quaternion leftPalm, ref Quaternion rightPalm)
     {
-        if (_priestAvatar != null) return true;
-        var prefab = Resources.Load<GameObject>("Characters/PF_CursedPriestVisual");
-        _priestController = Resources.Load<RuntimeAnimatorController>("Characters/AOC_CursedPriestPlayer");
-        var avatar = prefab != null ? prefab.GetComponent<Animator>()?.avatar : null;
-        if (avatar == null || !avatar.isValid || !avatar.isHuman || _priestController == null)
+        if (avatar != null) return true;
+        var prefab = Resources.Load<GameObject>(prefabPath);
+        controller = Resources.Load<RuntimeAnimatorController>(controllerPath);
+        var sourceAvatar = prefab != null ? prefab.GetComponent<Animator>()?.avatar : null;
+        if (sourceAvatar == null || !sourceAvatar.isValid || !sourceAvatar.isHuman || controller == null)
         {
-            Debug.LogError("[Character] Cursed Priest requires a valid Humanoid avatar and Jammo controller.");
+            Debug.LogError($"[Character] {prefabPath} requires a valid Humanoid avatar and controller.");
             return false;
         }
 
         var root = Instantiate(prefab, animator.transform);
-        var priestRig = root.GetComponent<Animator>();
-        _priestRightPalm = PalmBasis(priestRig, false);
-        _priestLeftPalm = PalmBasis(priestRig, true);
-        priestRig.enabled = false;
+        var sourceRig = root.GetComponent<Animator>();
+        rightPalm = PalmBasis(sourceRig, false);
+        leftPalm = PalmBasis(sourceRig, true);
+        sourceRig.enabled = false;
         var height = MeasureVisualHeight(root);
-        _priestScale = _defaultVisualHeight > 0f && height > 0f ? _defaultVisualHeight / height : 1f;
+        scale = _defaultVisualHeight > 0f && height > 0f ? _defaultVisualHeight / height : 1f;
         while (root.transform.childCount > 0)
         {
             var child = root.transform.GetChild(0);
             child.SetParent(animator.transform, false);
-            _priestChildren.Add(child.gameObject);
+            children.Add(child.gameObject);
         }
-        _priestAvatar = avatar;
-        Destroy(root);
+        avatar = sourceAvatar;
+        if (Application.isPlaying) Destroy(root);
+        else DestroyImmediate(root);
         return true;
     }
 

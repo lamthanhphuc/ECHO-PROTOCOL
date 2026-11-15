@@ -35,7 +35,9 @@ namespace EchoProtocol.UI
             _nextRefresh=Time.unscaledTime+0.1f;
             previousDifficulty.interactable=nextDifficulty.interactable=difficulty.interactable;
             if(difficulty.options.Count>difficulty.value) difficultyValue.text=System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(GameLanguage.Translate(difficulty.options[difficulty.value].text).ToLowerInvariant());
-            if(description!=null && bindings!=null)description.text=bindings.PreviewCharacterId == 2
+            if(description!=null && bindings!=null)description.text=bindings.PreviewCharacterId == 3
+                ? GameLanguage.Choose("Lính đánh thuê kỳ cựu. Nhận những hợp đồng vượt xa tầm phủ sóng của đài cứu hộ cuối cùng.", "A veteran mercenary who takes contracts beyond the last rescue beacon.")
+                : bindings.PreviewCharacterId == 2
                 ? GameLanguage.Choose("Vị tu sĩ mang lời nguyền từ một nhà nguyện bỏ hoang. Vẫn dẫn đường cho những ai chưa tìm được lối về.", "A priest cursed in an abandoned chapel. Still guides those who have yet to find their way home.")
                 : bindings.PreviewCharacterId==1
                 ? GameLanguage.Choose("Robot bảo trì thích cứu người hơn sửa máy. Xóa sạch nhật ký lỗi. Giữ lại mọi lời cảm ơn.","A maintenance robot who prefers rescuing people to fixing machines. Deletes every error log. Keeps every thank-you.")

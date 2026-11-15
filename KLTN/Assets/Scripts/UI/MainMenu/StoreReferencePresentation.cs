@@ -134,7 +134,8 @@ namespace EchoProtocol.UI.MainMenu
                 var rect=content.Find(name) as RectTransform;
                 var grid=rect!=null ? rect.GetComponent<GridLayoutGroup>() : null;
                 if(grid==null)continue;
-                float width=(rect.rect.width-grid.padding.left-grid.padding.right-grid.spacing.x*2f)/3f;
+                int columns = rect.name == "CharacterGrid" ? CharacterShopAssets.Items.Length : 3;
+                float width=(rect.rect.width-grid.padding.left-grid.padding.right-grid.spacing.x*(columns-1))/columns;
                 grid.cellSize=Vector2.one*Mathf.Clamp(width,60f,170f);
                 var contentGrid=rect.GetComponent<ScrollRect>()?.content?.GetComponent<GridLayoutGroup>();
                 if(contentGrid!=null)contentGrid.cellSize=grid.cellSize;
@@ -313,7 +314,7 @@ namespace EchoProtocol.UI.MainMenu
             cells.SetParent(parent,false);cells.anchorMin=new Vector2(0,1);cells.anchorMax=Vector2.one;cells.pivot=new Vector2(0.5f,1);
             cells.anchoredPosition=Vector2.zero;cells.sizeDelta=new Vector2(0,0);
             var layout=cells.GetComponent<GridLayoutGroup>();layout.cellSize=authored.cellSize;layout.spacing=authored.spacing;
-            layout.padding=authored.padding;layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=3;
+            layout.padding=authored.padding;layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=parent.name=="CharacterGrid" ? CharacterShopAssets.Items.Length : 3;
             cells.GetComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             var scroll=parent.GetComponent<ScrollRect>() ?? parent.gameObject.AddComponent<ScrollRect>();
             scroll.content=cells;scroll.viewport=rect;scroll.horizontal=false;scroll.vertical=true;scroll.scrollSensitivity=35;scroll.movementType=ScrollRect.MovementType.Clamped;

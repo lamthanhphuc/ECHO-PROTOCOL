@@ -49,7 +49,9 @@ public static class ShopCatalogSeeder
             "Assets/Resources/Characters/PF_JammoVisual.prefab"),
 
         new(Guid.Parse("13000000-0000-0000-0000-000000000002"), "Cursed Priest", "CHARACTER", 1000,
-            "A cursed priest joins the expedition.", "Assets/Resources/Characters/PF_CursedPriestVisual.prefab")
+            "A cursed priest joins the expedition.", "Assets/Resources/Characters/PF_CursedPriestVisual.prefab"),
+        new(Guid.Parse("13000000-0000-0000-0000-000000000003"), "Mercenary", "CHARACTER", 1500,
+            "A veteran mercenary who takes contracts beyond the last rescue beacon.", "Assets/Resources/Characters/PF_MercenaryVisual.prefab")
     ];
 
     // Cosmetic pets and purchasable alternate skins.

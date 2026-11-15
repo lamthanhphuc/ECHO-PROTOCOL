@@ -979,7 +979,7 @@ namespace EchoProtocol.Networking
             }
 
             if (error == LobbySelectionError.None
-                && (characterId < 0 || characterId > 2))
+                && !CharacterShopAssets.TryGetByCharacterId(characterId, out _))
             {
                 error =
                     LobbySelectionError.InvalidSelection;
@@ -1056,14 +1056,15 @@ namespace EchoProtocol.Networking
             }
 
             if (error == LobbySelectionError.None
-                && (CharacterId < 0 || CharacterId > 2))
+                && !CharacterShopAssets.TryGetByCharacterId(CharacterId, out _))
             {
                 error =
                     LobbySelectionError.InvalidSelection;
             }
 
             if (error == LobbySelectionError.None
-                && (outfitId < 0 || outfitId > (CharacterId == 2 ? 0 : 3)))
+                && CharacterShopAssets.TryGetByCharacterId(CharacterId, out var definition)
+                && (outfitId < 0 || outfitId >= definition.OutfitCount))
             {
                 error =
                     LobbySelectionError.InvalidSelection;

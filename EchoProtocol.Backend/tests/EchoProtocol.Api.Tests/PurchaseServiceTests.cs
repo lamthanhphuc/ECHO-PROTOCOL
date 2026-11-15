@@ -41,6 +41,23 @@ public sealed class PurchaseServiceTests
     }
 
     [Fact, Trait("Category", "M4PurchaseUnit")]
+    public async Task PurchaseSeededMercenaryChargesCreditsAndGrantsOwnership()
+    {
+        await using var harness = await PurchaseHarness.CreateAsync(balance: 1750);
+        await ShopCatalogSeeder.SeedProductionCatalogAsync(harness.Db, TimeProvider.System, NullLogger.Instance);
+        var itemId = Guid.Parse("13000000-0000-0000-0000-000000000003");
+
+        var purchase = await harness.Service.PurchaseAsync(harness.UserId, Request(itemId, "mercenary"));
+        var duplicate = await harness.Service.PurchaseAsync(harness.UserId, Request(itemId, "mercenary-again"));
+
+        Assert.True(purchase.IsSuccess);
+        Assert.Equal(1500, purchase.Data!.PricePaid);
+        Assert.Equal(250, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Equal(itemId, (await harness.Db.InventoryItems.SingleAsync()).ShopItemId);
+        Assert.Equal(ErrorCodes.ShopItemAlreadyOwned, duplicate.ErrorCode);
+    }
+
+    [Fact, Trait("Category", "M4PurchaseUnit")]
     public async Task InsufficientBalanceDoesNotMutateWallet()
     {
         await using var harness = await PurchaseHarness.CreateAsync(balance: 50);

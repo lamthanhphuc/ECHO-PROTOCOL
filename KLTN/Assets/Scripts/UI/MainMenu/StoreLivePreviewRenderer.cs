@@ -102,7 +102,8 @@ namespace EchoProtocol.UI.MainMenu
         }
 
         private static bool IsCharacterPreview(string resourcePath) =>
-            resourcePath.Contains("Character_") || resourcePath == "Characters/PF_CursedPriestVisual";
+            resourcePath.Contains("Character_") || resourcePath == "Characters/PF_CursedPriestVisual"
+                || resourcePath == "Characters/PF_MercenaryVisual";
 
         private UnityEngine.Playables.PlayableGraph _priestPreviewGraph;
 

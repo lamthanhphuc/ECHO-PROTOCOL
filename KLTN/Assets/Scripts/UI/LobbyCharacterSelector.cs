@@ -66,6 +66,7 @@ namespace EchoProtocol.UI
             "ASTRONAUT",
             "JAMMO",
             "CURSED PRIEST",
+            "MERCENARY",
         };
 
         private static readonly string[] Descriptions =
@@ -73,6 +74,7 @@ namespace EchoProtocol.UI
             "STANDARD EXPEDITION OPERATOR",
             "COMPACT HAZARD EXPEDITION UNIT",
             "A PRIEST CURSED IN AN ABANDONED CHAPEL",
+            "A VETERAN MERCENARY OPERATING BEYOND THE LAST RESCUE BEACON",
         };
 
         private readonly CharacterView[] _views =
@@ -102,6 +104,7 @@ namespace EchoProtocol.UI
         public static string GetThumbnailResource(
             int characterId)
         {
+            if (characterId == CharacterShopAssets.MercenaryCharacterId) return "Shop/LobbyPortraits/Mercenary";
             if (characterId == 2) return "Shop/LobbyPortraits/Cursed Priest";
             return characterId == 1
                 ? "Shop/Characters/jammo"
@@ -1157,8 +1160,9 @@ namespace EchoProtocol.UI
                 if (outfit == null)
                     continue;
 
-                outfit.Button.gameObject.SetActive(_selectedCharacterId != 2);
-                if (_selectedCharacterId == 2) continue;
+                bool hasOutfits = CharacterShopAssets.Items[_selectedCharacterId].OutfitCount > 1;
+                outfit.Button.gameObject.SetActive(hasOutfits);
+                if (!hasOutfits) continue;
 
                 string outfitName =
                     CharacterOutfitLibrary.GetName(

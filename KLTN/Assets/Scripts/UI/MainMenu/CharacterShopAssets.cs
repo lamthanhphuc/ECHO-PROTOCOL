@@ -9,6 +9,7 @@ namespace EchoProtocol.UI.MainMenu
     {
         public const int AstronautCharacterId = 0;
         public const int JammoCharacterId = 1;
+        public const int MercenaryCharacterId = 3;
 
         public const string BuiltinAstronautItemId =
             "builtin:astronaut";
@@ -91,7 +92,13 @@ namespace EchoProtocol.UI.MainMenu
                 2, "13000000-0000-0000-0000-000000000002",
                 "CURSED PRIEST", "A cursed priest joins the expedition.",
                 "Assets/Resources/Characters/PF_CursedPriestVisual.prefab",
-                "Shop/LobbyVariants/Characters/character-2-outfit-0", "Characters/PF_CursedPriestVisual", 1000, 1, false)
+                "Shop/LobbyVariants/Characters/character-2-outfit-0", "Characters/PF_CursedPriestVisual", 1000, 1, false),
+
+            new Item(
+                MercenaryCharacterId, "13000000-0000-0000-0000-000000000003",
+                "MERCENARY", "A veteran mercenary who takes contracts beyond the last rescue beacon.",
+                "Assets/Resources/Characters/PF_MercenaryVisual.prefab",
+                "Shop/LobbyVariants/Characters/character-3-outfit-0", "Characters/PF_MercenaryVisual", 1500, 1, false)
         };
 
         public static bool TryGetByCharacterId(

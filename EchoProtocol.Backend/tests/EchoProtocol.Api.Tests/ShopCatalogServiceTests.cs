@@ -127,18 +127,18 @@ public sealed class ShopCatalogServiceTests
             NullLogger.Instance);
 
         // 4 production Team Tools
-        // + 2 production Characters
+        // + 3 production Characters
         // + 6 production Character Outfits
         // + 4 Pets
         // + 12 alternate Pet Skins
         // + 2 development-only items
-        // = 30 unique catalog entries.
+        // = 31 unique catalog entries.
         Assert.Equal(
-            30,
+            31,
             await harness.Db.ShopItems.CountAsync());
 
         Assert.Equal(
-            30,
+            31,
             await harness.Db.ShopItems
                 .Select(item => item.ItemId)
                 .Distinct()
@@ -151,6 +151,11 @@ public sealed class ShopCatalogServiceTests
 
         var priestId = Guid.Parse("13000000-0000-0000-0000-000000000002");
         Assert.Equal(1000, (await harness.Db.ShopItems.SingleAsync(item => item.ItemId == priestId)).Price);
+
+        var mercenaryId = Guid.Parse("13000000-0000-0000-0000-000000000003");
+        var mercenary = await harness.Db.ShopItems.SingleAsync(item => item.ItemId == mercenaryId);
+        Assert.Equal(1500, mercenary.Price);
+        Assert.Equal(ShopItemCategories.Character, mercenary.Category);
 
         // Existing production Team Tools.
         Assert.Contains(
@@ -215,9 +220,9 @@ public sealed class ShopCatalogServiceTests
                     item.Category ==
                     ShopItemCategories.PetSkin));
 
-        // Jammo and Cursed Priest + development Test Explorer.
+        // Jammo, Cursed Priest and Mercenary + development Test Explorer.
         Assert.Equal(
-            3,
+            4,
             await harness.Db.ShopItems.CountAsync(
                 item =>
                     item.Category ==
