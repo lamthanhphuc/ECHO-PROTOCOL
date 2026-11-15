@@ -12,6 +12,7 @@ import type { BalanceAnalytics, PlayerAIHistory } from "@/lib/types/balance-anal
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
+  AdminDashboard,
   AdminMatchesPage,
   AdminMatchDetail,
   AdminRoomSession,
@@ -54,6 +55,7 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  dashboard: () => authorized<AdminDashboard>("/api/admin/dashboard"),
   chatWords: () => authorized<ChatWordsData>("/api/admin/chat-words"),
   balanceAnalytics: (query: string) => authorized<BalanceAnalytics>(`/api/admin/balance-analytics${query}`),
   playerAIHistory: (id: string, page: number) => authorized<PlayerAIHistory>(`/api/admin/users/${encodeURIComponent(id)}/ai-history?page=${page}`),

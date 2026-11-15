@@ -48,6 +48,13 @@ public sealed class AdminMatchesQuery : AdminPagedQuery
     public bool FlaggedOnly { get; set; }
 }
 
+public sealed record AdminDashboardRoom(Guid RoomInstanceId, string FusionSessionName, string HostUsername,
+    Guid? CurrentMatchId, DateTime CreatedAtUtc, DateTime LeaseExpiresAtUtc, DateTime? ActivatedAtUtc,
+    DateTime? ClosedAtUtc);
+
+public sealed record AdminDashboardResponse(DateTime ObservedAtUtc, int OnlinePlayersEstimate,
+    int ActiveRooms, int ActiveMatches, int RegisteredPlayers, IReadOnlyList<AdminDashboardRoom> RecentRooms);
+
 public sealed class AdminMatchResponse
 {
     public Guid MatchId { get; init; }

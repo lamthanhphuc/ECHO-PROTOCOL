@@ -19,6 +19,10 @@ public sealed class AdminController(
     IAdminQueryService service,
     ILogger<AdminController> logger) : ControllerBase
 {
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> Dashboard([FromServices] AdminDashboardService dashboard, CancellationToken ct) =>
+        Ok(ApiResponse<AdminDashboardResponse>.Ok(await dashboard.GetAsync(ct)));
+
     [HttpGet("remote-fixed/game-defaults")]
     public async Task<IActionResult> UnityBalanceDefaults(
         [FromServices] Microsoft.Extensions.Options.IOptions<Configurations.MatchAuthoritySettings> settings,

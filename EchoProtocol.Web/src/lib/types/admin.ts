@@ -14,6 +14,24 @@ export interface AdminUser {
   createdAtUtc: string;
 }
 
+export interface AdminDashboard {
+  observedAtUtc: string;
+  onlinePlayersEstimate: number;
+  activeRooms: number;
+  activeMatches: number;
+  registeredPlayers: number;
+  recentRooms: Array<{
+    roomInstanceId: string;
+    fusionSessionName: string;
+    hostUsername: string;
+    currentMatchId: string | null;
+    createdAtUtc: string;
+    leaseExpiresAtUtc: string;
+    activatedAtUtc: string | null;
+    closedAtUtc: string | null;
+  }>;
+}
+
 export interface AdminPayment {
   paymentOrderId: string;
   userId: string;
