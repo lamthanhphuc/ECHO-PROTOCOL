@@ -203,7 +203,8 @@ namespace EchoProtocol.Player.Tests
             StringAssert.Contains("crouchCameraForwardOffset = 0.25f", camera);
             StringAssert.Contains("? crouchCameraForwardOffset", camera);
             StringAssert.Contains("animator.GetBool(IsCrouchingHash)", upperBodyAim);
-            StringAssert.Contains("if (animator.GetBool(IsCrouchingHash) && !jammo && !priest)", upperBodyAim);
+            StringAssert.Contains("bool humanoidGrip = character != null && character.UsesHumanoidGrip;", upperBodyAim);
+            StringAssert.IsMatch(@"if \(animator\.GetBool\(IsCrouchingHash\) && !jammo && !humanoidGrip\)\s*\{\s*return;", upperBodyAim);
         }
 
         [Test]
