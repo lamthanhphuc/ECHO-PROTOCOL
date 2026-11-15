@@ -9,4 +9,5 @@ public sealed class AdminModerationAction
     public Guid AdminUserId { get; set; }
     public string Reason { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; }
+    public DateTime? HostExecutedAtUtc { get; set; }
 }

@@ -134,6 +134,16 @@ namespace EchoProtocol.UI
             _cancel.Select();
         }
 
+        public void DismissConfirmation()
+        {
+            if (!_modal.activeSelf) return;
+            _modal.SetActive(false);
+            _accepted = _cancelled = null;
+            _bodyProvider = null;
+            _resolutionDialog = false;
+            _lock.Release();
+        }
+
         private void LayoutConfirmation()
         {
             float contentHeight = Mathf.Max(72, _body.GetPreferredValues(_body.text, 512, Mathf.Infinity).y);

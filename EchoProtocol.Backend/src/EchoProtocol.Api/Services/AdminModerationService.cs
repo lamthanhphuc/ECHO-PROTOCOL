@@ -14,15 +14,51 @@ public sealed class AdminModerationService(AppDbContext db)
     {
         var match = await db.MatchAuthorityBindings.AsNoTracking()
             .SingleOrDefaultAsync(item => item.MatchId == matchId, ct);
-        if (match is null || match.HostUserId != hostUserId || match.Status != MatchAuthorityStatus.InMatch
+        if (match is null || match.HostUserId != hostUserId
+            || match.Status is not (MatchAuthorityStatus.Lobby or MatchAuthorityStatus.InMatch)
             || match.LeaseExpiresAtUtc <= DateTime.UtcNow)
             return ServiceResult<IReadOnlyList<KickDecisionResponse>>.Failure("Host authority required", ErrorCodes.MatchAuthorityForbidden);
         var decisions = await db.AdminModerationActions.AsNoTracking()
             .Where(item => item.TargetId == matchId && item.Action == "KICK_PLAYER" && item.TargetUserId != null)
             .OrderBy(item => item.CreatedAtUtc)
-            .Select(item => new KickDecisionResponse(item.Id, item.TargetUserId!.Value, item.Reason, item.CreatedAtUtc))
+            .Select(item => new KickDecisionResponse(item.Id, item.TargetUserId!.Value, item.Reason, item.CreatedAtUtc, item.HostExecutedAtUtc))
             .ToArrayAsync(ct);
         return ServiceResult<IReadOnlyList<KickDecisionResponse>>.Success(decisions);
+    }
+
+    public async Task<ServiceResult<KickStatusResponse>> GetKickStatusAsync(Guid userId, Guid matchId, CancellationToken ct)
+    {
+        if (userId == Guid.Empty || matchId == Guid.Empty)
+            return ServiceResult<KickStatusResponse>.Failure("Invalid identity", ErrorCodes.ValidationError);
+        var action = await db.AdminModerationActions.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.TargetId == matchId && item.TargetUserId == userId && item.Action == "KICK_PLAYER", ct);
+        return ServiceResult<KickStatusResponse>.Success(action is null
+            ? new KickStatusResponse(false, null, null, null)
+            : new KickStatusResponse(true, action.Id, action.Reason, action.CreatedAtUtc));
+    }
+
+    public async Task<ServiceResult<KickDecisionResponse>> AckKickAsync(Guid hostUserId, Guid matchId, Guid actionId, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var match = db.Database.IsNpgsql()
+            ? await db.MatchAuthorityBindings.FromSqlInterpolated($"SELECT * FROM \"MatchAuthorityBindings\" WHERE \"MatchId\" = {matchId} FOR UPDATE").SingleOrDefaultAsync(ct)
+            : await db.MatchAuthorityBindings.SingleOrDefaultAsync(item => item.MatchId == matchId, ct);
+        var now = DateTime.UtcNow;
+        if (match is null || match.HostUserId != hostUserId
+            || !(match.Status is (MatchAuthorityStatus.Lobby or MatchAuthorityStatus.InMatch) && match.LeaseExpiresAtUtc > now
+                || match.Status == MatchAuthorityStatus.Ended && match.EndedAtUtc >= now.AddMinutes(-10)))
+            return ServiceResult<KickDecisionResponse>.Failure("Host authority required", ErrorCodes.MatchAuthorityForbidden);
+        var action = await db.AdminModerationActions.SingleOrDefaultAsync(
+            item => item.Id == actionId && item.TargetId == matchId && item.Action == "KICK_PLAYER" && item.TargetUserId != null, ct);
+        if (action is null)
+            return ServiceResult<KickDecisionResponse>.Failure("Kick decision not found", ErrorCodes.NotFound);
+        if (action.HostExecutedAtUtc is null)
+        {
+            action.HostExecutedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return ServiceResult<KickDecisionResponse>.Success(new(action.Id, action.TargetUserId!.Value, action.Reason, action.CreatedAtUtc, action.HostExecutedAtUtc));
     }
 
     public async Task<ServiceResult<AdminModerationAction>> KickPlayerAsync(
@@ -48,13 +84,26 @@ public sealed class AdminModerationService(AppDbContext db)
             return existing.Id == actionId && existing.AdminUserId == adminId && existing.Reason == reason
                 ? ServiceResult<AdminModerationAction>.Success(existing)
                 : ServiceResult<AdminModerationAction>.Failure("Player already kicked", ErrorCodes.Conflict);
-        if (match.Status != MatchAuthorityStatus.InMatch || match.HostUserId == targetUserId)
-            return ServiceResult<AdminModerationAction>.Failure("Only a non-host player in an active match can be kicked", ErrorCodes.Conflict);
+        if (match.Status is not (MatchAuthorityStatus.Lobby or MatchAuthorityStatus.InMatch)
+            || match.LeaseExpiresAtUtc <= DateTime.UtcNow
+            || match.RoomSessionId is Guid roomId && await db.RoomSessions.AnyAsync(room => room.Id == roomId && room.ClosedAtUtc != null, ct))
+            return ServiceResult<AdminModerationAction>.Failure("Room is not active", ErrorCodes.Conflict);
 
         var player = await db.MatchPlayerBindings.SingleOrDefaultAsync(
-            item => item.MatchId == matchId && item.UserId == targetUserId && item.Participated, ct);
+            item => item.MatchId == matchId && item.UserId == targetUserId
+                && (match.Status == MatchAuthorityStatus.Lobby && item.DisconnectedAtUtc == null
+                    || match.Status == MatchAuthorityStatus.InMatch && item.Participated), ct);
         if (player is null)
-            return ServiceResult<AdminModerationAction>.Failure("Player is not in the started roster", ErrorCodes.NotFound);
+            return ServiceResult<AdminModerationAction>.Failure("Player is not connected in the current roster", ErrorCodes.NotFound);
+        if (match.HostUserId == targetUserId && !await db.MatchPlayerBindings.AnyAsync(
+                item => item.MatchId == matchId && item.UserId != targetUserId
+                    && item.DisconnectedAtUtc == null && item.KickedAtUtc == null, ct))
+            return ServiceResult<AdminModerationAction>.Failure("No eligible player remains to receive Host authority", ErrorCodes.Conflict);
+        if (match.HostUserId != targetUserId
+            && await db.MatchPlayerBindings.AnyAsync(item => item.MatchId == matchId && item.UserId == match.HostUserId && item.KickedAtUtc != null, ct)
+            && !await db.MatchPlayerBindings.AnyAsync(item => item.MatchId == matchId && item.UserId != targetUserId
+                && item.UserId != match.HostUserId && item.DisconnectedAtUtc == null && item.KickedAtUtc == null, ct))
+            return ServiceResult<AdminModerationAction>.Failure("No eligible player remains to receive Host authority", ErrorCodes.Conflict);
 
         var now = DateTime.UtcNow;
         player.KickedAtUtc = now;

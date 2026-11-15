@@ -45,6 +45,21 @@ public sealed class MatchAuthorityController : ControllerBase
         [FromServices] AdminModerationService moderation, CancellationToken cancellationToken) =>
         Respond(await moderation.GetKicksForHostAsync(UserId(), matchId, cancellationToken));
 
+    [HttpGet("{matchId:guid}/kick-status/me")]
+    public async Task<IActionResult> GetMyKickStatus(Guid matchId,
+        [FromServices] AdminModerationService moderation, CancellationToken cancellationToken) =>
+        Respond(await moderation.GetKickStatusAsync(UserId(), matchId, cancellationToken));
+
+    [HttpGet("{matchId:guid}/room-status/me")]
+    public async Task<IActionResult> GetMyRoomStatus(Guid matchId,
+        [FromServices] RoomSessionService rooms, CancellationToken cancellationToken) =>
+        Respond(await rooms.GetForMatchMemberAsync(UserId(), matchId, cancellationToken));
+
+    [HttpPost("{matchId:guid}/kick-decisions/{actionId:guid}/host-ack")]
+    public async Task<IActionResult> AckKick(Guid matchId, Guid actionId,
+        [FromServices] AdminModerationService moderation, CancellationToken cancellationToken) =>
+        Respond(await moderation.AckKickAsync(UserId(), matchId, actionId, cancellationToken));
+
     [HttpGet("{matchId:guid}/players/{fusionActorNumber:int}/entitlements")]
     public async Task<IActionResult> GetPlayerEntitlements(
         Guid matchId, int fusionActorNumber, CancellationToken cancellationToken) =>

@@ -42,6 +42,52 @@ namespace EchoProtocol.Networking.Authority
                     joinProof = proof
                 });
 
+        public Task<ApiResult<ApiResponse<KickDecisionDto[]>>> GetKickDecisionsAsync(Guid matchId) =>
+            GetAsync<KickDecisionDto[]>($"/api/matches/{matchId:D}/kick-decisions");
+
+        public Task<ApiResult<ApiResponse<KickDecisionDto>>> AckKickAsync(Guid matchId, Guid actionId) =>
+            PostAsync<EmptyMatchAuthorityRequest, KickDecisionDto>(
+                $"/api/matches/{matchId:D}/kick-decisions/{actionId:D}/host-ack",
+                new EmptyMatchAuthorityRequest());
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> CreateRoomAsync(
+            Guid requestId, string sessionName, string region) =>
+            PostAsync<CreateRoomSessionRequest, RoomSessionDto>("/api/rooms",
+                new CreateRoomSessionRequest
+                {
+                    requestId = requestId.ToString("D"),
+                    fusionSessionName = sessionName,
+                    region = region
+                });
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> ActivateRoomAsync(Guid roomId, string region) =>
+            PostAsync<ActivateRoomRequest, RoomSessionDto>(
+                $"/api/rooms/{roomId:D}/activate", new ActivateRoomRequest { actualRegion = region });
+
+        public Task<ApiResult<ApiResponse<MatchAuthorityDto>>> PrepareRoomMatchAsync(
+            Guid roomId, Guid requestId, int maxPlayers) =>
+            PostAsync<PrepareRoomMatchRequest, MatchAuthorityDto>(
+                $"/api/rooms/{roomId:D}/matches",
+                new PrepareRoomMatchRequest { requestId = requestId.ToString("D"), maxPlayers = maxPlayers });
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> ConfirmRoomPublicationAsync(
+            Guid roomId, Guid matchId) =>
+            PostAsync<EmptyMatchAuthorityRequest, RoomSessionDto>(
+                $"/api/rooms/{roomId:D}/matches/{matchId:D}/publication-ack",
+                new EmptyMatchAuthorityRequest());
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> SyncRoomHostAsync(Guid roomId) =>
+            PostAsync<EmptyMatchAuthorityRequest, RoomSessionDto>(
+                $"/api/rooms/{roomId:D}/sync-host", new EmptyMatchAuthorityRequest());
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> RenewRoomLeaseAsync(Guid roomId) =>
+            PostAsync<EmptyMatchAuthorityRequest, RoomSessionDto>(
+                $"/api/rooms/{roomId:D}/lease", new EmptyMatchAuthorityRequest());
+
+        public Task<ApiResult<ApiResponse<RoomSessionDto>>> ReleaseRoomAsync(Guid roomId) =>
+            PostAsync<EmptyMatchAuthorityRequest, RoomSessionDto>(
+                $"/api/rooms/{roomId:D}/release", new EmptyMatchAuthorityRequest());
+
         public Task<ApiResult<ApiResponse<MatchPlayerEntitlementsDto>>> GetPlayerEntitlementsAsync(
             Guid matchId, int actorNumber) =>
             GetAsync<MatchPlayerEntitlementsDto>(

@@ -51,6 +51,7 @@ public sealed class AdminMatchesQuery : AdminPagedQuery
 public sealed class AdminMatchResponse
 {
     public Guid MatchId { get; init; }
+    public Guid? RoomSessionId { get; init; }
     public Guid HostUserId { get; init; }
     public string HostUsername { get; init; } = string.Empty;
     public string? MapId { get; init; }

@@ -195,6 +195,7 @@ public sealed class AdminController(
             .Select(item => new AdminMatchResponse
             {
                 MatchId = item.MatchId,
+                RoomSessionId = item.RoomSessionId,
                 HostUserId = item.HostUserId,
                 HostUsername = item.HostUser == null ? "" : item.HostUser.Username,
                 MapId = item.MapId,
@@ -226,6 +227,7 @@ public sealed class AdminController(
             .Select(item => new AdminMatchResponse
             {
                 MatchId = item.MatchId,
+                RoomSessionId = item.RoomSessionId,
                 HostUserId = item.HostUserId,
                 HostUsername = item.HostUser == null ? "" : item.HostUser.Username,
                 MapId = item.MapId,
@@ -275,6 +277,20 @@ public sealed class AdminController(
     public Task<IActionResult> KickPlayer(Guid matchId, Guid userId, [FromBody] AdminKickPlayerRequest request,
         [FromServices] AdminModerationService moderation, CancellationToken ct) =>
         WithAdmin(adminId => moderation.KickPlayerAsync(adminId, matchId, userId, request.ActionId, request.Reason, ct), ct);
+
+    [HttpPost("rooms/{roomInstanceId:guid}/close")]
+    public Task<IActionResult> CloseRoom(Guid roomInstanceId,
+        [FromBody] EchoProtocol.Api.DTOs.MatchAuthority.CloseRoomRequest request,
+        [FromServices] RoomSessionService rooms, CancellationToken ct) =>
+        WithAdmin(adminId => rooms.CloseAsync(adminId, roomInstanceId, request, ct), ct);
+
+    [HttpGet("rooms")]
+    public Task<IActionResult> ListRooms([FromServices] RoomSessionService rooms, CancellationToken ct) =>
+        WithAdmin(adminId => rooms.ListForAdminAsync(adminId, ct), ct);
+
+    [HttpGet("rooms/{roomInstanceId:guid}")]
+    public Task<IActionResult> GetRoom(Guid roomInstanceId, [FromServices] RoomSessionService rooms, CancellationToken ct) =>
+        WithAdmin(adminId => rooms.GetForAdminAsync(adminId, roomInstanceId, ct), ct);
     [HttpPost("matches/{matchId:guid}/recover-result")]
     public async Task<IActionResult> RecoverResult(Guid matchId, [FromBody] RecoverMatchResultRequest request,
         [FromServices] MatchResultService results, [FromServices] IRewardService rewards,

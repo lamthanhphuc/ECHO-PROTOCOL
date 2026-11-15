@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
+    public DbSet<RoomSession> RoomSessions => Set<RoomSession>();
     public DbSet<RemoteFixedBalanceVersion> RemoteFixedBalanceVersions => Set<RemoteFixedBalanceVersion>();
     public DbSet<RemoteFixedBalanceAuditEntry> RemoteFixedBalanceAuditEntries => Set<RemoteFixedBalanceAuditEntry>();
     public DbSet<AdminModerationAction> AdminModerationActions => Set<AdminModerationAction>();
@@ -57,6 +58,18 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<RoomSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FusionSessionName).HasMaxLength(128);
+            entity.Property(x => x.Region).HasMaxLength(32);
+            entity.Property(x => x.ActualRegion).HasMaxLength(32);
+            entity.Property(x => x.CloseReason).HasMaxLength(500);
+            entity.HasIndex(x => x.CreateRequestId).IsUnique();
+            entity.HasIndex(x => x.FusionSessionName).IsUnique()
+                .HasFilter("\"ClosedAtUtc\" IS NULL");
+            entity.HasIndex(x => x.HostUserId).IsUnique().HasFilter("\"ClosedAtUtc\" IS NULL");
+        });
         modelBuilder.Entity<ChatWordPolicy>(entity =>
         {
             entity.ToTable("ChatWordPolicies");
@@ -392,6 +405,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => new { e.FusionSessionName, e.Status });
             entity.HasIndex(e => e.HostUserId);
+            entity.HasIndex(e => new { e.RoomSessionId, e.Status });
+            entity.HasIndex(e => new { e.RoomSessionId, e.RoomMatchRequestId }).IsUnique()
+                .HasFilter("\"RoomMatchRequestId\" IS NOT NULL");
+            entity.HasOne<RoomSession>().WithMany().HasForeignKey(e => e.RoomSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.MapId, e.Difficulty });
             entity.HasOne(e => e.HostUser)
                 .WithMany()

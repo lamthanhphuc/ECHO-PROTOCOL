@@ -49,6 +49,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         var sessionName = request.FusionSessionName.Trim();
+        if (await _db.RoomSessions.AsNoTracking().AnyAsync(room => room.FusionSessionName == sessionName, cancellationToken))
+            return Failure<MatchAuthorityResponse>("Fusion session is managed by RoomSession", ErrorCodes.MatchSessionConflict);
         var now = UtcNow();
         var alreadyActive = await _db.MatchAuthorityBindings.AnyAsync(
             item => item.FusionSessionName == sessionName
@@ -91,6 +93,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         {
             return Failure<JoinProofResponse>(stateFailure.Value.Message, stateFailure.Value.Code);
         }
+        if (await IsRoomClosedAsync(match!, cancellationToken) || await IsRoomPublicationPendingAsync(match!, cancellationToken)
+            || await WasKickedFromRoomAsync(match!, userId, cancellationToken))
+            return Failure<JoinProofResponse>("Room is closed or publication is pending", ErrorCodes.MatchAuthorityForbidden);
 
         if (await HasOtherActiveMatchAsync(userId, matchId, cancellationToken))
         {
@@ -143,6 +148,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         {
             return Failure<MatchPlayerBindingResponse>(authorityFailure.Value.Message, authorityFailure.Value.Code);
         }
+        if (await IsRoomClosedAsync(match!, cancellationToken) || await IsRoomPublicationPendingAsync(match!, cancellationToken))
+            return Failure<MatchPlayerBindingResponse>("Room is closed or publication is pending", ErrorCodes.MatchAuthorityForbidden);
 
         if (!_proofs.TryValidate(request.JoinProof, out var proof)
             || proof is null
@@ -152,6 +159,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         {
             return Failure<MatchPlayerBindingResponse>("Join proof is invalid or expired", ErrorCodes.JoinProofInvalid);
         }
+        if (await WasKickedFromRoomAsync(match!, proof.UserId, cancellationToken))
+            return Failure<MatchPlayerBindingResponse>("Player access was revoked for this room", ErrorCodes.MatchAuthorityForbidden);
 
         if (await HasOtherActiveMatchAsync(proof.UserId, matchId, cancellationToken))
         {
@@ -236,6 +245,8 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 "Match not found",
                 ErrorCodes.MatchNotFound);
         }
+        if (await IsRoomClosedAsync(match, cancellationToken))
+            return Failure<MatchAuthorityResponse>("Room was closed by Admin", ErrorCodes.MatchAuthorityForbidden);
 
         if (match.Status == MatchAuthorityStatus.Ended)
         {
@@ -549,6 +560,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
 
         MatchAuthorityBinding? match = await _db.MatchAuthorityBindings.Include(item => item.Players)
             .SingleOrDefaultAsync(item => item.MatchId == matchId, cancellationToken);
+        if (match is not null && (await IsRoomClosedAsync(match, cancellationToken)
+            || await IsRoomPublicationPendingAsync(match, cancellationToken)))
+            return Failure<MatchAuthorityResponse>("Room is closed or publication is pending", ErrorCodes.MatchAuthorityForbidden);
         if (isV2)
         {
             var existingFailure = ValidateActiveHost(match, hostUserId);
@@ -970,6 +984,23 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             ? ("Match authority lease expired", ErrorCodes.MatchLeaseExpired)
             : null;
     }
+
+    private Task<bool> IsRoomClosedAsync(MatchAuthorityBinding match, CancellationToken ct) =>
+        match.RoomSessionId is Guid id
+            ? _db.RoomSessions.AsNoTracking().AnyAsync(room => room.Id == id && room.ClosedAtUtc != null, ct)
+            : Task.FromResult(false);
+
+    private Task<bool> WasKickedFromRoomAsync(MatchAuthorityBinding match, Guid userId, CancellationToken ct) =>
+        match.RoomSessionId is Guid roomId
+            ? _db.AdminModerationActions.AsNoTracking().AnyAsync(action => action.Action == "KICK_PLAYER"
+                && action.TargetUserId == userId && _db.MatchAuthorityBindings.Any(binding =>
+                    binding.MatchId == action.TargetId && binding.RoomSessionId == roomId), ct)
+            : Task.FromResult(false);
+
+    private Task<bool> IsRoomPublicationPendingAsync(MatchAuthorityBinding match, CancellationToken ct) =>
+        match.RoomSessionId is Guid id
+            ? _db.RoomSessions.AsNoTracking().AnyAsync(room => room.Id == id && (room.CurrentMatchId != match.MatchId || room.ActivatedAtUtc == null || !room.MatchPublished), ct)
+            : Task.FromResult(false);
 
     private (string Message, string Code)? ValidateActiveHost(
         MatchAuthorityBinding? match,

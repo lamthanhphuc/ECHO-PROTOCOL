@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading;
 using EchoProtocol.Auth;
+using EchoProtocol.Api;
 using EchoProtocol.AI.Common.AED;
 using EchoProtocol.Gameplay;
 using Fusion;
@@ -43,6 +44,15 @@ namespace EchoProtocol.Networking
         private bool _completedMatchObserved;
         private int _reconnectGeneration;
         private Task _terminationTask;
+        private Task<bool> _adminKickCheck;
+        private Task<bool> _adminCloseCheck;
+        private Task _adminExitTask;
+        private Guid _disconnectMatchId;
+        private string _disconnectUserId;
+        private Guid _roomInstanceId;
+        private bool _verifiedAdminKick;
+        private bool _verifiedAdminClose;
+        private float _nextAdminClosePollAt;
         private Task _hostMigrationTask;
         private bool _hostMigrationInProgress;
         // A successful StartGame is NOT proof that Fusion has invoked HostMigrationResume.
@@ -111,6 +121,7 @@ namespace EchoProtocol.Networking
 
         public static NetworkBootstrap Instance => _instance;
         public NetworkRunner Runner { get; private set; }
+        public string ActualPhotonRegion => _realtimeClient?.CurrentRegion;
         public NetworkSessionState State { get; private set; } = NetworkSessionState.Disconnected;
         public string CurrentSessionName { get; private set; } = string.Empty;
         public string LastError { get; private set; } = string.Empty;
@@ -118,6 +129,196 @@ namespace EchoProtocol.Networking
         public bool IsBusy => _sessionOperationInProgress || State == NetworkSessionState.ShuttingDown;
         public bool IsMatchStartPending => _matchStartPending;
         public bool ReconnectIdentityPending => _reconnectIdentityPending;
+        public bool HasVerifiedAdminKick => _verifiedAdminKick;
+        public bool HasVerifiedAdminClose => _verifiedAdminClose;
+
+        [Serializable]
+        private sealed class AdminKickStatus
+        {
+            public bool kicked;
+            public string reason;
+        }
+
+        [Serializable]
+        private sealed class AdminCloseStatus
+        {
+            public bool closed;
+            public string reason;
+        }
+
+        public Task<bool> CheckForVerifiedAdminCloseAsync(Guid roomInstanceId)
+        {
+            if (_verifiedAdminClose) return Task.FromResult(true);
+            if (_adminCloseCheck != null && !_adminCloseCheck.IsCompleted) return _adminCloseCheck;
+            if (roomInstanceId == Guid.Empty || !Guid.TryParse(AuthSession.CurrentUserId, out _))
+                return Task.FromResult(false);
+            _roomInstanceId = roomInstanceId;
+            _adminCloseCheck = VerifyAdminCloseAsync(roomInstanceId, AuthSession.CurrentUserId);
+            return _adminCloseCheck;
+        }
+
+        private async Task<bool> VerifyAdminCloseAsync(Guid roomInstanceId, string userId)
+        {
+            try
+            {
+                var completion = new TaskCompletionSource<ApiResult<ApiResponse<AdminCloseStatus>>>();
+                AuthRuntime.EnsureExists().Client.GetJson<ApiResponse<AdminCloseStatus>>(
+                    $"/api/rooms/{roomInstanceId:D}/close-status/me", true,
+                    response => completion.TrySetResult(response));
+                if (await Task.WhenAny(completion.Task, Task.Delay(5000)) != completion.Task)
+                {
+                    Debug.LogWarning("[NetworkSession] Room Close verification timed out; cause remains unverified.");
+                    return false;
+                }
+                var result = await completion.Task;
+                if (!result.IsSuccess || result.Data == null || !result.Data.success
+                    || result.Data.data == null || !result.Data.data.closed
+                    || AuthSession.CurrentUserId != userId || _roomInstanceId != roomInstanceId)
+                    return false;
+
+                _verifiedAdminClose = true;
+                if (Runner != null && Runner.IsServer)
+                {
+                    try
+                    {
+                        var ack = new TaskCompletionSource<ApiResult<ApiResponse<AdminCloseStatus>>>();
+                        AuthRuntime.EnsureExists().Client.PostJson<EmptyMatchAuthorityRequest, ApiResponse<AdminCloseStatus>>(
+                            $"/api/rooms/{roomInstanceId:D}/close-host-ack",
+                            new EmptyMatchAuthorityRequest(), true,
+                            response => ack.TrySetResult(response));
+                        if (await Task.WhenAny(ack.Task, Task.Delay(5000)) != ack.Task
+                            || !ack.Task.Result.IsSuccess)
+                            Debug.LogWarning("[NetworkSession] Admin Close Host ACK was not confirmed.");
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogWarning($"[NetworkSession] Admin Close Host ACK failed: {exception.Message}");
+                    }
+                }
+                await ForceAdminExitAsync("ADMIN_CLOSED", result.Data.data.reason);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[NetworkSession] Room Close verification unavailable: {exception.Message}");
+                return false;
+            }
+        }
+
+        public Task<bool> CheckForVerifiedAdminKickAsync()
+        {
+            if (_verifiedAdminKick) return Task.FromResult(true);
+            if (_adminKickCheck != null && !_adminKickCheck.IsCompleted) return _adminKickCheck;
+            var matchId = _matchAuthority != null && _matchAuthority.MatchId != Guid.Empty
+                ? _matchAuthority.MatchId : _disconnectMatchId;
+            var userId = AuthSession.CurrentUserId;
+            if (matchId == Guid.Empty || !Guid.TryParse(userId, out _)
+                || (_disconnectUserId != null && _disconnectUserId != userId))
+                return Task.FromResult(false);
+            _disconnectMatchId = matchId;
+            _disconnectUserId = userId;
+            _adminKickCheck = VerifyAdminKickAsync(matchId, userId);
+            return _adminKickCheck;
+        }
+
+        private async Task<bool> VerifyAdminKickAsync(Guid matchId, string userId)
+        {
+            try
+            {
+                var completion = new TaskCompletionSource<ApiResult<ApiResponse<AdminKickStatus>>>();
+                AuthRuntime.EnsureExists().Client.GetJson<ApiResponse<AdminKickStatus>>(
+                    $"/api/matches/{matchId:D}/kick-status/me", true,
+                    response => completion.TrySetResult(response));
+                var finished = await Task.WhenAny(completion.Task, Task.Delay(5000));
+                if (finished != completion.Task)
+                {
+                    Debug.LogWarning("[NetworkSession] Admin Kick verification timed out; cause remains unverified.");
+                    return false;
+                }
+                var result = await completion.Task;
+                if (!result.IsSuccess || result.Data == null || !result.Data.success
+                    || result.Data.data == null || !result.Data.data.kicked
+                    || AuthSession.CurrentUserId != userId
+                    || _disconnectMatchId != matchId)
+                    return false;
+
+                _verifiedAdminKick = true;
+                await ForceAdminExitAsync("ADMIN_KICKED", result.Data.data.reason);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[NetworkSession] Admin Kick verification unavailable: {exception.Message}");
+                return false;
+            }
+        }
+
+        private Task ForceAdminExitAsync(string code, string reason) =>
+            _adminExitTask ??= ForceAdminExitCoreAsync(code, reason);
+
+        private async Task ForceAdminExitCoreAsync(string code, string reason)
+        {
+            ++_reconnectGeneration;
+            _reconnectSessionName = null;
+            _reconnectIdentityPending = false;
+            IsReconnecting = false;
+            _reconnectCancellation?.Cancel();
+            _reconnectCancellation?.Dispose();
+            _reconnectCancellation = null;
+            _hostMigrationDisconnectPending = false;
+            _sceneTransitionDisconnectPending = false;
+            _hostMigrationSceneFencePending = false;
+            _matchStartPending = false;
+            _sessionOperationInProgress = true;
+            SetState(NetworkSessionState.ShuttingDown, "Leaving closed session...");
+            PlayerInteractionControlLock.ReleaseAll();
+            ClearLocalInputProvider();
+            ResultSession.Clear();
+            var runner = Runner;
+            try
+            {
+                var deadline = Time.realtimeSinceStartup + 12f;
+                while (Runner == runner && runner != null && !runner.IsShutdown
+                    && (IsSceneLoading || runner.IsSceneManagerBusy)
+                    && Time.realtimeSinceStartup < deadline)
+                    await Task.Delay(50);
+                if (runner != null)
+                {
+                    UnregisterCallbacks(runner);
+                    if (Runner == runner) Runner = null;
+                    if (!runner.IsShutdown) await runner.Shutdown(shutdownReason: ShutdownReason.Ok);
+                    Destroy(runner.gameObject);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[NetworkSession] Admin forced exit shutdown warning: {exception.Message}");
+                if (runner != null) Destroy(runner.gameObject);
+                if (Runner == runner) Runner = null;
+            }
+            _matchAuthority?.ResetBinding();
+            _matchAuthority?.ClearRoomBinding();
+            _callbacksRegistered = false;
+            _sessionOperationInProgress = false;
+            IsSceneLoading = false;
+            CurrentSessionName = string.Empty;
+            _actorIds.Clear();
+            var detail = string.IsNullOrWhiteSpace(reason) ? code : $"{code}: {reason.Trim()}";
+            LastError = detail;
+            try { await LoadDestinationAsync(EchoProtocol.Core.GameConstants.SceneMainMenu); }
+            catch (Exception exception) { Debug.LogWarning($"[NetworkSession] Admin exit scene load failed: {exception.Message}"); ReturnToBootstrapScene(); }
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            SetState(NetworkSessionState.Failed, detail);
+            var feedback = EchoProtocol.UI.GameUIFeedback.Instance;
+            feedback.DismissConfirmation();
+            feedback.Toast(detail);
+            feedback.Confirm(
+                code == "ADMIN_KICKED"
+                    ? EchoProtocol.Settings.GameLanguage.Choose("Bạn đã bị mời khỏi trận", "You were removed from the match")
+                    : EchoProtocol.Settings.GameLanguage.Choose("Phòng đã đóng", "The room was closed"),
+                () => detail, () => { }, "OK");
+        }
         public static bool IsHostMigrationResumeActive { get; private set; }
         // The Fusion scene callback may fire before HostMigrationResume has
         // restored snapshot objects. Treat the entire Runner handoff as an
@@ -159,6 +360,18 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if (HasRunningRunner && Runner.SessionInfo.IsValid
+                && Runner.SessionInfo.Properties != null
+                && Runner.SessionInfo.Properties.TryGetValue(MatchAuthorityRuntime.RoomIdSessionProperty, out var roomProperty)
+                && Guid.TryParse((string)roomProperty, out var roomId))
+                _roomInstanceId = roomId;
+            if (_roomInstanceId != Guid.Empty && !_verifiedAdminClose
+                && (State == NetworkSessionState.InLobby || State == NetworkSessionState.InMatch)
+                && Time.unscaledTime >= _nextAdminClosePollAt)
+            {
+                _nextAdminClosePollAt = Time.unscaledTime + 2f;
+                _ = CheckForVerifiedAdminCloseAsync(_roomInstanceId);
+            }
             // Fusion's scene callback can precede Unity activating Lobby.
             // Reconcile after activation as well, rather than relying on callback timing.
             if (State == NetworkSessionState.InMatch && HasRunningRunner
@@ -289,7 +502,19 @@ namespace EchoProtocol.Networking
 
         public Task Shutdown() => ShutdownAsync(returnToLobby: false);
 
-        private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null, bool abortFailedLoading = false)
+        public async Task<bool> TryAdminHostHandoffAsync()
+        {
+            var runner = Runner;
+            if (runner == null || !runner.IsRunning || !runner.IsServer
+                || CountPlayers(runner) < 2
+                || (State != NetworkSessionState.InLobby && State != NetworkSessionState.InMatch))
+                return false;
+            await ShutdownAsync(returnToLobby: false, requireHostMigration: true);
+            return Runner == null && State == NetworkSessionState.Disconnected;
+        }
+
+        private async Task ShutdownAsync(bool returnToLobby, string destinationScene = null, bool abortFailedLoading = false,
+            bool requireHostMigration = false)
         {
             if (State == NetworkSessionState.ShuttingDown) return;
             ResultSession.Clear();
@@ -327,6 +552,12 @@ namespace EchoProtocol.Networking
                 && (previousState == NetworkSessionState.InLobby
                     || previousState == NetworkSessionState.InMatch)
                 && CountPlayers(sceneRunner) > 1;
+
+            if (requireHostMigration && !gracefulHostMigration)
+            {
+                SetState(previousState, "Admin Host kick is waiting for another connected player.");
+                return;
+            }
 
             if (gracefulHostMigration)
             {
@@ -381,8 +612,22 @@ namespace EchoProtocol.Networking
             {
                 Debug.LogWarning($"[NetworkSession] Backend Host relinquish failed: {exception.Message}");
             }
+            if (!gracefulHostMigration && sceneRunner != null && sceneRunner.IsServer
+                && _matchAuthority != null && _matchAuthority.RoomInstanceId != Guid.Empty)
+            {
+                try
+                {
+                    if (!await _matchAuthority.ReleaseRoomAsync())
+                        Debug.LogWarning("[NetworkSession] Backend room release was not confirmed; lease expiry will close it.");
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"[NetworkSession] Backend room release failed: {exception.Message}");
+                }
+            }
             if (Runner == null)
             {
+                _matchAuthority?.ClearRoomBinding();
                 CurrentSessionName = string.Empty;
                 _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
@@ -412,6 +657,7 @@ namespace EchoProtocol.Networking
             finally
             {
                 if (runner != null) Destroy(runner.gameObject);
+                _matchAuthority?.ClearRoomBinding();
                 CurrentSessionName = string.Empty;
                 _actorIds.Clear();
                 SetState(NetworkSessionState.Disconnected, "Disconnected");
@@ -612,6 +858,16 @@ namespace EchoProtocol.Networking
             if (_sessionOperationInProgress) return await FailWithoutStarting("A create/join operation is already in progress.");
             if (HasRunningRunner) return await FailWithoutStarting($"Already connected to room '{CurrentSessionName}'.");
 
+            if (!IsReconnecting)
+            {
+                _disconnectMatchId = Guid.Empty;
+                _disconnectUserId = null;
+                _verifiedAdminKick = false;
+                _verifiedAdminClose = false;
+                _roomInstanceId = Guid.Empty;
+                _adminExitTask = null;
+            }
+
             _sessionOperationInProgress = true;
             _completedMatchObserved = false;
             _matchStartPending = false;
@@ -686,6 +942,16 @@ namespace EchoProtocol.Networking
                     return false;
                 }
 
+                if (gameMode == GameMode.Host)
+                {
+                    if (!await _matchAuthority.ConfirmHostRoomReadyAsync(runner))
+                    {
+                        await HandleStartFailureAsync("Backend room activation or Photon publication was not confirmed.");
+                        return false;
+                    }
+                    _roomInstanceId = _matchAuthority.RoomInstanceId;
+                }
+
                 CurrentSessionName = normalizedName;
                 if (!_matchAuthority.AttachJoinedSession(runner))
                 {
@@ -750,6 +1016,15 @@ namespace EchoProtocol.Networking
             _matchStartPending = false;
             ClearLocalInputProvider();
             if (_matchAuthority != null) await _matchAuthority.EndAsync("FUSION_START_FAILED");
+            if (_matchAuthority != null && _matchAuthority.RoomInstanceId != Guid.Empty)
+            {
+                try { await _matchAuthority.ReleaseRoomAsync(); }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"[NetworkSession] Failed room release: {exception.Message}");
+                }
+            }
+            _matchAuthority?.ClearRoomBinding();
             LastError = message;
             Debug.LogError($"[NetworkSession] {message}");
             var failedRunner = Runner;
@@ -998,6 +1273,10 @@ namespace EchoProtocol.Networking
 
         void INetworkRunnerCallbacks.OnShutdown(NetworkRunner runner, ShutdownReason reason)
         {
+            if (Runner == runner && runner.IsClient)
+                _ = CheckForVerifiedAdminKickAsync();
+            if (Runner == runner && _roomInstanceId != Guid.Empty)
+                _ = CheckForVerifiedAdminCloseAsync(_roomInstanceId);
             if (Runner == runner) MatchLoadingCoordinator.Instance?.YieldToNetworkRecovery(runner);
             if (reason == ShutdownReason.HostMigration)
             {
@@ -1074,6 +1353,10 @@ namespace EchoProtocol.Networking
             NetworkRunner runner,
             NetDisconnectReason reason)
         {
+            if (Runner == runner && runner.IsClient)
+                _ = CheckForVerifiedAdminKickAsync();
+            if (Runner == runner && _roomInstanceId != Guid.Empty)
+                _ = CheckForVerifiedAdminCloseAsync(_roomInstanceId);
             if (Runner == runner) MatchLoadingCoordinator.Instance?.YieldToNetworkRecovery(runner);
             if (_hostMigrationSceneFencePending
                 && Runner == runner)
@@ -1517,6 +1800,9 @@ namespace EchoProtocol.Networking
         {
             if (Runner != runner) return;
 
+            if (runner.IsClient)
+                _ = CheckForVerifiedAdminKickAsync();
+
             _hostMigrationDisconnectPending = false;
             _sceneTransitionDisconnectPending = false;
             _matchStartPending = false;
@@ -1589,6 +1875,9 @@ namespace EchoProtocol.Networking
                 {
                     await Task.Delay(2000);
                     if (generation != _reconnectGeneration || _reconnectSessionName != sessionName) return;
+                    if (await CheckForVerifiedAdminKickAsync()) return;
+                    if (_roomInstanceId != Guid.Empty && await CheckForVerifiedAdminCloseAsync(_roomInstanceId)) return;
+                    if (generation != _reconnectGeneration || _reconnectSessionName != sessionName) return;
                     ReconnectAttempt++;
                     bool joined = await JoinRoomAsync(sessionName);
                     if (generation != _reconnectGeneration) return;
@@ -1607,6 +1896,7 @@ namespace EchoProtocol.Networking
             IsReconnecting = false;
             _reconnectCancellation?.Dispose();
             _reconnectCancellation = null;
+            _matchAuthority?.ClearRoomBinding();
             if (message.StartsWith("Match finished", StringComparison.Ordinal))
             {
                 LastError = string.Empty;
@@ -1634,6 +1924,7 @@ namespace EchoProtocol.Networking
             Runner = null;
             _sessionOperationInProgress = false;
             CurrentSessionName = string.Empty;
+            _matchAuthority?.ClearRoomBinding();
             LastError = string.Empty;
             SetState(NetworkSessionState.Disconnected, "Disconnected");
             if (runner != null) Destroy(runner.gameObject);
@@ -1670,6 +1961,8 @@ namespace EchoProtocol.Networking
         {
             try
             {
+                if (await CheckForVerifiedAdminKickAsync()) return;
+                if (_roomInstanceId != Guid.Empty && await CheckForVerifiedAdminCloseAsync(_roomInstanceId)) return;
                 if (Runner != oldRunner
                     || oldRunner == null
                     || hostMigrationToken == null)
@@ -1822,7 +2115,7 @@ namespace EchoProtocol.Networking
                 oldRunner,
                 "Host Migration shutdown");
 
-            if (Runner != oldRunner)
+            if (Runner != oldRunner || _verifiedAdminKick || _verifiedAdminClose)
             {
                 _sessionOperationInProgress = false;
                 _hostMigrationInProgress = false;
@@ -1865,6 +2158,8 @@ namespace EchoProtocol.Networking
             {
                 await PrepareHostMigrationSceneReloadAsync(
                     migrationSourceScene);
+
+                if (_verifiedAdminKick || _verifiedAdminClose) return;
 
                 migrationRunner = EnsureRunner();
                 _hostMigrationExpectedResumeRunner = migrationRunner;
@@ -1929,6 +2224,14 @@ namespace EchoProtocol.Networking
 
                 var result =
                     await migrationRunner.StartGame(args);
+
+                if (_verifiedAdminKick || _verifiedAdminClose)
+                {
+                    if (!migrationRunner.IsShutdown)
+                        await migrationRunner.Shutdown(shutdownReason: ShutdownReason.Ok);
+                    Destroy(migrationRunner.gameObject);
+                    return;
+                }
 
                 if (!result.Ok)
                 {
@@ -3031,6 +3334,8 @@ namespace EchoProtocol.Networking
             {
                 return;
             }
+
+            if (_verifiedAdminKick || _verifiedAdminClose) return;
 
             // A valid HostMigrationToken wins over all pending
             // disconnect cleanup paths.

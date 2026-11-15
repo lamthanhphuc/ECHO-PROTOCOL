@@ -35,6 +35,45 @@ namespace EchoProtocol.Networking.Authority
     {
         public string userId;
         public bool disconnected;
+        public bool kicked;
+    }
+
+    [Serializable]
+    public sealed class KickDecisionDto
+    {
+        public string actionId;
+        public string userId;
+        public string reason;
+        public string hostExecutedAtUtc;
+    }
+
+    [Serializable]
+    public sealed class RoomSessionDto
+    {
+        public string roomInstanceId;
+        public string currentMatchId;
+        public bool matchPublished;
+    }
+
+    [Serializable]
+    public sealed class CreateRoomSessionRequest
+    {
+        public string requestId;
+        public string fusionSessionName;
+        public string region;
+    }
+
+    [Serializable]
+    public sealed class PrepareRoomMatchRequest
+    {
+        public string requestId;
+        public int maxPlayers;
+    }
+
+    [Serializable]
+    public sealed class ActivateRoomRequest
+    {
+        public string actualRegion;
     }
 
     [Serializable]

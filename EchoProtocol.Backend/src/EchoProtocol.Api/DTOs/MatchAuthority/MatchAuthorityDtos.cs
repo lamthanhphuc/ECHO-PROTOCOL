@@ -3,7 +3,8 @@ using EchoProtocol.Api.Enums;
 
 namespace EchoProtocol.Api.DTOs.MatchAuthority;
 
-public sealed record KickDecisionResponse(Guid ActionId, Guid UserId, string Reason, DateTime CreatedAtUtc);
+public sealed record KickDecisionResponse(Guid ActionId, Guid UserId, string Reason, DateTime CreatedAtUtc, DateTime? HostExecutedAtUtc);
+public sealed record KickStatusResponse(bool Kicked, Guid? ActionId, string? Reason, DateTime? CreatedAtUtc);
 
 public sealed class CreateMatchAuthorityRequest
 {

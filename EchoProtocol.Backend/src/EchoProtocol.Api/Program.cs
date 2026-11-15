@@ -247,6 +247,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<AdaptiveMatchAuditService>();
 builder.Services.AddScoped<AdminBalanceAnalyticsService>();
 builder.Services.AddScoped<AdminModerationService>();
+builder.Services.AddScoped<RoomSessionService>();
 builder.Services.AddScoped<IMatchTelemetryAggregator, MatchTelemetryAggregator>();
 builder.Services.AddScoped<IPlayerAIProfileUpdater, PlayerAIProfileUpdater>();
 builder.Services.AddSingleton<IPlayerAIProfilePolicy, ConfiguredPlayerAIProfilePolicy>();

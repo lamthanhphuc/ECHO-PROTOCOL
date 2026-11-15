@@ -33,6 +33,7 @@ namespace EchoProtocol.Networking.Authority
         IUnityTelemetryProvenanceProvider
     {
         public const string MatchIdSessionProperty = "matchId";
+        public const string RoomIdSessionProperty = "roomInstanceId";
         public const string ScenarioResolutionModeSessionProperty = "scenarioResolutionMode";
         public const string MatchDifficultySessionProperty = "difficulty";
         private const float LeaseRenewIntervalSeconds = 15f;
@@ -117,6 +118,20 @@ namespace EchoProtocol.Networking.Authority
         private NetworkBootstrap _bootstrap;
         private float _nextLeaseRenewal;
         private bool _leaseRequestInProgress;
+        private bool _kickPollInProgress;
+        private float _nextKickPollAt;
+        private Guid _kickPollMatchId;
+        private Guid _roomInstanceId;
+        private Guid _roomCreateRequestId;
+        private Guid _matchPrepareRequestId;
+        private string _roomSessionName;
+        private bool _roomPublicationConfirmed;
+        private bool _roomLeaseRequestInProgress;
+        private float _nextRoomLeaseRenewal;
+        public Guid RoomInstanceId => _roomInstanceId;
+        public bool RoomPublicationConfirmed => _roomPublicationConfirmed;
+        private readonly HashSet<Guid> _executedKickActions = new();
+        private readonly HashSet<Guid> _acknowledgedKickActions = new();
         private bool _identityRequestInProgress;
         private int _bindingGeneration;
 
@@ -143,6 +158,7 @@ namespace EchoProtocol.Networking.Authority
         private readonly HashSet<int> _disconnectedActors = new();
         private readonly HashSet<int> _objectiveContributors = new();
         private readonly Dictionary<Guid, bool> _migratedResultRoster = new();
+        private readonly HashSet<Guid> _migratedKickedUsers = new();
         private bool _eventsSubscribed;
         private TelemetryRuntimeBehaviour _telemetry;
         private DateTime _matchStartedAtUtc;
@@ -872,6 +888,7 @@ namespace EchoProtocol.Networking.Authority
         public bool RequiresFreshHostBinding =>
             _needsFreshLobbyBinding || !HasBinding
             || !IsHostBinding
+            || (_roomInstanceId != Guid.Empty && !_roomPublicationConfirmed)
             || HasQueuedResult(MatchId);
         public bool IsCompletingMatch =>
             _backendEndRequestInProgress
@@ -944,6 +961,25 @@ namespace EchoProtocol.Networking.Authority
         private async void Update()
         {
             TickResultOutbox();
+            if (MatchId != _kickPollMatchId)
+            {
+                _kickPollMatchId = MatchId;
+                _executedKickActions.Clear();
+                _acknowledgedKickActions.Clear();
+                _nextKickPollAt = 0f;
+            }
+            if (HasStateAuthority && HasBinding && _api != null
+                && (_bootstrap.State == NetworkSessionState.InLobby
+                    || _bootstrap.State == NetworkSessionState.InMatch)
+                && !NetworkBootstrap.IsHostMigrationReconciliationPending
+                && !_kickPollInProgress && Time.unscaledTime >= _nextKickPollAt)
+                PollKickDecisions();
+            if (_roomPublicationConfirmed && _bootstrap?.Runner != null
+                && _bootstrap.Runner.IsRunning && _bootstrap.Runner.IsServer
+                && !NetworkBootstrap.IsHostMigrationReconciliationPending
+                && !_roomLeaseRequestInProgress
+                && Time.unscaledTime >= _nextRoomLeaseRenewal)
+                RenewRoomLease();
             var matchState = NetworkMatchState.Instance;
             if (_pendingAuthoritativeTelemetryMatchStart && Time.unscaledTime >= _nextTelemetryMatchStartAttempt)
             {
@@ -996,6 +1032,88 @@ namespace EchoProtocol.Networking.Authority
             }
         }
 
+        private async void PollKickDecisions()
+        {
+            var matchId = MatchId;
+            var runner = _bootstrap?.Runner;
+            _kickPollInProgress = true;
+            _nextKickPollAt = Time.unscaledTime + 2f;
+            try
+            {
+                var response = await _api.GetKickDecisionsAsync(matchId);
+                if (!HasStateAuthority || MatchId != matchId || _bootstrap?.Runner != runner
+                    || (_bootstrap.State != NetworkSessionState.InLobby
+                        && _bootstrap.State != NetworkSessionState.InMatch)
+                    || runner == null || !runner.IsRunning || !runner.IsServer
+                    || NetworkBootstrap.IsHostMigrationReconciliationPending || !IsSuccessful(response))
+                    return;
+                var lifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+                if (lifecycle == null) return;
+                Guid.TryParse(AuthSession.CurrentUserId, out var localHostUserId);
+                foreach (var decision in response.Data.data)
+                {
+                    if (!HasStateAuthority || MatchId != matchId || _bootstrap?.Runner != runner
+                        || (_bootstrap.State != NetworkSessionState.InLobby
+                            && _bootstrap.State != NetworkSessionState.InMatch)) break;
+                    if (decision == null || !Guid.TryParse(decision.actionId, out var actionId)
+                        || !Guid.TryParse(decision.userId, out var userId)
+                        || (!_boundPlayers.Values.Contains(userId)
+                            && !_migratedKickedUsers.Contains(userId)
+                            && userId != localHostUserId))
+                        continue;
+                    if (userId == localHostUserId)
+                    {
+                        // Let Fusion hand the session to a remaining player before this Host exits.
+                        if (!await _bootstrap.TryAdminHostHandoffAsync())
+                            Debug.LogWarning("[MatchAuthority] Admin Host kick is waiting for a safe Host handoff.");
+                        break;
+                    }
+                    if (!_executedKickActions.Contains(actionId))
+                    {
+                        if (!lifecycle.TerminatePlayerAuthoritative(userId)) continue;
+                        _executedKickActions.Add(actionId);
+                        foreach (var binding in _boundPlayers)
+                            if (binding.Value == userId) MarkPlayerDisconnected(binding.Key);
+                        Debug.Log($"[MatchAuthority] Admin kick enforced. Match={matchId:D}, User={userId:D}.");
+                    }
+                    if (_acknowledgedKickActions.Contains(actionId)) continue;
+                    if (!string.IsNullOrEmpty(decision.hostExecutedAtUtc))
+                    {
+                        _acknowledgedKickActions.Add(actionId);
+                        continue;
+                    }
+                    var ack = await _api.AckKickAsync(matchId, actionId);
+                    if (IsSuccessful(ack)) _acknowledgedKickActions.Add(actionId);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[MatchAuthority] Kick polling failed: {exception.Message}");
+            }
+            finally
+            {
+                _kickPollInProgress = false;
+            }
+        }
+
+        private async void RenewRoomLease()
+        {
+            var roomId = _roomInstanceId;
+            _roomLeaseRequestInProgress = true;
+            _nextRoomLeaseRenewal = Time.unscaledTime + 15f;
+            try
+            {
+                var response = await _api.RenewRoomLeaseAsync(roomId);
+                if (!IsSuccessful(response))
+                    Debug.LogWarning($"[MatchAuthority] Room lease renewal failed: {Describe(response)}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[MatchAuthority] Room lease renewal failed: {exception.Message}");
+            }
+            finally { _roomLeaseRequestInProgress = false; }
+        }
+
         private void SampleAEDv2PlayerObservation(NetworkMatchState matchState)
         {
             if (!CanEmitProductionTelemetry()
@@ -1038,7 +1156,26 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
-            var result = await _api.CreateAsync(sessionName, maxPlayers);
+            if (_roomSessionName != sessionName)
+            {
+                _roomSessionName = sessionName;
+                _roomInstanceId = Guid.Empty;
+                _roomCreateRequestId = Guid.NewGuid();
+                _matchPrepareRequestId = Guid.Empty;
+            }
+            if (_roomCreateRequestId == Guid.Empty) _roomCreateRequestId = Guid.NewGuid();
+            if (_roomInstanceId == Guid.Empty)
+            {
+                var room = await _api.CreateRoomAsync(_roomCreateRequestId, sessionName, "auto");
+                if (!IsSuccessful(room)
+                    || !Guid.TryParse(room.Data.data.roomInstanceId, out _roomInstanceId))
+                {
+                    Debug.LogError($"[MatchAuthority] Room creation failed: {Describe(room)}");
+                    return false;
+                }
+            }
+            if (_matchPrepareRequestId == Guid.Empty) _matchPrepareRequestId = Guid.NewGuid();
+            var result = await _api.PrepareRoomMatchAsync(_roomInstanceId, _matchPrepareRequestId, maxPlayers);
             if (!IsSuccessful(result)
                 || !Guid.TryParse(result.Data.data.matchId, out var matchId))
             {
@@ -1047,14 +1184,70 @@ namespace EchoProtocol.Networking.Authority
             }
 
             ResetLocalRewardTracking();
+            if (MatchId != matchId)
+                _bootstrap?.Runner?.GetComponent<FusionPlayerLifecycle>()?.ResetTerminalUsersForNewMatch();
             MatchId = matchId;
             IsHostBinding = true;
+            _roomPublicationConfirmed = false;
             _needsFreshLobbyBinding = false;
             _nextLeaseRenewal = Time.unscaledTime + LeaseRenewIntervalSeconds;
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchAuthority,
                 $"[MatchAuthority] Host binding created. Match={MatchId:D}, Session='{sessionName}'.");
             return true;
+        }
+
+        public async Task<bool> ConfirmHostRoomReadyAsync(NetworkRunner runner)
+        {
+            if (!IsHostBinding || !HasBinding || _roomInstanceId == Guid.Empty
+                || runner == null || !runner.IsRunning || !runner.IsServer)
+                return false;
+            var matchId = MatchId;
+            var deadline = Time.realtimeSinceStartup + 10f;
+            while (runner == _bootstrap?.Runner && runner.IsRunning && runner.IsServer
+                && MatchId == matchId && Time.realtimeSinceStartup < deadline)
+            {
+                if (runner.SessionInfo.Properties != null
+                    && runner.SessionInfo.Properties.TryGetValue(MatchIdSessionProperty, out var property)
+                    && Guid.TryParse((string)property, out var publishedMatch)
+                    && publishedMatch == matchId)
+                    break;
+                await Task.Delay(100);
+            }
+            if (runner != _bootstrap?.Runner || !runner.IsRunning || !runner.IsServer
+                || MatchId != matchId || runner.SessionInfo.Properties == null
+                || !runner.SessionInfo.Properties.TryGetValue(MatchIdSessionProperty, out var verified)
+                || !Guid.TryParse((string)verified, out var verifiedMatch)
+                || verifiedMatch != matchId
+                || !runner.SessionInfo.Properties.TryGetValue(RoomIdSessionProperty, out var roomProperty)
+                || !Guid.TryParse((string)roomProperty, out var publishedRoom)
+                || publishedRoom != _roomInstanceId)
+                return false;
+            var room = await _api.ActivateRoomAsync(_roomInstanceId, _bootstrap.ActualPhotonRegion);
+            if (!IsSuccessful(room) || runner != _bootstrap?.Runner || MatchId != matchId
+                || !runner.IsRunning || !runner.IsServer) return false;
+            var confirmed = await _api.ConfirmRoomPublicationAsync(_roomInstanceId, MatchId);
+            if (!IsSuccessful(confirmed)) return false;
+            _matchPrepareRequestId = Guid.Empty;
+            _roomPublicationConfirmed = true;
+            _nextRoomLeaseRenewal = Time.unscaledTime + 15f;
+            return true;
+        }
+
+        public void ClearRoomBinding()
+        {
+            _roomInstanceId = Guid.Empty;
+            _roomCreateRequestId = Guid.Empty;
+            _matchPrepareRequestId = Guid.Empty;
+            _roomSessionName = null;
+            _roomPublicationConfirmed = false;
+        }
+
+        public async Task<bool> ReleaseRoomAsync()
+        {
+            if (_roomInstanceId == Guid.Empty || _api == null) return false;
+            var response = await _api.ReleaseRoomAsync(_roomInstanceId);
+            return IsSuccessful(response);
         }
 
         public async Task<bool> TakeoverHostAuthorityAsync(
@@ -1094,6 +1287,13 @@ namespace EchoProtocol.Networking.Authority
             {
                 Debug.LogError($"[MatchAuthority] Host takeover rejected: local match {MatchId:D} does not match session {sessionMatchId:D}.");
                 return false;
+            }
+
+            if (runner.SessionInfo.Properties.TryGetValue(RoomIdSessionProperty, out var roomProperty)
+                && Guid.TryParse((string)roomProperty, out var migratedRoomId))
+            {
+                _roomInstanceId = migratedRoomId;
+                _roomSessionName = runner.SessionInfo.Name;
             }
 
             var sessionName = runner.SessionInfo.Name;
@@ -1207,13 +1407,17 @@ namespace EchoProtocol.Networking.Authority
                     }
 
                     _migratedResultRoster.Clear();
+                    _migratedKickedUsers.Clear();
 
                     foreach (var participant in
                              context.players ?? Array.Empty<MatchRosterPlayerDto>())
                     {
                         if (Guid.TryParse(participant.userId, out var participantId))
+                        {
                             _migratedResultRoster[participantId] =
                                 participant.disconnected;
+                            if (participant.kicked) _migratedKickedUsers.Add(participantId);
+                        }
                     }
 
                     StartedRosterCount = _migratedResultRoster.Count;
@@ -1271,6 +1475,32 @@ namespace EchoProtocol.Networking.Authority
             }
 
             IsHostBinding = true;
+            if (_roomInstanceId != Guid.Empty)
+            {
+                var roomSync = await _api.SyncRoomHostAsync(_roomInstanceId);
+                if (!IsSuccessful(roomSync)
+                    || !roomSync.Data.data.matchPublished
+                    || !Guid.TryParse(roomSync.Data.data.currentMatchId, out var roomMatchId)
+                    || roomMatchId != sessionMatchId)
+                {
+                    IsHostBinding = false;
+                    return false;
+                }
+                _roomPublicationConfirmed = true;
+                _nextRoomLeaseRenewal = Time.unscaledTime + 15f;
+            }
+            var migratedLifecycle = runner.GetComponent<FusionPlayerLifecycle>();
+            if (migratedLifecycle == null)
+            {
+                IsHostBinding = false;
+                return false;
+            }
+            foreach (var kickedUser in _migratedKickedUsers)
+                if (!migratedLifecycle.TerminatePlayerAuthoritative(kickedUser))
+                {
+                    IsHostBinding = false;
+                    return false;
+                }
             if (restoreAutomaticRevision)
             {
                 // Keep applying confirmed gameplay while new decisions wait for reconciled evidence.
@@ -1327,6 +1557,7 @@ namespace EchoProtocol.Networking.Authority
             new Dictionary<string, SessionProperty>
             {
                 [MatchIdSessionProperty] = MatchId.ToString("D"),
+                [RoomIdSessionProperty] = _roomInstanceId.ToString("D"),
                 [ScenarioResolutionModeSessionProperty] =
                     requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive
                         ? "ADAPTIVE"
@@ -1341,7 +1572,8 @@ namespace EchoProtocol.Networking.Authority
         public Dictionary<string, SessionProperty> BuildBindingSessionProperties() =>
             new Dictionary<string, SessionProperty>
             {
-                [MatchIdSessionProperty] = MatchId.ToString("D")
+                [MatchIdSessionProperty] = MatchId.ToString("D"),
+                [RoomIdSessionProperty] = _roomInstanceId.ToString("D")
             };
 
         public bool AttachJoinedSession(NetworkRunner runner)
@@ -1367,6 +1599,14 @@ namespace EchoProtocol.Networking.Authority
 
             ResetLocalRewardTracking();
             MatchId = matchId;
+            _roomInstanceId = Guid.Empty;
+            if (runner.SessionInfo.Properties != null
+                && runner.SessionInfo.Properties.TryGetValue(RoomIdSessionProperty, out var roomProperty)
+                && Guid.TryParse((string)roomProperty, out var attachedRoomId))
+            {
+                _roomInstanceId = attachedRoomId;
+                _roomSessionName = runner.SessionInfo.Name;
+            }
             IsHostBinding = runner.IsServer;
             requestedScenarioResolutionMode = ReadScenarioResolutionMode(runner);
             requestedDifficulty = ReadMatchDifficulty(runner);
@@ -2363,6 +2603,7 @@ namespace EchoProtocol.Networking.Authority
             _disconnectedActors.Clear();
             _objectiveContributors.Clear();
             _migratedResultRoster.Clear();
+            _migratedKickedUsers.Clear();
             _matchStartedAtUtc = default;
             _telemetryMatchActive = false;
             _pendingInitialSpawns.Clear();

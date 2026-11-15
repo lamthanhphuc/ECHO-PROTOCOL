@@ -14,6 +14,57 @@ namespace EchoProtocol.Api.Tests;
 public sealed class AdminModerationTests
 {
     [Fact]
+    public async Task LobbyKickCanTargetHostOnlyWithSuccessorAndBlocksFutureRoomProof()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var admin = Guid.NewGuid();
+        var host = Guid.NewGuid();
+        var successor = Guid.NewGuid();
+        var roomId = Guid.NewGuid();
+        var matchId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        db.Users.AddRange(
+            new User { Id = admin, Username = "admin-room", Email = "admin-room@test.invalid", PasswordHash = "hash", Role = UserRole.ADMIN, Status = UserStatus.ACTIVE },
+            new User { Id = host, Username = "host-room", Email = "host-room@test.invalid", PasswordHash = "hash", Role = UserRole.PLAYER, Status = UserStatus.ACTIVE },
+            new User { Id = successor, Username = "successor-room", Email = "successor-room@test.invalid", PasswordHash = "hash", Role = UserRole.PLAYER, Status = UserStatus.ACTIVE });
+        db.RoomSessions.Add(new RoomSession { Id = roomId, CreateRequestId = Guid.NewGuid(), FusionSessionName = "room-kick", Region = "auto", HostUserId = host,
+            CreatedAtUtc = now, ActivatedAtUtc = now, LeaseExpiresAtUtc = now.AddMinutes(1), CurrentMatchId = matchId, MatchPublished = true });
+        db.MatchAuthorityBindings.Add(new MatchAuthorityBinding { MatchId = matchId, RoomSessionId = roomId, HostUserId = host,
+            FusionSessionName = "room-kick", MaxPlayers = 4, Status = MatchAuthorityStatus.Lobby,
+            CreatedAtUtc = now, UpdatedAtUtc = now, LeaseExpiresAtUtc = now.AddMinutes(1) });
+        db.MatchPlayerBindings.AddRange(
+            new MatchPlayerBinding { Id = Guid.NewGuid(), MatchId = matchId, UserId = host, FusionActorNumber = 1, JoinProofId = Guid.NewGuid(), BoundAtUtc = now, LastSeenAtUtc = now },
+            new MatchPlayerBinding { Id = Guid.NewGuid(), MatchId = matchId, UserId = successor, FusionActorNumber = 2, JoinProofId = Guid.NewGuid(), BoundAtUtc = now, LastSeenAtUtc = now });
+        await db.SaveChangesAsync();
+        var moderation = new AdminModerationService(db);
+        var settings = Options.Create(new MatchAuthoritySettings { ProofSigningKey = "test-proof-key-that-is-at-least-32-bytes", JoinProofLifetimeSeconds = 120 });
+        var authority = new MatchAuthorityService(db, new MatchJoinProofService(settings, TimeProvider.System), settings, TimeProvider.System);
+
+        Assert.True((await moderation.KickPlayerAsync(admin, matchId, host, Guid.NewGuid(), "Host removed by administrator", default)).IsSuccess);
+        Assert.Single((await moderation.GetKicksForHostAsync(host, matchId, default)).Data!);
+        Assert.False((await moderation.KickPlayerAsync(admin, matchId, successor, Guid.NewGuid(), "Remove remaining player", default)).IsSuccess);
+        Assert.False((await authority.IssueJoinProofAsync(host, matchId,
+            new IssueJoinProofRequest { FusionSessionName = "room-kick", FusionActorNumber = 1 }, default)).IsSuccess);
+        Assert.True((await authority.RelinquishAsync(host, matchId, default)).IsSuccess);
+        var takeover = await authority.TakeoverAsync(successor, matchId,
+            new TakeoverMatchAuthorityRequest { FusionSessionName = "room-kick", FusionActorNumber = 2 }, default);
+        Assert.True(takeover.IsSuccess);
+        Assert.True((await new RoomSessionService(db).SyncHostAfterTakeoverAsync(successor, roomId, default)).IsSuccess);
+        Assert.Equal(successor, db.RoomSessions.Single().HostUserId);
+        var nextMatchId = Guid.NewGuid();
+        db.MatchAuthorityBindings.Add(new MatchAuthorityBinding { MatchId = nextMatchId, RoomSessionId = roomId, HostUserId = successor,
+            FusionSessionName = "room-kick", MaxPlayers = 4, Status = MatchAuthorityStatus.Lobby,
+            CreatedAtUtc = now, UpdatedAtUtc = now, LeaseExpiresAtUtc = now.AddMinutes(1) });
+        db.RoomSessions.Single().CurrentMatchId = nextMatchId;
+        await db.SaveChangesAsync();
+        Assert.False((await authority.IssueJoinProofAsync(host, nextMatchId,
+            new IssueJoinProofRequest { FusionSessionName = "room-kick", FusionActorNumber = 1 }, default)).IsSuccess);
+    }
+
+    [Fact]
     public async Task KickRevokesDisconnectedRosterMemberAndPreviouslyIssuedProof()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -58,6 +109,20 @@ public sealed class AdminModerationTests
         var kick = await moderation.KickPlayerAsync(adminId, matchId, playerId, actionId, "Disruptive behavior in match", default);
         Assert.True(kick.IsSuccess);
         Assert.Single((await moderation.GetKicksForHostAsync(hostId, matchId, default)).Data!);
+        var self = await moderation.GetKickStatusAsync(playerId, matchId, default);
+        Assert.True(self.Data!.Kicked);
+        Assert.Equal(actionId, self.Data.ActionId);
+        Assert.False((await moderation.GetKickStatusAsync(hostId, matchId, default)).Data!.Kicked);
+        Assert.False((await moderation.AckKickAsync(playerId, matchId, actionId, default)).IsSuccess);
+        var ack = await moderation.AckKickAsync(hostId, matchId, actionId, default);
+        Assert.True(ack.IsSuccess);
+        Assert.NotNull(ack.Data!.HostExecutedAtUtc);
+        Assert.Equal(ack.Data.HostExecutedAtUtc, (await moderation.AckKickAsync(hostId, matchId, actionId, default)).Data!.HostExecutedAtUtc);
+        var kickedMatch = await db.MatchAuthorityBindings.SingleAsync();
+        kickedMatch.Status = MatchAuthorityStatus.Ended;
+        kickedMatch.EndedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Assert.True((await moderation.AckKickAsync(hostId, matchId, actionId, default)).IsSuccess);
         Assert.False((await moderation.GetKicksForHostAsync(playerId, matchId, default)).IsSuccess);
         Assert.Equal(actionId, (await moderation.KickPlayerAsync(adminId, matchId, playerId, actionId, "Disruptive behavior in match", default)).Data!.Id);
         Assert.False((await moderation.KickPlayerAsync(adminId, matchId, playerId, Guid.NewGuid(), "Disruptive behavior in match", default)).IsSuccess);
