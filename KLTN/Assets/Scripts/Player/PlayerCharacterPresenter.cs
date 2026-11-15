@@ -156,6 +156,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     private readonly List<GameObject> _mercenaryChildren = new List<GameObject>();
     private Avatar _mercenaryAvatar;
     private RuntimeAnimatorController _mercenaryController;
+    private const float MercenaryLobbyScale = 1f;
     private float _mercenaryScale = 1f;
     private Quaternion _mercenaryLeftPalm, _mercenaryRightPalm;
     private int _applied = -1;
@@ -235,20 +236,25 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     public void Refresh()
     {
         int id = _state != null && _state.Object != null && _state.Object.IsValid ? _state.CharacterId : offlineCharacterId;
-        if (_applied == id || animator == null) return;
+        if (animator == null) return;
+        if (_applied == id)
+        {
+            if (IsMercenary) animator.transform.localScale = _defaultScale * GetMercenaryVisualScale();
+            return;
+        }
         if (id == 1 && !EnsureJammo()) return;
         if (id == 2 && !EnsureHumanoid("Characters/PF_CursedPriestVisual", "Characters/AOC_CursedPriestPlayer",
             _priestChildren, ref _priestAvatar, ref _priestController, ref _priestScale, ref _priestLeftPalm, ref _priestRightPalm)) return;
         bool mercenary = id == CharacterShopAssets.MercenaryCharacterId;
         if (mercenary && !EnsureHumanoid("Characters/PF_MercenaryVisual", "Characters/AC_MercenaryPlayer",
-            _mercenaryChildren, ref _mercenaryAvatar, ref _mercenaryController, ref _mercenaryScale, ref _mercenaryLeftPalm, ref _mercenaryRightPalm)) return;
+            _mercenaryChildren, ref _mercenaryAvatar, ref _mercenaryController, ref _mercenaryScale, ref _mercenaryLeftPalm, ref _mercenaryRightPalm, -90f)) return;
         foreach (var child in _mercenaryChildren) if (child != null) child.SetActive(mercenary);
         foreach (var child in _priestChildren) if (child != null) child.SetActive(id == 2);
         foreach (var child in _defaultChildren) if (child.Key != null) child.Key.SetActive(id == 0 && child.Value);
         foreach (var child in _jammoChildren) if (child != null) child.SetActive(id == 1);
         animator.avatar = mercenary ? _mercenaryAvatar : id == 2 ? _priestAvatar : id == 1 ? _jammoAvatar : _defaultAvatar;
         animator.runtimeAnimatorController = mercenary ? _mercenaryController : id == 2 ? _priestController : id == 1 ? _jammoController : _defaultController;
-        animator.transform.localScale = _defaultScale * (mercenary ? _mercenaryScale : id == 2 ? _priestScale : id == 1 ? _jammoScale : 1f);
+        animator.transform.localScale = _defaultScale * (mercenary ? GetMercenaryVisualScale() : id == 2 ? _priestScale : id == 1 ? _jammoScale : 1f);
         animator.applyRootMotion = false;
         animator.Rebind();
         animator.Update(0f);
@@ -260,6 +266,14 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         GetComponent<QuickOutline.Outline>()?.RefreshRenderers();
         if (id == 0) GetComponent<PlayerColorPresenter>()?.Refresh();
     }
+    private float GetMercenaryVisualScale()
+    {
+        bool inLobby = _state != null && _state.Object != null && _state.Object.IsValid
+            ? !_state.IsGameplayPlayer
+            : UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby";
+        return _mercenaryScale * (inLobby ? MercenaryLobbyScale : 1f);
+    }
+
     private static float MeasureVisualHeight(GameObject root)
     {
         float minimum = float.PositiveInfinity;
@@ -273,9 +287,28 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         return float.IsInfinity(minimum) ? 0f : maximum - minimum;
     }
 
+    private float MeasureAtDefaultScale(GameObject root, float pitch = 0f)
+    {
+        // A new rig is temporarily under the Animator scaled for the previous character.
+        var previousScale = animator.transform.localScale;
+        var originalRotation = root.transform.localRotation;
+        try
+        {
+            animator.transform.localScale = _defaultScale;
+            if (pitch != 0f)
+                root.transform.localRotation = originalRotation * Quaternion.Euler(pitch, 0f, 0f);
+            return MeasureVisualHeight(root);
+        }
+        finally
+        {
+            root.transform.localRotation = originalRotation;
+            animator.transform.localScale = previousScale;
+        }
+    }
+
     private bool EnsureHumanoid(string prefabPath, string controllerPath, List<GameObject> children,
         ref Avatar avatar, ref RuntimeAnimatorController controller, ref float scale,
-        ref Quaternion leftPalm, ref Quaternion rightPalm)
+        ref Quaternion leftPalm, ref Quaternion rightPalm, float heightMeasurementPitch = 0f)
     {
         if (avatar != null) return true;
         var prefab = Resources.Load<GameObject>(prefabPath);
@@ -292,7 +325,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         rightPalm = PalmBasis(sourceRig, false);
         leftPalm = PalmBasis(sourceRig, true);
         sourceRig.enabled = false;
-        var height = MeasureVisualHeight(root);
+        var height = MeasureAtDefaultScale(root, heightMeasurementPitch);
         scale = _defaultVisualHeight > 0f && height > 0f ? _defaultVisualHeight / height : 1f;
         while (root.transform.childCount > 0)
         {
@@ -322,7 +355,7 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         _jammoAvatar = sourceAnimator.avatar;
         _jammoRightPalm = PalmBasis(sourceAnimator, false);
         _jammoLeftPalm = PalmBasis(sourceAnimator, true);
-        float jammoHeight = MeasureVisualHeight(_jammoRoot);
+        float jammoHeight = MeasureAtDefaultScale(_jammoRoot);
         _jammoScale = _defaultVisualHeight > 0f && jammoHeight > 0f ? _defaultVisualHeight / jammoHeight : 1f;
         sourceAnimator.enabled = false;
         // Avatar and original Generic clip paths start directly below the Animator root.
