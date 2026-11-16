@@ -71,7 +71,7 @@
   background: linear-gradient(90deg, #0d0b0cf5, #0d0b0cbd 35%, #0d0b0c10 80%),
     linear-gradient(0deg, #0d0b0c 0%, transparent 31%);
 }
-.heroContent, .section, .closing {
+.heroContent, .section {
   width: min(100%, 90rem);
   margin-inline: auto;
   padding-inline: clamp(1rem, 6vw, 6rem);
@@ -110,21 +110,11 @@
 .section { padding-block: clamp(3rem, 6vw, 5.5rem); }
 .sectionHead { display: flex; align-items: end; justify-content: space-between; gap: 1.4rem; margin-bottom: 2rem; }
 
-.sectionHead > p, .landing dd, .rosterDetails p, .threats article > p:last-child, .aboutGrid p, .closing p {
+.sectionHead > p, .rosterDetails p, .aboutGrid p {
   max-width: 33rem;
   color: var(--muted-copy);
   line-height: 1.65;
 }
-.missions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-.missions article { min-height: 17rem; border: 1px solid var(--edge); border-radius: .65rem; padding: clamp(1.25rem, 4vw, 3rem); }
-.expedition { background: linear-gradient(145deg, #16191c, #111012); }
-.purge { background: radial-gradient(ellipse at 100% 0, #38191a, #171011 75%); }
-.missions h3 { margin-top: .65rem; }
-.missions dl { margin-top: 1.6rem; }
-.missions dl > div { border-top: 1px solid #55403b; padding-block: .8rem; }
-.missions dt { font-weight: 700; }
-.missions dd { margin: .3rem 0 0; }
-.threats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .roster { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-radius: .7rem; overflow: hidden; background: #181314; border: 1px solid var(--edge); }
 .featuredPortrait { position: relative; min-height: clamp(19rem, 40vw, 32rem); }
 .featuredPortrait img { object-fit: cover; object-position: center 38%; }
@@ -142,10 +132,6 @@
 .optionPortrait img { object-fit: cover; }
 .rosterOptions button:hover { border-color: #e0ab9d; background: #302021; }
 .rosterOptions button[aria-pressed="true"] { border-color: var(--accent); background: #38201e; color: #fff1ea; }
-.field { border-block: 1px solid var(--edge); background: #151011; }
-.threats article { padding: clamp(1.2rem, 3vw, 2rem); border-top: 2px solid #8a4039; border-radius: .25rem .25rem .6rem .6rem; background: #1d1415; }
-.threats h3 { margin-block: .5rem .65rem; font-size: 1.65rem; }
-.threats article > p:last-child { font-size: .9rem; }
 .aboutSection {
   background: radial-gradient(ellipse at 50% 0%, #2b1617 0, transparent 58%), #100d0e;
   border-bottom: 1px solid var(--edge);
@@ -159,13 +145,10 @@
 .signalMark { display: grid; place-items: center; width: 2.25rem; aspect-ratio: 1; border: 1px solid #a65a52; border-radius: 50%; }
 .signalMark::after { content: ""; width: .66rem; height: .66rem; border: 1px solid var(--accent); transform: rotate(45deg); }
 .aboutGrid h3 { font-size: clamp(1.15rem, 2.1vw, 1.45rem); line-height: 1.35; }
-.aboutGrid p, .closing p { margin-top: .55rem; }
-.closing { padding-block: 2.2rem; background: #221516; border-block: 1px solid #59312f; display: flex; justify-content: space-between; align-items: center; gap: 1.25rem; }
-.closing h2 { font-size: clamp(1.9rem, 4vw, 3rem); }
+.aboutGrid p { margin-top: .55rem; }
 @media (max-width: 860px) {
   .sectionHead { display: block; }
   .sectionHead > p { margin-top: .85rem; }
-  .threats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .bar { grid-template-columns: 1fr 1fr; row-gap: .15rem; }
@@ -173,11 +156,8 @@
   .hero { min-height: 34rem; }
   .heroContent { padding-block: 3rem 4rem; }
   .featuredPortrait { min-height: 0; aspect-ratio: 1.15; }
-  .threats { grid-template-columns: 1fr; }
   .hero::after { background: linear-gradient(90deg, #0d0b0ce8, #0d0b0c54), linear-gradient(0deg, #0d0b0c, transparent 40%); }
-  .missions, .aboutGrid, .roster { grid-template-columns: 1fr; }
-  .missions article { min-height: 0; }
-  .closing { align-items: start; flex-direction: column; }
+  .aboutGrid, .roster { grid-template-columns: 1fr; }
 }
 
 .brand img { display: block; width: auto; height: clamp(3.5rem, 5vw, 4.25rem); }

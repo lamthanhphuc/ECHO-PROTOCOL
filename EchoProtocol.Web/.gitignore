@@ -5,3 +5,7 @@ out/
 .env.*.local
 npm-debug.log*
 *.tsbuildinfo
+
+.npm-cache/
+test-results/
+playwright-report/

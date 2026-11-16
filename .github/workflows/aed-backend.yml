@@ -106,6 +106,10 @@ jobs:
         run: npm run typecheck 2>&1 | tee ../TestResults/web/typecheck.log
       - name: Build Web
         run: npm run build 2>&1 | tee ../TestResults/web/build.log
+      - name: Install Chromium for Web smoke tests
+        run: npx playwright install --with-deps chromium
+      - name: Run Web browser smoke tests
+        run: npm run test:browser
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

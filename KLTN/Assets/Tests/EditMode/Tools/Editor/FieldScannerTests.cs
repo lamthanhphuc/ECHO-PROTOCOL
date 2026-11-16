@@ -126,6 +126,10 @@ namespace EchoProtocol.Tests.EditMode.Tools
                 var timer = (UnityEngine.UI.Text)hud.GetType().GetField("scanTimerText", flags).GetValue(hud);
                 hud.BindScanner(scanner);
                 render.Invoke(hud, null);
+                Assert.That(timer.text, Is.EqualTo("MẤT KẾT NỐI"));
+                // The EditMode scanner has no Fusion runner. Inject it only for presentation assertions.
+                hud.GetType().GetField("_boundScanner", flags).SetValue(hud, scanner);
+                render.Invoke(hud, null);
                 Assert.That(timer.text, Is.EqualTo("SẴN SÀNG  ·  [Chuột trái] Quét"));
                 Assert.That(status.text, Is.EqualTo("[Chuột trái] Quét"));
                 var hintUntil = hud.GetType().GetField("_modeHintUntil", flags);

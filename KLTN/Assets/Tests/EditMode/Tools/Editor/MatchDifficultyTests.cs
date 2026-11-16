@@ -20,7 +20,8 @@ public sealed class MatchDifficultyTests
             var bindingUpdate = authority.BuildBindingSessionProperties();
             Assert.That(bindingUpdate.Keys, Is.EquivalentTo(new[]
             {
-                MatchAuthorityRuntime.MatchIdSessionProperty
+                MatchAuthorityRuntime.MatchIdSessionProperty,
+                MatchAuthorityRuntime.RoomIdSessionProperty
             }), "Refreshing the backend binding must not overwrite live room settings.");
 
             authority.RequestDifficulty((MatchDifficulty)99);
