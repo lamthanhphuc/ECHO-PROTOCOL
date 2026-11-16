@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { LandingGallery } from "./landing-gallery";
+import { MentorSurprise } from "./mentor-surprise";
 import { LandingMaps } from "./landing-maps";
 import { LandingOperators } from "./landing-operators";
 import styles from "./landing.module.css";
@@ -72,6 +73,7 @@ export default function Home() {
             <a className={styles.cta} href="#maps">Xem bản đồ <span aria-hidden="true">↓</span></a>
             <a className={styles.secondary} href="#operators">Xem nhân vật</a>
           </div>
+          <MentorSurprise />
         </div>
       </section>
 
