@@ -2702,7 +2702,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                         ("MatchId", "FusionSessionName", "HostUserId", "MaxPlayers", "Status",
                          "LeaseExpiresAtUtc", "CreatedAtUtc", "UpdatedAtUtc", "StartedAtUtc")
                     VALUES ({matchId}, {$"integration-{matchId:N}"}, {hostId}, {4}, {nameof(MatchAuthorityStatus.InMatch)},
-                            {Now.AddMinutes(10).UtcDateTime}, {Now.AddMinutes(-3).UtcDateTime},
+                            {DateTime.UtcNow.AddMinutes(10)}, {Now.AddMinutes(-3).UtcDateTime},
                             {Now.AddMinutes(-2).UtcDateTime}, {Now.AddMinutes(-2).UtcDateTime})
                     """);
                 foreach (var binding in new[] { CreateBinding(matchId, hostId, 1), CreateBinding(matchId, playerId, 2) })
@@ -2731,7 +2731,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                     : null,
                 MatchDataPolicy = testOnly ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard,
                 Status = MatchAuthorityStatus.InMatch,
-                LeaseExpiresAtUtc = Now.AddMinutes(10).UtcDateTime,
+                LeaseExpiresAtUtc = DateTime.UtcNow.AddMinutes(10),
                 CreatedAtUtc = Now.AddMinutes(-3).UtcDateTime,
                 UpdatedAtUtc = Now.AddMinutes(-2).UtcDateTime,
                 StartedAtUtc = Now.AddMinutes(-2).UtcDateTime,
