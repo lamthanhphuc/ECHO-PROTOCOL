@@ -959,8 +959,16 @@ namespace EchoProtocol.UI.MainMenu
 
                 () => { string current = NetworkLobbyUI.ConnectionFeedback(detail); int line = current.IndexOf('\n'); return line >= 0 ? current.Substring(line + 1) : current; },
 
-                Submit, GameLanguage.Choose("Thử lại", "Retry"));
+                _hostMode ? FocusRoomName : Submit,
+                _hostMode ? GameLanguage.Choose("Quay lại tạo phòng", "Back to room creation") : GameLanguage.Choose("Thử lại", "Retry"),
+                _hostMode ? FocusRoomName : null);
 
+        }
+
+        private void FocusRoomName()
+        {
+            if (roomCodeInput != null && roomCodeInput.isActiveAndEnabled)
+                roomCodeInput.ActivateInputField();
         }
 
 

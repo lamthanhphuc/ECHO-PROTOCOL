@@ -6,6 +6,7 @@ using EchoProtocol.Core;
 using EchoProtocol.Gameplay;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using EchoProtocol.UI.MainMenu;
 using EchoProtocol.Networking.Authority;
 using TMPro;
@@ -393,6 +394,14 @@ RefreshMemberList();
                 return "THIẾU TÊN NGƯỜI CHƠI\nNhập tên của bạn trước khi kết nối.";
             if (error.Contains("gamenotfound"))
                 return "KHÔNG TÌM THẤY PHÒNG\nKiểm tra mã phòng và hỏi host đã mở phòng chưa. Sau đó chọn Vào phòng để thử lại.";
+            if (error.Contains("gameidalreadyexists"))
+                return GameLanguage.Choose(
+                    "TÊN PHÒNG ĐÃ ĐƯỢC SỬ DỤNG\nHãy chọn tên khác rồi tạo phòng lại.",
+                    "ROOM NAME ALREADY IN USE\nChoose another name and try again.");
+            if (error.Contains("room name or host already reserved"))
+                return GameLanguage.Choose(
+                    "KHÔNG THỂ TẠO PHÒNG\nTên phòng đã được dùng hoặc bạn còn phòng đang mở. Hãy đổi tên hoặc rời phòng cũ rồi thử lại.",
+                    "COULD NOT CREATE ROOM\nThe name is in use or you still have an open room. Choose another name or leave your previous room and try again.");
             if (error.Contains("gameisfull"))
                 return "PHÒNG ĐÃ ĐẦY\nNhờ host kiểm tra chỗ trống hoặc dùng mã phòng khác.";
             if (error.Contains("gameclosed"))

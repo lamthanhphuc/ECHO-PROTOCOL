@@ -875,17 +875,18 @@ namespace EchoProtocol.Networking
             SetState(NetworkSessionState.Connecting,
                 gameMode == GameMode.Host ? $"Creating room '{normalizedName}'..." : $"Joining room '{normalizedName}'...");
 
-            _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
-            if (gameMode == GameMode.Host
-                && !await _matchAuthority.PrepareHostAsync(normalizedName, playerCount ?? 4))
-            {
-                _sessionOperationInProgress = false;
-                return await FailWithoutStarting("Backend rejected the Host authority binding.");
-            }
-
-            var runner = EnsureRunner();
             try
             {
+                _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
+                if (gameMode == GameMode.Host
+                    && !await _matchAuthority.PrepareHostAsync(normalizedName, playerCount ?? 4))
+                {
+                    LastError = _matchAuthority.LastHostPreparationError ?? "Could not prepare the room.";
+                    SetState(NetworkSessionState.Failed, LastError);
+                    return false;
+                }
+
+                var runner = EnsureRunner();
                 _realtimeClient =
                     MatchmakingArgumentsExtensions.BuildRealtimeClient();
                 var args = new StartGameArgs
@@ -1015,7 +1016,14 @@ namespace EchoProtocol.Networking
             IsSceneLoading = false;
             _matchStartPending = false;
             ClearLocalInputProvider();
-            if (_matchAuthority != null) await _matchAuthority.EndAsync("FUSION_START_FAILED");
+            if (_matchAuthority != null)
+            {
+                try { await _matchAuthority.EndAsync("FUSION_START_FAILED"); }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"[NetworkSession] Failed to end match binding: {exception.Message}");
+                }
+            }
             if (_matchAuthority != null && _matchAuthority.RoomInstanceId != Guid.Empty)
             {
                 try { await _matchAuthority.ReleaseRoomAsync(); }

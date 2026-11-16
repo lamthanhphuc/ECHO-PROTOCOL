@@ -129,6 +129,7 @@ namespace EchoProtocol.Networking.Authority
         private bool _roomLeaseRequestInProgress;
         private float _nextRoomLeaseRenewal;
         public Guid RoomInstanceId => _roomInstanceId;
+        internal string LastHostPreparationError { get; private set; }
         public bool RoomPublicationConfirmed => _roomPublicationConfirmed;
         private readonly HashSet<Guid> _executedKickActions = new();
         private readonly HashSet<Guid> _acknowledgedKickActions = new();
@@ -1153,8 +1154,10 @@ namespace EchoProtocol.Networking.Authority
 
         public async Task<bool> PrepareHostAsync(string sessionName, int maxPlayers)
         {
+            LastHostPreparationError = null;
             if (!AuthSession.IsAuthenticated || !Guid.TryParse(AuthSession.CurrentUserId, out _))
             {
+                LastHostPreparationError = "An authenticated user is required to create a room.";
                 Debug.LogError("[MatchAuthority] An authenticated backend user is required to host.");
                 return false;
             }
@@ -1173,7 +1176,8 @@ namespace EchoProtocol.Networking.Authority
                 if (!IsSuccessful(room)
                     || !Guid.TryParse(room.Data.data.roomInstanceId, out _roomInstanceId))
                 {
-                    Debug.LogError($"[MatchAuthority] Room creation failed: {Describe(room)}");
+                    LastHostPreparationError = Describe(room);
+                    Debug.LogError($"[MatchAuthority] Room creation failed: {LastHostPreparationError}");
                     return false;
                 }
             }
@@ -1182,7 +1186,8 @@ namespace EchoProtocol.Networking.Authority
             if (!IsSuccessful(result)
                 || !Guid.TryParse(result.Data.data.matchId, out var matchId))
             {
-                Debug.LogError($"[MatchAuthority] Create failed: {Describe(result)}");
+                LastHostPreparationError = Describe(result);
+                Debug.LogError($"[MatchAuthority] Create failed: {LastHostPreparationError}");
                 return false;
             }
 
