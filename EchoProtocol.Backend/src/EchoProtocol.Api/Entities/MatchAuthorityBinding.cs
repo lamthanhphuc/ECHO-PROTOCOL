@@ -5,6 +5,8 @@ namespace EchoProtocol.Api.Entities;
 public sealed class MatchAuthorityBinding
 {
     public Guid MatchId { get; set; }
+    public Guid? RoomSessionId { get; set; }
+    public Guid? RoomMatchRequestId { get; set; }
     public string FusionSessionName { get; set; } = string.Empty;
     [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
     public Guid HostUserId { get; set; }

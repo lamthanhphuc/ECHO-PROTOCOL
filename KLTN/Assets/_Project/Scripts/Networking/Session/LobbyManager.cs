@@ -12,12 +12,45 @@ using UnityEngine;
 
 namespace EchoProtocol.Networking
 {
+    internal static class CloudRejoinGuard
+    {
+        private static NetworkRunner _failedRunner;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void Initialize()
+        {
+            NetworkRunner.CloudConnectionLostCurrentMode = NetworkRunner.CloudConnectionLostMode.QuickRejoin;
+            NetworkRunner.CloudConnectionLost -= OnCloudConnectionLost;
+            NetworkRunner.CloudConnectionLost += OnCloudConnectionLost;
+            _failedRunner = null;
+            Debug.Assert(NetworkRunner.CloudConnectionLostCurrentMode ==
+                NetworkRunner.CloudConnectionLostMode.QuickRejoin);
+        }
+
+        internal static bool CanStartNewMatch(NetworkRunner runner) =>
+            runner != null && runner.IsRunning && runner.IsInSession && runner != _failedRunner;
+
+        private static void OnCloudConnectionLost(NetworkRunner runner, ShutdownReason reason, bool reconnecting)
+        {
+            if (runner == null || runner != NetworkBootstrap.Instance?.Runner) return;
+            if (reconnecting)
+                Debug.LogWarning($"[CloudRejoin] Rejoining original session: {reason}.");
+            else
+            {
+                _failedRunner = runner;
+                Debug.LogWarning($"[CloudRejoin] Original session unavailable: {reason}. New matches require a new room.");
+            }
+            UnityEngine.Object.FindAnyObjectByType<LobbyManager>()?.RefreshFromRunner();
+        }
+    }
+
     /// <summary>
     /// Projects Fusion's replicated ActivePlayers collection into lobby UI state.
     /// The projection is never used as the authoritative member store.
     /// </summary>
     public sealed class LobbyManager : MonoBehaviour
     {
+
         public const string GameSceneName = "SciFi";
 
         [SerializeField] private NetworkBootstrap _bootstrap;
@@ -52,7 +85,7 @@ namespace EchoProtocol.Networking
 
             var runner = _bootstrap?.Runner;
             if (_bootstrap?.State != NetworkSessionState.InLobby
-                || runner == null || !runner.IsRunning || !runner.IsServer
+                || !CloudRejoinGuard.CanStartNewMatch(runner) || !runner.IsServer
                 || !runner.IsSceneAuthority || !runner.SessionInfo.IsValid
                 || _matchStartInProgress || Time.realtimeSinceStartup < _nextLobbyBindingAttempt
                 || _lobbyBindingTask is { IsCompleted: false }) return;
@@ -183,9 +216,9 @@ namespace EchoProtocol.Networking
             }
 
             var runner = _bootstrap.Runner;
-            if (runner == null || !runner.IsRunning || !runner.IsServer || !runner.IsSceneAuthority)
+            if (!CloudRejoinGuard.CanStartNewMatch(runner) || !runner.IsServer || !runner.IsSceneAuthority)
             {
-                ReportError("Only the authoritative host can start the match.");
+                ReportError("Cannot start a match until the original Photon room is connected. Create a new room if reconnect failed.");
                 return false;
             }
 
@@ -480,7 +513,7 @@ namespace EchoProtocol.Networking
                 }
 
                 if (!loading.IsCurrent(runner, loadingAttempt)) return;
-                if (runner == null
+                if (!CloudRejoinGuard.CanStartNewMatch(runner)
                     || !ReferenceEquals(runner, _bootstrap?.Runner)
                     || !runner.IsRunning
                     || !runner.IsServer
@@ -516,6 +549,11 @@ namespace EchoProtocol.Networking
                 }
                 backendAccepted = true;
                 if (!loading.IsCurrent(runner, loadingAttempt)) return;
+                if (!CloudRejoinGuard.CanStartNewMatch(runner))
+                {
+                    ReportError("Photon room lost matchmaking during match start.");
+                    return;
+                }
                 loading.BackendAuthorized(
                     runner,
                     loadingAttempt,
@@ -542,7 +580,7 @@ namespace EchoProtocol.Networking
                     await Task.Delay(100);
                 }
                 if (!loading.IsCurrent(runner, loadingAttempt)) return;
-                if (!_bootstrap.CloseRoomForMatchStart())
+                if (!CloudRejoinGuard.CanStartNewMatch(runner) || !_bootstrap.CloseRoomForMatchStart())
                 {
                     ReportError("Fusion room was not ready after backend start; aborting backend match without shutting down the Lobby.");
                     if (ReferenceEquals(runner, _bootstrap?.Runner))
@@ -613,16 +651,27 @@ namespace EchoProtocol.Networking
             {
                 if (runner == null || !runner.IsRunning || !runner.IsServer
                     || !runner.IsSceneAuthority || !runner.SessionInfo.IsValid) return false;
-                if (!await authority.PrepareNextMatchAsync(
-                        runner.SessionInfo.Name, runner.SessionInfo.MaxPlayers)) return false;
+                if (!authority.HasBinding || authority.RoomPublicationConfirmed)
+                    if (!await authority.PrepareNextMatchAsync(
+                            runner.SessionInfo.Name, runner.SessionInfo.MaxPlayers)) return false;
 
                 if (this == null || runner != _bootstrap?.Runner || !runner.IsRunning
                     || !runner.IsServer || _bootstrap.State != NetworkSessionState.InLobby
-                    || !_bootstrap.UpdateRoomProperties(authority.BuildBindingSessionProperties()))
+                    || !runner.SessionInfo.IsValid) return false;
+                _bootstrap.UpdateRoomProperties(authority.BuildBindingSessionProperties());
+                var deadline = Time.realtimeSinceStartup + 10f;
+                while (runner == _bootstrap?.Runner && runner.IsRunning
+                    && Time.realtimeSinceStartup < deadline)
                 {
-                    await authority.EndAsync("LOBBY_BINDING_NOT_PUBLISHED");
-                    return false;
+                    if (runner.SessionInfo.Properties != null
+                        && runner.SessionInfo.Properties.TryGetValue(
+                            MatchAuthorityRuntime.MatchIdSessionProperty, out var published)
+                        && Guid.TryParse((string)published, out var publishedId)
+                        && publishedId == authority.MatchId)
+                        break;
+                    await Task.Delay(100);
                 }
+                if (!await authority.ConfirmHostRoomReadyAsync(runner)) return false;
 
                 if (TryGetLocalPlayerState(out var localPlayerState, false))
                     authority.TrySubmitLocalIdentity(localPlayerState, force: true);
@@ -805,6 +854,7 @@ namespace EchoProtocol.Networking
                 IsHost = runner.IsServer,
                 IsReady = localReady,
                 CanStartMatch = runner.IsServer
+                                && CloudRejoinGuard.CanStartNewMatch(runner)
                                 && !_bootstrap.IsMatchStartPending
                                 && supportedRoster
                                 && requiredPlayersReady,

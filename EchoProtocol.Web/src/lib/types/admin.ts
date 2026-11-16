@@ -14,6 +14,24 @@ export interface AdminUser {
   createdAtUtc: string;
 }
 
+export interface AdminDashboard {
+  observedAtUtc: string;
+  onlinePlayersEstimate: number;
+  activeRooms: number;
+  activeMatches: number;
+  registeredPlayers: number;
+  recentRooms: Array<{
+    roomInstanceId: string;
+    fusionSessionName: string;
+    hostUsername: string;
+    currentMatchId: string | null;
+    createdAtUtc: string;
+    leaseExpiresAtUtc: string;
+    activatedAtUtc: string | null;
+    closedAtUtc: string | null;
+  }>;
+}
+
 export interface AdminPayment {
   paymentOrderId: string;
   userId: string;
@@ -107,6 +125,7 @@ export type AdminPurchasesPage = PagedResponse<AdminPurchase>;
 
 export interface AdminMatch {
   matchId: string;
+  roomSessionId: string | null;
   hostUserId: string;
   hostUsername: string;
   mapId: string | null;
@@ -121,6 +140,20 @@ export interface AdminMatch {
   endedAtUtc: string | null;
 }
 export type AdminMatchesPage = PagedResponse<AdminMatch>;
+export interface AdminRoomSession {
+  roomInstanceId: string;
+  fusionSessionName: string;
+  region: string;
+  actualRegion: string | null;
+  hostUserId: string;
+  createdAtUtc: string;
+  activatedAtUtc: string | null;
+  currentMatchId: string | null;
+  matchPublished: boolean;
+  closedAtUtc: string | null;
+  closeReason: string | null;
+  hostExecutedAtUtc: string | null;
+}
 export interface AdminMatchDetail {
   match: AdminMatch;
   players: Array<{
@@ -133,15 +166,23 @@ export interface AdminMatchDetail {
     boundAtUtc: string;
     lastSeenAtUtc: string;
     disconnectedAtUtc: string | null;
+    kickedAtUtc: string | null;
   }>;
 }
 export interface AdminModerationAction {
   id: string;
   targetId: string;
-  action: "FLAG_MATCH" | "CLEAR_MATCH" | "STOP_MATCH" | "FLAG_USER" | "CLEAR_USER" | "LOCK_USER" | "UNLOCK_USER";
+  targetUserId: string | null;
+  action: "FLAG_MATCH" | "CLEAR_MATCH" | "STOP_MATCH" | "KICK_PLAYER" | "FLAG_USER" | "CLEAR_USER" | "LOCK_USER" | "UNLOCK_USER";
   adminUserId: string;
   reason: string;
   createdAtUtc: string;
+  hostExecutedAtUtc: string | null;
+}
+
+export interface ChatWordsData {
+  words: string[];
+  updatedAtUtc: string | null;
 }
 
 export interface RemoteFixedVersion {

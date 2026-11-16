@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { difficultyLabel, mapLabel } from "@/lib/utils/game-labels";
 import { adminApi } from "@/lib/api/server-api";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
+import { KickPlayersPanel } from "@/components/admin/kick-players-panel";
 import { AdaptiveMatchPanel } from "@/components/admin/adaptive-match-panel";
 import { formatAdminDate as formatDate } from "@/lib/utils/format";
 
@@ -51,13 +52,16 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ ma
       <div><dt className="eyebrow">Kết thúc</dt><dd className="mt-1">{formatDate(match.endedAtUtc)}</dd></div>
       <div><dt className="eyebrow">Quyền điều phối của chủ phòng hết hạn</dt><dd className="mt-1">{formatDate(match.leaseExpiresAtUtc)}</dd></div>
     </dl></Panel>
-    <Panel className="mt-5"><h2 className="mb-4 text-lg font-semibold text-white">Người chơi trong phòng</h2>
-      <p className="muted mb-4 text-sm">Trạng thái do chủ phòng báo về lần gần nhất.</p>
+    <KickPlayersPanel matchId={matchId} status={match.status} hostUserId={match.hostUserId}
+      closed={false} players={players} history={history} />
+    <Panel className="mt-5"><h2 className="mb-4 text-lg font-semibold text-white">Thông tin người chơi trong trận</h2>
+      <p className="muted mb-4 text-sm">Trạng thái kết nối dựa trên lần Host báo gần nhất; không chứng minh người chơi đang online. Quyết định Kick của backend có thể đang chờ Host thực thi.</p>
       {players.length === 0 ? <p className="muted">Chưa có người chơi.</p> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người chơi</th><th>Vai trò</th><th>Trạng thái</th><th>Tham gia trận</th><th>Gián đoạn trong trận</th><th>Vào phòng</th><th>Cập nhật cuối</th><th>Rời phòng</th></tr></thead><tbody>
         {players.map((player) => <tr key={player.userId}>
-          <td><Link className="admin-link" href={`/admin/users/${player.userId}`}>{player.displayName || player.username}</Link></td>
+          <td><Link className="admin-link" href={`/admin/users/${player.userId}`}>{player.displayName || player.username}</Link><p className="code muted mt-1 text-xs">{player.userId}</p></td>
           <td>{player.userId === match.hostUserId ? "Chủ phòng" : "Người chơi"}</td>
-          <td>{player.disconnectedAtUtc ? "Đã rời" : "Chưa báo rời"}</td>
+          <td>{player.kickedAtUtc ? history.find((entry) => entry.action === "KICK_PLAYER" && entry.targetUserId === player.userId)?.hostExecutedAtUtc
+            ? "Đã Kick · Host xác nhận" : "Đã Kick · chờ Host xác nhận" : player.disconnectedAtUtc ? "Đã báo rời" : "Chưa báo rời; kết nối chưa xác minh"}</td>
           <td>{player.participated ? "Có" : "Chưa"}</td>
           <td>{player.hadGameplayDisconnect ? "Có" : "Không"}</td>
           <td>{formatDate(player.boundAtUtc)}</td><td>{formatDate(player.lastSeenAtUtc)}</td><td>{formatDate(player.disconnectedAtUtc)}</td>

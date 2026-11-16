@@ -12,9 +12,8 @@ namespace EchoProtocol.UI.HUD
         private readonly List<HUDPurgeIcon> _icons = new List<HUDPurgeIcon>();
         public string TargetLabel { get; set; }
         private Color _accent = new Color(0.35f, 0.78f, 0.76f);
-        private bool _motion, _scanning;
+        private bool _scanning;
         private float _pulse;
-        private static readonly Vector2[] Corners = { Vector2.up, Vector2.right, Vector2.down, Vector2.left };
 
         public void Present(IReadOnlyList<Vector3> offsets, float range, float heading, bool motion, bool scanning)
         {
@@ -28,12 +27,11 @@ namespace EchoProtocol.UI.HUD
                     _points.Add(Vector2.ClampMagnitude(new Vector2(localOffset.x, localOffset.z) / range, 1f));
                 }
             }
-            _motion = motion;
             _scanning = scanning;
             while (_icons.Count < _points.Count)
             {
-                var go = new GameObject("TargetIcon", typeof(RectTransform), typeof(HUDPurgeIcon));
-                go.transform.SetParent(transform, false);
+                var go = new GameObject("TargetIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(HUDPurgeIcon));
+                go.transform.SetParent(transform.parent, false);
                 var icon = go.GetComponent<HUDPurgeIcon>();
                 icon.raycastTarget = false;
                 _icons.Add(icon);

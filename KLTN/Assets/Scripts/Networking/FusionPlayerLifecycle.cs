@@ -47,6 +47,8 @@ namespace EchoProtocol.Networking
         private readonly Dictionary<PlayerRef, Coroutine> _graceTimers = new();
         private readonly Dictionary<PlayerRef, NetworkObject> _playerObjects = new();
         private readonly HashSet<PlayerRef> _expiring = new();
+        private readonly HashSet<Guid> _terminalUsers = new();
+        private readonly Dictionary<PlayerRef, Guid> _terminalRefs = new();
 
         public FusionPlayerIdentityRegistry IdentityRegistry => _identityRegistry;
         public float ReconnectGraceSeconds =>
@@ -97,6 +99,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (!_playerObjects.ContainsKey(player)) _terminalRefs.Remove(player);
             var reconnectToken =
                 runner.GetPlayerConnectionToken(player);
 
@@ -118,6 +121,13 @@ namespace EchoProtocol.Networking
             }
             if (existingObject != null)
             {
+                if (existingObject.TryGetComponent<LobbyPlayerState>(out var existingState)
+                    && Guid.TryParse(existingState.BackendUserId.ToString(), out var existingUserId)
+                    && _terminalUsers.Contains(existingUserId))
+                {
+                    runner.Disconnect(player);
+                    return;
+                }
                 if (IsCommitted(player, existingObject))
                 {
                     if (existingObject.TryGetComponent<LobbyPlayerState>(out var retained)
@@ -285,6 +295,26 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            if (_terminalRefs.TryGetValue(player, out var terminalUser))
+            {
+                if (!runner.TryGetPlayerObject(player, out var current)
+                    || current == null || !current.IsValid)
+                {
+                    if (!_playerObjects.TryGetValue(player, out current)
+                        || current == null || !current.IsValid)
+                    {
+                        _terminalRefs.Remove(player);
+                        return;
+                    }
+                }
+                if (current.TryGetComponent<LobbyPlayerState>(out var currentState)
+                    && Guid.TryParse(currentState.BackendUserId.ToString(), out var currentUser)
+                    && currentUser != terminalUser)
+                {
+                    return;
+                }
+            }
+
             _identityRegistry.TryGetPlayerId(player, out var oldPlayerId);
             if (!runner.TryGetPlayerObject(player, out var playerObject) || playerObject == null)
                 _playerObjects.TryGetValue(player, out playerObject);
@@ -362,6 +392,54 @@ namespace EchoProtocol.Networking
                 RuntimeLogCategory.PlayerLifecycle,
                 $"FPL|LEFT_COMMIT|player={player}|playerId={(oldPlayerId.IsValid ? oldPlayerId.Value.ToString() : "none")}|hadPlayerObject={playerObject != null}");
         }
+
+        public bool TerminatePlayerAuthoritative(Guid userId)
+        {
+            var runner = _runner;
+            if (userId == Guid.Empty || !CanMutateLifecycle(runner)
+                || NetworkBootstrap.IsHostMigrationResumeActive)
+                return false;
+
+            PlayerRef target = PlayerRef.None;
+            NetworkObject playerObject = null;
+            foreach (var entry in _playerObjects)
+            {
+                if (entry.Value == null || !entry.Value.IsValid
+                    || !entry.Value.TryGetComponent<LobbyPlayerState>(out var state)
+                    || !Guid.TryParse(state.BackendUserId.ToString(), out var candidate)
+                    || candidate != userId) continue;
+                target = entry.Key;
+                playerObject = entry.Value;
+                break;
+            }
+            _terminalUsers.Add(userId);
+            if (playerObject == null) return true;
+
+            var online = false;
+            foreach (var active in runner.ActivePlayers)
+                if (active == target) { online = true; break; }
+            if (playerObject.TryGetComponent<LobbyPlayerState>(out var lobbyState))
+            {
+                if (lobbyState.CarriedCoreId.IsValid
+                    && runner.TryFindObject(lobbyState.CarriedCoreId, out var core)
+                    && core.TryGetComponent<NetworkPickupItem>(out var item))
+                    item.TryDrop(target, playerObject.transform.position, playerObject.transform.rotation, lobbyState);
+                lobbyState.SetDisconnectedAuthoritative(true);
+                NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(lobbyState);
+            }
+            playerObject.RemoveInputAuthority();
+            NetworkMatchState.Instance?.ReleasePlayerOperationsAuthoritative(target);
+            foreach (var life in FindObjectsByType<NetworkPlayerLifeState>())
+                life.ReleaseDisconnectedReviverAuthoritative(target);
+            if (_graceTimers.Remove(target, out var timer) && timer != null) StopCoroutine(timer);
+            _terminalRefs[target] = userId;
+            _expiring.Add(target);
+            OnPlayerLeft(runner, target);
+            if (online) runner.Disconnect(target);
+            return !_playerObjects.ContainsKey(target);
+        }
+
+        public void ResetTerminalUsersForNewMatch() => _terminalUsers.Clear();
 
         public bool RebuildAfterHostMigration(
             NetworkRunner runner,
@@ -701,7 +779,9 @@ namespace EchoProtocol.Networking
                     || !candidate.IsValid
                     || !candidate.TryGetComponent<LobbyPlayerState>(
                         out var state)
-                    || !state.Disconnected)
+                    || !state.Disconnected
+                    || (Guid.TryParse(state.BackendUserId.ToString(), out var retainedUserId)
+                        && _terminalUsers.Contains(retainedUserId)))
                 {
                     continue;
                 }

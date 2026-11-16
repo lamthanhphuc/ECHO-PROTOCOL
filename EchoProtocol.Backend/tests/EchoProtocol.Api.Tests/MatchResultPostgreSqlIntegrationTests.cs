@@ -1076,6 +1076,148 @@ public sealed class MatchResultPostgreSqlIntegrationTests
     }
 
     [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task ConcurrentKicksCreateOneAuditAndStillAllowValidResult()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        var adminId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.Users.Add(new User
+            {
+                Id = adminId, Username = $"admin-{adminId:N}", Email = $"admin-{adminId:N}@echo.invalid",
+                PasswordHash = "unused", Role = UserRole.ADMIN, Status = UserStatus.ACTIVE
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        async Task<ServiceResult<AdminModerationAction>> KickAsync()
+        {
+            await using var db = scope.CreateDbContext();
+            return await new AdminModerationService(db).KickPlayerAsync(
+                adminId, seed.MatchId, seed.PlayerId, Guid.NewGuid(), "Admin removed player from match", default);
+        }
+
+        var results = await Task.WhenAll(KickAsync(), KickAsync());
+        Assert.Single(results, item => item.IsSuccess);
+        var result = await SubmitAsync(scope, seed, CreateRequest(seed));
+        Assert.True(result.IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        Assert.Single(await verify.AdminModerationActions.Where(item => item.Action == "KICK_PLAYER").ToArrayAsync());
+        Assert.NotNull((await verify.MatchPlayerBindings.SingleAsync(item => item.UserId == seed.PlayerId)).KickedAtUtc);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task KickRacingResultNeverReportsSuccessAfterResultCommitted()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        var adminId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.Users.Add(new User
+            {
+                Id = adminId, Username = $"admin-{adminId:N}", Email = $"admin-{adminId:N}@echo.invalid",
+                PasswordHash = "unused", Role = UserRole.ADMIN, Status = UserStatus.ACTIVE
+            });
+            await setup.SaveChangesAsync();
+        }
+        async Task<ServiceResult<AdminModerationAction>> KickAsync()
+        {
+            await using var db = scope.CreateDbContext();
+            return await new AdminModerationService(db).KickPlayerAsync(
+                adminId, seed.MatchId, seed.PlayerId, Guid.NewGuid(), "Admin removed player from match", default);
+        }
+
+        var kickTask = KickAsync();
+        var resultTask = SubmitAsync(scope, seed, CreateRequest(seed));
+        await Task.WhenAll(kickTask, resultTask);
+        var kick = await kickTask;
+        Assert.True((await resultTask).IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        Assert.Equal(MatchAuthorityStatus.Ended,
+            (await verify.MatchAuthorityBindings.SingleAsync(item => item.MatchId == seed.MatchId)).Status);
+        Assert.Equal(kick.IsSuccess,
+            await verify.AdminModerationActions.AnyAsync(item => item.TargetId == seed.MatchId && item.Action == "KICK_PLAYER"));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task KickRacingBindLeavesPlayerRevoked()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        var adminId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.Users.Add(new User
+            {
+                Id = adminId, Username = $"admin-{adminId:N}", Email = $"admin-{adminId:N}@echo.invalid",
+                PasswordHash = "unused", Role = UserRole.ADMIN, Status = UserStatus.ACTIVE
+            });
+            await setup.SaveChangesAsync();
+        }
+        var settings = Options.Create(new MatchAuthoritySettings
+        {
+            ProofSigningKey = "test-proof-key-that-is-at-least-32-bytes",
+            JoinProofLifetimeSeconds = 120
+        });
+        var time = new FixedTimeProvider(Now);
+        string proof;
+        await using (var proofDb = scope.CreateDbContext())
+        {
+            var authority = new MatchAuthorityService(proofDb, new MatchJoinProofService(settings, time), settings, time);
+            proof = (await authority.IssueJoinProofAsync(seed.PlayerId, seed.MatchId,
+                new IssueJoinProofRequest { FusionSessionName = $"integration-{seed.MatchId:N}", FusionActorNumber = 3 }, default)).Data!.Proof;
+        }
+        async Task<ServiceResult<AdminModerationAction>> KickAsync()
+        {
+            await using var db = scope.CreateDbContext();
+            return await new AdminModerationService(db).KickPlayerAsync(
+                adminId, seed.MatchId, seed.PlayerId, Guid.NewGuid(), "Admin removed player from match", default);
+        }
+        async Task<ServiceResult<MatchPlayerBindingResponse>> BindAsync()
+        {
+            await using var db = scope.CreateDbContext();
+            var authority = new MatchAuthorityService(db, new MatchJoinProofService(settings, time), settings, time);
+            return await authority.BindPlayerAsync(seed.HostId, seed.MatchId,
+                new BindMatchPlayerRequest { FusionActorNumber = 3, JoinProof = proof }, default);
+        }
+
+        var kickTask = KickAsync();
+        var bindTask = BindAsync();
+        await Task.WhenAll(kickTask, bindTask);
+        Assert.True((await kickTask).IsSuccess);
+        await using var verify = scope.CreateDbContext();
+        Assert.NotNull((await verify.MatchPlayerBindings.SingleAsync(item => item.UserId == seed.PlayerId)).KickedAtUtc);
+        var authorityAfterKick = new MatchAuthorityService(verify, new MatchJoinProofService(settings, time), settings, time);
+        Assert.False((await authorityAfterKick.BindPlayerAsync(seed.HostId, seed.MatchId,
+            new BindMatchPlayerRequest { FusionActorNumber = 3, JoinProof = proof }, default)).IsSuccess);
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task ResultCommittedBeforeKickRejectsKickWithoutAudit()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        var adminId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.Users.Add(new User
+            {
+                Id = adminId, Username = $"admin-{adminId:N}", Email = $"admin-{adminId:N}@echo.invalid",
+                PasswordHash = "unused", Role = UserRole.ADMIN, Status = UserStatus.ACTIVE
+            });
+            await setup.SaveChangesAsync();
+        }
+        Assert.True((await SubmitAsync(scope, seed, CreateRequest(seed))).IsSuccess);
+        await using var db = scope.CreateDbContext();
+        var kick = await new AdminModerationService(db).KickPlayerAsync(
+            adminId, seed.MatchId, seed.PlayerId, Guid.NewGuid(), "Late admin kick request", default);
+        Assert.False(kick.IsSuccess);
+        Assert.False(await db.AdminModerationActions.AnyAsync(item => item.TargetId == seed.MatchId && item.Action == "KICK_PLAYER"));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
     public async Task ControllerSubmissionReturns201AndPersistsInPostgreSql()
     {
         await using var scope = await PostgresScope.CreateAsync();

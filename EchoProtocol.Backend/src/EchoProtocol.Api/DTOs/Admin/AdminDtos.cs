@@ -48,9 +48,17 @@ public sealed class AdminMatchesQuery : AdminPagedQuery
     public bool FlaggedOnly { get; set; }
 }
 
+public sealed record AdminDashboardRoom(Guid RoomInstanceId, string FusionSessionName, string HostUsername,
+    Guid? CurrentMatchId, DateTime CreatedAtUtc, DateTime LeaseExpiresAtUtc, DateTime? ActivatedAtUtc,
+    DateTime? ClosedAtUtc);
+
+public sealed record AdminDashboardResponse(DateTime ObservedAtUtc, int OnlinePlayersEstimate,
+    int ActiveRooms, int ActiveMatches, int RegisteredPlayers, IReadOnlyList<AdminDashboardRoom> RecentRooms);
+
 public sealed class AdminMatchResponse
 {
     public Guid MatchId { get; init; }
+    public Guid? RoomSessionId { get; init; }
     public Guid HostUserId { get; init; }
     public string HostUsername { get; init; } = string.Empty;
     public string? MapId { get; init; }
@@ -82,6 +90,13 @@ public sealed class AdminMatchPlayerResponse
     public DateTime BoundAtUtc { get; init; }
     public DateTime LastSeenAtUtc { get; init; }
     public DateTime? DisconnectedAtUtc { get; init; }
+    public DateTime? KickedAtUtc { get; init; }
+}
+
+public sealed class AdminKickPlayerRequest
+{
+    public Guid ActionId { get; init; }
+    public string Reason { get; init; } = string.Empty;
 }
 
 public sealed class AdminGrantCreditsRequest

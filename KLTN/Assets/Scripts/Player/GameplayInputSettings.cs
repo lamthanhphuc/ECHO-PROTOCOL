@@ -185,7 +185,9 @@ namespace EchoProtocol.Settings
 
         private static bool IsFixedGameplayKey(Key key)
         {
-            return key == Key.J || key == Key.G || key == Key.H || key == Key.Q || key == Key.Digit1 || key == Key.Digit2
+            return key == Key.Enter || key == Key.NumpadEnter
+                || key == Key.J || key == Key.G || key == Key.H
+                || key == Key.Q || key == Key.Digit1 || key == Key.Digit2
                 || key == Key.F1 || key == Key.F2 || key == Key.Backquote;
         }
 

@@ -196,7 +196,7 @@ namespace EchoProtocol.UI.HUD
                 || scanner.Runner == null
                 || !scanner.Runner.IsRunning)
             {
-                return true;
+                return false;
             }
 
             var playerState = scanner.GetComponent<LobbyPlayerState>();

@@ -17,8 +17,8 @@ export default async function WalletTransactionsPage({ searchParams }: { searchP
   const result = await adminApi.walletTransactions(queryString({ page, pageSize: 20, ...values }));
   const pageParams = Object.fromEntries(Object.entries(values).filter(([, value]) => value));
   return <>
-    <PageHeader title="Lịch sử số dư" />
-    <Panel className="mb-5"><form action="/admin/wallet-transactions" className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+    <PageHeader title="Lịch sử số dư" description="Theo dõi thay đổi số dư và tìm giao dịch cần kiểm tra." />
+    <Panel className="mb-5"><h2 className="admin-section-title mb-3">Lọc lịch sử số dư</h2><form action="/admin/wallet-transactions" className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
       <label className="admin-field">Mã người dùng<input className="input" name="userId" defaultValue={values.userId} /></label>
       <label className="admin-field">Loại giao dịch<select className="input" name="type" defaultValue={values.type}><option value="">Tất cả</option>{types.map((type) => <option key={type} value={type}>{statusLabel(type)}</option>)}</select></label>
       <label className="admin-field">Mã tham chiếu<input className="input" name="reference" defaultValue={values.reference} /></label>

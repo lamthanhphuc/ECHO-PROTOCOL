@@ -17,8 +17,10 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   return <>
     <PageHeader title="Người dùng" description="Tìm tài khoản theo tên hoặc email." />
     <Panel className="mb-5">
+      <h2 className="admin-section-title mb-3">Tìm tài khoản</h2>
       <form className="flex flex-col gap-3 sm:flex-row" action="/admin/users">
-        <input className="input" name="search" defaultValue={search} aria-label="Tìm người dùng" placeholder="Tên tài khoản, tên hiển thị hoặc email" />
+        <label className="sr-only" htmlFor="admin-user-search">Tên tài khoản, tên hiển thị hoặc email</label>
+        <input id="admin-user-search" className="input" name="search" defaultValue={search} placeholder="Tên tài khoản, tên hiển thị hoặc email" />
         <button className="button" type="submit">Tìm kiếm</button>
       </form>
     </Panel>

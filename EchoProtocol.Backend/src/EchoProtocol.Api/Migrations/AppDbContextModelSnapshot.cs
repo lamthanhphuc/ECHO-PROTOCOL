@@ -763,6 +763,9 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("HostExecutedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -771,11 +774,41 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<Guid>("TargetId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("TargetUserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TargetId", "CreatedAtUtc");
 
+                    b.HasIndex("TargetId", "TargetUserId", "Action")
+                        .IsUnique()
+                        .HasFilter("\"Action\" = 'KICK_PLAYER'");
+
                     b.ToTable("AdminModerationActions", (string)null);
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ChatWordPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("WordsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ChatWordPolicies", (string)null);
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
@@ -885,6 +918,12 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<Guid?>("RoomMatchRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RoomSessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -905,6 +944,12 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("FusionSessionName", "Status");
 
                     b.HasIndex("MapId", "Difficulty");
+
+                    b.HasIndex("RoomSessionId", "RoomMatchRequestId")
+                        .IsUnique()
+                        .HasFilter("\"RoomMatchRequestId\" IS NOT NULL");
+
+                    b.HasIndex("RoomSessionId", "Status");
 
                     b.ToTable("MatchAuthorityBindings", null, t =>
                         {
@@ -934,6 +979,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<Guid>("JoinProofId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("KickedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("LastSeenAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2055,6 +2103,73 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("RemoteFixedBalanceVersions", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.RoomSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ActivatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ActualRegion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreateRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CurrentMatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CurrentMatchRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FusionSessionName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("MatchPublished")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreateRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("FusionSessionName")
+                        .IsUnique()
+                        .HasFilter("\"ClosedAtUtc\" IS NULL");
+
+                    b.HasIndex("HostUserId")
+                        .IsUnique()
+                        .HasFilter("\"ClosedAtUtc\" IS NULL");
+
+                    b.ToTable("RoomSessions");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioAdaptivePlanV2", b =>
                 {
                     b.Property<Guid>("DecisionId")
@@ -3122,6 +3237,11 @@ namespace EchoProtocol.Api.Migrations
                         .HasForeignKey("HostUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.RoomSession", null)
+                        .WithMany()
+                        .HasForeignKey("RoomSessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("HostUser");
                 });

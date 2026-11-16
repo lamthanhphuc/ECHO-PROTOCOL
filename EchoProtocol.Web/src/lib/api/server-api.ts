@@ -12,9 +12,12 @@ import type { BalanceAnalytics, PlayerAIHistory } from "@/lib/types/balance-anal
 import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
+  AdminDashboard,
   AdminMatchesPage,
   AdminMatchDetail,
+  AdminRoomSession,
   AdminModerationAction,
+  ChatWordsData,
   AdminPaymentsPage,
   AdminPurchasesPage,
   AdminUser,
@@ -52,6 +55,8 @@ export const playerApi = {
 };
 
 export const adminApi = {
+  dashboard: () => authorized<AdminDashboard>("/api/admin/dashboard"),
+  chatWords: () => authorized<ChatWordsData>("/api/admin/chat-words"),
   balanceAnalytics: (query: string) => authorized<BalanceAnalytics>(`/api/admin/balance-analytics${query}`),
   playerAIHistory: (id: string, page: number) => authorized<PlayerAIHistory>(`/api/admin/users/${encodeURIComponent(id)}/ai-history?page=${page}`),
   matchContent: () => authorized<MatchContent>("/api/admin/match-content"),
@@ -63,6 +68,8 @@ export const adminApi = {
   matchAdaptive: (id: string) => authorized<AdaptiveMatchAudit>(`/api/admin/matches/${encodeURIComponent(id)}/adaptive`),
   matches: (query: string) => authorized<AdminMatchesPage>(`/api/admin/matches/logs${query}`),
   match: (id: string) => authorized<AdminMatchDetail>(`/api/admin/matches/${encodeURIComponent(id)}`),
+  rooms: () => authorized<AdminRoomSession[]>("/api/admin/rooms"),
+  room: (id: string) => authorized<AdminRoomSession>(`/api/admin/rooms/${encodeURIComponent(id)}`),
   moderationHistory: (id: string) => authorized<AdminModerationAction[]>(`/api/admin/moderation/${encodeURIComponent(id)}`),
   users: (query: string) => authorized<AdminUsersPage>(`/api/admin/users${query}`),
   user: (id: string) => authorized<AdminUser>(`/api/admin/users/${encodeURIComponent(id)}`),
