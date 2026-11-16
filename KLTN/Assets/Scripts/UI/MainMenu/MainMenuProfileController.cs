@@ -793,8 +793,9 @@ namespace EchoProtocol.UI.MainMenu
     public static void Open(Canvas canvas)
     {
       if (canvas == null) return;
-      var profile = canvas.gameObject.GetComponent<UtilityProfileOverlay>()
-        ?? canvas.gameObject.AddComponent<UtilityProfileOverlay>();
+      var profile = canvas.gameObject.GetComponent<UtilityProfileOverlay>();
+      if (profile == null)
+        profile = canvas.gameObject.AddComponent<UtilityProfileOverlay>();
       profile.Show();
     }
 
@@ -813,7 +814,9 @@ namespace EchoProtocol.UI.MainMenu
         foreach (Transform child in transform)
         {
           if (child == _root) continue;
-          var group = child.GetComponent<CanvasGroup>() ?? child.gameObject.AddComponent<CanvasGroup>();
+          var group = child.GetComponent<CanvasGroup>();
+          if (group == null)
+            group = child.gameObject.AddComponent<CanvasGroup>();
           _locked.Add((group, group.interactable, group.blocksRaycasts));
           group.interactable = group.blocksRaycasts = false;
         }
@@ -892,10 +895,8 @@ namespace EchoProtocol.UI.MainMenu
 
       Font headingFont = visuals != null && visuals.spectralFont != null ? visuals.spectralFont : bodyFont;
       _title = Label("Title", 34, 20, 950, 44, 28, headingFont);
-      Label("DossierSubtitle", 34, 65, 950, 24, 13, headingFont);
       Box("HeaderRule", 34, 93, 1196, 1, new Color(.42f,.23f,.20f,.8f));
       Box("ColumnRule", 329, 110, 1, 558, new Color(.4f,.36f,.3f,.5f));
-      Label("ArchiveBadge", 1035, 30, 160, 32, 13, headingFont);
       Label("ProfileHeading", 350, 105, 880, 32, 24, headingFont);
       var portrait = Rect("OperatorPortrait", _panel);
       portrait.anchorMin = portrait.anchorMax = new Vector2(0, 1);
@@ -962,8 +963,6 @@ namespace EchoProtocol.UI.MainMenu
       Decoration("Fingerprint", visuals != null ? visuals.fingerprint : null, 1008, 507, 105, 160, 12);
       Decoration("SurveillancePhoto", visuals != null ? visuals.surveillanceStill : null, 1093, 524, 135, 115, 9);
       Decoration("PhotoTape", visuals != null ? visuals.agedTape : null, 1090, 514, 138, 23, 16);
-      Label("PhotoCaption", 1010, 649, 220, 24, 11, bodyFont);
-      Label("IdentityCaption", 34, 473, 278, 24, 12, headingFont).color = new Color(.68f,.18f,.20f);
       _identity.rectTransform.anchoredPosition = new Vector2(34,-499);
       _identity.rectTransform.sizeDelta = new Vector2(278,36);
       Label("TotalExperience", 34, 541, 278, 26, 15, bodyFont);
@@ -1063,15 +1062,11 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (_title == null) return;
       _title.text = "ECHO PROTOCOL";
-      Copy("DossierSubtitle", "HỒ SƠ NHÂN SỰ  ///  NHẬT KÝ NHIỆM VỤ", "PERSONNEL RECORD  ///  MISSION ARCHIVE");
-      Copy("ArchiveBadge", "NHẬT KÝ NHIỆM VỤ", "MISSION ARCHIVE");
       Copy("ProfileHeading", "HỒ SƠ ĐIỀU TRA VIÊN", "OPERATOR PROFILE");
       Copy("ActivityHeading", "HOẠT ĐỘNG GẦN ĐÂY", "RECENT ACTIVITY");
-      Copy("IdentityCaption", "DANH TÍNH ĐIỀU TRA VIÊN", "OPERATOR IDENTITY");
       Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.ExperiencePoints:N0} XP",
         $"TOTAL EXPERIENCE  ·  {PlayerProfileSession.ExperiencePoints:N0} XP");
       Copy("NoteCopy", "MỖI NHIỆM VỤ\nĐỀU ĐỂ LẠI DẤU VẾT.", "EVERY MISSION\nLEAVES A TRACE.");
-      Copy("PhotoCaption", "ECHO  //  TƯ LIỆU HIỆN TRƯỜNG", "ECHO  //  FIELD ARCHIVE");
       _name.text = string.IsNullOrWhiteSpace(PlayerProfileSession.DisplayName)
         ? (string.IsNullOrWhiteSpace(AuthSession.DisplayName)
           ? AuthSession.Username : AuthSession.DisplayName)

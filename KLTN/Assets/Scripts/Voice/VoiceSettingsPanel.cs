@@ -64,6 +64,13 @@ namespace EchoProtocol.Voice
             var window = _canvas.transform.Find("Overlay/Window");
             var subtitle = window.Find("Subtitle");
             if (subtitle != null) subtitle.gameObject.SetActive(false);
+            var title = TextAt("Overlay/Window/Title");
+            title.rectTransform.anchoredPosition = new Vector2(574, 0);
+            title.rectTransform.sizeDelta = new Vector2(620, 82);
+            title.alignment = TextAlignmentOptions.Left;
+            // Spectral's line height exceeds the saved heading boxes; ellipsis can hide the whole line.
+            foreach (string path in new[] { "Title", "Body/Voice/Heading", "Body/Mouse/Heading" })
+                window.Find(path).GetComponent<TMP_Text>().overflowMode = TextOverflowModes.Overflow;
             var language = SettingsMenuWidgets.Button("LanguageShortcut", window, 20, 15, 170, 42,
                 GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH", false, 16);
             SettingsMenuWidgets.Icon("Icon", language.transform, 12, 9, 24, 24, SettingsIcon.Web);
@@ -541,6 +548,9 @@ namespace EchoProtocol.Voice
         private void RefreshVisuals()
         {
             TextAt("Overlay/Window/LanguageShortcut/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH";
+            TextAt("Overlay/Window/Title").text = GameLanguage.Choose("CÀI ĐẶT", "SETTING");
+            TextAt(Body + "Voice/Heading").text = GameLanguage.Choose("MICRÔ", "MICROPHONE");
+            TextAt(Body + "Mouse/Heading").text = GameLanguage.Choose("CHUỘT", "MOUSE");
             if (!_open) return;
             bool mainMenu = SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu;
             TextAt(Footer + "Resume/Label").text = _parentMenuLock != null ? GameLanguage.Choose("QUAY LẠI", "BACK") : mainMenu ? GameLanguage.Choose("ĐÓNG", "CLOSE") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
