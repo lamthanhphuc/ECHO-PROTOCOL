@@ -97,6 +97,8 @@ public sealed class PlayerTeamToolController : MonoBehaviour
         equippedObject.name = definition.TeamToolGameplayPrefab.name;
         equippedObject.transform.localPosition = definition.ItemId == "core_stabilizer" ? Vector3.zero : heldLocalPosition;
         equippedObject.transform.localRotation = Quaternion.Euler(definition.ItemId == "core_stabilizer" ? new Vector3(0f, 90f, 0f) : heldLocalEulerAngles);
+        if (definition.ItemId == "core_stabilizer")
+            GetComponent<PlayerCharacterPresenter>()?.PlaceMercenaryCoreStabilizer(equippedObject.transform);
         equippedTool = FindGameplay(equippedObject);
         equippedTool?.Equip(gameObject, aimOrigin != null ? aimOrigin : transform);
         ApplyPushVisibility();

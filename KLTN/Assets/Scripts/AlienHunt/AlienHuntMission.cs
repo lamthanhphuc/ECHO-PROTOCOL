@@ -253,6 +253,16 @@ namespace EchoProtocol.Networking
             if (NetworkReady) return Match.Runner.TryGetPlayerObject(player, out var obj) && obj ? obj.transform : null;
             return _offlinePlayer ? _offlinePlayer.transform : null;
         }
+        public bool HasHumanoidCarrier(PlayerRef player)
+        {
+            var owner = Carrier(player);
+            return owner && owner.GetComponentInChildren<PlayerCharacterPresenter>()?.UsesHumanoidGrip == true;
+        }
+        public bool HasMercenaryCarrier(PlayerRef player)
+        {
+            var owner = Carrier(player);
+            return owner && owner.GetComponentInChildren<PlayerCharacterPresenter>()?.IsMercenary == true;
+        }
         public void HeldPose(PlayerRef carrier, HuntKind kind, out Vector3 position, out Quaternion rotation, bool presentation)
         {
             var owner = Carrier(carrier);
@@ -281,6 +291,8 @@ namespace EchoProtocol.Networking
             var character = owner.GetComponentInChildren<PlayerCharacterPresenter>();
             if (presentation && character != null && character.UsesHumanoidGrip)
                 hand = character.RightPalmContact(anchor.position);
+            if (presentation && kind != HuntKind.Alien && character != null && character.UsesHumanoidGrip)
+                hand += Vector3.up * .05f - owner.forward * .08f;
             position = hand - rotation * grip;
         }
         public bool Act(PlayerRef player, Transform owner, int entity, int furnace)

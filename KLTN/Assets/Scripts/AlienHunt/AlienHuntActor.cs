@@ -25,6 +25,7 @@ namespace EchoProtocol.Networking
         private Transform _meatVisual;
         private Vector3 _meatGroundPosition;
         private Quaternion _meatGroundRotation;
+        private Vector3 _meatGroundScale;
         private Transform _alienVisual;
         private Vector3 _alienGroundPosition;
         private Quaternion _alienGroundRotation;
@@ -38,6 +39,8 @@ namespace EchoProtocol.Networking
         private Transform _jerrycanVisual;
         private Vector3 _jerrycanGroundPosition;
         private Quaternion _jerrycanGroundRotation;
+        private Vector3 _jerrycanGroundScale;
+        private bool _wasCarried;
         public const float JerrycanVisualScale = 2f;
 
         public void Configure(int id, HuntKind type, Animator animation)
@@ -134,6 +137,7 @@ namespace EchoProtocol.Networking
                 }
                 _jerrycanGroundPosition = _jerrycanVisual.localPosition;
                 _jerrycanGroundRotation = _jerrycanVisual.localRotation;
+                _jerrycanGroundScale = _jerrycanVisual.localScale;
             }
             if (kind == HuntKind.Alien)
             {
@@ -175,6 +179,7 @@ namespace EchoProtocol.Networking
                 _meatVisual = transform.GetChild(0);
                 _meatGroundPosition = _meatVisual.localPosition;
                 _meatGroundRotation = _meatVisual.localRotation;
+                _meatGroundScale = _meatVisual.localScale;
             }
 
             if (kind == HuntKind.Meat || kind == HuntKind.Jerrycan)
@@ -267,16 +272,22 @@ namespace EchoProtocol.Networking
                 animator.transform.localPosition = onPan ? new Vector3(-.172f, 1.687f, .13873f) : _alienRigPosition;
                 animator.transform.localRotation = onPan ? Quaternion.Euler(-200f, -90f, 0f) : _alienRigRotation;
             }
-            if (_meatVisual)
+            if (_meatVisual && carried != _wasCarried)
             {
-                _meatVisual.localPosition = carried ? new Vector3(-.111f, .588f, .12f) : _meatGroundPosition;
+                _meatVisual.localPosition = carried ? new Vector3(-.082f, .64f, .152f) : _meatGroundPosition;
                 _meatVisual.localRotation = carried ? Quaternion.Euler(10.643f, -141.51f, -117.218f) : _meatGroundRotation;
+                _meatVisual.localScale = _meatGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
             }
-            if (_jerrycanVisual)
+            if (_jerrycanVisual && carried != _wasCarried)
             {
-                _jerrycanVisual.localPosition = carried ? new Vector3(.0667f, .142f, .7438f) : _jerrycanGroundPosition;
+                _jerrycanVisual.localPosition = carried
+                    ? AlienHuntMission.Instance.HasMercenaryCarrier(state.Carrier)
+                        ? new Vector3(.059f, .383f, .708f) : new Vector3(.055f, .368f, .647f)
+                    : _jerrycanGroundPosition;
                 _jerrycanVisual.localRotation = carried ? Quaternion.Euler(64.147f, 169.87f, -15.506f) : _jerrycanGroundRotation;
+                _jerrycanVisual.localScale = _jerrycanGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
             }
+            _wasCarried = carried;
             for (int i = 0; i < _renderers.Length; i++)
             {
                 var renderer = _renderers[i];

@@ -231,6 +231,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
         _currentVisual.name = "Held_" + _currentItem.ItemId;
         ApplyLocalPose(_currentVisual.transform, _currentItem);
+        if (CurrentVisualToolId == LobbyPlayerState.CoreStabilizerToolId)
+            GetComponentInParent<PlayerCharacterPresenter>()?.PlaceMercenaryCoreStabilizer(_currentVisual.transform);
         _heldVisualBaseScale = _currentVisual.transform.localScale;
         _heldVisualBasePosition = _currentVisual.transform.localPosition;
         _currentVisual.transform.localScale = _heldVisualBaseScale * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(CurrentVisualToolId) ?? 1f);

@@ -45,6 +45,12 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
         return wrist != null && knuckle != null ? Vector3.Lerp(wrist.position, knuckle.position, 0.65f) : fallback;
     }
     public bool IsMercenary => _applied == CharacterShopAssets.MercenaryCharacterId;
+    public void PlaceMercenaryCoreStabilizer(Transform heldRoot)
+    {
+        if (!IsMercenary || heldRoot == null) return;
+        Transform visual = heldRoot.Find("AnimatedVisual/Visual") ?? heldRoot.Find("Visual");
+        if (visual != null) visual.localPosition = new Vector3(-0.098f, 0f, 0.016f);
+    }
     private Quaternion LeftPalm => IsMercenary ? _mercenaryLeftPalm : _priestLeftPalm;
     private Quaternion RightPalm => IsMercenary ? _mercenaryRightPalm : _priestRightPalm;
     public bool IsJammo => _applied == 1;
