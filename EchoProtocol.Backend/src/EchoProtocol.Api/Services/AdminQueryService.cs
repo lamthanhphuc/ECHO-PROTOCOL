@@ -43,7 +43,7 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
         {
             UserId = user.Id,
             LastGameHeartbeatAtUtc = user.LastGameHeartbeatAtUtc,
-            HasRecentGameHeartbeat = user.LastGameHeartbeatAtUtc > now.AddSeconds(-90),
+            HasRecentGameHeartbeat = (user.LastGameHeartbeatAtUtc ?? DateTime.UnixEpoch) > now.AddSeconds(-90),
             IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == user.Id
                 && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
                 && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId
@@ -79,7 +79,7 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
             {
                 UserId = item.Id,
                 LastGameHeartbeatAtUtc = item.LastGameHeartbeatAtUtc,
-                HasRecentGameHeartbeat = item.LastGameHeartbeatAtUtc > now.AddSeconds(-90),
+                HasRecentGameHeartbeat = (item.LastGameHeartbeatAtUtc ?? DateTime.UnixEpoch) > now.AddSeconds(-90),
                 IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == item.Id
                     && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
                     && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId

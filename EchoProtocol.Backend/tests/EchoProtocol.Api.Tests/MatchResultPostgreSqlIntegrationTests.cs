@@ -2691,12 +2691,14 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             var playerId = Guid.NewGuid();
             var matchId = Guid.NewGuid();
             await using var db = CreateDbContext();
-            db.Users.AddRange(CreateUser(hostId, "host"), CreateUser(playerId, "player"));
-            if (testOnly)
-                db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("TEST-RFB-1"));
             if (legacyBindings)
             {
-                await db.SaveChangesAsync();
+                foreach (var user in new[] { CreateUser(hostId, "host"), CreateUser(playerId, "player") })
+                    await db.Database.ExecuteSqlInterpolatedAsync($"""
+                        INSERT INTO "Users" ("Id", "Email", "Username", "PasswordHash", "Role", "Status", "CreatedAt", "UpdatedAt")
+                        VALUES ({user.Id}, {user.Email}, {user.Username}, {user.PasswordHash}, {user.Role.ToString()},
+                                {user.Status.ToString()}, {user.CreatedAt}, {user.UpdatedAt})
+                        """);
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO "MatchAuthorityBindings"
                         ("MatchId", "FusionSessionName", "HostUserId", "MaxPlayers", "Status",
@@ -2714,6 +2716,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                         """);
                 return new MatchSeed(matchId, hostId, playerId);
             }
+            db.Users.AddRange(CreateUser(hostId, "host"), CreateUser(playerId, "player"));
+            if (testOnly)
+                db.RemoteFixedBalanceVersions.Add(CreateRemoteBalance("TEST-RFB-1"));
             db.MatchAuthorityBindings.Add(new MatchAuthorityBinding
             {
                 MatchId = matchId,
