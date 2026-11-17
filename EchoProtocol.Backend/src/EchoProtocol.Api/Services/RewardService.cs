@@ -66,22 +66,29 @@ public sealed class RewardService : IRewardService
             }
 
             var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly;
-            var rewardVersion = testOnly ? TestOnlyRewardVersion : _policy.Version;
+            var policy = _policy;
+            if (!testOnly)
+            {
+                var settings = await _db.RewardConfigurations.AsNoTracking()
+                    .SingleOrDefaultAsync(configuration => configuration.Id == RewardConfiguration.SharedId, cancellationToken);
+                if (settings != null) policy = new RewardPolicyV1(settings);
+            }
+            var rewardVersion = testOnly ? TestOnlyRewardVersion : policy.Version;
             var progressionVersion = testOnly
                 ? TestOnlyProgressionVersion
                 : _progressionService.PolicyVersion;
 
             if (!testOnly)
             {
-                if (!_policy.IsConfigured)
+                if (!policy.IsConfigured)
                 {
                     return Failure(
                         "No approved reward policy is configured",
                         ErrorCodes.RewardPolicyNotConfigured);
                 }
 
-                if (string.IsNullOrWhiteSpace(_policy.Version) ||
-                    _policy.Version.Length > MaximumPolicyVersionLength)
+                if (string.IsNullOrWhiteSpace(policy.Version) ||
+                    policy.Version.Length > MaximumPolicyVersionLength)
                 {
                     return Failure("Reward policy version is invalid", ErrorCodes.RewardPolicyInvalid);
                 }
@@ -99,7 +106,7 @@ public sealed class RewardService : IRewardService
             {
                 allocations = testOnly
                     ? result.Players.Select(player => new RewardAllocation(player.UserId, 0)).ToArray()
-                    : _policy.Calculate(CreateSnapshot(result));
+                    : policy.Calculate(CreateSnapshot(result));
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
             {

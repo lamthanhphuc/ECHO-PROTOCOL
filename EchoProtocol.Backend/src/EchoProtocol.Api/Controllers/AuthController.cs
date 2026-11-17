@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.DTOs.Auth;
@@ -160,6 +161,21 @@ public class AuthController : ControllerBase
                     "Internal server error",
                     ErrorCodes.InternalServerError));
         }
+    }
+
+    [Authorize]
+    [HttpPost("game-heartbeat")]
+    public async Task<IActionResult> GameHeartbeat(
+        [FromServices] Data.AppDbContext db, [FromServices] TimeProvider clock, CancellationToken ct)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+            return Unauthorized();
+        var now = clock.GetUtcNow().UtcDateTime;
+        var cutoff = now.AddSeconds(-15);
+        await db.Users.Where(user => user.Id == userId &&
+            (user.LastGameHeartbeatAtUtc == null || user.LastGameHeartbeatAtUtc < cutoff))
+            .ExecuteUpdateAsync(update => update.SetProperty(user => user.LastGameHeartbeatAtUtc, now), ct);
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 
     [Authorize]

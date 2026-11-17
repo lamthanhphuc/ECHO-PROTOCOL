@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<UserAgreementAcceptance> UserAgreementAcceptances => Set<UserAgreementAcceptance>();
+    public DbSet<RewardConfiguration> RewardConfigurations => Set<RewardConfiguration>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();

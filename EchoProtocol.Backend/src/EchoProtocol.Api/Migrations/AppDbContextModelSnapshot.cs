@@ -2103,6 +2103,44 @@ namespace EchoProtocol.Api.Migrations
                     b.ToTable("RemoteFixedBalanceVersions", (string)null);
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.RewardConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Contribution")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Disconnected")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EffectiveAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Maximum")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Objective")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Participation")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Survival")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Win")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RewardConfigurations");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.RoomSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2942,6 +2980,9 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("LastGameHeartbeatAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

@@ -42,6 +42,7 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
         var projected = users.Select(user => new AdminUserResponse
         {
             UserId = user.Id,
+            LastGameHeartbeatAtUtc = user.LastGameHeartbeatAtUtc,
             IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == user.Id
                 && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
                 && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId
@@ -76,6 +77,7 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
             .Select(item => new AdminUserResponse
             {
                 UserId = item.Id,
+                LastGameHeartbeatAtUtc = item.LastGameHeartbeatAtUtc,
                 IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == item.Id
                     && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
                     && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId

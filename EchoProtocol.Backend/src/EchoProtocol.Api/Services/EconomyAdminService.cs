@@ -24,8 +24,30 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
             .Select(x => new { x.ItemId, x.ItemName, x.Category, x.Price, x.IsActive }).ToArrayAsync(ct);
         var proposals = await db.Set<ShopPriceProposal>().AsNoTracking().OrderBy(x => x.Status == "PENDING" ? 0 : 1)
             .ThenByDescending(x => x.ProposedAtUtc).Take(100).ToArrayAsync(ct);
-        return ServiceResult<object>.Success(new { items, proposals, CanReview = CanReview(admin), AdminId = admin,
-            RewardPolicy = RewardPolicyV1.PolicyVersion, RewardPolicyV1.MaximumCurrencyPerMatch });
+        var rewards = await db.RewardConfigurations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == RewardConfiguration.SharedId, ct) ?? new();
+        return ServiceResult<object>.Success(new { items, proposals, Rewards = rewards, CanReview = CanReview(admin), AdminId = admin,
+            RewardPolicy = new RewardPolicyV1(rewards).Version, MaximumCurrencyPerMatch = rewards.Maximum });
+    }
+
+    public async Task<ServiceResult<object>> SaveRewardsAsync(Guid admin, RewardConfiguration rewards, CancellationToken ct)
+    {
+        rewards.Id = RewardConfiguration.SharedId;
+        rewards.EffectiveAtUtc = clock.GetUtcNow().UtcDateTime;
+        rewards.UpdatedByUserId = admin;
+
+        var current = await db.RewardConfigurations.FindAsync(new object[] { rewards.Id }, ct);
+        if (current == null) db.RewardConfigurations.Add(rewards);
+        else db.Entry(current).CurrentValues.SetValues(rewards);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException error) when (error.GetBaseException() is PostgresException { SqlState: "23505" })
+        {
+            return Fail("Mức thưởng vừa được cập nhật. Hãy tải lại rồi thử lại.");
+        }
+        return ServiceResult<object>.Success(rewards);
     }
 
     public async Task<ServiceResult<object>> ProposeAsync(Guid admin, ProposeShopPrice request, CancellationToken ct)

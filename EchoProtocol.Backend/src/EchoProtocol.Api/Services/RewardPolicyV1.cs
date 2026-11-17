@@ -1,4 +1,5 @@
 using EchoProtocol.Api.Enums;
+using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Services.Interfaces;
 
 namespace EchoProtocol.Api.Services;
@@ -8,14 +9,10 @@ public sealed class RewardPolicyV1 : IRewardPolicy
     public const string PolicyVersion = "REWARD_V1";
     public const int MaximumCurrencyPerMatch = 130;
 
-    private const int ParticipationCurrency = 20;
-    private const int MaximumObjectiveCurrency = 30;
-    private const int WinCurrency = 50;
-    private const int SurvivalCurrency = 20;
-    private const int ContributionCurrency = 10;
-    private const int DisconnectedCurrency = 10;
-
-    public string Version => PolicyVersion;
+    private readonly RewardConfiguration _settings;
+    public RewardPolicyV1() : this(new RewardConfiguration()) { }
+    public RewardPolicyV1(RewardConfiguration settings) => _settings = settings;
+    public string Version => _settings.Id == Guid.Empty ? PolicyVersion : "REWARD_CUSTOM_V1";
     public bool IsConfigured => true;
 
     public IReadOnlyList<RewardAllocation> Calculate(RewardMatchSnapshot match)
@@ -23,30 +20,30 @@ public sealed class RewardPolicyV1 : IRewardPolicy
         RewardSnapshotRules.Validate(match);
 
         var objectiveCurrency = (int)decimal.Floor(
-            match.ObjectiveCompletion * MaximumObjectiveCurrency);
+            match.ObjectiveCompletion * _settings.Objective);
 
         return match.Players
             .Select(player => new RewardAllocation(
                 player.UserId,
                 player.Disconnected
-                    ? DisconnectedCurrency
+                    ? Math.Min(_settings.Disconnected, _settings.Maximum)
                     : CalculateConnectedPlayer(match.Outcome, objectiveCurrency, player)))
             .ToArray();
     }
 
-    private static int CalculateConnectedPlayer(
+    private int CalculateConnectedPlayer(
         MatchOutcome outcome,
         int objectiveCurrency,
         RewardPlayerSnapshot player)
     {
         var currency = checked(
-            ParticipationCurrency
+            _settings.Participation
             + objectiveCurrency
-            + (outcome == MatchOutcome.WIN ? WinCurrency : 0)
-            + (player.Survived ? SurvivalCurrency : 0)
-            + (player.ObjectiveContribution > 0 ? ContributionCurrency : 0));
+            + (outcome == MatchOutcome.WIN ? _settings.Win : 0)
+            + (player.Survived ? _settings.Survival : 0)
+            + (player.ObjectiveContribution > 0 ? _settings.Contribution : 0));
 
-        return Math.Min(currency, MaximumCurrencyPerMatch);
+        return Math.Min(currency, _settings.Maximum);
     }
 }
 

@@ -13,6 +13,7 @@ export interface EconomyData {
   }[];
   canReview: boolean;
   adminId: string;
+  rewards?: Record<"participation" | "objective" | "win" | "survival" | "contribution" | "disconnected" | "maximum", number>;
   rewardPolicy: string;
   maximumCurrencyPerMatch: number;
 }

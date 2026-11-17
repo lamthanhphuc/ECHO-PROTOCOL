@@ -18,10 +18,13 @@ public sealed class AdminDashboardService(AppDbContext db)
             && (match.RoomSessionId == null || activeRooms.Any(room => room.Id == match.RoomSessionId
                 && room.CurrentMatchId == match.MatchId && room.MatchPublished)));
 
-        var onlinePlayers = await db.MatchPlayerBindings.AsNoTracking()
+        var sessionPlayers = db.MatchPlayerBindings.AsNoTracking()
             .Where(player => player.DisconnectedAtUtc == null && player.KickedAtUtc == null
                 && activeMatches.Any(match => match.MatchId == player.MatchId))
-            .Select(player => player.UserId).Distinct().CountAsync(ct);
+            .Select(player => player.UserId);
+        var cutoff = now.AddSeconds(-90);
+        var onlinePlayers = await db.Users.Where(user => user.Role == UserRole.PLAYER &&
+            (user.LastGameHeartbeatAtUtc > cutoff || sessionPlayers.Contains(user.Id))).CountAsync(ct);
         var activeRoomCount = await activeRooms.CountAsync(ct);
         var activeMatchCount = await activeMatches.CountAsync(match => match.Status == MatchAuthorityStatus.InMatch, ct);
         var registeredPlayers = await db.Users.AsNoTracking().CountAsync(user => user.Role == UserRole.PLAYER, ct);

@@ -106,6 +106,7 @@ namespace EchoProtocol.Auth
       }
 
       _apiClient.Initialize(configuration);
+      StartCoroutine(SendGameHeartbeats());
       _authService.Initialize(_apiClient);
       _playerProfileService = new PlayerProfileApiService(_apiClient);
       _initialized = true;
@@ -114,6 +115,22 @@ namespace EchoProtocol.Auth
     public void SetRestoreState(SessionRestoreState state)
     {
       RestoreState = state;
+    }
+    private System.Collections.IEnumerator SendGameHeartbeats()
+    {
+      string lastUser = null;
+      float nextHeartbeat = 0f;
+      while (true)
+      {
+        if (!AuthSession.IsAuthenticated) lastUser = null;
+        else if (lastUser != AuthSession.CurrentUserId || Time.realtimeSinceStartup >= nextHeartbeat)
+        {
+          lastUser = AuthSession.CurrentUserId;
+          nextHeartbeat = Time.realtimeSinceStartup + 30f;
+          _apiClient.PostJson<object, object>("/api/auth/game-heartbeat", new object(), true, _ => { });
+        }
+        yield return new WaitForSecondsRealtime(1f);
+      }
     }
   }
 }

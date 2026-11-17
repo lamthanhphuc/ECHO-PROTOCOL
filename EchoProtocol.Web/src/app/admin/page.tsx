@@ -14,7 +14,7 @@ export default async function AdminDashboard() {
   ]);
   const metrics = [
     { label: "Người chơi online", value: dashboard.onlinePlayersEstimate,
-      detail: "Roster còn kết nối trong phiên có lease hiệu lực", href: "/admin/matches" },
+      detail: "Tín hiệu game gần đây hoặc phiên chơi còn hiệu lực", href: "/admin/matches" },
     { label: "Phòng hoạt động", value: dashboard.activeRooms,
       detail: "Phòng đã kích hoạt và còn lease backend", href: "/admin/matches" },
     { label: "Trận đang diễn ra", value: dashboard.activeMatches,

@@ -6,6 +6,16 @@ import { Panel } from "@/components/ui/panel";
 import type { EconomyData } from "@/lib/types/operations";
 import { formatAdminDate as formatDate } from "@/lib/utils/format";
 
+const rewardFields = [
+  ["participation", "Tham gia"],
+  ["objective", "Hoàn thành mục tiêu (tối đa)"],
+  ["win", "Thắng trận"],
+  ["survival", "Sống sót"],
+  ["contribution", "Đóng góp mục tiêu"],
+  ["disconnected", "Mất kết nối"],
+  ["maximum", "Tổng thưởng tối đa"],
+] as const;
+
 const itemCategories = [
   { value: "CHARACTER", label: "Nhân vật gốc" },
   { value: "CHARACTER_OUTFIT", label: "Trang phục nhân vật" },
@@ -73,11 +83,39 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
     }
   }
 
+  async function saveRewards(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/bff/admin/economy/rewards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(rewardFields.map(([key]) => [key, Number(fields.get(key))]))),
+      });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.message || "Không lưu được mức thưởng.");
+      setMessage("Đã lưu cấu hình thưởng chung.");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Không kết nối được máy chủ.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <div className="grid gap-5">
     <Panel>
       <h2 className="mb-2 font-semibold">Luật kết quả và thưởng</h2>
       <p className="text-sm">Chính sách {data.rewardPolicy} · Tối đa {data.maximumCurrencyPerMatch} xu mỗi trận.</p>
-      <p className="muted mt-1 text-sm">Thắng/thua, tư cách nhận thưởng, điều kiện mở khóa và trọng số đóng góp được quản lý bởi nghiệp vụ game.</p>
+      <p className="muted mt-1 text-sm">Mức thưởng này áp dụng khi hệ thống tính thưởng cho các trận chưa được trả thưởng.</p>
+      {data.rewards && <form key={data.rewardPolicy} className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={saveRewards}>
+        {rewardFields.map(([key, label]) => <label className="admin-field" key={key}>{label} (xu)
+          <input className="input" name={key} type="number" min={0} max={10000} step={1} required defaultValue={data.rewards?.[key]} disabled={busy} />
+        </label>)}
+        <button className="button self-end justify-self-start" type="submit" disabled={busy}>Lưu mức thưởng</button>
+      </form>}
     </Panel>
     <Panel>
       <h2 className="mb-3 font-semibold">Cập nhật giá Shop</h2>

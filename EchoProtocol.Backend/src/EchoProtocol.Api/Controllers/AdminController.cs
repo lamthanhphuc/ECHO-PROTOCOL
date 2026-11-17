@@ -67,6 +67,10 @@ public sealed class AdminController(
     public Task<IActionResult> Economy([FromServices] EconomyAdminService economy, CancellationToken ct) =>
         WithAdmin(id => economy.GetAsync(id, ct), ct);
 
+    [HttpPost("economy/rewards")]
+    public Task<IActionResult> SaveRewards(Entities.RewardConfiguration request, [FromServices] EconomyAdminService economy, CancellationToken ct) =>
+        WithAdmin(id => economy.SaveRewardsAsync(id, request, ct), ct);
+
     [HttpPost("economy/prices/apply")]
     public Task<IActionResult> ApplyPrice(ProposeShopPrice request, [FromServices] EconomyAdminService economy, CancellationToken ct) =>
         WithAdmin(id => economy.ApplyPriceAsync(id, request, ct), ct);
