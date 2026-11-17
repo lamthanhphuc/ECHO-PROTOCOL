@@ -194,11 +194,14 @@ namespace EchoProtocol.Voice
             display.gameObject.SetActive(false);
         }
 
+        internal static string ControlsGuide =>
+            EchoProtocol.Settings.GameLanguage.Choose("G · Thả đồ    J · Nhiệm vụ    F2 · Hướng dẫn công cụ\nH · Gọi hỗ trợ    1 / 2 · Chọn vật phẩm\nChuột trái · Dùng công cụ\nChuột phải · Xem trước vị trí đặt / Đổi chế độ quét", "G · Drop    J · Missions    F2 · Tool guide\nH · Call for help    1 / 2 · Select item\nLeft click · Use tool\nRight click · Placement preview / Scanner mode");
+
         private static void BuildControlsNote(Transform body)
         {
             var note = Card("ControlsNote", body, 0, 196, 780, 280, "Tùy chỉnh điều khiển", "⌨");
-            Label("Body", note, 34, 77, 705, 160,
-                EchoProtocol.Settings.GameLanguage.Choose("Chọn ô phím bên phải để đổi phím. ESC để hủy.\n\nPhím cố định:\nG · Thả đồ    J · Nhiệm vụ    F2 · Hướng dẫn công cụ\nH · Gọi hỗ trợ    1 / 2 · Chọn vật phẩm\nChuột trái · Dùng công cụ\nChuột phải · Xem trước vị trí đặt / Đổi chế độ quét", "Select a key on the right to rebind. ESC cancels.\n\nFixed controls:\nG · Drop    J · Missions    F2 · Tool guide\nH · Call for help    1 / 2 · Select item\nLeft click · Use tool\nRight click · Placement preview / Scanner mode"),
+            Label("Body", note, 34, 77, 705, 190,
+                ControlsGuide,
                 16, Muted).textWrappingMode = TextWrappingModes.Normal;
             note.gameObject.SetActive(false);
         }

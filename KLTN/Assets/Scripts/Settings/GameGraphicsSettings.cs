@@ -31,7 +31,7 @@ namespace EchoProtocol.Settings
         {
             get
             {
-                if (_performanceMode) return GameLanguage.Choose("Tiết kiệm GPU", "GPU Saver");
+                if (UsesRenderPresets) return RenderPresetLabel(_performanceMode);
                 var names = QualitySettings.names;
                 return names.Length > 0 ? names[Mathf.Clamp(QualitySettings.GetQualityLevel(), 0, names.Length - 1)] : "Default";
             }
@@ -107,7 +107,7 @@ namespace EchoProtocol.Settings
 
         public static void CycleQuality()
         {
-            if (_performanceMode || GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+            if (UsesRenderPresets)
             {
                 SetPerformanceMode(!_performanceMode);
                 PlayerPrefs.SetInt(PerformanceKey, _performanceMode ? 1 : 0);
@@ -122,16 +122,23 @@ namespace EchoProtocol.Settings
                 QualitySettings.vSyncCount = PlayerPrefs.GetInt(VSyncKey) != 0 ? 1 : 0;
         }
 
-        public static string[] QualityChoices => GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset
-            ? new[] { GameLanguage.Choose("Chất lượng cao", "High quality"), GameLanguage.Choose("Tiết kiệm GPU", "GPU saving") }
+        private static bool UsesRenderPresets =>
+            _performanceMode || GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset;
+
+        private static string RenderPresetLabel(bool performance) => performance
+            ? GameLanguage.Choose("Tiết kiệm GPU", "GPU Saver")
+            : GameLanguage.Choose("Chất lượng cao", "High Quality");
+
+        public static string[] QualityChoices => UsesRenderPresets
+            ? new[] { RenderPresetLabel(false), RenderPresetLabel(true) }
             : QualitySettings.names;
 
         public static void SelectQuality(int index)
         {
-            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+            if (UsesRenderPresets)
             {
                 SetPerformanceMode(index == 1);
-                PlayerPrefs.SetInt(PerformanceKey, index == 1 ? 1 : 0);
+                PlayerPrefs.SetInt(PerformanceKey, _performanceMode ? 1 : 0);
             }
             else if (index >= 0 && index < QualitySettings.names.Length)
             {

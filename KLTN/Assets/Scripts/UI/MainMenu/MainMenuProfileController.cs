@@ -793,8 +793,9 @@ namespace EchoProtocol.UI.MainMenu
     public static void Open(Canvas canvas)
     {
       if (canvas == null) return;
-      var profile = canvas.gameObject.GetComponent<UtilityProfileOverlay>()
-        ?? canvas.gameObject.AddComponent<UtilityProfileOverlay>();
+      var profile = canvas.gameObject.GetComponent<UtilityProfileOverlay>();
+      if (profile == null)
+        profile = canvas.gameObject.AddComponent<UtilityProfileOverlay>();
       profile.Show();
     }
 
@@ -813,7 +814,9 @@ namespace EchoProtocol.UI.MainMenu
         foreach (Transform child in transform)
         {
           if (child == _root) continue;
-          var group = child.GetComponent<CanvasGroup>() ?? child.gameObject.AddComponent<CanvasGroup>();
+          var group = child.GetComponent<CanvasGroup>();
+          if (group == null)
+            group = child.gameObject.AddComponent<CanvasGroup>();
           _locked.Add((group, group.interactable, group.blocksRaycasts));
           group.interactable = group.blocksRaycasts = false;
         }
@@ -892,10 +895,8 @@ namespace EchoProtocol.UI.MainMenu
 
       Font headingFont = visuals != null && visuals.spectralFont != null ? visuals.spectralFont : bodyFont;
       _title = Label("Title", 34, 20, 950, 44, 28, headingFont);
-      Label("DossierSubtitle", 34, 65, 950, 24, 13, headingFont);
       Box("HeaderRule", 34, 93, 1196, 1, new Color(.42f,.23f,.20f,.8f));
       Box("ColumnRule", 329, 110, 1, 558, new Color(.4f,.36f,.3f,.5f));
-      Label("ArchiveBadge", 1035, 30, 160, 32, 13, headingFont);
       Label("ProfileHeading", 350, 105, 880, 32, 24, headingFont);
       var portrait = Rect("OperatorPortrait", _panel);
       portrait.anchorMin = portrait.anchorMax = new Vector2(0, 1);
@@ -922,35 +923,26 @@ namespace EchoProtocol.UI.MainMenu
       _section = Label("StatisticsTitle", 350, 267, 880, 38, 23, headingFont);
       _statLabels = new Text[4];
       _statValues = new Text[4];
+      Box("StatisticsStrip", 350, 315, 880, 110, new Color(.02f, .025f, .028f, .84f));
       for (int i = 0; i < 4; i++)
       {
-        float x = 350 + i * 224;
-        var card = Box("StatCard" + i, x, 315, 208, 126, new Color(.035f,.035f,.035f,.93f));
-        var edge = card.gameObject.AddComponent<Outline>();
-        edge.effectColor = i == 1 ? new Color(.5f,.12f,.13f) : new Color(.32f,.28f,.24f);
-        edge.effectDistance = new Vector2(1,-1);
-        var iconRect = Rect("StatIcon", card);
-        iconRect.anchorMin = iconRect.anchorMax = new Vector2(.5f,1);
-        iconRect.pivot = new Vector2(.5f,1);
-        iconRect.anchoredPosition = new Vector2(0,-12);
-        iconRect.sizeDelta = new Vector2(26,26);
-        var icons = new[] { SettingsIcon.Inventory, SettingsIcon.Trophy, SettingsIcon.Team, SettingsIcon.Shop };
-        iconRect.gameObject.AddComponent<SettingsIconGraphic>().Configure(icons[i],
-          i == 1 ? new Color(.75f,.19f,.22f) : new Color(.72f,.65f,.45f));
-        // The decorative heading font does not contain a complete numeric glyph set.
-        // Statistics are data, so keep them on the same digit-safe font as XP/progress.
-        _statValues[i] = Label("StatValue" + i, x + 12, 354, 184, 38, 27, bodyFont);
+        float x = 350 + i * 220;
+        if (i > 0) Box("StatDivider" + i, x, 335, 1, 70, new Color(.44f, .39f, .31f, .65f));
+        _statValues[i] = Label("StatValue" + i, x + 10, 330, 200, 42, 31, bodyFont);
         _statValues[i].alignment = TextAnchor.MiddleCenter;
-        _statLabels[i] = Label("StatCaption" + i, x + 8, 392, 192, 35, 14, bodyFont);
+        _statLabels[i] = Label("StatCaption" + i, x + 10, 374, 200, 29, 14, bodyFont);
         _statLabels[i].alignment = TextAnchor.MiddleCenter;
+        _statLabels[i].color = new Color(.78f, .71f, .54f);
       }
-      Label("ActivityHeading", 350, 451, 660, 28, 20, headingFont);
+      var activityHeading = Label("ActivityHeading", 350, 451, 640, 33, 20, bodyFont);
+      activityHeading.fontStyle = FontStyle.Bold;
       _activity = new Text[3];
       _activityTitles = new Text[3];
       for (int i = 0; i < 3; i++)
       {
         float y = 489 + i * 60;
-        Box("ActivityRow" + i, 350, y, 640, 54, new Color(.025f,.035f,.035f,.95f));
+        Box("ActivityRow" + i, 350, y, 640, 54, new Color(.02f, .025f, .028f, .75f));
+        Box("ActivityRule" + i, 350, y + 53, 640, 1, new Color(.44f, .39f, .31f, .5f));
         _activityTitles[i] = Label("ActivityTitle" + i, 365, y + 3, 610, 21, 13, bodyFont);
         _activity[i] = Label("ActivityValue" + i, 365, y + 24, 610, 27, 14, bodyFont);
       }
@@ -962,8 +954,6 @@ namespace EchoProtocol.UI.MainMenu
       Decoration("Fingerprint", visuals != null ? visuals.fingerprint : null, 1008, 507, 105, 160, 12);
       Decoration("SurveillancePhoto", visuals != null ? visuals.surveillanceStill : null, 1093, 524, 135, 115, 9);
       Decoration("PhotoTape", visuals != null ? visuals.agedTape : null, 1090, 514, 138, 23, 16);
-      Label("PhotoCaption", 1010, 649, 220, 24, 11, bodyFont);
-      Label("IdentityCaption", 34, 473, 278, 24, 12, headingFont).color = new Color(.68f,.18f,.20f);
       _identity.rectTransform.anchoredPosition = new Vector2(34,-499);
       _identity.rectTransform.sizeDelta = new Vector2(278,36);
       Label("TotalExperience", 34, 541, 278, 26, 15, bodyFont);
@@ -1063,15 +1053,11 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (_title == null) return;
       _title.text = "ECHO PROTOCOL";
-      Copy("DossierSubtitle", "HỒ SƠ NHÂN SỰ  ///  NHẬT KÝ NHIỆM VỤ", "PERSONNEL RECORD  ///  MISSION ARCHIVE");
-      Copy("ArchiveBadge", "NHẬT KÝ NHIỆM VỤ", "MISSION ARCHIVE");
       Copy("ProfileHeading", "HỒ SƠ ĐIỀU TRA VIÊN", "OPERATOR PROFILE");
       Copy("ActivityHeading", "HOẠT ĐỘNG GẦN ĐÂY", "RECENT ACTIVITY");
-      Copy("IdentityCaption", "DANH TÍNH ĐIỀU TRA VIÊN", "OPERATOR IDENTITY");
       Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.ExperiencePoints:N0} XP",
         $"TOTAL EXPERIENCE  ·  {PlayerProfileSession.ExperiencePoints:N0} XP");
       Copy("NoteCopy", "MỖI NHIỆM VỤ\nĐỀU ĐỂ LẠI DẤU VẾT.", "EVERY MISSION\nLEAVES A TRACE.");
-      Copy("PhotoCaption", "ECHO  //  TƯ LIỆU HIỆN TRƯỜNG", "ECHO  //  FIELD ARCHIVE");
       _name.text = string.IsNullOrWhiteSpace(PlayerProfileSession.DisplayName)
         ? (string.IsNullOrWhiteSpace(AuthSession.DisplayName)
           ? AuthSession.Username : AuthSession.DisplayName)

@@ -21,6 +21,7 @@ namespace EchoProtocol.Voice
     {
         private const string PrefabPath = "Voice/VoiceSettingsCanvas";
         private const string Body = "Overlay/Window/Body/";
+        private TMP_Text _settingsTitle, _voiceHeading, _mouseHeading, _controlsGuide;
         private const string Footer = "Overlay/Window/Footer/";
         private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
         private readonly System.Collections.Generic.Dictionary<string, Component> _components =
@@ -64,38 +65,247 @@ namespace EchoProtocol.Voice
             var window = _canvas.transform.Find("Overlay/Window");
             var subtitle = window.Find("Subtitle");
             if (subtitle != null) subtitle.gameObject.SetActive(false);
-            var language = SettingsMenuWidgets.Button("LanguageShortcut", window, 20, 15, 170, 42,
+            _settingsTitle = window.Find("Title")?.GetComponent<TMP_Text>();
+            _voiceHeading = window.Find("Body/Voice/Heading")?.GetComponent<TMP_Text>();
+            _mouseHeading = window.Find("Body/Mouse/Heading")?.GetComponent<TMP_Text>();
+            if (_settingsTitle != null)
+            {
+                _settingsTitle.rectTransform.anchoredPosition = new Vector2(574, 0);
+                _settingsTitle.rectTransform.sizeDelta = new Vector2(620, 82);
+                _settingsTitle.alignment = TextAlignmentOptions.Left;
+                _settingsTitle.overflowMode = TextOverflowModes.Overflow;
+            }
+            if (_voiceHeading != null) _voiceHeading.overflowMode = TextOverflowModes.Overflow;
+            if (_mouseHeading != null) _mouseHeading.overflowMode = TextOverflowModes.Overflow;
+            foreach (string path in new[]
+            {
+                "Voice/InputTitle", "Voice/VolumeTitle", "Voice/PushToTalkTitle", "Voice/KeyTitle",
+                "Mouse/SensitivityTitle", "Mouse/InvertTitle", "Mouse/AccelerationTitle",
+                "Controls/Heading", "ControlsNote/Heading", "Audio/Heading",
+                "Graphics/Heading", "Display/Heading", "Devices/Heading", "Team/Heading"
+            })
+            {
+                var label = _canvas.transform.Find(Body + path)?.GetComponent<TMP_Text>();
+                if (label == null) continue;
+                var size = label.rectTransform.sizeDelta;
+                size.y = Mathf.Max(size.y, label.fontSize >= 27f ? 46f : 36f);
+                label.rectTransform.sizeDelta = size;
+                label.overflowMode = TextOverflowModes.Overflow;
+            }
+            _controlsGuide = _canvas.transform.Find(Body + "ControlsNote/Body")?.GetComponent<TMP_Text>();
+            if (_controlsGuide != null)
+            {
+                var size = _controlsGuide.rectTransform.sizeDelta;
+                size.y = Mathf.Max(size.y, 190f);
+                _controlsGuide.rectTransform.sizeDelta = size;
+            }
+            SettingsMenuWidgets.Button("LanguageShortcut", window, 20, 15, 170, 42,
                 GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH", false, 16);
-            SettingsMenuWidgets.Icon("Icon", language.transform, 12, 9, 24, 24, SettingsIcon.Web);
-            var languageLabel = language.GetComponentInChildren<TMP_Text>();
-            languageLabel.rectTransform.anchoredPosition = new Vector2(22, 0);
-            languageLabel.rectTransform.sizeDelta = new Vector2(132, 42);
-            var cameraMotion = SettingsMenuWidgets.Frame("CameraMotion", _canvas.transform.Find("Overlay/Window/Body"), 800, 520, 680, 150);
-            SettingsMenuWidgets.Label("Title", cameraMotion, 34, 12, 612, 30, GameLanguage.Choose("CHUYỂN ĐỘNG CAMERA", "CAMERA MOTION"), 21);
-            SettingsMenuWidgets.Label("MotionTitle", cameraMotion, 34, 52, 320, 30, GameLanguage.Choose("Cường độ chuyển động", "Motion intensity"), 19);
-            var motionSlider = SettingsMenuWidgets.Slider("Intensity", cameraMotion, 405, 52, 220);
+            var closeButton = window.Find("CloseButton");
+            closeButton.Find("Label").gameObject.SetActive(false);
+            foreach (float angle in new[] { -45f, 45f })
+            {
+                var stroke = SettingsMenuWidgets.Panel("CloseStroke", closeButton, 21, 21, 18, 3, Color.white);
+                stroke.pivot = new Vector2(.5f, .5f);
+                stroke.localRotation = Quaternion.Euler(0, 0, angle);
+                stroke.GetComponent<Image>().raycastTarget = false;
+            }
+            var cameraMotion = SettingsMenuWidgets.Card("CameraMotion", window.Find("Body"), 0, 192, 780, 158,
+                "Chuyển động camera", "◐");
+            SettingsMenuWidgets.Label("MotionTitle", cameraMotion, 34, 65, 350, 34, GameLanguage.Choose("Cường độ chuyển động", "Motion intensity"), 19);
+            cameraMotion.Find("Heading").GetComponent<TMP_Text>().overflowMode = TextOverflowModes.Overflow;
+            var motionSlider = SettingsMenuWidgets.Slider("Intensity", cameraMotion, 405, 65, 278);
             motionSlider.SetValueWithoutNotify(PlayerCameraSettings.Intensity);
             motionSlider.onValueChanged.AddListener(value => PlayerCameraSettings.Intensity = value);
-            SettingsMenuWidgets.Label("ReduceTitle", cameraMotion, 34, 96, 340, 30, GameLanguage.Choose("Giảm chuyển động", "Reduce motion"), 19);
-            var reduceToggle = SettingsMenuWidgets.Toggle("Reduce", cameraMotion, 520, 94);
+            SettingsMenuWidgets.Label("ReduceTitle", cameraMotion, 34, 106, 350, 34, GameLanguage.Choose("Giảm chuyển động", "Reduce motion"), 19);
+            SettingsMenuWidgets.Label("IntensityValue", cameraMotion, 695, 65, 57, 34, "", 18,
+                align: TextAlignmentOptions.Right);
+            var reduceToggle = SettingsMenuWidgets.Toggle("Reduce", cameraMotion, 520, 104);
             reduceToggle.SetIsOnWithoutNotify(PlayerCameraSettings.ReduceMotion);
             reduceToggle.onValueChanged.AddListener(value => PlayerCameraSettings.ReduceMotion = value);
-            var audioRect = _canvas.transform.Find(Body + "Audio").GetComponent<RectTransform>();
-            audioRect.anchoredPosition = new Vector2(audioRect.anchoredPosition.x, -570);
-            audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 168);
-            string[] audioRows = { "Master", "Music", "Effects", "Voice" };
+            LayoutSettings(window);
+            BuildQuickSettings();
+            Bind();
+            IndustrialUiStyle.Controls(_canvas.transform);
+            var quit = Find<HorrorFrameGraphic>(Footer + "Quit");
+            quit.Configure(SettingsMenuWidgets.Ink, false);
+            var resume = Find<HorrorFrameGraphic>(Footer + "Resume");
+            resume.Configure(new Color(.24f, .045f, .055f, .95f), true);
+            _overlay.SetActive(false);
+        }
+
+        private void LayoutSettings(Transform window)
+        {
+            var tabs = (RectTransform)window.Find("SettingsTabs");
+            tabs.anchoredPosition = new Vector2(0, -111);
+            tabs.sizeDelta = new Vector2(1480, 50);
+            tabs.Find("Graphics").gameObject.SetActive(false);
+            int visibleIndex = 0;
+            for (int i = 0; i < tabs.childCount; i++)
+            {
+                var tab = (RectTransform)tabs.GetChild(i);
+                if (!tab.gameObject.activeSelf) continue;
+                tab.anchoredPosition = new Vector2(visibleIndex++ * 496, 0);
+                tab.sizeDelta = new Vector2(488, 50);
+                ((RectTransform)tab.Find("Icon")).anchoredPosition = new Vector2(138, -13);
+                var label = (RectTransform)tab.Find("Label");
+                label.anchoredPosition = new Vector2(167, 0);
+                label.sizeDelta = new Vector2(180, 50);
+                ((RectTransform)tab.Find("Active")).sizeDelta = new Vector2(488, 2);
+            }
+
+            LayoutRect("Voice", height: 278);
+            Find<Button>(Body + "Voice/DeviceButton").gameObject.SetActive(false);
+            Find<Button>(Body + "Voice/AdvancedButton").gameObject.SetActive(false);
+            var audioRect = Find<RectTransform>(Body + "Audio");
+            // Voice output already has a slider in the microphone card.
+            foreach (string name in new[] { "Voice", "VoiceTitle", "VoiceValue" })
+                audioRect.Find(name)?.gameObject.SetActive(false);
+            audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 280);
+            string[] audioRows = { "Master", "Music", "Effects" };
             for (int i = 0; i < audioRows.Length; i++)
                 foreach (string suffix in new[] { "", "Title", "Value" })
                 {
                     var row = audioRect.Find(audioRows[i] + suffix) as RectTransform;
-                    if (row != null) row.anchoredPosition = new Vector2(row.anchoredPosition.x, -(54 + i * 25));
+                    if (row != null) row.anchoredPosition = new Vector2(row.anchoredPosition.x, -(76 + i * 65));
                 }
-            foreach (var label in _canvas.GetComponentsInChildren<TMP_Text>(true))
-                if (label.transform.parent == audioRect && label.name != "Title" && label.name != "Icon")
-                    label.fontSize = Mathf.Min(label.fontSize, 18);
-            Bind();
-            IndustrialUiStyle.Controls(_canvas.transform);
-            _overlay.SetActive(false);
+            LayoutRect("Devices", height: 278);
+            LayoutRect("Devices/List", height: 106);
+            var viewport = Find<RectTransform>(Body + "Devices/List/Viewport");
+            SettingsMenuWidgets.Stretch(viewport);
+            viewport.offsetMin = new Vector2(8, 4);
+            viewport.offsetMax = new Vector2(-8, -4);
+            if (viewport.GetComponent<RectMask2D>() == null) viewport.gameObject.AddComponent<RectMask2D>();
+            Find<RectTransform>(Body + "Devices/List").gameObject.SetActive(false);
+            Find<RectTransform>(Body + "Devices/DeviceText").gameObject.SetActive(false);
+            SettingsMenuWidgets.Button("SelectDevice", Find<RectTransform>(Body + "Devices"), 27, 59, 626, 38, "Chọn micrô");
+            LayoutRect("Devices/Test", top: 216, height: 30);
+            LayoutRect("Devices/LevelText", top: 216, height: 30);
+            LayoutRect("Team", height: 280);
+            LayoutRect("Team/List", height: 94);
+            LayoutRect("Team/Retry", top: 241, height: 31);
+
+            foreach (string card in new[] { "Voice", "Audio", "Devices", "Team" })
+            {
+                var frame = Find<RectTransform>(Body + card);
+                frame.sizeDelta = new Vector2(730, frame.sizeDelta.y);
+                var rule = Find<RectTransform>(Body + card + "/Rule");
+                rule.sizeDelta = new Vector2(684, rule.sizeDelta.y);
+            }
+            foreach (string path in new[] { "Voice/VolumeText", "Voice/Meter", "Voice/VolumeSlider",
+                "Voice/MicToggle", "Voice/PushToTalkToggle", "Voice/KeyButton", "Audio/MasterValue",
+                "Audio/MusicValue", "Audio/EffectsValue", "Audio/Master", "Audio/Music", "Audio/Effects" })
+                Find<RectTransform>(Body + path).anchoredPosition -= new Vector2(50, 0);
+
+            foreach (string name in audioRows)
+            {
+                var title = TextAt(Body + "Audio/" + name + "Title");
+                title.rectTransform.sizeDelta = new Vector2(300, 42);
+                title.rectTransform.anchoredPosition += new Vector2(0, 6);
+                title.overflowMode = TextOverflowModes.Overflow;
+            }
+
+            foreach (string card in new[] { "Graphics", "Display" })
+            {
+                var frame = Find<RectTransform>(Body + card);
+                frame.sizeDelta = new Vector2(730, 390);
+                var line = Find<RectTransform>(Body + card + "/Rule");
+                line.sizeDelta = new Vector2(684, line.sizeDelta.y);
+            }
+            foreach (string name in new[] { "Quality", "Resolution", "Fullscreen", "VSync", "Hint" })
+            {
+                var row = Find<RectTransform>(Body + "Graphics/" + name);
+                if (name == "Hint") row.sizeDelta = new Vector2(662, row.sizeDelta.y);
+                else row.anchoredPosition -= new Vector2(25, 0);
+            }
+            foreach (string name in new[] { "Monitor", "Stand", "Base", "SaveHint" })
+                Find<RectTransform>(Body + "Display/" + name).anchoredPosition += new Vector2(25, 0);
+
+            LayoutRect("Display/Monitor", top: 76, height: 191);
+            LayoutRect("Display/Monitor/Resolution", top: 26, height: 65);
+            LayoutRect("Display/Monitor/Quality", top: 103, height: 55);
+            LayoutRect("Display/Stand", top: 267, height: 32);
+            LayoutRect("Display/Base", top: 299);
+            Find<RectTransform>(Body + "Display/Description").gameObject.SetActive(false);
+            LayoutRect("Display/SaveHint", top: 328);
+
+            LayoutRect("ControlsNote", height: 278);
+            LayoutRect("ControlsNote/Body", top: 69, height: 150);
+            LayoutRect("Controls", height: 640);
+            LayoutRect("Controls/Hint", top: 592);
+        }
+
+        private void LayoutRect(string path, float? top = null, float? height = null)
+        {
+            var rect = Find<RectTransform>(Body + path);
+            if (top.HasValue)
+                rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, -top.Value);
+            if (height.HasValue)
+                rect.sizeDelta = new Vector2(rect.sizeDelta.x, height.Value);
+        }
+
+        private void BuildQuickSettings()
+        {
+            var body = _canvas.transform.Find(Body.TrimEnd('/'));
+            var audio = SettingsMenuWidgets.Frame("QuickAudio", body, 0, 0, 730, 322);
+            var controls = SettingsMenuWidgets.Frame("QuickControls", body, 750, 0, 730, 322);
+
+            foreach (var panel in new[] { audio, controls })
+            {
+                SettingsMenuWidgets.Label("Heading", panel, 32, 19, 666, 45, "", 26, bold: true);
+                for (int i = 0; i < 3; i++)
+                {
+                    float y = 76 + i * 54;
+                    SettingsMenuWidgets.Line("Rule" + i, panel, 32, y, 666);
+                    SettingsMenuWidgets.Label("Row" + i, panel, 32, y + 6, 340, 40, "");
+                }
+            }
+
+            SettingsMenuWidgets.Slider("Master", audio, 380, 84, 240).onValueChanged.AddListener(GameAudioSettings.SetMasterVolume);
+            SettingsMenuWidgets.Label("MasterValue", audio, 625, 82, 73, 42, "", 18, align: TextAlignmentOptions.Right);
+            SettingsMenuWidgets.Toggle("Microphone", audio, 504, 139).onValueChanged.AddListener(SetMicrophoneEnabled);
+            SettingsMenuWidgets.Toggle("PushToTalk", audio, 504, 193).onValueChanged.AddListener(_voice.SetPushToTalk);
+            SettingsMenuWidgets.Slider("Sensitivity", controls, 380, 84, 240, .1f, 3f)
+                .onValueChanged.AddListener(value => GameplayInputSettings.MouseSensitivity = value);
+            SettingsMenuWidgets.Label("SensitivityValue", controls, 625, 82, 73, 42, "", 18, align: TextAlignmentOptions.Right);
+            SettingsMenuWidgets.Slider("Motion", controls, 380, 138, 240)
+                .onValueChanged.AddListener(value => PlayerCameraSettings.Intensity = value);
+            SettingsMenuWidgets.Label("MotionValue", controls, 625, 136, 73, 42, "", 18, align: TextAlignmentOptions.Right);
+            SettingsMenuWidgets.Toggle("Reduce", controls, 504, 193)
+                .onValueChanged.AddListener(value => PlayerCameraSettings.ReduceMotion = value);
+
+            SettingsMenuWidgets.Button("Details", audio, 32, 255, 285, 40, "", false, 16)
+                .onClick.AddListener(() => SelectTab(2));
+            SettingsMenuWidgets.Button("Details", controls, 32, 255, 285, 40, "", false, 16)
+                .onClick.AddListener(() => SelectTab(3));
+        }
+
+        private void SetMicrophoneEnabled(bool enabled)
+        {
+            if (enabled) _voice.SetMuted(false);
+            _voice.EnableMicrophone(enabled);
+        }
+
+        private void RefreshQuickSettings()
+        {
+            TextAt(Body + "QuickAudio/Heading").text = GameLanguage.Choose("Âm thanh và thoại", "Audio and voice");
+            TextAt(Body + "QuickAudio/Row0").text = GameLanguage.Choose("Tổng âm lượng", "Master volume");
+            TextAt(Body + "QuickAudio/Row1").text = GameLanguage.Choose("Micrô", "Microphone");
+            TextAt(Body + "QuickAudio/Row2").text = GameLanguage.Choose("Nhấn giữ để nói", "Push to talk");
+            TextAt(Body + "QuickAudio/Details/Label").text = GameLanguage.Choose("Cài đặt âm thanh →", "Audio settings →");
+            SetVolume("QuickAudio/Master", "QuickAudio/MasterValue", GameAudioSettings.MasterVolume);
+            SetToggle("QuickAudio/Microphone", _voice.MicrophoneEnabled && !_voice.SelfMuted);
+            SetToggle("QuickAudio/PushToTalk", _voice.PushToTalk);
+
+            TextAt(Body + "QuickControls/Heading").text = GameLanguage.Choose("Chuột và camera", "Mouse and camera");
+            TextAt(Body + "QuickControls/Row0").text = GameLanguage.Choose("Độ nhạy chuột", "Mouse sensitivity");
+            TextAt(Body + "QuickControls/Row1").text = GameLanguage.Choose("Cường độ chuyển động", "Motion intensity");
+            TextAt(Body + "QuickControls/Row2").text = GameLanguage.Choose("Giảm chuyển động", "Reduce motion");
+            TextAt(Body + "QuickControls/Details/Label").text = GameLanguage.Choose("Cài đặt điều khiển →", "Control settings →");
+            Find<Slider>(Body + "QuickControls/Sensitivity").SetValueWithoutNotify(GameplayInputSettings.MouseSensitivity);
+            TextAt(Body + "QuickControls/SensitivityValue").text = GameplayInputSettings.MouseSensitivity.ToString("0.00");
+            SetVolume("QuickControls/Motion", "QuickControls/MotionValue", PlayerCameraSettings.Intensity);
+            SetToggle("QuickControls/Reduce", PlayerCameraSettings.ReduceMotion);
         }
 
         private T Find<T>(string path) where T : Component
@@ -121,17 +331,10 @@ namespace EchoProtocol.Voice
             var root = new GameObject("GraphicsChoices", typeof(RectTransform), typeof(Image));
             _graphicsChoices = root;
             var rect = (RectTransform)root.transform;
-            rect.SetParent(source.transform, false);
-            rect.anchorMin = rect.anchorMax = new Vector2(0, 0);
-            rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(((RectTransform)source.transform).rect.width, Mathf.Min(choices.Length, 6) * 44);
-            float bottom = RectTransformUtility.WorldToScreenPoint(null, source.transform.position).y;
-            if (bottom < rect.sizeDelta.y * source.transform.lossyScale.y + 24)
-            {
-                rect.anchorMin = rect.anchorMax = new Vector2(0,1);
-                rect.pivot = Vector2.zero;
-            }
+            rect.SetParent(Find<RectTransform>(Body + "Display"), false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(114, -76);
+            rect.sizeDelta = new Vector2(502, Mathf.Min(choices.Length, 6) * 44);
             root.GetComponent<Image>().color = new Color(.025f,.035f,.04f,1);
             IndustrialUiStyle.Frame(root);
             var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
@@ -175,7 +378,10 @@ namespace EchoProtocol.Voice
             Click("Overlay/Window/LanguageShortcut", () =>
             {
                 CancelRebind();
+                if (_graphicsChoices != null) Destroy(_graphicsChoices);
+                _graphicsChoices = null;
                 GameLanguage.Set(GameLanguage.Current == GameLocale.Vietnamese ? GameLocale.English : GameLocale.Vietnamese);
+                _deviceSignature = _teamSignature = null;
                 RefreshVisuals();
             });
             Click("Overlay/Window/CloseButton", Close);
@@ -198,11 +404,7 @@ namespace EchoProtocol.Voice
                 Click("Overlay/Window/SettingsTabs/" + tabs[i], () => SelectTab(index));
             }
 
-            Find<Toggle>(Body + "Voice/MicToggle").onValueChanged.AddListener(enabled =>
-            {
-                if (enabled) _voice.SetMuted(false);
-                _voice.EnableMicrophone(enabled);
-            });
+            Find<Toggle>(Body + "Voice/MicToggle").onValueChanged.AddListener(SetMicrophoneEnabled);
             Find<Toggle>(Body + "Voice/PushToTalkToggle").onValueChanged.AddListener(_voice.SetPushToTalk);
             Find<Slider>(Body + "Voice/VolumeSlider").onValueChanged.AddListener(GameAudioSettings.SetVoiceVolume);
             Click(Body + "Voice/KeyButton", () => { BeginRebind(); _micRebinding = true; RefreshVisuals(); });
@@ -230,6 +432,12 @@ namespace EchoProtocol.Voice
                 GameplayAction selected = action;
                 Click(Body + "Controls/" + action, () => { BeginRebind(); _rebindAction = selected; RefreshVisuals(); });
             }
+            Click(Body + "Devices/SelectDevice", () =>
+            {
+                var list = Find<RectTransform>(Body + "Devices/List").gameObject;
+                list.SetActive(!list.activeSelf);
+                RefreshVisuals();
+            });
             Click(Body + "Devices/Refresh", () => { _voice.Devices.Refresh(); _deviceSignature = null; });
             Click(Body + "Devices/Test", () =>
             {
@@ -508,17 +716,22 @@ namespace EchoProtocol.Voice
         private void SelectTab(int index)
         {
             _tab = index;
+            Find<RectTransform>(Body + "Devices/List").gameObject.SetActive(false);
+            if (_graphicsChoices != null) Destroy(_graphicsChoices);
+            _graphicsChoices = null;
             CancelRebind();
-            Place("Voice", index == 0 || index == 2, 0, 0);
-            Place("Mouse", index == 0 || index == 3, 0, index == 0 ? 342 : 0);
-            Place("Audio", index == 0 || index == 2, 0, index == 0 ? 570 : 342);
-            Place("Controls", index == 0 || index == 3, 800, 0);
-            Place("Devices", index == 2, 800, 0);
-            Place("Team", index == 2, 800, 362);
-            Place("Graphics", index == 1, 0, 0);
-            Place("Display", index == 1, 800, 0);
-            Place("ControlsNote", index == 3, 0, 228);
-            Place("CameraMotion", index == 3, 0, 520);
+            Place("QuickAudio", index == 0, 0, 402);
+            Place("QuickControls", index == 0, 750, 402);
+            Place("Voice", index == 2, 0, 0);
+            Place("Mouse", index == 3, 0, 0);
+            Place("Audio", index == 2, 0, 290);
+            Place("Controls", index == 3, 800, 0);
+            Place("Devices", index == 2, 750, 0);
+            Place("Team", index == 2, 750, 290);
+            Place("Graphics", index == 0, 0, 0);
+            Place("Display", index == 0, 750, 0);
+            Place("ControlsNote", index == 3, 0, 362);
+            Place("CameraMotion", index == 3, 0, 192);
             string[] tabs = { "General", "Graphics", "Audio", "Controls" };
             for (int i = 0; i < tabs.Length; i++)
             {
@@ -541,17 +754,29 @@ namespace EchoProtocol.Voice
         private void RefreshVisuals()
         {
             TextAt("Overlay/Window/LanguageShortcut/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH";
+            if (_settingsTitle != null) _settingsTitle.text = GameLanguage.Choose("CÀI ĐẶT", "SETTINGS");
+            if (_voiceHeading != null) _voiceHeading.text = GameLanguage.Choose("MICRÔ", "MICROPHONE");
+            if (_mouseHeading != null) _mouseHeading.text = GameLanguage.Choose("CHUỘT", "MOUSE");
+            TextAt(Body + "ControlsNote/Heading").text = GameLanguage.Choose("Phím cố định", "Fixed controls");
+            TextAt(Body + "CameraMotion/Heading").text = GameLanguage.Choose("Chuyển động camera", "Camera motion");
+            if (_controlsGuide != null) _controlsGuide.text = VoiceSettingsCanvasFactory.ControlsGuide;
             if (!_open) return;
             bool mainMenu = SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneMainMenu;
             TextAt(Footer + "Resume/Label").text = _parentMenuLock != null ? GameLanguage.Choose("QUAY LẠI", "BACK") : mainMenu ? GameLanguage.Choose("ĐÓNG", "CLOSE") : GameLanguage.Choose("TIẾP TỤC", "RESUME");
             Find<Button>(Footer + "Inventory").interactable = CanOpenInventory;
+            if (_tab == 0) RefreshQuickSettings();
             SetToggle("Voice/MicToggle", _voice.MicrophoneEnabled && !_voice.SelfMuted);
             SetToggle("Voice/PushToTalkToggle", _voice.PushToTalk);
-            TextAt(Body + "Voice/KeyTitle").text = _voice.PushToTalk ? "Phím nhấn giữ để nói" : "Phím bật / tắt mic";
-            TextAt(Body + "Voice/KeyButton/Label").text = _micRebinding ? "NHẤN PHÍM MỚI..." : KeyLabel(_voice.ToggleMicrophoneKey);
+            TextAt(Body + "Voice/KeyTitle").text = _voice.PushToTalk
+                ? GameLanguage.Choose("Phím nhấn giữ để nói", "Push-to-talk key")
+                : GameLanguage.Choose("Phím bật / tắt mic", "Microphone toggle key");
+            TextAt(Body + "Voice/KeyButton/Label").text = _micRebinding ? GameLanguage.Choose("NHẤN PHÍM MỚI...", "PRESS A NEW KEY...") : KeyLabel(_voice.ToggleMicrophoneKey);
             TextAt(Body + "Voice/DeviceButton/Label").text = string.IsNullOrEmpty(_voice.Devices.Selected)
-                ? "CHỌN MICROPHONE..." : _voice.Devices.Selected;
+                ? GameLanguage.Choose("CHỌN MICROPHONE...", "SELECT MICROPHONE...") : _voice.Devices.Selected;
             SetVolume("Voice/VolumeSlider", "Voice/VolumeText", _voice.OutputVolume);
+            TextAt(Body + "Audio/MasterTitle").text = GameLanguage.Choose("Tổng âm lượng", "Master volume");
+            TextAt(Body + "Audio/MusicTitle").text = GameLanguage.Choose("Nhạc nền", "Music");
+            TextAt(Body + "Audio/EffectsTitle").text = GameLanguage.Choose("Hiệu ứng", "Sound effects");
             SetVolume("Audio/Master", "Audio/MasterValue", GameAudioSettings.MasterVolume);
             SetVolume("Audio/Music", "Audio/MusicValue", GameAudioSettings.MusicVolume);
             SetVolume("Audio/Effects", "Audio/EffectsValue", GameAudioSettings.EffectsVolume);
@@ -560,19 +785,19 @@ namespace EchoProtocol.Voice
             TextAt(Body + "Mouse/SensitivityText").text = GameplayInputSettings.MouseSensitivity.ToString("0.00");
             SetToggle("Mouse/Invert", GameplayInputSettings.InvertY);
             SetToggle("Mouse/Acceleration", GameplayInputSettings.MouseAcceleration);
-            Find<Slider>(Body + "CameraMotion/Intensity").SetValueWithoutNotify(PlayerCameraSettings.Intensity);
+            SetVolume("CameraMotion/Intensity", "CameraMotion/IntensityValue", PlayerCameraSettings.Intensity);
             SetToggle("CameraMotion/Reduce", PlayerCameraSettings.ReduceMotion);
             foreach (GameplayAction action in Enum.GetValues(typeof(GameplayAction)))
             {
                 if (action == GameplayAction.Inventory) continue;
                 TextAt(Body + "Controls/" + action + "/Label").text = _rebindAction == action
-                    ? "NHẤN PHÍM..." : GameplayInputSettings.GetKeyLabel(action);
+                    ? GameLanguage.Choose("NHẤN PHÍM...", "PRESS A KEY...") : GameplayInputSettings.GetKeyLabel(action);
             }
             TextAt(Body + "Controls/Hint").text = !string.IsNullOrEmpty(_bindingMessage) ? _bindingMessage
-                : IsRebinding ? "Nhấn phím mới  ·  ESC để hủy" : "Chọn một phím để thay đổi  ·  ESC để hủy";
+                : IsRebinding ? GameLanguage.Choose("Nhấn phím mới  ·  ESC để hủy", "Press a new key  ·  ESC to cancel") : GameLanguage.Choose("Chọn một phím để thay đổi  ·  ESC để hủy", "Select a binding to change  ·  ESC to cancel");
             TextAt(Footer + "Saved").text = !string.IsNullOrEmpty(_bindingMessage) && _micRebinding ? _bindingMessage
-                : IsRebinding ? "ESC  ·  HỦY ĐỔI PHÍM" : mainMenu ? GameLanguage.Choose("ESC  ·  QUAY LẠI MENU", "ESC  ·  RETURN TO MENU") : "ESC  ·  QUAY LẠI GAME";
-            if (_tab == 1)
+                : IsRebinding ? GameLanguage.Choose("ESC  ·  HỦY ĐỔI PHÍM", "ESC  ·  CANCEL REBIND") : mainMenu ? GameLanguage.Choose("ESC  ·  QUAY LẠI MENU", "ESC  ·  RETURN TO MENU") : GameLanguage.Choose("ESC  ·  QUAY LẠI GAME", "ESC  ·  RETURN TO GAME");
+            if (_tab == 0)
             {
                 TextAt(Body + "Graphics/Quality/Label").text = GameGraphicsSettings.QualityLabel;
                 TextAt(Body + "Graphics/Resolution/Label").text = GameGraphicsSettings.ResolutionLabel;
@@ -583,17 +808,19 @@ namespace EchoProtocol.Voice
                 Find<Button>(Body + "Graphics/Resolution").interactable = GameGraphicsSettings.CanChangeResolution && !GameGraphicsSettings.HasResolutionPreview;
                 Find<Toggle>(Body + "Graphics/Fullscreen").interactable = GameGraphicsSettings.CanChangeFullscreen && !GameGraphicsSettings.HasResolutionPreview;
                 TextAt(Body + "Graphics/Hint").text = Application.isEditor
-                    ? "Độ phân giải / toàn màn hình thay đổi trong bản game."
-                    : "Chọn giá trị để chuyển sang tùy chọn tiếp theo.";
+                    ? GameLanguage.Choose("Đổi độ phân giải và chế độ toàn màn hình trong bản game.",
+                        "Change the resolution and fullscreen mode in the game build.")
+                    : GameLanguage.Choose("Chọn một giá trị để mở danh sách tùy chọn.",
+                        "Select a value to open the list of options.");
             }
             if (_tab != 2) return;
-            TextAt(Body + "Devices/DeviceText").text = !string.IsNullOrEmpty(_voice.Devices.Error)
+            TextAt(Body + "Devices/SelectDevice/Label").text = !string.IsNullOrEmpty(_voice.Devices.Error)
                 ? _voice.Devices.Selected + " · " + GameLanguage.Choose("Không khả dụng. Kiểm tra thiết bị hoặc chọn lại.", "Unavailable. Check the device or select another.")
-                : string.IsNullOrEmpty(_voice.Devices.Selected) ? "Chọn microphone để bắt đầu nói" : _voice.Devices.Selected;
-            TextAt(Body + "Devices/Test/Label").text = _voice.Devices.Testing ? "DỪNG THỬ MIC" : "THỬ MICROPHONE";
+                : string.IsNullOrEmpty(_voice.Devices.Selected) ? GameLanguage.Choose("Chọn microphone để bắt đầu nói", "Select a microphone to start talking") : GameLanguage.Translate(_voice.Devices.Selected) + " ▾";
+            TextAt(Body + "Devices/Test/Label").text = _voice.Devices.Testing ? GameLanguage.Choose("DỪNG THỬ MIC", "STOP MIC TEST") : GameLanguage.Choose("THỬ MICROPHONE", "TEST MICROPHONE");
             Find<Button>(Body + "Devices/Test").interactable = _voice.Devices.Ready;
-            TextAt(Body + "Devices/LevelText").text = "Mức đầu vào: " + Mathf.RoundToInt(_voice.InputLevel * 100) + "%";
-            TextAt(Body + "Team/Status").text = _voice.Joined ? "Đã kết nối thoại"
+            TextAt(Body + "Devices/LevelText").text = GameLanguage.Choose("Mức đầu vào: ", "Input level: ") + Mathf.RoundToInt(_voice.InputLevel * 100) + "%";
+            TextAt(Body + "Team/Status").text = _voice.Joined ? GameLanguage.Choose("Đã kết nối thoại", "Voice connected")
                  : _voice.Status.StartsWith("Waiting") ? GameLanguage.Choose("Vào phòng để kết nối thoại", "Join a room to connect voice")
                 : _voice.RetryInSeconds>0 ? string.Format(GameLanguage.Choose("Tự kết nối lại sau {0} giây", "Reconnecting automatically in {0}s"),Mathf.CeilToInt(_voice.RetryInSeconds))
                 : GameLanguage.Choose("Đang kết nối thoại…", "Connecting voice…");
@@ -626,7 +853,7 @@ namespace EchoProtocol.Voice
             ClearRows(_deviceList);
             if (devices.Length == 0)
             {
-                VoiceSettingsCanvasFactory.AddListButton(_deviceList, "NoDevice", "Không tìm thấy microphone.", false).interactable = false;
+                VoiceSettingsCanvasFactory.AddListButton(_deviceList, "NoDevice", GameLanguage.Choose("Không tìm thấy microphone.", "No microphone found."), false).interactable = false;
                 return;
             }
             foreach (string device in devices)
@@ -634,7 +861,7 @@ namespace EchoProtocol.Voice
                 string selected = device;
                 bool current = selected == _voice.Devices.Selected;
                 VoiceSettingsCanvasFactory.AddListButton(_deviceList, "Device", (current ? "✓  " : "") + selected, current)
-                    .onClick.AddListener(() => { _voice.SelectDevice(selected); _deviceSignature = null; });
+                    .onClick.AddListener(() => { _voice.SelectDevice(selected); _deviceSignature = null; Find<RectTransform>(Body + "Devices/List").gameObject.SetActive(false); RefreshVisuals(); });
             }
         }
 
@@ -657,10 +884,10 @@ namespace EchoProtocol.Voice
                 count++;
                 string key = _voice.GetPlayerKey(player);
                 bool muted = _voice.IsPlayerMuted(key);
-                VoiceSettingsCanvasFactory.AddListButton(_teamList, "Teammate", (muted ? "Bật tiếng  ·  " : "Tắt tiếng  ·  ") + NameFor(player), muted)
+                VoiceSettingsCanvasFactory.AddListButton(_teamList, "Teammate", (muted ? GameLanguage.Choose("Bật tiếng  ·  ", "Unmute  ·  ") : GameLanguage.Choose("Tắt tiếng  ·  ", "Mute  ·  ")) + NameFor(player), muted)
                     .onClick.AddListener(() => { _voice.SetPlayerMuted(key, !_voice.IsPlayerMuted(key)); _teamSignature = null; });
             }
-            if (count == 0) VoiceSettingsCanvasFactory.AddListButton(_teamList, "EmptyTeam", "Chưa có đồng đội trong thoại.", false).interactable = false;
+            if (count == 0) VoiceSettingsCanvasFactory.AddListButton(_teamList, "EmptyTeam", GameLanguage.Choose("Chưa có đồng đội trong thoại.", "No teammates in voice chat."), false).interactable = false;
         }
 
         private void ShowConfirmation(bool quit)
