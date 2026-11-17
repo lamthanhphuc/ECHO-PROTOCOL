@@ -455,7 +455,10 @@ namespace EchoProtocol.Networking
             float multiplier = 1f;
             if (State == NetworkItemState.Carried && Holder.IsRealPlayer && Runner != null
                 && Runner.TryGetPlayerObject(Holder, out var player) && player != null)
-                multiplier = player.GetComponent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f;
+            {
+                var character = player.GetComponent<PlayerCharacterPresenter>();
+                if (character != null) multiplier = character.HeldItemScale * character.TwoHandHeldScale;
+            }
             transform.localScale = _originalVisualScale * multiplier;
         }
         private void ApplyReplicatedPose()

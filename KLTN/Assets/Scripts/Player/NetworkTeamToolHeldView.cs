@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using Fusion;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -183,7 +183,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             _visual.name = "Held_TeamTool_" + _shownToolId;
             _visual.transform.localPosition = ResolveToolPosition(_shownToolId);
             _visual.transform.localRotation = Quaternion.Euler(ResolveToolEulerAngles(_shownToolId));
-            _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.HeldItemScale ?? 1f);
+            _visual.transform.localScale = ResolveToolScale(_shownToolId) * (GetComponentInParent<PlayerCharacterPresenter>()?.ToolHeldScale(_shownToolId) ?? 1f);
 
             // TÃƒÂ¡Ã‚ÂºÃ‚Â¯t tÃƒÂ¡Ã‚ÂºÃ‚Â¥t cÃƒÂ¡Ã‚ÂºÃ‚Â£ collider, audio, physics, networking trÃƒÆ’Ã‚Âªn held visual Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ khÃƒÆ’Ã‚Â´ng ÃƒÂ¡Ã‚ÂºÃ‚Â£nh hÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã…Â¸ng gameplay
             foreach (var c in _visual.GetComponentsInChildren<Collider>(true))

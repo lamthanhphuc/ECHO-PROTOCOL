@@ -25,7 +25,8 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     public Vector3 HeldItemWorldOffset => IsJammo ? transform.up * jammoHeldItemLift : Vector3.zero;
     public float HeldItemScale => (_state != null && _state.Object != null && _state.Object.IsValid
         ? _state.CharacterId == 1 : IsJammo) ? jammoHeldItemScale : 1f;
-    public float ToolHeldScale(int toolId) => HeldItemScale * (IsJammo && toolId == 2 ? 1.15f : 1f);
+    public float ToolHeldScale(int toolId) => HeldItemScale * (toolId == LobbyPlayerState.CoreStabilizerToolId
+        ? TwoHandHeldScale : IsJammo && toolId == 2 ? 1.15f : 1f);
     private Vector3 _gripAimForward;
     public Vector3 ToolHeldOffset(int toolId)
     {
@@ -35,7 +36,15 @@ public sealed class PlayerCharacterPresenter : MonoBehaviour
     }
     private Quaternion _priestRightPalm, _priestLeftPalm;
     public bool UsesHumanoidGrip => _applied == 2 || _applied == CharacterShopAssets.MercenaryCharacterId;
-    private bool IsMercenary => _applied == CharacterShopAssets.MercenaryCharacterId;
+    public float TwoHandHeldScale => IsMercenary ? 1.08f : 1f;
+    public Vector3 RightPalmContact(Vector3 fallback)
+    {
+        if (animator == null || !animator.isHuman) return fallback;
+        var wrist = animator.GetBoneTransform(HumanBodyBones.RightHand);
+        var knuckle = animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
+        return wrist != null && knuckle != null ? Vector3.Lerp(wrist.position, knuckle.position, 0.65f) : fallback;
+    }
+    public bool IsMercenary => _applied == CharacterShopAssets.MercenaryCharacterId;
     private Quaternion LeftPalm => IsMercenary ? _mercenaryLeftPalm : _priestLeftPalm;
     private Quaternion RightPalm => IsMercenary ? _mercenaryRightPalm : _priestRightPalm;
     public bool IsJammo => _applied == 1;

@@ -278,6 +278,9 @@ namespace EchoProtocol.Networking
                 grip = new Vector3(-.04f, .54f, 0f); // middle of the narrow bone
             }
             var hand = anchor.position + owner.forward * .08f;
+            var character = owner.GetComponentInChildren<PlayerCharacterPresenter>();
+            if (presentation && character != null && character.UsesHumanoidGrip)
+                hand = character.RightPalmContact(anchor.position);
             position = hand - rotation * grip;
         }
         public bool Act(PlayerRef player, Transform owner, int entity, int furnace)

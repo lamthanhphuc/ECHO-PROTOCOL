@@ -77,6 +77,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
     }
 
     private int CurrentVisualToolId => _currentItem == null ? 0 :
+        IsItem(_currentItem, "core_stabilizer", "stabilizer") ? LobbyPlayerState.CoreStabilizerToolId :
         IsItem(_currentItem, "noise", "beacon") ? 2 :
         IsItem(_currentItem, "first_aid", "first aid") ? 3 :
         IsItem(_currentItem, "scan", "fieldscanner", "scanner") ? 1 : 0;
@@ -100,7 +101,8 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         if (_currentVisual == null) return;
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         var visual = _currentVisual.transform;
-        visual.localScale = _heldVisualBaseScale * (character?.ToolHeldScale(CurrentVisualToolId) ?? 1f);
+        visual.localScale = _heldVisualBaseScale * (_currentItem?.ItemType == InventoryItemType.EnergyCore
+            ? character?.TwoHandHeldScale ?? 1f : character?.ToolHeldScale(CurrentVisualToolId) ?? 1f);
         visual.localPosition = _heldVisualBasePosition + (visual.parent != null
             ? visual.parent.InverseTransformVector(character?.ToolHeldOffset(CurrentVisualToolId) ?? Vector3.zero) : Vector3.zero);
     }

@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -157,7 +157,8 @@ public class PlayerAnimatorDriver : MonoBehaviour
         animator.SetBool(IsMovingHash, isMoving);
         animator.SetBool(IsSprintingHash, isSprinting);
         animator.SetBool(IsCrouchingHash, isCrouching);
-        animator.SetBool(IsCarryingHash, useCarryPose);
+        bool useCarryAnimation = useCarryPose && GetComponentInParent<PlayerCharacterPresenter>()?.IsMercenary != true;
+        animator.SetBool(IsCarryingHash, useCarryAnimation);
         animator.SetBool(IsPushingHash, isPushing);
         animator.SetBool(IsDownedHash, isDowned);
         SetDownedIdlePoseHold(isDowned && !isMoving && !IsReviving);

@@ -120,7 +120,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         }
 
         ApplyArmPosingInLateUpdate();
-        CorrectFootRoll();
+        // Mercenary uses its clip-authored foot axes in both lobby and gameplay.
+        if (GetComponentInParent<PlayerCharacterPresenter>()?.IsMercenary != true)
+            CorrectFootRoll();
     }
 
     private void OnDisable() => GetComponentInParent<PlayerCharacterPresenter>()?.RestoreFuelCellFingerPose();
@@ -199,7 +201,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         if (layerIndex != 0 || animator == null || !animator.isHuman
             || animator.avatar == null || !animator.avatar.isValid) return;
         if (_headCharacter == null) _headCharacter = GetComponentInParent<PlayerCharacterPresenter>();
-        bool follow = !IsLobbyPresentation && _headCharacter != null && _headCharacter.IsJammo
+        bool follow = !IsLobbyPresentation && _headCharacter != null
+            && (_headCharacter.IsJammo || _headCharacter.UsesHumanoidGrip)
             && !IsDowned() && !IsReviving() && !IsPushing();
         _gameplayHeadWeight = Mathf.MoveTowards(_gameplayHeadWeight, follow ? 0.85f : 0f, Time.deltaTime / 0.12f);
         if (IsLobbyPresentation) _gameplayHeadWeight = 0f;
@@ -281,7 +284,14 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 leftHandPos  = chestOrigin + aimForward * (carryForwardOffset + (jammo ? jammoGripForwardClearance : 0f)) - aimRight * (carryLateralOffset + (jammo ? jammoCarryLateralClearance : 0f) + twoHandSpread) + aimUp * (carryVerticalOffset + (jammo ? jammoGripHeightOffset : 0f));
 
             float humanoidCarryDrop = isHoldingCoreStabilizer && !isCarryingCore ? 0.19f : 0.24f;
-            if (humanoidGrip)
+            bool mercenaryCarry = character != null && character.IsMercenary;
+            if (mercenaryCarry)
+            {
+                humanoidCarryDrop = 0f;
+                rightHandPos.y = chestOrigin.y + 0.21f + aimForward.y * 0.32f;
+                leftHandPos.y = chestOrigin.y + 0.21f + aimForward.y * 0.32f;
+            }
+            else if (humanoidGrip)
             {
                 rightHandPos -= aimUp * humanoidCarryDrop;
                 leftHandPos -= aimUp * humanoidCarryDrop;
@@ -294,16 +304,16 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
             Vector3 rightArmRoot = rightUpperArm != null ? rightUpperArm.position : chestOrigin;
             Vector3 leftArmRoot  = leftUpperArm  != null ? leftUpperArm.position  : chestOrigin;
-            Vector3 rightElbowPole = rightArmRoot + aimRight * rightElbowPoleOffset.x + aimUp * rightElbowPoleOffset.y - aimForward * Mathf.Abs(rightElbowPoleOffset.z);
-            Vector3 leftElbowPole  = leftArmRoot  + aimRight * leftElbowPoleOffset.x  + aimUp * leftElbowPoleOffset.y  - aimForward * Mathf.Abs(leftElbowPoleOffset.z);
+            Vector3 rightElbowPole = rightArmRoot + aimRight * (mercenaryCarry ? 0.05f : rightElbowPoleOffset.x) + aimUp * rightElbowPoleOffset.y - aimForward * Mathf.Abs(rightElbowPoleOffset.z);
+            Vector3 leftElbowPole  = leftArmRoot  + aimRight * (mercenaryCarry ? -0.05f : leftElbowPoleOffset.x)  + aimUp * leftElbowPoleOffset.y  - aimForward * Mathf.Abs(leftElbowPoleOffset.z);
 
-            float twoHandIKWeight = isHoldingCoreStabilizer ? 1f : carryIKWeight;
+            float twoHandIKWeight = mercenaryCarry || isHoldingCoreStabilizer ? 1f : carryIKWeight;
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, rightHandPos, rightElbowPole, twoHandIKWeight);
             SolveTwoBoneIK(leftUpperArm,  leftForeArm,  leftHandBone,  leftHandPos,  leftElbowPole,  twoHandIKWeight);
 
             if (humanoidGrip) character.ApplyCarryGrip(rightHandBone, false, aimForward, aimUp); else character?.ApplyJammoGrip(rightHandBone, false, aimForward, aimUp);
             if (humanoidGrip) character.ApplyCarryGrip(leftHandBone, true, aimForward, aimUp); else character?.ApplyJammoGrip(leftHandBone, true, aimForward, aimUp);
-            UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos);
+            UpdateCoreAnchorPose(aimForward, aimUp, aimRight, rightHandBone, leftHandBone, rightHandPos, leftHandPos, mercenaryCarry);
             return;
         }
 
@@ -599,7 +609,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         Transform rightHandBone,
         Transform leftHandBone,
         Vector3 rightHandTarget,
-        Vector3 leftHandTarget)
+        Vector3 leftHandTarget, bool usePalmContact)
     {
         if (_heldItemAnchor == null)
         {
@@ -614,10 +624,17 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
 
         Vector3 rHand = rightHandBone != null ? rightHandBone.position : rightHandTarget;
         Vector3 lHand = leftHandBone != null ? leftHandBone.position : leftHandTarget;
+        if (usePalmContact)
+        {
+            var rightKnuckle = animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
+            var leftKnuckle = animator.GetBoneTransform(HumanBodyBones.LeftMiddleProximal);
+            if (rightKnuckle != null) rHand = Vector3.Lerp(rHand, rightKnuckle.position, 0.65f);
+            if (leftKnuckle != null) lHand = Vector3.Lerp(lHand, leftKnuckle.position, 0.65f);
+        }
         Vector3 handsMid = (rHand + lHand) * 0.5f;
 
         Vector3 corePos = handsMid
-            + aimForward * coreHandOffset.z
+            + aimForward * (usePalmContact ? coreHandOffset.z * 0.4f : coreHandOffset.z)
             + aimUp * coreHandOffset.y
             + aimRight * coreHandOffset.x;
 
