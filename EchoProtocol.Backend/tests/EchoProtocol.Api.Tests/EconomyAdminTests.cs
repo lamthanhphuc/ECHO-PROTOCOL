@@ -34,4 +34,23 @@ public sealed partial class ScenarioServiceTests
         Assert.Equal(ErrorCodes.Conflict, (await service.ReviewAsync(approver, stale.Id, new(true, "Review test price"), default)).ErrorCode);
         Assert.Equal(110, await f.Db.ShopItems.AsNoTracking().Select(x => x.Price).SingleAsync());
     }
+    [Fact]
+    public async Task EconomyPrice_AppliesImmediatelyAndRecordsTheChange()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var item = new ShopItem { ItemId = Guid.NewGuid(), ItemName = "Test", Category = ShopItemCategories.Character,
+            Price = 100, CreatedAtUtc = Now.AddMinutes(-1), UpdatedAtUtc = Now.AddMinutes(-1) };
+        f.Db.ShopItems.Add(item);
+        await f.Db.SaveChangesAsync();
+        var service = new EconomyAdminService(f.Db, new ConfigurationBuilder().Build(), new FixedClock(Now));
+
+        Assert.True((await service.ApplyPriceAsync(f.HostId, new(item.ItemId, 100, 125, "Cân chỉnh bảng giá"), default)).IsSuccess);
+        Assert.Equal(ErrorCodes.Conflict, (await service.ApplyPriceAsync(f.HostId, new(item.ItemId, 100, 150, "Cân chỉnh bảng giá"), default)).ErrorCode);
+        Assert.Equal(125, await f.Db.ShopItems.AsNoTracking().Select(x => x.Price).SingleAsync());
+        var change = await f.Db.Set<ShopPriceProposal>().AsNoTracking().SingleAsync();
+        Assert.Equal(100, change.PreviousPrice);
+        Assert.Equal(125, change.ProposedPrice);
+        Assert.Equal(f.HostId, change.ReviewedByUserId);
+        Assert.Equal("APPROVED", change.Status);
+    }
 }

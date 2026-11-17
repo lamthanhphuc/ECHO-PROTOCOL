@@ -56,7 +56,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(proposalId ? `/api/bff/admin/economy/prices/${proposalId}/review` : "/api/bff/admin/economy/prices", {
+      const response = await fetch(proposalId ? `/api/bff/admin/economy/prices/${proposalId}/review` : "/api/bff/admin/economy/prices/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(proposalId ? { approve, reason } : { itemId, expectedPrice: item?.price, price: Number(fields.get("price")), reason }),
       });
@@ -64,7 +64,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
       if (!response.ok || !body.success) throw new Error(body.message || "Không lưu được thay đổi.");
       form.reset();
       if (!proposalId) selectItem("");
-      setMessage(proposalId ? "Đã ghi nhận quyết định duyệt." : "Đã gửi đề xuất giá.");
+      setMessage(proposalId ? "Đã ghi nhận quyết định duyệt." : "Đã lưu và áp dụng giá mới.");
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Không kết nối được máy chủ.");
@@ -80,7 +80,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
       <p className="muted mt-1 text-sm">Thắng/thua, tư cách nhận thưởng, điều kiện mở khóa và trọng số đóng góp được quản lý bởi nghiệp vụ game.</p>
     </Panel>
     <Panel>
-      <h2 className="mb-3 font-semibold">Đề xuất giá shop</h2>
+      <h2 className="mb-3 font-semibold">Cập nhật giá Shop</h2>
       <form onSubmit={(event) => submit(event)} className="grid gap-3 sm:grid-cols-2">
         <label className="admin-field">Loại mặt hàng<select className="input" required disabled={busy} value={category} onChange={(e) => {
           setCategory(e.target.value);
@@ -103,7 +103,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
           value={proposalReason} disabled={!item || busy} onChange={(e) => setProposalReason(e.target.value)} /></label>
         <div>
           {item && <p className="muted mb-2 text-sm">{item.itemName} · {item.price} xu → {price === "" ? "Chưa nhập giá mới" : `${price} xu`}</p>}
-          <button className="button" disabled={busy || !item || price === "" || Number(price) === item.price}>Gửi đề xuất</button>
+          <button className="button" disabled={busy || !item || price === "" || Number(price) === item.price}>Lưu và áp dụng</button>
         </div>
       </form>
     </Panel>

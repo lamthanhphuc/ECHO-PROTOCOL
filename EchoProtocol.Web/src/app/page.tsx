@@ -59,7 +59,7 @@ export default function Home() {
             <a href="#operators">Nhân vật</a>
             <a href="#gallery">Trưng bày</a>
           </nav>
-          <Link className={styles.portal} href="/login">Đăng nhập</Link>
+          <div className="flex items-center justify-end gap-3"><Link href="/legal" aria-label="18+ · Xem chính sách" className="rounded-full border px-2 py-1 text-xs font-semibold">18+</Link><Link className={styles.portal} href="/login">Đăng nhập</Link></div>
         </div>
       </header>
 

@@ -48,6 +48,27 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
         return ServiceResult<object>.Success(proposal);
     }
 
+    public async Task<ServiceResult<object>> ApplyPriceAsync(Guid admin, ProposeShopPrice request, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        var audit = await ProposeAsync(admin, request, ct);
+        if (!audit.IsSuccess) return audit;
+        var change = (ShopPriceProposal)audit.Data!;
+        var now = clock.GetUtcNow().UtcDateTime;
+        var count = await db.ShopItems.Where(item => item.ItemId == change.ItemId &&
+            item.Price == change.PreviousPrice && item.UpdatedAtUtc == change.ItemUpdatedAtUtc)
+            .ExecuteUpdateAsync(update => update.SetProperty(item => item.Price, change.ProposedPrice)
+                .SetProperty(item => item.UpdatedAtUtc, now), ct);
+        if (count != 1) return Fail("Giá hiện hành đã thay đổi. Hãy tải lại bảng giá.");
+        change.Status = "APPROVED";
+        change.ReviewedByUserId = admin;
+        change.ReviewedAtUtc = now;
+        change.ReviewReason = "Áp dụng trực tiếp bởi quản trị viên";
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return audit;
+    }
+
     public async Task<ServiceResult<object>> ReviewAsync(Guid admin, Guid id, ReviewShopPrice request, CancellationToken ct)
     {
         if (!CanReview(admin)) return Fail("Tài khoản thiếu quyền duyệt giá.", "FORBIDDEN");

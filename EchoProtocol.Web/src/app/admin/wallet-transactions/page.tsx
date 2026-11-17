@@ -6,7 +6,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { adminApi } from "@/lib/api/server-api";
 import { statusLabel } from "@/components/ui/status-badge";
 import type { SearchParams } from "@/lib/types/common";
-import { formatAdminDate as formatDate, formatNumber, param, queryString } from "@/lib/utils/format";
+import { formatAdminDate as formatDate, formatNumber, param, paymentProductLabel, queryString } from "@/lib/utils/format";
 
 const types = ["MATCH_REWARD", "PURCHASE", "PAYMENT_FULFILLMENT", "ADMIN_GRANT"];
 
@@ -27,7 +27,14 @@ export default async function WalletTransactionsPage({ searchParams }: { searchP
       <button className="button justify-self-start md:col-span-2 2xl:col-span-3" type="submit">Áp dụng bộ lọc</button>
     </form></Panel>
     {result.items.length === 0 ? <EmptyState title="Không có giao dịch phù hợp" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Giao dịch</th><th>Người dùng</th><th>Loại</th><th>Thay đổi</th><th>Số dư</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((item) => <tr key={item.transactionId}><td><CopyReference label={item.transactionId.slice(0, 8) + "…"} value={item.transactionId} /><p className="muted max-w-xs text-xs">{item.description}</p></td><td><Link className="admin-link" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td>{statusLabel(item.type)}<p className="code muted text-xs">Mã {item.reference.slice(0, 8)}…</p></td><td className={item.amount >= 0 ? "text-emerald-300" : "text-rose-300"}>{item.amount >= 0 ? "+" : ""}{formatNumber(item.amount)}</td><td>{formatNumber(item.balanceBefore)} → {formatNumber(item.balanceAfter)}</td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
+      {result.items.map((item) => <tr key={item.transactionId}><td><p>{item.type === "PURCHASE" ? (item.description?.startsWith("Mua ") ? item.description : "Mua vật phẩm trong Shop") : item.type === "MATCH_REWARD" && item.description ? `Thưởng trận · ${item.description}`
+          : item.type === "PAYMENT_FULFILLMENT" && item.description ? `Nạp tín dụng · ${paymentProductLabel(item.description)}`
+          : statusLabel(item.type)}</p>
+        <details className="muted text-xs"><summary>Chi tiết giao dịch</summary>
+          <CopyReference label="Sao chép mã giao dịch" value={item.transactionId} />
+          <CopyReference label="Sao chép mã tham chiếu" value={item.reference} />
+          {item.type === "ADMIN_GRANT" && <p>{item.description}</p>}
+        </details></td><td><Link className="admin-link" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td>{statusLabel(item.type)}</td><td className={item.amount >= 0 ? "text-emerald-300" : "text-rose-300"}>{item.amount >= 0 ? "+" : ""}{formatNumber(item.amount)}</td><td>{formatNumber(item.balanceBefore)} → {formatNumber(item.balanceAfter)}</td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/wallet-transactions" params={pageParams} />
   </>;

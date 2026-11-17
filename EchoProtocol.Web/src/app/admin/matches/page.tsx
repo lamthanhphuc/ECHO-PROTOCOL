@@ -38,13 +38,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
       <button className="button justify-self-start md:col-span-2 xl:col-span-3" type="submit">Tra cứu</button>
     </form></Panel>
     {invalid ? <EmptyState title="Mã tra cứu không hợp lệ" /> : (showRooms ? rooms.length === 0 && matches.length === 0 : matches.length === 0) ? <EmptyState title="Không có phòng hoặc trận đấu phù hợp" /> :
-      <div className="table-wrap rounded-lg"><table className="min-w-[1500px] whitespace-nowrap"><thead><tr><th>Mã trận</th><th>Chủ phòng</th><th>Bản đồ</th><th>Độ khó</th><th>Người chơi</th><th>Trạng thái</th><th>Kết quả trận</th><th>Bắt đầu / tạo lúc</th><th>Kết thúc / đóng lúc</th></tr></thead><tbody>
+      <div className="table-wrap rounded-lg"><table className="min-w-[1500px] whitespace-nowrap"><thead><tr><th>Phòng / trận đấu</th><th>Chủ phòng</th><th>Bản đồ</th><th>Độ khó</th><th>Người chơi</th><th>Trạng thái</th><th>Kết quả trận</th><th>Bắt đầu / tạo lúc</th><th>Kết thúc / đóng lúc</th></tr></thead><tbody>
         {showRooms && rooms.map((room) => {
           const current = result?.items.find((item) => item.matchId === room.currentMatchId);
           return <tr key={room.roomInstanceId}>
-            <td>{room.currentMatchId
-              ? <Link className="admin-link code font-semibold" href={`/admin/rooms/${room.roomInstanceId}`} title={`Mở phòng của trận ${room.currentMatchId}`}>{room.currentMatchId.slice(0, 8)}…</Link>
-              : <span className="muted">Chưa có trận</span>}</td>
+            <td><Link className="admin-link font-semibold" href={`/admin/rooms/${room.roomInstanceId}`}>{room.fusionSessionName}</Link>
+              {room.currentMatchId && <p><Link className="admin-link text-xs" href={`/admin/matches/${room.currentMatchId}`}>Xem trận</Link></p>}</td>
             <td><Link className="admin-link" href={`/admin/users/${room.hostUserId}`}>{current?.hostUsername || room.hostUserId.slice(0, 8)}</Link></td>
             <td>{current ? mapLabel(current.mapId) : "—"}</td><td>{current ? difficultyLabel(current.difficulty) : "—"}</td>
             <td>{current ? current.playerCount || current.connectedCount : "—"}</td>
@@ -54,9 +53,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
           </tr>;
         })}
         {matches.map((item) => <tr key={item.matchId}>
-          <td>{item.roomSessionId || roomByMatchId.has(item.matchId)
-            ? <Link className="code admin-link font-semibold" href={`/admin/rooms/${item.roomSessionId || roomByMatchId.get(item.matchId)}`} title={`Mở phòng của trận ${item.matchId}`}>{item.matchId.slice(0, 8)}…</Link>
-            : <span className="code" title="Trận cũ chưa liên kết phiên phòng">{item.matchId.slice(0, 8)}…</span>}
+          <td><Link className="admin-link font-semibold" href={`/admin/matches/${item.matchId}`}>{item.fusionSessionName || `Trận tại ${mapLabel(item.mapId)}`}</Link>
+            {(item.roomSessionId || roomByMatchId.has(item.matchId)) && <p><Link className="admin-link text-xs" href={`/admin/rooms/${item.roomSessionId || roomByMatchId.get(item.matchId)}`}>Xem phòng</Link></p>}
             {item.isFlagged && <p className="mt-1 text-xs text-amber-300">Cần kiểm tra</p>}</td>
           <td><Link className="admin-link" href={`/admin/users/${item.hostUserId}`}>{item.hostUsername || item.hostUserId.slice(0, 8)}</Link></td>
           <td>{mapLabel(item.mapId)}</td><td>{difficultyLabel(item.difficulty)}</td>

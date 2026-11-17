@@ -35,7 +35,8 @@ export function PortalShell({ session, items, children, mode }: {
       <header className={admin ? "admin-topbar flex min-h-16 items-center justify-between gap-4 border-b border-[var(--line)] px-4 md:px-7" : "panel sticky top-0 z-20 flex min-h-20 items-center justify-between rounded-none border-x-0 border-t-0 px-4 pt-4 md:px-7"}>
         <div className={admin ? "lg:hidden" : "md:hidden"}><Brand mode={mode} compact /></div>
         {admin && <div className="hidden min-w-0 lg:block"><p className="text-xs text-[var(--muted)]">Quản trị / {currentItem?.group ?? "Vận hành"}</p><p className="truncate text-sm font-semibold text-white">{currentItem?.label ?? "Tổng quan"}</p></div>}
-        <div className="ml-auto text-right">
+        {!admin && <div className="ml-auto"><Link href="/legal" aria-label="18+ · Xem chính sách" className="rounded-full border px-2 py-1 text-xs font-semibold">18+</Link></div>}
+        <div className={admin ? "ml-auto text-right" : "text-right"}>
           <p className="text-sm text-white">{session.username}</p>
           <p className="text-xs text-[var(--muted)]">{statusLabel(session.role)}</p>
         </div>

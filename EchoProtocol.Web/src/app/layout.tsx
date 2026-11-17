@@ -9,8 +9,5 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="vi"><body>
     <div className="site-content">{children}</div>
-    <footer style={{ textAlign: "center", padding: 20, fontSize: 14 }}>
-      <a href="/legal">Chính sách · Dành cho người từ 18 tuổi</a>
-    </footer>
   </body></html>;
 }

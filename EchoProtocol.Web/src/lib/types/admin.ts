@@ -2,6 +2,8 @@
 import type { PaymentStatus } from "./payment";
 
 export interface AdminUser {
+  isConnectedToSession?: boolean;
+  lastSessionActivityAtUtc?: string | null;
   userId: string;
   username: string;
   displayName: string | null;
@@ -126,6 +128,7 @@ export type AdminPurchasesPage = PagedResponse<AdminPurchase>;
 export interface AdminMatch {
   matchId: string;
   roomSessionId: string | null;
+  fusionSessionName?: string | null;
   hostUserId: string;
   hostUsername: string;
   mapId: string | null;

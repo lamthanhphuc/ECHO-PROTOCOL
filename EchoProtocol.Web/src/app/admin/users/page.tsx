@@ -15,7 +15,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const params: Record<string, string> = search ? { search } : {};
 
   return <>
-    <PageHeader title="Người dùng" description="Tìm tài khoản theo tên hoặc email." />
+    <PageHeader title="Người dùng" description="Tìm tài khoản theo tên hoặc email. Trạng thái kết nối dựa trên phiên game được ghi nhận." />
     <Panel className="mb-5">
       <h2 className="admin-section-title mb-3">Tìm tài khoản</h2>
       <form className="flex flex-col gap-3 sm:flex-row" action="/admin/users">
@@ -24,8 +24,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         <button className="button" type="submit">Tìm kiếm</button>
       </form>
     </Panel>
-    {result.items.length === 0 ? <EmptyState title="Không tìm thấy người dùng" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Số dư</th><th>Trận / Thắng</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((user) => <tr key={user.userId}><td><Link className="admin-link" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
+    {result.items.length === 0 ? <EmptyState title="Không tìm thấy người dùng" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Tài khoản</th><th>Kết nối phiên game</th><th>Hoạt động gần nhất</th><th>Số dư</th><th>Trận / Thắng</th><th>Ngày tạo</th></tr></thead><tbody>
+      {result.items.map((user) => <tr key={user.userId}><td><Link className="admin-link" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{user.isConnectedToSession ? "Đang kết nối" : user.lastSessionActivityAtUtc ? "Không ở trong phiên" : "Chưa ghi nhận"}</td><td>{formatDate(user.lastSessionActivityAtUtc)}</td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/users" params={params} />
   </>;

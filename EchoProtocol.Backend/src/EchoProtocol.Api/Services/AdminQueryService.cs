@@ -38,9 +38,19 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
                  user.PlayerProfile.DisplayName.ToLower().Contains(normalized)));
         }
 
+        var now = DateTime.UtcNow;
         var projected = users.Select(user => new AdminUserResponse
         {
             UserId = user.Id,
+            IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == user.Id
+                && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
+                && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId
+                    && match.Status != MatchAuthorityStatus.Ended && match.LeaseExpiresAtUtc > now
+                    && (match.RoomSessionId == null || db.RoomSessions.Any(room => room.Id == match.RoomSessionId
+                        && room.CurrentMatchId == match.MatchId && room.MatchPublished
+                        && room.ClosedAtUtc == null && room.ActivatedAtUtc != null && room.LeaseExpiresAtUtc > now)))),
+            LastSessionActivityAtUtc = db.MatchPlayerBindings.Where(player => player.UserId == user.Id)
+                .Max(player => (DateTime?)player.LastSeenAtUtc),
             Username = user.Username,
             DisplayName = user.PlayerProfile == null ? null : user.PlayerProfile.DisplayName,
             Email = user.Email,
@@ -60,11 +70,21 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
         var user = await db.Users.AsNoTracking()
             .Where(item => item.Id == userId)
             .Select(item => new AdminUserResponse
             {
                 UserId = item.Id,
+                IsConnectedToSession = db.MatchPlayerBindings.Any(player => player.UserId == item.Id
+                    && player.DisconnectedAtUtc == null && player.KickedAtUtc == null
+                    && db.MatchAuthorityBindings.Any(match => match.MatchId == player.MatchId
+                        && match.Status != MatchAuthorityStatus.Ended && match.LeaseExpiresAtUtc > now
+                        && (match.RoomSessionId == null || db.RoomSessions.Any(room => room.Id == match.RoomSessionId
+                            && room.CurrentMatchId == match.MatchId && room.MatchPublished
+                            && room.ClosedAtUtc == null && room.ActivatedAtUtc != null && room.LeaseExpiresAtUtc > now)))),
+                LastSessionActivityAtUtc = db.MatchPlayerBindings.Where(player => player.UserId == item.Id)
+                    .Max(player => (DateTime?)player.LastSeenAtUtc),
                 Username = item.Username,
                 DisplayName = item.PlayerProfile == null ? null : item.PlayerProfile.DisplayName,
                 Email = item.Email,
@@ -417,7 +437,16 @@ public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
             BalanceBefore = item.BalanceBefore,
             BalanceAfter = item.BalanceAfter,
             Reference = item.ReferenceId,
-            Description = item.Description,
+            Description = item.Type == WalletTransactionType.PURCHASE
+                ? db.PurchaseTransactions.Where(purchase => purchase.PurchaseId == item.ReferenceId)
+                    .Select(purchase => "Mua " + purchase.ShopItem.ItemName).FirstOrDefault() ?? "Mua vật phẩm trong Shop"
+                : item.Type == WalletTransactionType.MATCH_REWARD
+                    ? db.MatchAuthorityBindings.Where(match => match.MatchId == item.ReferenceId)
+                        .Select(match => match.FusionSessionName).FirstOrDefault() ?? ""
+                    : item.Type == WalletTransactionType.PAYMENT_FULFILLMENT
+                        ? db.PaymentOrders.Where(order => order.PaymentOrderId == item.ReferenceId)
+                            .Select(order => order.ProductReference).FirstOrDefault() ?? ""
+                        : item.Description,
             CreatedAtUtc = item.CreatedAtUtc
         });
 

@@ -59,6 +59,7 @@ public sealed class AdminMatchResponse
 {
     public Guid MatchId { get; init; }
     public Guid? RoomSessionId { get; init; }
+    public string? FusionSessionName { get; init; }
     public Guid HostUserId { get; init; }
     public string HostUsername { get; init; } = string.Empty;
     public string? MapId { get; init; }
@@ -127,6 +128,8 @@ public sealed class AdminPagedResponse<T>
 
 public sealed class AdminUserResponse
 {
+    public bool IsConnectedToSession { get; init; }
+    public DateTime? LastSessionActivityAtUtc { get; init; }
     public Guid UserId { get; init; }
     public string Username { get; init; } = string.Empty;
     public string? DisplayName { get; init; }
