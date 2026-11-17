@@ -128,6 +128,7 @@ public sealed class AdminPagedResponse<T>
 
 public sealed class AdminUserResponse
 {
+    public bool HasRecentGameHeartbeat { get; init; }
     public DateTime? LastGameHeartbeatAtUtc { get; init; }
     public bool IsConnectedToSession { get; init; }
     public DateTime? LastSessionActivityAtUtc { get; init; }

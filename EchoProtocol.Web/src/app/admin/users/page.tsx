@@ -11,7 +11,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const raw = await searchParams;
   const page = Math.max(1, Number(param(raw.page)) || 1);
   const search = param(raw.search);
-  const onlineCutoff = Date.now() - 90_000;
   const result = await adminApi.users(queryString({ page, pageSize: 20, search }));
   const params: Record<string, string> = search ? { search } : {};
 
@@ -26,7 +25,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       </form>
     </Panel>
     {result.items.length === 0 ? <EmptyState title="Không tìm thấy người dùng" /> : <div className="table-wrap rounded-lg"><table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Tài khoản</th><th>Kết nối phiên game</th><th>Hoạt động gần nhất</th><th>Số dư</th><th>Trận / Thắng</th><th>Ngày tạo</th></tr></thead><tbody>
-      {result.items.map((user) => <tr key={user.userId}><td><Link className="admin-link" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{user.isConnectedToSession || Date.parse(user.lastGameHeartbeatAtUtc ?? "") > onlineCutoff ? "Online" : user.lastGameHeartbeatAtUtc ? "Offline" : "Chưa ghi nhận"}</td><td>{formatDate([user.lastGameHeartbeatAtUtc, user.lastSessionActivityAtUtc].filter(Boolean).sort().at(-1))}</td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
+      {result.items.map((user) => <tr key={user.userId}><td><Link className="admin-link" href={`/admin/users/${user.userId}`}>{user.displayName ?? user.username}</Link></td><td>{statusLabel(user.role)}</td><td><StatusBadge status={user.status} /></td><td>{user.isConnectedToSession || user.hasRecentGameHeartbeat ? "Online" : user.lastGameHeartbeatAtUtc ? "Offline" : "Chưa ghi nhận"}</td><td>{formatDate([user.lastGameHeartbeatAtUtc, user.lastSessionActivityAtUtc].filter(Boolean).sort().at(-1))}</td><td>{formatNumber(user.walletBalance)}</td><td>{formatNumber(user.totalMatches)} / {formatNumber(user.totalWins)}</td><td>{formatDate(user.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/users" params={params} />
   </>;

@@ -2,6 +2,7 @@
 import type { PaymentStatus } from "./payment";
 
 export interface AdminUser {
+  hasRecentGameHeartbeat?: boolean;
   lastGameHeartbeatAtUtc?: string | null;
   isConnectedToSession?: boolean;
   lastSessionActivityAtUtc?: string | null;
