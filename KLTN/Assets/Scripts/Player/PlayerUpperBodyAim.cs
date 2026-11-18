@@ -227,7 +227,17 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (!TryGetAim(out Vector3 aimOrigin, out Vector3 aimForward, out Vector3 aimUp))
+        var heldHuntKind = EchoProtocol.Networking.AlienHuntMission.GetHeldKind(gameObject);
+        bool carryingHuntItem = heldHuntKind.HasValue;
+        Vector3 aimForward;
+        Vector3 aimUp;
+        if (carryingHuntItem)
+        {
+            var root = playerRoot != null ? playerRoot : transform;
+            aimForward = Quaternion.Euler(0f, root.eulerAngles.y, 0f) * Vector3.forward;
+            aimUp = Vector3.up;
+        }
+        else if (!TryGetAim(out _, out aimForward, out aimUp))
         {
             return;
         }
@@ -276,8 +286,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
         bool isCarryingCore = IsCarryingCore();
-        bool isHoldingCoreStabilizer = !EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject) && IsHoldingCoreStabilizer();
-        if (isCarryingCore || isHoldingCoreStabilizer)
+        bool isHoldingCoreStabilizer = !carryingHuntItem && IsHoldingCoreStabilizer();
+        if (!carryingHuntItem && (isCarryingCore || isHoldingCoreStabilizer))
         {
             float twoHandSpread = jammo && (isHoldingCoreStabilizer || isCarryingCore) ? 0.13f : 0f;
             Vector3 rightHandPos = chestOrigin + aimForward * (carryForwardOffset + (jammo ? jammoGripForwardClearance : 0f)) + aimRight * (carryLateralOffset + (jammo ? jammoCarryLateralClearance : 0f) + twoHandSpread) + aimUp * (carryVerticalOffset + (jammo ? jammoGripHeightOffset : 0f));
@@ -332,7 +342,7 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        if (IsHoldingTeamTool() || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))
+        if (IsHoldingTeamTool() || carryingHuntItem)
         {
             if (rightHandBone == null || rightUpperArm == null || rightForeArm == null)
             {
@@ -347,6 +357,13 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             float maxHandY = jammo || humanoidGrip ? chestOrigin.y + 0.55f : transform.position.y + 1.60f;
             float minHandY = jammo || humanoidGrip ? chestOrigin.y - 0.10f : transform.position.y + 1.05f;
             handTarget.y = Mathf.Clamp(handTarget.y, minHandY, maxHandY);
+            if (carryingHuntItem && humanoidGrip && !character.IsMercenary)
+                handTarget -= Vector3.up * (heldHuntKind switch
+                {
+                    EchoProtocol.Networking.HuntKind.Alien => 0.27f,
+                    EchoProtocol.Networking.HuntKind.Meat => 0.17f,
+                    _ => 0.07f
+                });
 
             Vector3 rightElbowPole = rightUpperArm.position + aimRight * 0.35f - aimUp * 0.25f - aimForward * 0.10f;
 

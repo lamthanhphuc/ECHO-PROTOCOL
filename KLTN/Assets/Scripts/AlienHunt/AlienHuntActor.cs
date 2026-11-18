@@ -272,20 +272,23 @@ namespace EchoProtocol.Networking
                 animator.transform.localPosition = onPan ? new Vector3(-.172f, 1.687f, .13873f) : _alienRigPosition;
                 animator.transform.localRotation = onPan ? Quaternion.Euler(-200f, -90f, 0f) : _alienRigRotation;
             }
+            bool mercenaryCarry = carried && AlienHuntMission.Instance.HasMercenaryCarrier(state.Carrier);
             if (_meatVisual && carried != _wasCarried)
             {
-                _meatVisual.localPosition = carried ? new Vector3(-.082f, .64f, .152f) : _meatGroundPosition;
+                _meatVisual.localPosition = carried
+                    ? mercenaryCarry ? new Vector3(-.086f, .607f, .154f) : new Vector3(-.082f, .64f, .152f)
+                    : _meatGroundPosition;
                 _meatVisual.localRotation = carried ? Quaternion.Euler(10.643f, -141.51f, -117.218f) : _meatGroundRotation;
-                _meatVisual.localScale = _meatGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
+                _meatVisual.localScale = mercenaryCarry ? Vector3.one * 576f : _meatGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
             }
             if (_jerrycanVisual && carried != _wasCarried)
             {
                 _jerrycanVisual.localPosition = carried
-                    ? AlienHuntMission.Instance.HasMercenaryCarrier(state.Carrier)
-                        ? new Vector3(.059f, .383f, .708f) : new Vector3(.055f, .368f, .647f)
+                    ? mercenaryCarry
+                        ? new Vector3(.039f, .41f, .687f) : new Vector3(.055f, .368f, .647f)
                     : _jerrycanGroundPosition;
                 _jerrycanVisual.localRotation = carried ? Quaternion.Euler(64.147f, 169.87f, -15.506f) : _jerrycanGroundRotation;
-                _jerrycanVisual.localScale = _jerrycanGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
+                _jerrycanVisual.localScale = mercenaryCarry ? Vector3.one * 1.6f : _jerrycanGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
             }
             _wasCarried = carried;
             for (int i = 0; i < _renderers.Length; i++)

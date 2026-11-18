@@ -45,11 +45,14 @@ namespace EchoProtocol.Networking
         public int LocalHeldIndex => Ready ? HeldIndex(LocalPlayer) : -1;
         public bool LocalPlacementRejected => Time.unscaledTime < _dropHintUntil;
 
-        public static bool IsCarrying(GameObject player)
+        public static bool IsCarrying(GameObject player) => GetHeldKind(player).HasValue;
+
+        public static HuntKind? GetHeldKind(GameObject player)
         {
-            var m = Instance; if (!m || !m.Ready || !player) return false;
+            var m = Instance; if (!m || !m.Ready || !player) return null;
             var obj = player.GetComponentInParent<NetworkObject>();
-            return m.HeldIndex(obj && obj.IsValid ? obj.InputAuthority : m.LocalPlayer) >= 0;
+            int held = m.HeldIndex(obj && obj.IsValid ? obj.InputAuthority : m.LocalPlayer);
+            return held >= 0 ? m.Actors[held].Kind : (HuntKind?)null;
         }
         public static string InteractKey => EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact);
         private float DifficultyScale => EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance
