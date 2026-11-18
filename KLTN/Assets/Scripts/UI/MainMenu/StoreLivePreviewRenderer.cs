@@ -230,14 +230,17 @@ namespace EchoProtocol.UI.MainMenu
             {
                 if (resourcePath == "Characters/PF_CursedPriestVisual" && !_priestPreviewGraph.IsValid())
                 {
-                    var clips = Resources.LoadAll<AnimationClip>("Characters/Sad Idle1");
-                    if (clips.Length > 0)
+                    var controller = Resources.Load<AnimatorOverrideController>("Characters/AOC_CursedPriestPlayer");
+                    var idleClip = controller != null
+                        ? System.Array.Find(controller.animationClips, clip => clip.name == "CursedPriestHappyIdle")
+                        : null;
+                    if (idleClip != null)
                     {
                         animator.enabled = true;
                         animator.applyRootMotion = false;
                         animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                         _priestPreviewGraph = UnityEngine.Playables.PlayableGraph.Create("Priest Shop Idle");
-                        var idle = UnityEngine.Animations.AnimationClipPlayable.Create(_priestPreviewGraph, clips[0]);
+                        var idle = UnityEngine.Animations.AnimationClipPlayable.Create(_priestPreviewGraph, idleClip);
                         var output = UnityEngine.Animations.AnimationPlayableOutput.Create(_priestPreviewGraph, "Idle", animator);
                         UnityEngine.Playables.PlayableOutputExtensions.SetSourcePlayable(output, idle);
                         _priestPreviewGraph.Play();

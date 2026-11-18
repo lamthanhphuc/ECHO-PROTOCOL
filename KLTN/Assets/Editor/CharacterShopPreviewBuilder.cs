@@ -132,9 +132,13 @@ namespace EchoProtocol.Editor
                     && animator.runtimeAnimatorController != null)
                 {
                     animator.applyRootMotion = false;
-                    var clips = Resources.LoadAll<AnimationClip>("Characters/Sad Idle1");
-                    if (clips.Length == 0) throw new InvalidOperationException("Missing Sad Idle 1.");
-                    clips[0].SampleAnimation(model, clips[0].length * 0.35f);
+                    var controller = Resources.Load<AnimatorOverrideController>("Characters/AOC_CursedPriestPlayer");
+                    var idle = controller != null
+                        ? Array.Find(controller.animationClips, clip => clip.name == "CursedPriestHappyIdle")
+                        : null;
+                    if (idle == null) throw new InvalidOperationException("Missing Cursed Priest Happy Idle.");
+                    animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                    idle.SampleAnimation(model, idle.length * 0.35f);
 
                 }
 
