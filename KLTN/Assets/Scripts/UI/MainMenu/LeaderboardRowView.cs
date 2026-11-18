@@ -48,7 +48,7 @@ namespace EchoProtocol.UI.MainMenu
             if (rankText != null)
             {
                 rankText.text = entry.rank.ToString("00");
-                rankText.color = accent;
+                rankText.color = IndustrialUiStyle.Text;
                 rankText.supportRichText = false;
             }
             if (avatarImage != null)
@@ -64,6 +64,7 @@ namespace EchoProtocol.UI.MainMenu
                     ? Math.Max(1, entry.players?.Length ?? 0).ToString()
                     : Initials(entry.displayName);
                 avatarInitialsText.supportRichText = false;
+                avatarInitialsText.color = IndustrialUiStyle.Text;
             }
             if (nameText != null)
             {
@@ -79,12 +80,13 @@ namespace EchoProtocol.UI.MainMenu
                 nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
                 nameText.verticalOverflow = VerticalWrapMode.Truncate;
                 nameText.supportRichText = false;
+                nameText.color = IndustrialUiStyle.Text;
             }
             if (durationText != null)
             {
                 durationText.text = LeaderboardPresentation.FormatDuration(
                     entry.durationCentiseconds);
-                durationText.color = accent;
+                durationText.color = IndustrialUiStyle.Text;
                 durationText.supportRichText = false;
             }
         }
@@ -139,7 +141,7 @@ namespace EchoProtocol.UI.MainMenu
                 TextAnchor.MiddleCenter, true);
             Stretch(initials.rectTransform, 0f, 0f);
             var name = NewText("Name", row, font, 15, TextAnchor.MiddleLeft, false);
-            name.color = Hex("DEE0D9");
+            name.color = IndustrialUiStyle.Text;
             name.rectTransform.anchorMin = new Vector2(0f, 0f);
             name.rectTransform.anchorMax = new Vector2(1f, 1f);
             name.rectTransform.offsetMin = new Vector2(93f, 0f);
@@ -187,7 +189,7 @@ namespace EchoProtocol.UI.MainMenu
             text.fontSize = size;
             text.alignment = alignment;
             text.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
-            text.color = Hex("A58255");
+            text.color = IndustrialUiStyle.Text;
             text.raycastTarget = false;
             text.supportRichText = false;
             return text;

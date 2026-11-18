@@ -769,6 +769,7 @@ namespace EchoProtocol.UI.MainMenu
   [DisallowMultipleComponent]
   public sealed class UtilityProfileOverlay : MonoBehaviour
   {
+    public bool IsOpen => _root != null && _root.gameObject.activeInHierarchy;
     private RectTransform _root;
     private RectTransform _panel;
     private Text _title;
@@ -894,7 +895,8 @@ namespace EchoProtocol.UI.MainMenu
       border.effectDistance = new Vector2(2f, -2f);
 
       Font headingFont = visuals != null && visuals.spectralFont != null ? visuals.spectralFont : bodyFont;
-      _title = Label("Title", 34, 20, 950, 44, 28, headingFont);
+      _title = Label("ScreenHeading", 300, 17, 680, 64, 36, headingFont);
+      UiTypographyTheme.ApplyScreenHeading(_title);
       Box("HeaderRule", 34, 93, 1196, 1, new Color(.42f,.23f,.20f,.8f));
       Box("ColumnRule", 329, 110, 1, 558, new Color(.4f,.36f,.3f,.5f));
       Label("ProfileHeading", 350, 105, 880, 32, 24, headingFont);
@@ -932,7 +934,7 @@ namespace EchoProtocol.UI.MainMenu
         _statValues[i].alignment = TextAnchor.MiddleCenter;
         _statLabels[i] = Label("StatCaption" + i, x + 10, 374, 200, 29, 14, bodyFont);
         _statLabels[i].alignment = TextAnchor.MiddleCenter;
-        _statLabels[i].color = new Color(.78f, .71f, .54f);
+        _statLabels[i].color = IndustrialUiStyle.Text;
       }
       var activityHeading = Label("ActivityHeading", 350, 451, 640, 33, 20, bodyFont);
       activityHeading.fontStyle = FontStyle.Bold;
@@ -978,6 +980,7 @@ namespace EchoProtocol.UI.MainMenu
       closeText.text = "×";
       closeText.alignment = TextAnchor.MiddleCenter;
       closeButton.onClick.AddListener(Close);
+      MenuViewportLayout.NormalizeChildren(_panel);
     }
 
     private void Decoration(string name, Sprite sprite, float x, float y, float width, float height, float rotation)
@@ -1018,8 +1021,7 @@ namespace EchoProtocol.UI.MainMenu
       var text = rect.gameObject.AddComponent<Text>();
       text.font = font;
       text.fontSize = size;
-      text.color = name.Contains("Heading") || name.Contains("Caption")
-        ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
+      text.color = name == "Status" ? IndustrialUiStyle.Muted : IndustrialUiStyle.Text;
       text.alignment = TextAnchor.MiddleLeft;
       text.raycastTarget = false;
       text.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -1043,8 +1045,7 @@ namespace EchoProtocol.UI.MainMenu
         safe.center.x / Screen.width, safe.center.y / Screen.height);
       float width = canvasRect.rect.width * safe.width / Screen.width;
       float height = canvasRect.rect.height * safe.height / Screen.height;
-      _panel.localScale = Vector3.one * Mathf.Clamp(Mathf.Min(
-        (width - 40f) / 1280f, (height - 40f) / 760f), 0.05f, 1.25f);
+      MenuViewportLayout.Fit(_panel, new Vector2(1280f, 760f), width, height);
       _screenSize = new Vector2Int(Screen.width, Screen.height);
       _safeArea = safe;
     }
@@ -1052,7 +1053,7 @@ namespace EchoProtocol.UI.MainMenu
     private void Render()
     {
       if (_title == null) return;
-      _title.text = "ECHO PROTOCOL";
+      _title.text = GameLanguage.Choose("HỒ SƠ", "PROFILE");
       Copy("ProfileHeading", "HỒ SƠ ĐIỀU TRA VIÊN", "OPERATOR PROFILE");
       Copy("ActivityHeading", "HOẠT ĐỘNG GẦN ĐÂY", "RECENT ACTIVITY");
       Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.ExperiencePoints:N0} XP",

@@ -31,7 +31,7 @@ namespace EchoProtocol.UI.MainMenu
         private static readonly Color Bronze = IndustrialUiStyle.Accent;
         private static readonly Color Blood = IndustrialUiStyle.Blood;
         private static readonly Color Pale = IndustrialUiStyle.Text;
-        private static readonly Color Muted = Hex("929792", 1f);
+        private static readonly Color Muted = IndustrialUiStyle.Muted;
 
         private Canvas _canvas;
         private Font _font;
@@ -321,12 +321,8 @@ namespace EchoProtocol.UI.MainMenu
             var topRule = NewRect("BloodRule", _panel);
             TopStretch(topRule, 0f, 3f, 0f, 0f);
             topRule.gameObject.AddComponent<Image>().color = Blood;
-            _heading = NewText("Heading", _panel, "LEADERBOARD", 36, Pale,
-                TextAnchor.MiddleCenter, FontStyle.Bold);
-            _heading.font = _font;
-            var titleShadow = _heading.gameObject.AddComponent<Shadow>();
-            titleShadow.effectColor = Hex("77211F", 0.65f);
-            titleShadow.effectDistance = new Vector2(2f, -2f);
+            _heading = NewText("ScreenHeading", _panel, "LEADERBOARD", 36, Pale, TextAnchor.MiddleCenter);
+            UiTypographyTheme.ApplyScreenHeading(_heading);
             var headingRect = _heading.rectTransform;
             headingRect.anchorMin = headingRect.anchorMax = new Vector2(0.5f, 1f);
             headingRect.pivot = new Vector2(0.5f, 1f);
@@ -432,17 +428,19 @@ namespace EchoProtocol.UI.MainMenu
             bottomRule.offsetMax = new Vector2(-28f, 63f);
             bottomRule.gameObject.AddComponent<Image>().color = Hex("674039", 0.75f);
 
-            _status = NewText("ArchiveStatus", _panel, "", 12, Muted,
-                TextAnchor.MiddleLeft);
-            var statusRect = _status.rectTransform;
-            statusRect.anchorMin = statusRect.anchorMax = new Vector2(0f, 0f);
-            statusRect.pivot = new Vector2(0f, 0f);
-            statusRect.anchoredPosition = new Vector2(28f, 20f);
-            statusRect.sizeDelta = new Vector2(500f, 28f);
+            var statusBacking = NewRect("ArchiveStatusBacking", _panel);
+            TopLeft(statusBacking, 850f, 194f, 430f, 42f);
+            var statusImage = statusBacking.gameObject.AddComponent<Image>();
+            statusImage.color = Hex("060809", 0.89f);
+            statusImage.raycastTarget = false;
+            _status = NewText("ArchiveStatus", statusBacking, "", 15, Pale,
+                TextAnchor.MiddleRight);
+            Stretch(_status.rectTransform, 8f, 0f, 8f, 0f);
+            statusBacking.gameObject.SetActive(false);
             _previousButton = NewButton("PreviousPage", _panel, "<", 18, 40f, 36f);
             BottomRight((RectTransform)_previousButton.transform, 158f, 17f, 40f, 36f);
             _previousButton.onClick.AddListener(() => ChangePage(-1));
-            _pageLabel = NewText("PageLabel", _panel, "01 / 01", 12, Bronze,
+            _pageLabel = NewText("PageLabel", _panel, "01 / 01", 12, Pale,
                 TextAnchor.MiddleCenter, FontStyle.Bold);
             BottomRight(_pageLabel.rectTransform, 77f, 20f, 75f, 30f);
             _nextButton = NewButton("NextPage", _panel, ">", 18, 40f, 36f);
@@ -471,6 +469,8 @@ namespace EchoProtocol.UI.MainMenu
             RefreshFilters();
             RefreshTabs();
             RefreshLanguage();
+            _panel.sizeDelta = new Vector2(PanelWidth, PanelHeight);
+            MenuViewportLayout.NormalizeChildren(_panel);
             UpdatePanelSize();
             _overlay.gameObject.SetActive(false);
         }
@@ -781,7 +781,7 @@ namespace EchoProtocol.UI.MainMenu
                     SetStatus(L("HỒ SƠ: TẢI THẤT BẠI", "ARCHIVE: LOAD FAILED"));
                     break;
                 default:
-                    SetStatus(recordCount + L(" THÀNH TÍCH", " RECORDS ON FILE"));
+                    SetStatus(string.Empty);
                     break;
             }
             RefreshPagination();
@@ -963,7 +963,9 @@ namespace EchoProtocol.UI.MainMenu
 
         private void SetStatus(string value)
         {
-            if (_status != null) _status.text = value;
+            if (_status == null) return;
+            _status.text = value;
+            _status.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(value));
         }
 
         private void UpdatePanelSize()
@@ -973,9 +975,8 @@ namespace EchoProtocol.UI.MainMenu
 
         public static float ComputePanelScale(float availableWidth, float availableHeight)
         {
-            return Mathf.Clamp(Mathf.Min(
-                (availableWidth - 40f) / PanelWidth,
-                (availableHeight - 40f) / PanelHeight), 0.05f, 1.25f);
+            return Mathf.Max(0.05f, Mathf.Min(
+                availableWidth / PanelWidth, availableHeight / PanelHeight));
         }
 
         public void ApplySafeArea(Rect safePixels, Vector2 screenPixels)
@@ -999,9 +1000,8 @@ namespace EchoProtocol.UI.MainMenu
                 * safePixels.width / screenWidth;
             float availableHeight = canvasRect.rect.height
                 * safePixels.height / screenHeight;
-            _fitScale = ComputePanelScale(availableWidth, availableHeight);
-            _panel.sizeDelta = new Vector2(PanelWidth, PanelHeight);
-            _panel.localScale = Vector3.one * _fitScale;
+            _fitScale = MenuViewportLayout.Fit(_panel, new Vector2(PanelWidth, PanelHeight),
+                availableWidth, availableHeight);
             _pageSize = _mode == LeaderboardMode.Team ? 9 : MaximumPageSize;
             if (_profileRect != null)
                 UtilityBarStyle.PositionAtSafeTopRight(

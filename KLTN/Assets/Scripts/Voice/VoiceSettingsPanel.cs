@@ -21,7 +21,8 @@ namespace EchoProtocol.Voice
     {
         private const string PrefabPath = "Voice/VoiceSettingsCanvas";
         private const string Body = "Overlay/Window/Body/";
-        private TMP_Text _settingsTitle, _voiceHeading, _mouseHeading, _controlsGuide;
+        private Text _settingsTitle;
+        private TMP_Text _voiceHeading, _mouseHeading, _controlsGuide;
         private const string Footer = "Overlay/Window/Footer/";
         private readonly PlayerInteractionControlLock _controlLock = new PlayerInteractionControlLock();
         private readonly System.Collections.Generic.Dictionary<string, Component> _components =
@@ -65,16 +66,21 @@ namespace EchoProtocol.Voice
             var window = _canvas.transform.Find("Overlay/Window");
             var subtitle = window.Find("Subtitle");
             if (subtitle != null) subtitle.gameObject.SetActive(false);
-            _settingsTitle = window.Find("Title")?.GetComponent<TMP_Text>();
+            var originalTitle = window.Find("Title");
+            if (originalTitle != null) originalTitle.gameObject.SetActive(false);
+            var settingsIcon = window.Find("SettingsIcon");
+            if (settingsIcon != null) settingsIcon.gameObject.SetActive(false);
+            var heading = SettingsMenuWidgets.Rect("ScreenHeading", window, 0, 15, 0, 42);
+            heading.anchorMin = heading.anchorMax = new Vector2(0.5f, 1f);
+            heading.pivot = new Vector2(0.5f, 1f);
+            heading.anchoredPosition = new Vector2(0f, -15f);
+            heading.sizeDelta = new Vector2(800f, 42f);
+            _settingsTitle = heading.gameObject.AddComponent<Text>();
+            UiTypographyTheme.ApplyScreenHeading(_settingsTitle);
+            _settingsTitle.fontSize = 48;
+            _settingsTitle.verticalOverflow = VerticalWrapMode.Overflow;
             _voiceHeading = window.Find("Body/Voice/Heading")?.GetComponent<TMP_Text>();
             _mouseHeading = window.Find("Body/Mouse/Heading")?.GetComponent<TMP_Text>();
-            if (_settingsTitle != null)
-            {
-                _settingsTitle.rectTransform.anchoredPosition = new Vector2(574, 0);
-                _settingsTitle.rectTransform.sizeDelta = new Vector2(620, 82);
-                _settingsTitle.alignment = TextAlignmentOptions.Left;
-                _settingsTitle.overflowMode = TextOverflowModes.Overflow;
-            }
             if (_voiceHeading != null) _voiceHeading.overflowMode = TextOverflowModes.Overflow;
             if (_mouseHeading != null) _mouseHeading.overflowMode = TextOverflowModes.Overflow;
             foreach (string path in new[]
@@ -127,10 +133,33 @@ namespace EchoProtocol.Voice
             BuildQuickSettings();
             Bind();
             IndustrialUiStyle.Controls(_canvas.transform);
+            foreach (var label in _canvas.GetComponentsInChildren<TMP_Text>(true))
+            {
+                string key = label.name;
+                bool hint = key == "Hint" || key == "Description" || key == "SaveHint"
+                    || key == "DeviceText" || key == "LevelText" || key == "Status"
+                    || key == "Saved" || key == "Message" || key == "ControlsGuide";
+                label.color = hint ? IndustrialUiStyle.Muted : IndustrialUiStyle.Text;
+            }
+            foreach (var slider in _canvas.GetComponentsInChildren<Slider>(true))
+                if (slider.fillRect != null && slider.fillRect.TryGetComponent<Graphic>(out var fill))
+                    fill.color = IndustrialUiStyle.Blood;
+            foreach (var toggle in _canvas.GetComponentsInChildren<Toggle>(true))
+                if (toggle.graphic is SettingsIconGraphic toggleGraphic)
+                    toggleGraphic.Configure(SettingsIcon.Pill, IndustrialUiStyle.Blood);
             var quit = Find<HorrorFrameGraphic>(Footer + "Quit");
             quit.Configure(SettingsMenuWidgets.Ink, false);
-            var resume = Find<HorrorFrameGraphic>(Footer + "Resume");
-            resume.Configure(new Color(.24f, .045f, .055f, .95f), true);
+            Find<Button>(Footer + "Resume").gameObject.SetActive(false);
+            var quitRect = Find<RectTransform>(Footer + "Quit");
+            quitRect.anchorMin = quitRect.anchorMax = new Vector2(.5f, 1f);
+            quitRect.pivot = new Vector2(.5f, 1f);
+            quitRect.anchoredPosition = Vector2.zero;
+            quitRect.sizeDelta = new Vector2(420f, 53f);
+            var quitLabel = TextAt(Footer + "Quit/Label").rectTransform;
+            quitLabel.anchorMin = Vector2.zero;
+            quitLabel.anchorMax = Vector2.one;
+            quitLabel.offsetMin = new Vector2(60f, 0f);
+            quitLabel.offsetMax = new Vector2(-60f, 0f);
             _overlay.SetActive(false);
         }
 
@@ -331,10 +360,13 @@ namespace EchoProtocol.Voice
             var root = new GameObject("GraphicsChoices", typeof(RectTransform), typeof(Image));
             _graphicsChoices = root;
             var rect = (RectTransform)root.transform;
-            rect.SetParent(Find<RectTransform>(Body + "Display"), false);
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = new Vector2(114, -76);
-            rect.sizeDelta = new Vector2(502, Mathf.Min(choices.Length, 6) * 44);
+            rect.SetParent(source.transform, false);
+            rect.anchorMin = new Vector2(0, 0);
+            rect.anchorMax = new Vector2(1, 0);
+            rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(0, -4);
+            rect.sizeDelta = new Vector2(0, Mathf.Min(choices.Length, 6) * 44);
+            source.transform.parent.SetAsLastSibling();
             root.GetComponent<Image>().color = new Color(.025f,.035f,.04f,1);
             IndustrialUiStyle.Frame(root);
             var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
@@ -365,7 +397,7 @@ namespace EchoProtocol.Voice
                 var rowLabel = row.GetComponentInChildren<TMP_Text>(true);
                 bool current = choices[i] == (setting == "Quality" ? GameGraphicsSettings.QualityLabel : GameGraphicsSettings.ResolutionLabel);
                 rowLabel.text = (current ? "• " : "") + choices[i];
-                rowLabel.color = current ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
+                rowLabel.color = IndustrialUiStyle.Text;
                 row.onClick = new Button.ButtonClickedEvent();
                 row.onClick.AddListener(() => { select(selected); Destroy(root); _graphicsChoices = null; RefreshVisuals(); });
             }
@@ -739,7 +771,7 @@ namespace EchoProtocol.Voice
                 Find<HorrorFrameGraphic>(path).Configure(i == index
                     ? new Color(0.18f, 0.025f, 0.026f, 0.95f) : SettingsMenuWidgets.Ink, i == index);
                 _canvas.transform.Find(path + "/Active").gameObject.SetActive(i == index);
-                TextAt(path + "/Label").color = i == index ? new Color(1, 0.60f, 0.56f) : SettingsMenuWidgets.Muted;
+                TextAt(path + "/Label").color = i == index ? IndustrialUiStyle.Text : IndustrialUiStyle.Muted;
             }
             RefreshVisuals();
         }

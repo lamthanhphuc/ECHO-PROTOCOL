@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: CinematicMatchLoadingTheme
   m_EditorClassIdentifier:
   background: {fileID: 21300000, guid: 20a91c65674fbd24da43c9e3f61a93f0, type: 3}
-  logo: {fileID: 21300000, guid: ff876ee3a32a6844881af4c7d9a72d2c, type: 3}
+  logo: {fileID: 21300000, guid: 623c43f3352e042458b87107e9c366a9, type: 3}
   logoMaterial: {fileID: 2100000, guid: a2043ab19269f6846ba06e90d9226a9d, type: 2}
   progressFillMaterial: {fileID: 2100000, guid: bb671ca60eea6914da2af227c6b262f9, type: 2}
   atmosphereMaterial: {fileID: 2100000, guid: e306155be2dc0414ba2823e8f01f44bf, type: 2}

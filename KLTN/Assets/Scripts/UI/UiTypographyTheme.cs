@@ -31,6 +31,21 @@ namespace EchoProtocol.UI
         public static Font ButtonLegacy => Visuals != null && Visuals.buttonFont != null
             ? Visuals.buttonFont : BodyLegacy;
 
+        public static void ApplyScreenHeading(Text label)
+        {
+            if (Visuals != null && Visuals.headingFont != null) label.font = Visuals.headingFont;
+            else label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            label.fontSize = 36;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = IndustrialUiStyle.Text;
+            label.raycastTarget = false;
+
+            var shadow = label.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color32(119, 33, 31, 166);
+            shadow.effectDistance = new Vector2(2f, -2f);
+        }
+
         public static void Apply(TMP_Text label, bool button = false)
         {
             if (label != null) label.font = button ? ButtonTmp : BodyTmp;

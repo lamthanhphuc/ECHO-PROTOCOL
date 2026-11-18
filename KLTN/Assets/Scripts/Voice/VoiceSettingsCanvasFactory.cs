@@ -211,6 +211,7 @@ namespace EchoProtocol.Voice
             var button = Button(name, parent, 0, 0, 570, 40, title, selected, 17);
             button.gameObject.AddComponent<LayoutElement>().preferredHeight = 40;
             var label = button.GetComponentInChildren<TMP_Text>();
+            label.color = Foreground;
             Stretch(label.rectTransform);
             label.rectTransform.offsetMin = new Vector2(13, 0);
             label.rectTransform.offsetMax = new Vector2(-13, 0);

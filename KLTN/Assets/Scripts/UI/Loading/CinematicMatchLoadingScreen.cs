@@ -224,6 +224,9 @@ namespace EchoProtocol.UI.Loading
         private void Present(MatchLoadingPhase phase, string sceneName, float progress, bool localReady,
             int ready, int required, string error, float time)
         {
+            const float logoScale = 1.2f;
+            var logoTransform = (_logo.sprite != null ? _logo.transform : _title.transform);
+            logoTransform.localScale = Vector3.one * logoScale;
             bool complete = phase == MatchLoadingPhase.Complete;
             bool failed = phase == MatchLoadingPhase.Failed;
             bool waiting = phase == MatchLoadingPhase.GameplayReadiness && localReady;
@@ -277,7 +280,11 @@ namespace EchoProtocol.UI.Loading
         {
             _theme = theme ?? Resources.Load<CinematicMatchLoadingTheme>(CinematicMatchLoadingTheme.ResourcePath);
             theme = _theme;
-            if (_content != null) return;
+            if (_content != null)
+            {
+                ApplyLayout();
+                return;
+            }
             var canvas = gameObject.GetComponent<Canvas>();
             if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -381,6 +388,20 @@ namespace EchoProtocol.UI.Loading
             _recoveryText.alignment = TextAlignmentOptions.Center;
             _recoveryText.text = GameLanguage.Choose("Về menu chính", "Return to main menu");
             _recovery.gameObject.SetActive(false);
+            ApplyLayout();
+        }
+
+        private void ApplyLayout()
+        {
+            ReferenceRect(_logo.rectTransform, 960, 400, 760, 330);
+            ReferenceRect(_title.rectTransform, 960, 400, 900, 315);
+            _logo.rectTransform.localScale = _title.rectTransform.localScale = Vector3.one * 1.2f;
+            ReferenceRect(_phase.rectTransform, 960, 640, 1180, 52);
+            ReferenceRect(_handprint.rectTransform, 1490, 640, 80, 80);
+            ReferenceRect((RectTransform)_fill.transform.parent, 960, 714, 850, 52);
+            ReferenceRect(_percent.rectTransform, 1458, 714, 136, 54);
+            ReferenceRect(_detail.rectTransform, 960, 784, 1180, 60);
+            ReferenceRect(_recovery.GetComponent<RectTransform>(), 960, 860, 440, 48);
         }
 
         /// <summary>Only used by the isolated Editor preview; does not start or alter a network session.</summary>

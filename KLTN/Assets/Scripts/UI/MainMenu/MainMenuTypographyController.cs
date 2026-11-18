@@ -85,13 +85,15 @@ namespace EchoProtocol.UI.MainMenu
             Material subtitleMaterial = ResolveMaterial("SubtitleSignal", mono, ref _runtimeSubtitleMaterial, false);
             Material buttonMaterial = ResolveMaterial("ButtonIndustrial", oswald, ref _runtimeButtonMaterial, false);
 
-            Configure(titleObject, display, titleMaterial, TitleColor, 124f, 0f,
+            var title = Configure(titleObject, display, titleMaterial, TitleColor, 114f, 0f,
                 TextAlignmentOptions.Center, -15f, true);
+            if (title != null) title.fontSize = 114f;
             _subtitle = Configure(subtitleObject, mono, subtitleMaterial, SubtitleColor, 24f, 8f,
                 TextAlignmentOptions.Center, 0f, false);
             if (_subtitle != null)
             {
                 RefreshSubtitleLanguage();
+                LayoutSubtitle(title);
                 _subtitleBaseColor = _subtitle.color;
                 _nextSignalDip = Time.unscaledTime + 6.7f;
             }
@@ -100,6 +102,31 @@ namespace EchoProtocol.UI.MainMenu
             ConfigureButton(joinObject, oswald, buttonMaterial);
             ConfigureButton(optionsObject, oswald, buttonMaterial);
             ConfigureButton(logoutObject, oswald, buttonMaterial);
+        }
+
+        private void LayoutSubtitle(TMP_Text title)
+        {
+            if (title == null || _subtitle == null) return;
+            title.ForceMeshUpdate(true);
+            var bounds = title.textBounds;
+            var rect = _subtitle.rectTransform;
+            var parent = (RectTransform)rect.parent;
+            var titleBottom = new Vector3(bounds.center.x, bounds.min.y, 0f);
+            for (var node = title.transform; node != null && node != parent; node = node.parent)
+                titleBottom = Matrix4x4.TRS(node.localPosition, node.localRotation, node.localScale)
+                    .MultiplyPoint3x4(titleBottom);
+
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            float titleScale = title.fontSize / 102f;
+            rect.anchoredPosition = new Vector2(titleBottom.x - parent.rect.center.x,
+                titleBottom.y - parent.rect.yMax - 12f * titleScale);
+            rect.sizeDelta = new Vector2(bounds.size.x * title.rectTransform.localScale.x, 44f * titleScale);
+            rect.localScale = Vector3.one;
+            _subtitle.fontSize = 28f * titleScale;
+            _subtitle.characterSpacing = 8f * titleScale;
+            _subtitle.alignment = TextAlignmentOptions.Top;
+            _subtitle.textWrappingMode = TextWrappingModes.NoWrap;
         }
 
         private static TMP_FontAsset GetOrCreateFont(ref TMP_FontAsset cache, Text source)

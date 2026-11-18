@@ -124,6 +124,7 @@ namespace EchoProtocol.Networking
         public string ActualPhotonRegion => _realtimeClient?.CurrentRegion;
         public NetworkSessionState State { get; private set; } = NetworkSessionState.Disconnected;
         public string CurrentSessionName { get; private set; } = string.Empty;
+        public bool IsCreatingRoom { get; private set; }
         public string LastError { get; private set; } = string.Empty;
         public bool HasRunningRunner => Runner != null && Runner.IsRunning;
         public bool IsBusy => _sessionOperationInProgress || State == NetworkSessionState.ShuttingDown;
@@ -872,6 +873,7 @@ namespace EchoProtocol.Networking
             _completedMatchObserved = false;
             _matchStartPending = false;
             LastError = string.Empty;
+            IsCreatingRoom = gameMode == GameMode.Host;
             SetState(NetworkSessionState.Connecting,
                 gameMode == GameMode.Host ? $"Creating room '{normalizedName}'..." : $"Joining room '{normalizedName}'...");
 

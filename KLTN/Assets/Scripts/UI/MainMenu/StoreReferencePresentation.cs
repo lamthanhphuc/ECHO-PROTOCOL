@@ -87,6 +87,12 @@ namespace EchoProtocol.UI.MainMenu
                 }
             }
             var creditsBox=window.Find("CreditsBox") as RectTransform;
+            if (creditsBox != null && creditsBox.GetComponent<Button>() == null)
+            {
+                var credits = creditsBox.gameObject.AddComponent<Button>();
+                credits.onClick.AddListener(OpenCreditsWallet);
+                EchoProtocol.Audio.GameAudioRuntime.RegisterButton(credits);
+            }
             UtilityBarStyle.Credits(creditsBox);
             UtilityBarStyle.PositionAtSafeTopRight(creditsBox,UtilityBarStyle.CreditsWidth,
                 4f*(UtilityBarStyle.ButtonSize+UtilityBarStyle.Gap));
@@ -134,11 +140,17 @@ namespace EchoProtocol.UI.MainMenu
                 var rect=content.Find(name) as RectTransform;
                 var grid=rect!=null ? rect.GetComponent<GridLayoutGroup>() : null;
                 if(grid==null)continue;
-                int columns = rect.name == "CharacterGrid" ? CharacterShopAssets.Items.Length : 3;
+                int columns = rect.name == "CharacterGrid" ? 2 : 3;
                 float width=(rect.rect.width-grid.padding.left-grid.padding.right-grid.spacing.x*(columns-1))/columns;
-                grid.cellSize=Vector2.one*Mathf.Clamp(width,60f,170f);
+                grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                grid.constraintCount = columns;
+                grid.cellSize=Vector2.one*Mathf.Max(60f, width);
                 var contentGrid=rect.GetComponent<ScrollRect>()?.content?.GetComponent<GridLayoutGroup>();
-                if(contentGrid!=null)contentGrid.cellSize=grid.cellSize;
+                if(contentGrid!=null)
+                {
+                    contentGrid.constraintCount=columns;
+                    contentGrid.cellSize=grid.cellSize;
+                }
             }
         }
         private void LateUpdate()
@@ -172,6 +184,16 @@ namespace EchoProtocol.UI.MainMenu
                 _headerTitle=content.Find("SectionTitle")?.GetComponent<Text>();
             }
             if(_headerName==null || _headerTitle==null)return;
+            Place(_headerTitle.rectTransform,74,65,1050,68);
+            _headerTitle.horizontalOverflow=HorizontalWrapMode.Overflow;
+            _headerTitle.resizeTextForBestFit=true;
+            _headerTitle.resizeTextMinSize=24;
+            _headerTitle.resizeTextMaxSize=56;
+            Place(_headerName.rectTransform,74,139,1000,48);
+            _headerName.horizontalOverflow=HorizontalWrapMode.Overflow;
+            _headerName.resizeTextForBestFit=true;
+            _headerName.resizeTextMinSize=20;
+            _headerName.resizeTextMaxSize=36;
             _headerName.gameObject.SetActive(!AwaitingSelection);
             if(_buyRect!=null)_buyRect.gameObject.SetActive(!AwaitingSelection);
             if(_priceRect!=null)_priceRect.gameObject.SetActive(!AwaitingSelection);
@@ -269,6 +291,15 @@ namespace EchoProtocol.UI.MainMenu
             EchoProtocol.Voice.VoiceManager.Instance
                 .GetComponent<EchoProtocol.Voice.VoiceSettingsPanel>()?.OpenFromMainMenu();
         }
+        private static void OpenCreditsWallet()
+        {
+            var mainMenu = Object.FindFirstObjectByType<MainMenuProfileController>();
+            if (mainMenu != null) { mainMenu.OpenTopUpWebsite(); return; }
+            var lobby = Object.FindFirstObjectByType<LobbyUtilityBarController>();
+            if (lobby != null) { lobby.OpenTopUp(); return; }
+            Application.OpenURL(UtilityBarStyle.WebsiteUrl + "wallet");
+        }
+
         private static void OpenWebsite()
         {
             var mainMenu=Object.FindFirstObjectByType<MainMenuProfileController>();
@@ -314,7 +345,7 @@ namespace EchoProtocol.UI.MainMenu
             cells.SetParent(parent,false);cells.anchorMin=new Vector2(0,1);cells.anchorMax=Vector2.one;cells.pivot=new Vector2(0.5f,1);
             cells.anchoredPosition=Vector2.zero;cells.sizeDelta=new Vector2(0,0);
             var layout=cells.GetComponent<GridLayoutGroup>();layout.cellSize=authored.cellSize;layout.spacing=authored.spacing;
-            layout.padding=authored.padding;layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=parent.name=="CharacterGrid" ? CharacterShopAssets.Items.Length : 3;
+            layout.padding=authored.padding;layout.constraint=GridLayoutGroup.Constraint.FixedColumnCount;layout.constraintCount=parent.name=="CharacterGrid" ? 2 : 3;
             cells.GetComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             var scroll=parent.GetComponent<ScrollRect>() ?? parent.gameObject.AddComponent<ScrollRect>();
             scroll.content=cells;scroll.viewport=rect;scroll.horizontal=false;scroll.vertical=true;scroll.scrollSensitivity=35;scroll.movementType=ScrollRect.MovementType.Clamped;

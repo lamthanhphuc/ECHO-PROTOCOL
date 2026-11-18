@@ -296,6 +296,85 @@ namespace EchoProtocol.UI
         }
 
 
+        internal Button LobbyStartButton => startButton;
+
+        private Button _roomCodeButton;
+        private bool _showRoomCode;
+        private string _roomCode;
+        private Sprite _unreadySprite;
+        private Color _unreadyColor;
+        private bool _readyStyleCaptured;
+
+        private void RefreshRoomCode(bool inRoom)
+        {
+            if (startButton == null) return;
+            string code = inRoom ? bootstrap?.CurrentSessionName : null;
+            if (_roomCode != code)
+            {
+                _roomCode = code;
+                _showRoomCode = false;
+            }
+
+            var startRect = (RectTransform)startButton.transform;
+            if (_roomCodeButton == null && !string.IsNullOrEmpty(code))
+            {
+                _roomCodeButton = Instantiate(startButton, startRect.parent);
+                _roomCodeButton.name = "RoomCodeButton";
+                _roomCodeButton.onClick = new Button.ButtonClickedEvent();
+                _roomCodeButton.onClick.AddListener(() =>
+                {
+                    _showRoomCode = !_showRoomCode;
+                    RefreshRoomCode(true);
+                });
+                var label = _roomCodeButton.GetComponentInChildren<TMP_Text>(true);
+                var labelRect = label.rectTransform;
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = new Vector2(12f, 2f);
+                labelRect.offsetMax = new Vector2(-12f, -2f);
+                label.alignment = TextAlignmentOptions.Center;
+                label.enableAutoSizing = true;
+                label.fontSizeMin = 15f;
+                label.fontSizeMax = label.fontSize;
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+                label.overflowMode = TextOverflowModes.Ellipsis;
+
+            }
+            if (_roomCodeButton == null) return;
+
+            var rect = (RectTransform)_roomCodeButton.transform;
+            rect.sizeDelta = new Vector2(270f, startRect.sizeDelta.y);
+            rect.anchoredPosition = startRect.anchoredPosition - new Vector2(rect.sizeDelta.x + 165f, 0f);
+            _roomCodeButton.gameObject.SetActive(!string.IsNullOrEmpty(code));
+            _roomCodeButton.interactable = true;
+            var colors = startButton.colors;
+            if (!_showRoomCode)
+            {
+                colors.normalColor = colors.disabledColor;
+                colors.highlightedColor = colors.disabledColor;
+                colors.selectedColor = colors.disabledColor;
+                colors.pressedColor = colors.disabledColor;
+            }
+            if (!_roomCodeButton.colors.Equals(colors))
+                _roomCodeButton.colors = colors;
+            _roomCodeButton.GetComponentInChildren<TMP_Text>(true).text = _showRoomCode
+                ? code : EchoProtocol.Settings.GameLanguage.Choose("MÃ PHÒNG", "ROOM CODE");
+        }
+
+        private void RefreshReadyStyle()
+        {
+            if (!(readyButton.targetGraphic is Image readyImage)
+                || !(startButton?.targetGraphic is Image startImage)) return;
+            if (!_readyStyleCaptured)
+            {
+                _unreadySprite = readyImage.sprite;
+                _unreadyColor = readyImage.color;
+                _readyStyleCaptured = true;
+            }
+            readyImage.sprite = _room.IsReady ? startImage.sprite : _unreadySprite;
+            readyImage.color = _room.IsReady ? startImage.color : _unreadyColor;
+        }
+
         private void Refresh()
         {
             ResolveServices();
@@ -324,6 +403,7 @@ namespace EchoProtocol.UI
                     readyRect.pivot = startRect.pivot;
                     readyRect.anchoredPosition = new Vector2(startRect.anchoredPosition.x, -880f);
                     readyRect.sizeDelta = startRect.sizeDelta;
+                    RefreshReadyStyle();
                 }
                 readyButton.interactable =
                     inRoom;
@@ -352,6 +432,8 @@ namespace EchoProtocol.UI
                     && _room.CanStartMatch;
                 RefreshAdaptiveTestButton(startRect, inRoom && _room.IsHost);
             }
+
+            RefreshRoomCode(inRoom);
 
             if (leaveButton != null)
             {

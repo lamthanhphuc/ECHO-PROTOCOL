@@ -27,6 +27,14 @@ namespace EchoProtocol.UI
         private string _composition = string.Empty;
         private int _compositionFrame = -1;
         private Coroutine _wordRefresh;
+        private bool _lobbyChat;
+        private UnityEngine.UI.Button _lobbyStartButton;
+        private Canvas _lobbyMenuCanvas;
+
+        private bool LobbyMenuOpen => _lobbyChat && (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen
+            || (_lobbyMenuCanvas != null
+                && (_lobbyMenuCanvas.GetComponent<MainMenu.MainMenuLeaderboardController>()?.IsOpen == true
+                    || _lobbyMenuCanvas.GetComponent<MainMenu.UtilityProfileOverlay>()?.IsOpen == true)));
 
         [System.Serializable]
         private sealed class ChatWordsEnvelope { public ChatWordsData data; }
@@ -84,8 +92,89 @@ namespace EchoProtocol.UI
             }
             input.characterLimit = 120;
             input.lineType = TMP_InputField.LineType.SingleLine;
-            inputPanel.SetActive(false);
-            history.transform.parent.gameObject.SetActive(false);
+            _lobbyChat = gameObject.scene.name == EchoProtocol.Core.GameConstants.SceneLobby;
+            if (_lobbyChat) StyleLobbyChat();
+            inputPanel.SetActive(_lobbyChat && !LobbyMenuOpen);
+            history.transform.parent.gameObject.SetActive(_lobbyChat);
+        }
+
+        private void StyleLobbyChat()
+        {
+            var historyPanel = (RectTransform)history.transform.parent;
+            var entry = (RectTransform)inputPanel.transform;
+            const float chatWidth = 530f;
+            const float entryHeight = 48f;
+            historyPanel.anchoredPosition = new Vector2(32f, 47f);
+            historyPanel.sizeDelta = new Vector2(chatWidth, 215f);
+            if (historyPanel.TryGetComponent<UnityEngine.UI.Image>(out var background))
+            {
+                background.sprite = null;
+                background.color = new Color32(0, 0, 0, 75);
+                background.raycastTarget = false;
+            }
+
+            entry.SetParent(historyPanel, false);
+            entry.anchorMin = Vector2.zero;
+            entry.anchorMax = Vector2.right;
+            entry.anchoredPosition = Vector2.zero;
+            entry.sizeDelta = new Vector2(0f, entryHeight);
+            history.color = IndustrialUiStyle.Accent;
+            input.textComponent.color = IndustrialUiStyle.Accent;
+            input.textComponent.alignment = TextAlignmentOptions.Left;
+            if (input.placeholder is TMP_Text placeholder)
+            {
+                placeholder.color = IndustrialUiStyle.Accent;
+                placeholder.alignment = TextAlignmentOptions.Left;
+            }
+
+            _lobbyStartButton = FindAnyObjectByType<LobbyRuntimeBindingsController>()?.LobbyStartButton;
+            _lobbyMenuCanvas = _lobbyStartButton != null ? _lobbyStartButton.GetComponentInParent<Canvas>() : null;
+            if (entry.TryGetComponent<UnityEngine.UI.Image>(out var entryBackground)
+                && _lobbyStartButton != null
+                && _lobbyStartButton.targetGraphic is UnityEngine.UI.Image startBackground)
+            {
+                entryBackground.sprite = startBackground.sprite;
+                entryBackground.type = startBackground.type;
+                entryBackground.color = startBackground.color * _lobbyStartButton.colors.disabledColor;
+            }
+
+            history.rectTransform.offsetMin = new Vector2(14f, entryHeight + 9f);
+            history.rectTransform.offsetMax = new Vector2(-14f, -10f);
+        }
+
+        private void LateUpdate()
+        {
+            if (!_lobbyChat) return;
+            bool visible = !LobbyMenuOpen;
+            if (!visible && _lock.IsLocked) Close();
+            history.transform.parent.gameObject.SetActive(visible);
+            inputPanel.SetActive(visible);
+            if (_lobbyStartButton == null) return;
+
+            var start = (RectTransform)_lobbyStartButton.transform;
+            var panel = (RectTransform)history.transform.parent;
+            var canvasRect = (RectTransform)panel.parent;
+            var bottom = canvasRect.InverseTransformPoint(start.TransformPoint(start.rect.min));
+            var top = canvasRect.InverseTransformPoint(start.TransformPoint(new Vector2(start.rect.xMin, start.rect.yMax)));
+            float entryHeight = top.y - bottom.y;
+            if (entryHeight <= 0f) return;
+
+            panel.anchoredPosition = new Vector2(panel.anchoredPosition.x, bottom.y - canvasRect.rect.yMin);
+            var entry = (RectTransform)inputPanel.transform;
+            entry.sizeDelta = new Vector2(0f, entryHeight);
+            history.rectTransform.offsetMin = new Vector2(14f, entryHeight + 9f);
+        }
+
+        private void SelectLobbyInput(string _)
+        {
+            if (!_lock.IsLocked) Open();
+            if (!_lock.IsLocked) input.DeactivateInputField();
+        }
+
+        private void RefreshLobbyPlaceholder()
+        {
+            if (input.placeholder is TMP_Text placeholder)
+                placeholder.text = GameLanguage.Choose("Nhập tin nhắn", "Enter text");
         }
 
         private void OnEnable()
@@ -94,6 +183,12 @@ namespace EchoProtocol.UI
 
             GameplayChatRpc.MessageReceived += Receive;
             input.onSubmit.AddListener(Submit);
+            if (_lobbyChat)
+            {
+                input.onSelect.AddListener(SelectLobbyInput);
+                GameLanguage.Changed += RefreshLobbyPlaceholder;
+                RefreshLobbyPlaceholder();
+            }
             if (Keyboard.current != null)
                 Keyboard.current.onIMECompositionChange += OnCompositionChanged;
             _wordRefresh = StartCoroutine(RefreshChatWords());
@@ -103,7 +198,14 @@ namespace EchoProtocol.UI
         {
             GameplayChatRpc.MessageReceived -= Receive;
             if (input != null)
+            {
                 input.onSubmit.RemoveListener(Submit);
+                if (_lobbyChat)
+                {
+                    input.onSelect.RemoveListener(SelectLobbyInput);
+                    GameLanguage.Changed -= RefreshLobbyPlaceholder;
+                }
+            }
             if (Keyboard.current != null)
                 Keyboard.current.onIMECompositionChange -= OnCompositionChanged;
             if (_wordRefresh != null) StopCoroutine(_wordRefresh);
@@ -113,9 +215,11 @@ namespace EchoProtocol.UI
 
         private void Update()
         {
-            if (!_lock.IsLocked && history.transform.parent.gameObject.activeSelf
+            if (!_lobbyChat && !_lock.IsLocked && history.transform.parent.gameObject.activeSelf
                 && Time.unscaledTime - _lastMessageTime >= 10f)
                 history.transform.parent.gameObject.SetActive(false);
+
+            if (LobbyMenuOpen) return;
 
             var keyboard = Keyboard.current;
             if (keyboard == null || !Application.isFocused)
@@ -145,6 +249,9 @@ namespace EchoProtocol.UI
 
         private void Open()
         {
+            if (LobbyMenuOpen || PlayerInteractionControlLock.HasModal || PlayerInteractionControlLock.IsGameplayInputBlocked())
+                return;
+
             var runner = NetworkBootstrap.Instance?.Runner;
 
             if (runner == null || !runner.IsRunning
@@ -250,14 +357,20 @@ namespace EchoProtocol.UI
                 if (EventSystem.current != null
                     && EventSystem.current.currentSelectedGameObject == input.gameObject)
                     EventSystem.current.SetSelectedGameObject(null);
+
+                if (_lobbyChat)
+                {
+                    input.SetTextWithoutNotify(string.Empty);
+                    input.ForceLabelUpdate();
+                }
             }
 
             if (inputPanel != null)
-                inputPanel.SetActive(false);
+                inputPanel.SetActive(_lobbyChat && !LobbyMenuOpen);
 
             if (history != null)
-                history.transform.parent.gameObject.SetActive(_messages.Count > 0
-                    && Time.unscaledTime - _lastMessageTime < 10f);
+                history.transform.parent.gameObject.SetActive(!LobbyMenuOpen && (_lobbyChat || (_messages.Count > 0
+                    && Time.unscaledTime - _lastMessageTime < 10f)));
 
             _lock.Release();
         }
@@ -292,7 +405,7 @@ namespace EchoProtocol.UI
 
             history.text = string.Join("\n", _messages);
             _lastMessageTime = Time.unscaledTime;
-            history.transform.parent.gameObject.SetActive(true);
+            history.transform.parent.gameObject.SetActive(!LobbyMenuOpen);
         }
     }
 }

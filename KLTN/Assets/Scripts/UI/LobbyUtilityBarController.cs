@@ -31,6 +31,7 @@ namespace EchoProtocol.UI
         private Rect _lastSafeArea;
         private Button _profileButton;
         private Button _settingsButton;
+        private Text _creditsAmount;
 
 
         public void Configure(
@@ -53,7 +54,12 @@ namespace EchoProtocol.UI
         private void OnEnable()
         {
             if (shopButton != null) shopButton.gameObject.SetActive(false);
+            EnsureCreditsTypography();
             UtilityBarStyle.Lobby(transform as RectTransform);
+            // ReferenceShade spans the toolbar area and belongs behind the toolbar.
+            var content = transform.parent.Find("PreMatchContent");
+            if (content != null && transform.GetSiblingIndex() < content.GetSiblingIndex())
+                transform.SetSiblingIndex(content.GetSiblingIndex());
             _profileButton = transform.Find("ProfileButton")?.GetComponent<Button>();
             _settingsButton = transform.Find("SettingsButton")?.GetComponent<Button>();
             var canvas = GetComponentInParent<Canvas>();
@@ -107,6 +113,22 @@ namespace EchoProtocol.UI
         }
 
 
+        private void EnsureCreditsTypography()
+        {
+            if (_creditsAmount != null || creditsButton == null || creditsText == null) return;
+            foreach (var original in creditsButton.GetComponentsInChildren<TMP_Text>(true))
+            {
+                var label = new GameObject(original.name + "Legacy", typeof(RectTransform), typeof(Text))
+                    .GetComponent<Text>();
+                label.transform.SetParent(original.transform.parent, false);
+                label.text = original.text;
+                label.raycastTarget = false;
+                label.verticalOverflow = VerticalWrapMode.Overflow;
+                original.enabled = false;
+                if (original == creditsText) _creditsAmount = label;
+            }
+        }
+
         public void RefreshCredits()
         {
             UtilityBarStyle.RefreshCreditsLabel(creditsButton != null
@@ -119,12 +141,13 @@ namespace EchoProtocol.UI
                     ? PlayerProfileSession.WalletBalance
                     : AuthSession.WalletBalance;
 
-            creditsText.text =
-                $"{balance:N0}";
+            creditsText.text = $"{balance:N0}";
+            if (_creditsAmount != null)
+                _creditsAmount.text = creditsText.text;
         }
 
 
-        private void OpenTopUp()
+        internal void OpenTopUp()
         {
             if (!string.IsNullOrWhiteSpace(
                     topUpWebUrl))

@@ -80,7 +80,10 @@ namespace EchoProtocol.UI
             var parent = label.transform.parent;
             bool credits = parent != null &&
                 (parent.name == "CoinContainer" || parent.name == "CreditsBox" || parent.name == "CreditsButton");
-            if (!isMainMenuTypography && !cinematic && !credits)
+            bool managedScreen = label.GetComponentInParent<EchoProtocol.UI.MainMenu.MainMenuLeaderboardController>() != null
+                || label.GetComponentInParent<EchoProtocol.Voice.VoiceSettingsPanel>() != null
+                || label.GetComponentInParent<EchoProtocol.UI.MainMenu.UtilityProfileOverlay>() != null;
+            if (!isMainMenuTypography && !cinematic && !credits && !managedScreen && label.name != "ScreenHeading")
             {
                 if (label is TMP_Text tmp) UiTypographyTheme.Apply(tmp, isButton);
                 else if (label is Text legacy) UiTypographyTheme.Apply(legacy, isButton);

@@ -17,11 +17,9 @@ namespace EchoProtocol.UI
     {
         private static GameUIFeedback _instance;
         private readonly PlayerInteractionControlLock _lock = new();
-        private readonly PlayerInteractionControlLock _progressLock = new();
-        private readonly LoadingUiNavigationLock _progressNavigation = new();
-        private GameObject _modal, _progress, _toast;
-        private TMP_Text _title, _body, _acceptText, _cancelText, _progressText, _toastText;
-        private Button _accept, _cancel, _progressCancel;
+        private GameObject _modal, _toast;
+        private TMP_Text _title, _body, _acceptText, _cancelText, _toastText;
+        private Button _accept, _cancel;
         private RectTransform _confirmationCard, _bodyViewport;
         private ScrollRect _bodyScroll;
         private Action _accepted, _cancelled;
@@ -95,15 +93,6 @@ namespace EchoProtocol.UI
             _cancel.navigation = new Navigation { mode = Navigation.Mode.Explicit, selectOnRight = _accept, selectOnUp = _accept, selectOnDown = _accept };
             _accept.navigation = new Navigation { mode = Navigation.Mode.Explicit, selectOnLeft = _cancel, selectOnUp = _cancel, selectOnDown = _cancel };
 
-            _progress = Layer("NetworkTransition", new Color(0.018f, 0.022f, 0.024f, 1f));
-            var progressCard = Card(_progress.transform, 600, 230);
-            Label(progressCard, 28, 22, 544, 42, 32).text = "ECHO PROTOCOL";
-            _progressText = Label(progressCard, 28, 74, 544, 82, 19);
-            _progressCancel = Button(progressCard, "ReturnToMenu", 28, 162, 544, 40, out var progressCancelText);
-            progressCancelText.text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
-            _progressCancel.onClick.AddListener(ReturnToMenu);
-            _progressCancel.navigation = new Navigation { mode = Navigation.Mode.None };
-
             _toast = new GameObject("InteractionFeedback", typeof(RectTransform), typeof(Image));
             _toast.transform.SetParent(transform, false);
             var toastRect = _toast.GetComponent<RectTransform>();
@@ -114,7 +103,7 @@ namespace EchoProtocol.UI
             _toast.GetComponent<Image>().color = new Color(0.04f, 0.045f, 0.045f, 0.96f);
             _toast.GetComponent<Image>().raycastTarget = false;
             _toastText = Label(_toast.transform, 16, 8, 528, 42, 16);
-            _modal.SetActive(false); _progress.SetActive(false); _toast.SetActive(false);
+            _modal.SetActive(false); _toast.SetActive(false);
             NetworkPlayerInteractor.LocalRequestCompleted += InteractionCompleted;
             SceneManager.activeSceneChanged += SceneChanged;
         }
@@ -243,24 +232,22 @@ namespace EchoProtocol.UI
             if (!settling) _sceneChangeFrame = -1;
             bool cinematic = MatchLoadingCoordinator.OwnsPresentation;
             bool show = _startup || _sceneTransition || settling || retry || migration || loading || enteringLobby || leaving || _returning || joining;
-            // The cinematic screen now owns all transition visuals and input blocking.
-            _progressLock.Release();
-            _progressNavigation.Release();
-            _progress.SetActive(false);
-            _progressCancel.gameObject.SetActive(retry);
+            string transitionMessage;
             if (retry)
-            {
-                _progressText.text = GameLanguage.Choose(
+                transitionMessage = GameLanguage.Choose(
                     $"Đang kết nối lại…\nLần thử {network.ReconnectAttempt} · Còn {Mathf.CeilToInt(network.ReconnectSecondsRemaining)} giây\nKiểm tra mạng hoặc hủy để về menu.",
                     $"Reconnecting…\nAttempt {network.ReconnectAttempt} · {Mathf.CeilToInt(network.ReconnectSecondsRemaining)} seconds remaining\nCheck your network, or cancel to return to the menu.");
-                _progressCancel.GetComponentInChildren<TMP_Text>().text = GameLanguage.Choose("Hủy và về menu", "Cancel and return to menu");
-            }
-            else _progressText.text = migration ? GameLanguage.Choose("Đang khôi phục trận đấu…", "Restoring the match…")
-                : _startup ? GameLanguage.Choose("Đang khởi động…\nVui lòng chờ.", "Starting…\nPlease wait.")
-                : _returning || leaving ? GameLanguage.Choose("Đang rời phòng…", "Leaving room…")
-                : loading ? GameLanguage.Choose("Đang tải khu vực…\nVui lòng chờ.", "Loading area…\nPlease wait.")
-                : GameLanguage.Choose("Đang kết nối…\nVui lòng chờ.", "Connecting…\nPlease wait.");
-            CinematicMatchLoadingScreen.EnsureExists().SetSessionTransition(show, _progressText.text,
+            else
+                transitionMessage = migration ? GameLanguage.Choose("Đang khôi phục trận đấu…", "Restoring the match…")
+                    : _startup ? GameLanguage.Choose("Đang khởi động…\nVui lòng chờ.", "Starting…\nPlease wait.")
+                    : _returning || leaving ? GameLanguage.Choose("Đang rời phòng…", "Leaving room…")
+                    : enteringLobby ? GameLanguage.Choose("Đang mở phòng chờ…", "Opening the lobby…")
+                    : joining ? network.IsCreatingRoom
+                        ? GameLanguage.Choose("Đang tạo phòng…", "Creating room…")
+                        : GameLanguage.Choose("Đang vào phòng…", "Joining room…")
+                    : loading ? GameLanguage.Choose("Đang tải khu vực…\nVui lòng chờ.", "Loading area…\nPlease wait.")
+                    : GameLanguage.Choose("Đang chuyển màn hình…", "Loading the next screen…");
+            CinematicMatchLoadingScreen.EnsureExists().SetSessionTransition(show, transitionMessage,
                 retry && !_returning ? ReturnToMenu : null);
             if (network != null && network.State != _previousState)
             {
@@ -323,7 +310,6 @@ namespace EchoProtocol.UI
             Complete(false);
             _toastUntil = 0;
             _lock.Release();
-            _progressLock.Release();
         }
         private void OnDestroy()
         {
@@ -331,16 +317,8 @@ namespace EchoProtocol.UI
             SceneManager.activeSceneChanged -= SceneChanged;
             if (GameGraphicsSettings.HasResolutionPreview) GameGraphicsSettings.RevertResolution();
             _lock.Release();
-            _progressLock.Release();
-            _progressNavigation.Release();
             if (_instance == this) _instance = null;
         }
-        private void OnDisable()
-        {
-            _progressNavigation.Release();
-            _progressLock.Release();
-        }
-
         private GameObject LocalPlayer()
         {
             var camera = FindAnyObjectByType<PlayerCamera>();

@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -57,7 +57,12 @@ namespace EchoProtocol.UI.MainMenu
             help.GetComponent<Image>().color=Color.white;
             var helpCaption=help.GetComponentInChildren<Text>();helpCaption.fontSize=34;helpCaption.fontStyle=FontStyle.Normal;
             helpCaption.rectTransform.sizeDelta=new Vector2(42,42);
-            helpCaption.rectTransform.anchoredPosition=new Vector2(0,2);
+            helpCaption.rectTransform.anchoredPosition=Vector2.zero;
+            helpCaption.verticalOverflow=VerticalWrapMode.Overflow;
+            helpCaption.horizontalOverflow=HorizontalWrapMode.Overflow;
+            helpCaption.resizeTextForBestFit=true;
+            helpCaption.resizeTextMinSize=14;
+            helpCaption.resizeTextMaxSize=34;
             var rect=(RectTransform)help.transform;rect.anchorMin=rect.anchorMax=new Vector2(0,1);
             _help=help.gameObject;help.onClick.AddListener(()=>{RefreshContent();_overlay.SetActive(true);_overlay.transform.SetAsLastSibling();});
             var overlay=Rect("ToolGuideOverlay",parent,Vector2.zero,Vector2.zero);
@@ -86,6 +91,7 @@ namespace EchoProtocol.UI.MainMenu
             helpRect.sizeDelta=Vector2.one*size;
             var caption=_help.GetComponentInChildren<Text>();
             caption.fontSize=Mathf.RoundToInt(size*.8f);
+            caption.resizeTextMaxSize=caption.fontSize;
             caption.rectTransform.sizeDelta=Vector2.one*(size-6f);
             title.rectTransform.GetWorldCorners(_nameCorners);
             Vector3 topLeft=_root.InverseTransformPoint(_nameCorners[1]);

@@ -414,6 +414,7 @@ namespace EchoProtocol.UI
             var button = rect.GetComponent<Button>();
             if (button != null)
             {
+                image.raycastTarget = true;
                 button.targetGraphic = image;
                 var colors = button.colors;
                 colors.normalColor = Color.white;
@@ -421,6 +422,7 @@ namespace EchoProtocol.UI
                 colors.selectedColor = colors.highlightedColor;
                 colors.pressedColor = new Color(1.15f, 1f, 0.65f, 1f);
                 button.colors = colors;
+                EnsureTooltip(button, SettingsIcon.Credits);
             }
             var outline = rect.GetComponent<Outline>() ?? rect.gameObject.AddComponent<Outline>();
             outline.enabled = true;
@@ -456,24 +458,30 @@ namespace EchoProtocol.UI
             var legacyFont = UiTypographyTheme.BodyLegacy;
             foreach (var text in rect.GetComponentsInChildren<Text>(true))
             {
+                if (text.transform.parent != rect) continue;
                 bool label = IsCreditLabel(text.name);
                 PositionCreditText(text.rectTransform, label);
                 if (legacyFont != null) text.font = legacyFont;
                 text.fontSize = label ? 11 : 18;
                 text.fontStyle = label ? FontStyle.Normal : FontStyle.Bold;
-                text.resizeTextForBestFit = false;
-                text.alignment = TextAnchor.MiddleLeft;
+                text.resizeTextForBestFit = !label;
+                text.resizeTextMinSize = 12;
+                text.resizeTextMaxSize = 18;
+                text.alignment = TextAnchor.MiddleCenter;
                 text.color = label ? IconColor : CreditsColor;
             }
             foreach (var text in rect.GetComponentsInChildren<TMP_Text>(true))
             {
+                if (text.transform.parent != rect) continue;
                 bool label = IsCreditLabel(text.name);
                 PositionCreditText(text.rectTransform, label);
                 if (sharedFont != null) text.font = sharedFont;
                 text.fontSize = label ? 11 : 18;
                 text.fontStyle = label ? FontStyles.Normal : FontStyles.Bold;
-                text.enableAutoSizing = false;
-                text.alignment = TextAlignmentOptions.MidlineLeft;
+                text.enableAutoSizing = !label;
+                text.fontSizeMin = 12f;
+                text.fontSizeMax = 18f;
+                text.alignment = TextAlignmentOptions.Center;
                 text.color = label ? IconColor : CreditsColor;
             }
             RefreshCreditsLabel(rect);
@@ -484,9 +492,9 @@ namespace EchoProtocol.UI
             if (rect == null) return;
             string value = EchoProtocol.Settings.GameLanguage.Choose("TÍN DỤNG", "CREDITS");
             foreach (var text in rect.GetComponentsInChildren<Text>(true))
-                if (text.name.Contains("Label") || text.name == "Caption") text.text = value;
+                if (text.transform.parent == rect && IsCreditLabel(text.name)) text.text = value;
             foreach (var text in rect.GetComponentsInChildren<TMP_Text>(true))
-                if (text.name.Contains("Label") || text.name == "Caption") text.text = value;
+                if (text.transform.parent == rect && IsCreditLabel(text.name)) text.text = value;
         }
 
         private static bool IsCreditLabel(string name) =>
@@ -494,10 +502,11 @@ namespace EchoProtocol.UI
 
         private static void PositionCreditText(RectTransform rect, bool label)
         {
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(50f, label ? -28f : -5f);
-            rect.sizeDelta = new Vector2(120f, label ? 16f : 24f);
+            rect.anchorMin = new Vector2(0f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(0f, label ? -12f : 8f);
+            rect.sizeDelta = new Vector2(-88f, label ? 16f : 24f);
             rect.localScale = Vector3.one;
         }
     }
@@ -537,6 +546,7 @@ namespace EchoProtocol.UI
             if (_label == null) return;
             _label.text = _icon switch
             {
+                SettingsIcon.Credits => GameLanguage.Choose("NẠP TIỀN", "TOP UP"),
                 SettingsIcon.Profile => GameLanguage.Choose("HỒ SƠ", "PROFILE"),
                 SettingsIcon.Trophy => GameLanguage.Choose("BẢNG XẾP HẠNG", "LEADERBOARD"),
                 SettingsIcon.Web => GameLanguage.Choose("TRANG WEB", "WEBSITE"),

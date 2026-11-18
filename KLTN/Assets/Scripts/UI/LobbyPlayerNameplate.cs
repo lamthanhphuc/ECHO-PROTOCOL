@@ -14,7 +14,7 @@ namespace EchoProtocol.UI
         [SerializeField, Min(0f)] private float heightAbovePlayer = 1.35f;
 
         private static readonly Color NameColor =
-            new Color32(216, 220, 218, 255);
+            IndustrialUiStyle.Accent;
 
         private static readonly Color ReadyColor =
             new Color32(117, 143, 121, 255);
