@@ -62,7 +62,7 @@ public sealed class ProgressionService : IProgressionService
             var updates = allocations.Select(allocation =>
             {
                 var profile = profiles[allocation.UserId];
-                var totalMatches = checked(profile.TotalMatches + 1);
+                var totalMatches = checked(profile.TotalMatches + (allocation.CountsAsMatch ? 1 : 0));
                 var totalWins = checked(profile.TotalWins + (allocation.CountsAsWin ? 1 : 0));
                 var experiencePoints = checked(profile.ExperiencePoints + allocation.ExperiencePoints);
                 var level = _policy.GetLevel(experiencePoints);

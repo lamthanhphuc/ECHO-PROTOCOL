@@ -11,4 +11,5 @@ public interface IProgressionPolicy
 public sealed record ProgressionAllocation(
     Guid UserId,
     long ExperiencePoints,
-    bool CountsAsWin);
+    bool CountsAsWin,
+    bool CountsAsMatch = true);

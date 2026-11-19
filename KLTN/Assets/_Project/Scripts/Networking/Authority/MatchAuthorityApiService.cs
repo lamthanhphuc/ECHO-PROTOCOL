@@ -171,10 +171,26 @@ namespace EchoProtocol.Networking.Authority
 
         public Task<ApiResult<ApiResponse<MatchResultResponseDto>>> SubmitResultAsync(
             Guid matchId,
-            SubmitMatchResultRequestDto request) =>
-            PutAsync<SubmitMatchResultRequestDto, MatchResultResponseDto>(
-                $"/api/matches/{matchId:D}/result",
-                request);
+            SubmitMatchResultRequestDto request)
+        {
+            if (request.evidenceVersion == 0)
+                return PutAsync<LegacySubmitMatchResultRequestDto, MatchResultResponseDto>(
+                    $"/api/matches/{matchId:D}/result",
+                    new LegacySubmitMatchResultRequestDto
+                    {
+                        outcome = request.outcome,
+                        objectiveCompletion = request.objectiveCompletion,
+                        players = Array.ConvertAll(request.players, player => new LegacySubmitMatchResultPlayerDto
+                        {
+                            userId = player.userId, survived = player.survived,
+                            disconnected = player.disconnected, detectionCount = player.detectionCount,
+                            downedCount = player.downedCount, reviveCount = player.reviveCount,
+                            objectiveContribution = player.objectiveContribution
+                        })
+                    });
+            return PutAsync<SubmitMatchResultRequestDto, MatchResultResponseDto>(
+                $"/api/matches/{matchId:D}/result", request);
+        }
 
         public Task<ApiResult<ApiResponse<RewardMeResponseDto>>> GetMyRewardAsync(Guid matchId) =>
             GetAsync<RewardMeResponseDto>($"/api/matches/{matchId:D}/reward/me");

@@ -46,9 +46,10 @@ public sealed class MatchResultOutboxSerializationTests
         var queue = new PendingMatchResultQueue();
         queue.items.Add(new PendingMatchResultRecord { matchId = "match-a", ownerId = "host-a",
             notBeforeUtc = 123456, nextLeaseUtc = 123450,
-            request = new SubmitMatchResultRequestDto { outcome = "WIN", objectiveCompletion = 0.75f,
+            request = new SubmitMatchResultRequestDto { outcome = "WIN", objectiveCompletion = 0.75f, evidenceVersion = 2,
                 players = new[] { new SubmitMatchResultPlayerDto { userId = "player-a", survived = true,
-                    downedCount = 2, reviveCount = 3, objectiveContribution = 1 } } } });
+                    downedCount = 2, reviveCount = 3, objectiveContribution = 1,
+                    objectiveActions = 3, rescueActions = 1, evidenceComplete = true } } } });
         var restored = JsonUtility.FromJson<PendingMatchResultQueue>(JsonUtility.ToJson(queue));
         Assert.That(restored.items.Count, Is.EqualTo(1));
         var record = restored.items[0];
@@ -57,9 +58,13 @@ public sealed class MatchResultOutboxSerializationTests
         Assert.That(record.notBeforeUtc, Is.EqualTo(123456));
         Assert.That(record.request.outcome, Is.EqualTo("WIN"));
         Assert.That(record.request.objectiveCompletion, Is.EqualTo(0.75f));
+        Assert.That(record.request.evidenceVersion, Is.EqualTo(2));
         Assert.That(record.request.players[0].survived, Is.True);
         Assert.That(record.request.players[0].downedCount, Is.EqualTo(2));
         Assert.That(record.request.players[0].reviveCount, Is.EqualTo(3));
+        Assert.That(record.request.players[0].objectiveActions, Is.EqualTo(3));
+        Assert.That(record.request.players[0].rescueActions, Is.EqualTo(1));
+        Assert.That(record.request.players[0].evidenceComplete, Is.True);
     }
 
     [Test]

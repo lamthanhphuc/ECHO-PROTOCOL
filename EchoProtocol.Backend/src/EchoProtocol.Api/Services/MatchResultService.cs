@@ -82,6 +82,11 @@ public sealed class MatchResultService : IMatchResultService
                 return ResolveReplay(match.Result, payloadHash);
             }
 
+            if (match.MatchDataPolicy != RemoteFixedBalanceContract.TestOnly &&
+                match.RewardPolicyVersion == "REWARD_V2" &&
+                (request.EvidenceVersion != 2 || request.Players.Any(player => player.EvidenceComplete != true)))
+                return Failure("Complete V2 reward evidence is required", ErrorCodes.MatchResultInvalidPayload);
+
             var wallNow = UtcNow();
             var now = reviewedEndUtc ?? wallNow;
             if (match.Status != MatchAuthorityStatus.InMatch)
@@ -128,6 +133,7 @@ public sealed class MatchResultService : IMatchResultService
                 EndedAtUtc = now,
                 DurationSeconds = durationSeconds,
                 ObjectiveCompletion = request.ObjectiveCompletion,
+                EvidenceVersion = request.EvidenceVersion,
                 PlayerCount = request.Players.Count,
                 RosterKey = string.Join(",", request.Players
                     .Select(player => player.UserId.ToString("N"))
@@ -145,7 +151,10 @@ public sealed class MatchResultService : IMatchResultService
                     DetectionCount = player.DetectionCount,
                     DownedCount = player.DownedCount,
                     ReviveCount = player.ReviveCount,
-                    ObjectiveContribution = player.ObjectiveContribution
+                    ObjectiveContribution = player.ObjectiveContribution,
+                    ObjectiveActions = player.ObjectiveActions,
+                    RescueActions = player.RescueActions,
+                    EvidenceComplete = player.EvidenceComplete
                 }).ToList()
             };
 
@@ -276,6 +285,15 @@ public sealed class MatchResultService : IMatchResultService
             return ("A player can only appear once in a match result", ErrorCodes.MatchResultDuplicatePlayer);
         }
 
+        if (request.EvidenceVersion is not null and not 2)
+            return ("Unsupported evidence version", ErrorCodes.MatchResultInvalidPayload);
+        if (request.Players.Any(player => player.ObjectiveActions is < 0 or > 10000 ||
+            player.RescueActions is < 0 or > 10000))
+            return ("Invalid reward evidence", ErrorCodes.MatchResultInvalidPayload);
+        if (request.EvidenceVersion == 2 && request.Players.Any(player =>
+            player.ObjectiveActions is null || player.RescueActions is null || player.EvidenceComplete is null))
+            return ("Missing V2 reward evidence fields", ErrorCodes.MatchResultInvalidPayload);
+
         return null;
     }
 
@@ -314,6 +332,8 @@ public sealed class MatchResultService : IMatchResultService
             writer.WriteStartObject();
             writer.WriteString("outcome", request.Outcome!.Value.ToString());
             writer.WriteNumber("objectiveCompletion", request.ObjectiveCompletion);
+            if (request.EvidenceVersion.HasValue)
+                writer.WriteNumber("evidenceVersion", request.EvidenceVersion.Value);
             writer.WriteStartArray("players");
             foreach (var player in request.Players.OrderBy(item => item.UserId))
             {
@@ -325,6 +345,12 @@ public sealed class MatchResultService : IMatchResultService
                 writer.WriteNumber("downedCount", player.DownedCount);
                 writer.WriteNumber("reviveCount", player.ReviveCount);
                 writer.WriteNumber("objectiveContribution", player.ObjectiveContribution);
+                if (request.EvidenceVersion == 2)
+                {
+                    writer.WriteNumber("objectiveActions", player.ObjectiveActions!.Value);
+                    writer.WriteNumber("rescueActions", player.RescueActions!.Value);
+                    writer.WriteBoolean("evidenceComplete", player.EvidenceComplete!.Value);
+                }
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();

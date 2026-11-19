@@ -21,6 +21,9 @@ public sealed class MatchAuthorityBinding
     public string? BalanceVersion { get; set; }
     public string? BalanceHash { get; set; }
     public string MatchDataPolicy { get; set; } = "STANDARD";
+    public string? RewardPolicyVersion { get; set; }
+    public string? ProgressionPolicyVersion { get; set; }
+    public string? RewardConfigurationJson { get; set; }
     public MatchAuthorityStatus Status { get; set; }
     public DateTime LeaseExpiresAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }

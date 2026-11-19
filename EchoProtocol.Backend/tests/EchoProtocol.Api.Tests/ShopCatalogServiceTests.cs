@@ -248,6 +248,32 @@ public sealed class ShopCatalogServiceTests
             seededIds);
     }
 
+    [Fact]
+    public async Task SeederPreservesAdminPriceAndInactiveStateWhileRetiringLegacyItems()
+    {
+        await using var harness = await ShopHarness.CreateAsync();
+        var clock = new FixedTimeProvider(Now);
+        await ShopCatalogSeeder.SeedProductionCatalogAsync(harness.Db, clock, NullLogger.Instance);
+        var scannerId = Guid.Parse("12000000-0000-0000-0000-000000000001");
+        var scanner = await harness.Db.ShopItems.SingleAsync(item => item.ItemId == scannerId);
+        Assert.Equal(300, scanner.Price);
+        Assert.True(scanner.IsActive);
+
+        scanner.Price = 777;
+        scanner.IsActive = false;
+        var legacy = Item("Legacy", "TEAM_TOOL", 20, true);
+        legacy.ItemId = Guid.Parse("12000000-0000-0000-0000-000000000003");
+        harness.Db.ShopItems.Add(legacy);
+        await harness.Db.SaveChangesAsync();
+        var count = await harness.Db.ShopItems.CountAsync();
+
+        await ShopCatalogSeeder.SeedProductionCatalogAsync(harness.Db, clock, NullLogger.Instance);
+        Assert.Equal(count, await harness.Db.ShopItems.CountAsync());
+        Assert.Equal(777, scanner.Price);
+        Assert.False(scanner.IsActive);
+        Assert.False(legacy.IsActive);
+    }
+
     [Fact, Trait("Category", "M4ShopUnit")]
     public async Task ControllerResponseMatchesPublicCatalogContract()
     {

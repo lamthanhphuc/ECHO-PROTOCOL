@@ -1234,6 +1234,21 @@ Backend phải validate hoặc tính lại reward dựa trên raw match stats.
 
 Level V1 dùng công thức `floor(totalXP / 500) + 1`. Level hiện là progression/profile, không tăng sức mạnh gameplay.
 
+**Reward/Progression V2 (mặc định cho cài đặt mới):** mỗi trận khóa phiên bản và
+cấu hình thưởng khi bắt đầu. V2 yêu cầu bằng chứng đầy đủ cho từng người chơi:
+`objectiveActions`, `rescueActions`, `evidenceComplete=true`. Số đơn vị đóng góp là
+`min(objectiveActions,objectiveActionCap)+min(rescueActions,rescueActionCap)`;
+giới hạn mặc định là 4 và 2. Hệ số thưởng đội mặc định là 0, 0.5, 0.75,
+1 theo số đơn vị 0, 1, 2, từ 3 trở lên. Giới hạn hành động, hệ số và các mức XP
+được cấu hình trong Admin Economy và khóa theo trận. Không có đóng góp hợp lệ thì 0 Credit,
+0 XP và không tăng số trận đủ điều kiện. Trần thưởng V2 mặc định là 320 Credit mỗi trận.
+Mỗi lần cứu đồng đội cộng thêm Credit theo cấu hình Admin (mặc định 10),
+tối đa theo giới hạn cứu đã cấu hình và vẫn chịu trần thưởng của trận. Thua hoặc mất kết nối bị giới hạn bởi
+thời lượng trận; đóng góp đã ghi nhận không bị xóa. TEST_ONLY luôn 0 Credit và XP.
+Các trận V1 lịch sử vẫn giữ công thức V1; thay đổi Admin chỉ áp dụng cho trận bắt đầu sau đó.
+V2 chưa phải bộ phát hiện AFK hoàn chỉnh: người hỗ trợ ngoài hai loại hành động được đo
+có thể chưa được ghi nhận đầy đủ.
+
 **Security rule:**
 
 * Client không được tự cộng ECHO Credits.

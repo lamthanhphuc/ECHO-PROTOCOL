@@ -58,6 +58,7 @@ namespace EchoProtocol.Networking
         public int ReviveCount;
         public int RescuesPerformed;
         public NetworkBool HasObjectiveContribution;
+        public int ObjectiveActions;
     }
 
     public enum NetworkMatchPhase
@@ -1589,7 +1590,6 @@ namespace EchoProtocol.Networking
             {
                 if (!GetSecurityHoldParticipant(index).IsNone) continue;
                 SetSecurityHoldParticipant(index, requester);
-                MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(requester);
                 _securityHoldLeases[index] = TickTimer.CreateFromSeconds(Runner, 1.25f);
                 EmitSecurityTerminalInteractionNoiseAuthoritative(requester, director.SecurityTerminal);
                 break;
@@ -1759,6 +1759,8 @@ namespace EchoProtocol.Networking
                 || SecurityHoldAccumulatedSeconds < SecurityHoldDurationSeconds) return false;
 
             SecurityHoldCompleted = true;
+            for (int index = 0; index < 4; index++)
+                MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(GetSecurityHoldParticipant(index));
             PowerAuthorizationAvailable = true;
             SecurityHoldAccumulatedSeconds = SecurityHoldDurationSeconds;
             RelayRepairWindowTimer = TickTimer.None;
@@ -2024,7 +2026,6 @@ namespace EchoProtocol.Networking
                 return;
             }
             zone3.StartAuthoritativePush(actor, lifeState.gameObject);
-            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone3Pusher = actor;
         }
 
@@ -2217,7 +2218,6 @@ namespace EchoProtocol.Networking
                 || !zone3.IsPlayerNearCharge(lifeState.transform.position)) return false;
 
             Zone3ChargeDurationSeconds = zone3.ChargeStation.ChargeDurationSeconds;
-            MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             Zone3ChargeOperator = actor;
             _zone3ChargeLease = TickTimer.CreateFromSeconds(Runner, 1.25f);
             HandleReplicatedStateChanged();
@@ -2279,6 +2279,7 @@ namespace EchoProtocol.Networking
             return TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate,
                 NetworkMatchPhase.FinalHunt, "ZONE3_CHARGE_ACTIVATED", () =>
                 {
+                    MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
                     EmitZone3PowerSurgeNoiseAuthoritative(actor,
                         zone3.ChargeStation.transform.position);
                     zone3.StopAllAuthoritativePushers();
@@ -3249,7 +3250,8 @@ namespace EchoProtocol.Networking
                 ReviveCount = life != null ? Mathf.Max(0, life.MatchReviveCount) : -1,
                 RescuesPerformed = player.TryGetComponent<NetworkPlayerInteractor>(out var interactor)
                     ? Mathf.Max(0, interactor.FirstAidRevivesUsedThisMatch) : -1,
-                HasObjectiveContribution = player.HasObjectiveContribution
+                HasObjectiveContribution = player.HasObjectiveContribution,
+                ObjectiveActions = Mathf.Max(0, player.ObjectiveActions)
             };
 
             var previous = GetResultRosterEntry(slot);
@@ -3262,7 +3264,8 @@ namespace EchoProtocol.Networking
                 && previous.DownCount == entry.DownCount
                 && previous.ReviveCount == entry.ReviveCount
                 && previous.RescuesPerformed == entry.RescuesPerformed
-                && (bool)previous.HasObjectiveContribution == (bool)entry.HasObjectiveContribution)
+                && (bool)previous.HasObjectiveContribution == (bool)entry.HasObjectiveContribution
+                && previous.ObjectiveActions == entry.ObjectiveActions)
                 return;
 
             switch (slot)

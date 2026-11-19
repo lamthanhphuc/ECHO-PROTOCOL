@@ -2572,15 +2572,17 @@ namespace EchoProtocol.Networking.Authority
             if (runner == null || !actor.IsRealPlayer) return;
 
             var actorNumber = runner.GetPlayerActorId(actor) ?? actor.PlayerId;
-            if (_boundPlayers.ContainsKey(actorNumber))
+            if (!_boundPlayers.ContainsKey(actorNumber) || !runner.IsServer)
+                return;
+
+            _objectiveContributors.Add(actorNumber);
+            if (runner.TryGetPlayerObject(actor, out var obj) &&
+                obj != null && obj.IsValid && obj.HasStateAuthority &&
+                obj.TryGetComponent<LobbyPlayerState>(out var state))
             {
-                _objectiveContributors.Add(actorNumber);
-                if (runner.TryGetPlayerObject(actor, out var obj)
-                    && obj.TryGetComponent<LobbyPlayerState>(out var state))
-                {
-                    state.HasObjectiveContribution = true;
-                    NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(state);
-                }
+                state.HasObjectiveContribution = true;
+                state.ObjectiveActions = Mathf.Min(10000, state.ObjectiveActions + 1);
+                NetworkMatchState.Instance?.RecordResultRosterPlayerAuthoritative(state);
             }
         }
 
@@ -3383,7 +3385,10 @@ namespace EchoProtocol.Networking.Authority
                         survived = NetworkPlayerLifeStateRules.SurvivedMatch(entry.LifeStatus,
                             matchSnapshot.HuntReady, _pendingBackendOutcome == "WIN", !connected),
                         downedCount = Mathf.Max(0, entry.DownCount), reviveCount = Mathf.Max(0, entry.ReviveCount),
-                        objectiveContribution = entry.HasObjectiveContribution ? 1 : 0
+                        objectiveContribution = entry.HasObjectiveContribution ? 1 : 0,
+                        objectiveActions = Mathf.Max(0, entry.ObjectiveActions),
+                        rescueActions = Mathf.Max(0, entry.RescuesPerformed),
+                        evidenceComplete = entry.HasLifeState && entry.RescuesPerformed >= 0
                     });
                 }
             }
@@ -3421,14 +3426,16 @@ namespace EchoProtocol.Networking.Authority
                     detectionCount = 0,
                     downedCount = downedCount,
                     reviveCount = reviveCount,
-                    objectiveContribution = _objectiveContributors.Contains(actorNumber) ? 1 : 0
+                    objectiveContribution = _objectiveContributors.Contains(actorNumber) ? 1 : 0,
+                    objectiveActions = 0, rescueActions = 0, evidenceComplete = false
                 });
             }
 
             foreach (var participant in _migratedResultRoster)
                 if (!players.Exists(item => item.userId == participant.Key.ToString("D")))
                     players.Add(new SubmitMatchResultPlayerDto { userId = participant.Key.ToString("D"),
-                        disconnected = participant.Value });
+                        disconnected = participant.Value,
+                        objectiveActions = 0, rescueActions = 0, evidenceComplete = false });
 
             players.Sort((left, right) =>
                 string.CompareOrdinal(left.userId, right.userId));
@@ -3437,6 +3444,7 @@ namespace EchoProtocol.Networking.Authority
             {
                 outcome = _pendingBackendOutcome,
                 objectiveCompletion = _pendingObjectiveCompletion,
+                evidenceVersion = 2,
                 players = players.ToArray()
             };
             return true;

@@ -3,6 +3,7 @@ using System.Data;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.Entities;
+using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -13,11 +14,8 @@ public sealed record ProposeShopPrice(Guid ItemId, int ExpectedPrice,
 
 public sealed record ReviewShopPrice([Required] bool? Approve, [Required, StringLength(500, MinimumLength = 10)] string Reason);
 
-public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, TimeProvider clock)
+public sealed class EconomyAdminService(AppDbContext db, TimeProvider clock)
 {
-    private bool CanReview(Guid admin) => config.GetSection("EconomyAdmin:PriceApproverUserIds")
-        .Get<string[]>()?.Any(x => Guid.TryParse(x, out var id) && id == admin) == true;
-
     public async Task<ServiceResult<object>> GetAsync(Guid admin, CancellationToken ct)
     {
         var items = await db.ShopItems.AsNoTracking().OrderBy(x => x.ItemName).ThenBy(x => x.ItemId)
@@ -26,17 +24,41 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
             .ThenByDescending(x => x.ProposedAtUtc).Take(100).ToArrayAsync(ct);
         var rewards = await db.RewardConfigurations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == RewardConfiguration.SharedId, ct) ?? new();
-        return ServiceResult<object>.Success(new { items, proposals, Rewards = rewards, CanReview = CanReview(admin), AdminId = admin,
-            RewardPolicy = new RewardPolicyV1(rewards).Version, MaximumCurrencyPerMatch = rewards.Maximum });
+        return ServiceResult<object>.Success(new { items, proposals, Rewards = rewards,
+            RewardPolicy = rewards.PolicyKey, MaximumCurrencyPerMatch = rewards.Maximum });
     }
 
     public async Task<ServiceResult<object>> SaveRewardsAsync(Guid admin, RewardConfiguration rewards, CancellationToken ct)
     {
+        if (rewards.PolicyKey is not ("REWARD_V1" or "REWARD_V2"))
+            return Fail("Invalid reward policy", ErrorCodes.ValidationError);
+        if (rewards.PolicyKey == "REWARD_V2" && !rewards.HasValidV2Settings())
+            return Fail("Invalid V2 reward settings", ErrorCodes.ValidationError);
+        var expectedEffectiveAtUtc = rewards.EffectiveAtUtc;
         rewards.Id = RewardConfiguration.SharedId;
-        rewards.EffectiveAtUtc = clock.GetUtcNow().UtcDateTime;
         rewards.UpdatedByUserId = admin;
 
         var current = await db.RewardConfigurations.FindAsync(new object[] { rewards.Id }, ct);
+        if (current != null && current.EffectiveAtUtc != expectedEffectiveAtUtc)
+            return Fail("Mức thưởng vừa được cập nhật. Hãy tải lại rồi thử lại.");
+        if (rewards.PolicyKey == "REWARD_V2")
+        {
+            var legacy = await db.MatchAuthorityBindings.Where(m => m.RewardPolicyVersion == null &&
+                (m.Status == MatchAuthorityStatus.InMatch || db.MatchResults.Any(r =>
+                    r.MatchId == m.MatchId && r.RewardStatus == MatchRewardStatus.Pending))).ToListAsync(ct);
+            if (legacy.Count > 0 && current?.PolicyKey == "REWARD_V2")
+                return Fail("Còn trận cũ chưa có cấu hình thưởng V1 để xử lý an toàn.", ErrorCodes.Conflict);
+            var previous = current ?? new RewardConfiguration { PolicyKey = "REWARD_V1", Participation = 20,
+                Objective = 30, Win = 50, Survival = 20, Contribution = 10, Disconnected = 10, Maximum = 130 };
+            var snapshot = System.Text.Json.JsonSerializer.Serialize(previous);
+            foreach (var match in legacy)
+            {
+                match.RewardPolicyVersion = "REWARD_V1";
+                match.ProgressionPolicyVersion = "PROGRESSION_V1";
+                match.RewardConfigurationJson = snapshot;
+            }
+        }
+        rewards.EffectiveAtUtc = clock.GetUtcNow().UtcDateTime;
         if (current == null) db.RewardConfigurations.Add(rewards);
         else db.Entry(current).CurrentValues.SetValues(rewards);
         try
@@ -44,6 +66,10 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
             await db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException error) when (error.GetBaseException() is PostgresException { SqlState: "23505" })
+        {
+            return Fail("Mức thưởng vừa được cập nhật. Hãy tải lại rồi thử lại.");
+        }
+        catch (DbUpdateConcurrencyException)
         {
             return Fail("Mức thưởng vừa được cập nhật. Hãy tải lại rồi thử lại.");
         }
@@ -93,7 +119,6 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
 
     public async Task<ServiceResult<object>> ReviewAsync(Guid admin, Guid id, ReviewShopPrice request, CancellationToken ct)
     {
-        if (!CanReview(admin)) return Fail("Tài khoản thiếu quyền duyệt giá.", "FORBIDDEN");
         if (request.Approve is null || request.Reason.Trim().Length < 10)
             return Fail("Cần quyết định duyệt và lý do từ 10 ký tự.", ErrorCodes.ValidationError);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -101,7 +126,6 @@ public sealed class EconomyAdminService(AppDbContext db, IConfiguration config, 
         {
             var proposal = await db.Set<ShopPriceProposal>().SingleOrDefaultAsync(x => x.Id == id, ct);
             if (proposal is null) return Fail("Không tìm thấy đề xuất.", ErrorCodes.NotFound);
-            if (proposal.ProposedByUserId == admin) return Fail("Người đề xuất không thể tự duyệt.", "FORBIDDEN");
             if (proposal.Status != "PENDING") return Fail("Đề xuất đã được xử lý.");
             var now = clock.GetUtcNow().UtcDateTime;
             if (request.Approve.Value)

@@ -387,11 +387,6 @@ public static class ShopCatalogSeeder
                 changed = true;
             }
 
-            if (item.Price != definition.Price)
-            {
-                item.Price = definition.Price;
-                changed = true;
-            }
 
             if (item.Description != definition.Description)
             {
@@ -405,11 +400,6 @@ public static class ShopCatalogSeeder
                 changed = true;
             }
 
-            if (!item.IsActive)
-            {
-                item.IsActive = true;
-                changed = true;
-            }
 
             if (changed)
             {
