@@ -14,6 +14,7 @@ public sealed class PaymentCatalogController(
     ILogger<PaymentCatalogController> logger) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public IActionResult Get()
     {
         try

@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import type { ApiResponse, UserRole } from "@/lib/types/common";
 
 interface LoginResult { user: { role: UserRole }; expiresAt: string; }
 
 export function LoginForm() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,12 +21,15 @@ export function LoginForm() {
       const payload = await response.json() as ApiResponse<LoginResult>;
       if (!response.ok || !payload.success || !payload.data) throw new Error(payload.message);
       const next = new URLSearchParams(window.location.search).get("next");
+      const walletPath = next && /^\/wallet(?:\?product=[A-Za-z0-9_-]+)?$/.test(next) ? next : null;
       const paymentReturnPath =
         next === "/wallet/payment/return" || next === "/wallet/payment/cancel"
           ? next
           : null;
       const adminPath = next && /^\/admin(?:\/[^?#\\]*)?(?:\?[^#\\]*)?$/.test(next) ? next : "/admin";
-      router.replace(payload.data.user.role === "ADMIN" ? adminPath : paymentReturnPath ?? "/dashboard");
+      const destination = payload.data.user.role === "ADMIN" ? adminPath : walletPath ?? paymentReturnPath ?? "/dashboard";
+      window.history.replaceState(window.history.state, "", "/");
+      window.location.assign(destination);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại.");
     } finally { setLoading(false); }

@@ -46,3 +46,16 @@ test("landing fits a narrow phone viewport", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Vùng ngập" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });
+
+test("browser Back from login always opens the landing page", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/login\?next=%2Fadmin/);
+  await page.goBack();
+  await expect(page).toHaveURL("/");
+
+  await page.goto("/");
+  await page.locator("header").getByRole("link", { name: "Đăng nhập" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goBack();
+  await expect(page).toHaveURL("/");
+});

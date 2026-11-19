@@ -60,7 +60,7 @@ namespace EchoProtocol.UI.MainMenu
     [SerializeField] private Text profileWinRateText;
     [SerializeField] private Text profileCreditsText;
     [SerializeField] private Text profileStatusText;
-    [SerializeField] private string topUpWebUrl = "https://web.3.1.238.6.sslip.io/wallet";
+    [SerializeField] private string topUpWebUrl = "https://web.3.1.238.6.sslip.io/topup";
     [SerializeField] private string webUrl = "https://web.3.1.238.6.sslip.io/";
     [SerializeField] private string lobbySceneName = GameConstants.SceneLobby;
     [SerializeField] private string loginSceneName = GameConstants.SceneLogin;

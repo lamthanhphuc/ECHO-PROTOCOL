@@ -194,9 +194,10 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
     </Panel>
     <Panel>
       <h2 className="mb-2 font-semibold">Lịch sử thay đổi giá</h2>
-      {[{ title: "Đề xuất cũ chờ xử lý", proposals: pending }, { title: "Đã áp dụng và xử lý", proposals: history }].map((group) => <section className="mt-4" key={group.title}>
+      {[{ title: "Đề xuất cũ chờ xử lý", proposals: pending }, { title: "Đã áp dụng và xử lý", proposals: history }]
+        .filter((group) => group.proposals.length > 0)
+        .map((group) => <section className="mt-4" key={group.title}>
         <h3 className="mb-2 font-semibold">{group.title} ({group.proposals.length})</h3>
-        {group.proposals.length === 0 && <p className="muted text-sm">Chưa có đề xuất.</p>}
         {group.proposals.map((proposal) => {
           const current = itemsById.get(proposal.itemId);
           const priceChanged = proposal.status === "PENDING" && current && current.price !== proposal.previousPrice;

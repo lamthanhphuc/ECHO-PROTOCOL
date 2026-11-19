@@ -3305,6 +3305,14 @@ namespace EchoProtocol.Networking.Authority
             string outcome,
             float objectiveCompletion)
         {
+            Debug.Log(
+                $"[RESULT_DIAG] Queue " +
+                $"match={MatchId:D} " +
+                $"outcome={outcome} " +
+                $"host={IsHostBinding} " +
+                $"bound={_boundPlayers.Count} " +
+                $"snapshot={NetworkMatchState.Instance != null}");
+
             if (!HasBinding || !IsHostBinding)
             {
                 return;

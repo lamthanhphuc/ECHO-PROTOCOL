@@ -8,7 +8,7 @@ export function proxy(request: NextRequest) {
   if (!session) {
     const params = new URLSearchParams();
     if (request.cookies.has("echo_session")) params.set("expired", "1");
-    if (adminPath) params.set("next", path + request.nextUrl.search);
+    if (adminPath || path === "/wallet") params.set("next", path + request.nextUrl.search);
     else if (path === "/wallet/payment/return" || path === "/wallet/payment/cancel") params.set("next", path);
     return NextResponse.redirect(new URL(params.size ? `/login?${params}` : "/login", request.url));
   }

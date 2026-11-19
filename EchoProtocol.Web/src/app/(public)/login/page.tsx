@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import { getSession } from "@/lib/auth/session";
 import { LoginForm } from "@/components/auth/login-form";
+import { LoginBackToHome } from "@/components/auth/login-back-to-home";
 
 export const metadata = { title: "Đăng nhập" };
 
@@ -12,6 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="login-stage mx-auto grid min-h-screen w-full max-w-[1480px] items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-16">
+      <LoginBackToHome />
       <div className="w-full max-w-2xl justify-self-center text-center">
         <div className="flex justify-center">
           <h1 className="w-full max-w-[580px]">

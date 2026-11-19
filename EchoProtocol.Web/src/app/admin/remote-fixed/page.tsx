@@ -52,9 +52,11 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
     <PageHeader title="Cấu hình trận" />
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div className="text-sm">
-        <p>{status.remoteFixedEnabled && compatibleActive.length > 0
-          ? compatibleActive.length + " bản Web có thể áp dụng cho phạm vi đã chọn."
-          : "Bản game đã đăng ký chọn nguồn tự động sẽ dùng mặc định trong game ở phạm vi này."}</p>
+        {status.remoteFixedEnabled && compatibleActive.length > 0 && (
+          <p>
+            {compatibleActive.length} bản Web có thể áp dụng cho phạm vi đã chọn.
+          </p>
+        )}
         {status.remoteFixedEnabled && !status.gameplayTestEnabled &&
           <p className="muted mt-1">Thử nghiệm RFB-2 đang tắt. Cấu hình thử nghiệm đã kích hoạt được giữ lại để dùng khi bật lại.</p>}
       </div>

@@ -37838,7 +37838,7 @@ MonoBehaviour:
   shopButton: {fileID: 1644736322}
   webButton: {fileID: 491302429}
   storePanel: {fileID: 1345861287}
-  topUpWebUrl: https://web.3.1.238.6.sslip.io/wallet
+  topUpWebUrl: https://web.3.1.238.6.sslip.io/topup
   webUrl: https://web.3.1.238.6.sslip.io/
 --- !u!4 &1407709432 stripped
 Transform:

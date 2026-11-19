@@ -20,7 +20,7 @@ namespace EchoProtocol.UI
 
         [SerializeField]
         private string topUpWebUrl =
-            "https://web.3.1.238.6.sslip.io/wallet";
+            "https://web.3.1.238.6.sslip.io/topup";
 
         [SerializeField]
         private string webUrl =

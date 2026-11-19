@@ -219,6 +219,76 @@ namespace EchoProtocol.Networking
             for (int i = 0; i < actors.Length; i++) if (Read(i).Carrier == player) return i;
             return -1;
         }
+        public bool DebugCompleteNextFurnace(int count = FurnaceCapacity)
+        {
+            if (!Authority || !Ready || Completed ||
+                (count != 1 && count != FurnaceCapacity))
+                return false;
+
+            for (int i = 0; i < furnaces.Length; i++)
+            {
+                var furnace = ReadFurnace(i);
+                if (furnace.BurnedCount >= FurnaceCapacity) continue;
+
+                int amount = Mathf.Min(
+                    count, FurnaceCapacity - furnace.BurnedCount);
+
+                int[] victims = new int[amount];
+                int found = 0;
+                int onPan = furnace.AlienSlot - 1;
+
+                if (onPan >= 0 && onPan < AlienCount &&
+                    Read(onPan).Stage != (int)AlienStage.Burned)
+                {
+                    victims[found++] = onPan;
+                }
+
+                for (int alien = 0; alien < AlienCount && found < amount; alien++)
+                {
+                    var state = Read(alien);
+
+                    if (alien == onPan ||
+                        state.Stage == (int)AlienStage.Burned ||
+                        state.Stage == (int)AlienStage.OnPan ||
+                        state.Stage == (int)AlienStage.Burning)
+                        continue;
+
+                    victims[found++] = alien;
+                }
+
+                if (found != amount) return false;
+
+                foreach (int alien in victims)
+                {
+                    var state = Read(alien);
+                    state.Stage = (int)AlienStage.Burned;
+                    state.Carrier = PlayerRef.None;
+                    state.Target = -1;
+                    Write(alien, state);
+                }
+
+                furnace.BurnedCount += amount;
+                furnace.AlienSlot = 0;
+                furnace.Fuel = 0;
+                furnace.BurnRemaining = 0f;
+                WriteFurnace(i, furnace);
+
+                for (int n = 0; n < amount; n++)
+                {
+                    if (NetworkReady)
+                        Match.RecordHuntBurn(furnaces[i].transform.position);
+                    else
+                        _offlineBurned++;
+                }
+
+                Debug.Log(
+                    $"[AlienHuntCheat] Furnace {i + 1}: " +
+                    $"{furnace.BurnedCount}/{FurnaceCapacity}");
+                return true;
+            }
+
+            return false;
+        }
         public bool DebugGive(PlayerRef player, HuntKind kind)
         {
             if (!Authority || !Ready || Completed || HeldIndex(player) >= 0 || kind == HuntKind.Alien) return false;
