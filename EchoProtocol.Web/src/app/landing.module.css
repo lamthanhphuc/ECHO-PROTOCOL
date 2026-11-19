@@ -53,7 +53,7 @@
   gap: 1rem;
 }
 .bar > .brand { justify-self: start; }
-.bar > .portal { justify-self: end; display: inline-grid; place-items: center; min-height: 2.75rem; padding: .4rem 1rem; }
+.bar > .portal { justify-self: end; display: inline-grid; place-items: center; min-height: 2.75rem; padding: .45rem 1rem .35rem; }
 .brand { font-weight: 780; font-size: clamp(.9rem, 2vw, 1.15rem); letter-spacing: -.035em; white-space: nowrap; }
 .label { color: var(--accent); }
 .nav { display: flex; gap: clamp(1rem, 3vw, 2.75rem); font-size: .875rem; color: #dfd5ce; }
@@ -78,13 +78,14 @@
 }
 .heroContent { padding-block: 4.5rem 5.5rem; }
 .label { font-size: .76rem; font-weight: 650; line-height: 1.5; letter-spacing: .1em; text-transform: uppercase; }
-.hero h1 {
+.landing .heroLogo {
   margin-block: 1.4rem;
-  font-size: clamp(2.8rem, 9vw, 8.1rem);
-  line-height: .88;
-  font-weight: 880;
-  letter-spacing: -.06em;
-  text-shadow: 0 .12em .24em #09070866;
+}
+.heroLogo img {
+  display: block;
+  width: min(100%, 900px);
+  height: auto;
+  margin-inline: auto;
 }
 .tagline { font-size: clamp(1.22rem, 3vw, 2rem); font-weight: 670; }
 .hero .heroLead { max-width: 30rem; margin-top: .85rem; color: #d8ccc5; line-height: 1.7; }

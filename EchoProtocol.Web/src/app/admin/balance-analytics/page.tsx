@@ -28,7 +28,7 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
   ]);
 
   return <>
-    <PageHeader title="Báo cáo trận đấu" description="So sánh kết quả và bằng chứng áp dụng Adaptive trên các trận có kết quả đã ghi nhận." />
+    <PageHeader title="Báo cáo trận đấu" />
     <Panel>
       <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" action="/admin/balance-analytics">
         <label className="admin-field">Số ngày gần nhất<input className="input" type="number" name="days" min={1} max={90} required defaultValue={days} /></label>
@@ -50,7 +50,9 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
     </Panel>
     <Panel className="mt-5">
       <h2 className="admin-section-title">Kết quả theo cách điều chỉnh độ khó</h2>
-      <p className="muted my-2 text-sm">{data.total} trận trong mẫu. Nên so sánh các trận cùng bản đồ, độ khó, quy mô đội và cấu hình nền.</p>
+      <p className="muted my-2 text-sm">
+        {data.total} trận trong mẫu.
+      </p>
       {data.truncated && <p className="my-2 text-sm">Chỉ tính {data.limit} trận mới nhất. Thu hẹp bộ lọc để xem toàn bộ một phạm vi nhỏ hơn.</p>}
       {data.cohorts.length === 0 ? <p className="muted">Chưa có kết quả trận phù hợp.</p> : <div className="table-wrap"><table>
         <thead><tr><th>Nhóm</th><th>Số trận</th><th>Thắng</th><th>Thời lượng TB</th><th>Sống sót</th><th>Trận gần đây</th></tr></thead>

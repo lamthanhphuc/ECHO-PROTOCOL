@@ -15,7 +15,7 @@ namespace EchoProtocol.Networking
 
         private static readonly Dictionary<PlayerRef, float> LastSent = new();
         private static NetworkRunner _rateRunner;
-        // shortcut: ambiguous REVIEW terms (dm, cc, vl, lon) stay allowed until context-aware moderation exists.
+        // shortcut: "dm" is ambiguous but blocked when the configured list includes "đụ mẹ"; review if false positives appear.
         private static readonly Regex BlockedWords = new(
             @"(?<![\p{L}\p{N}])(?:" +
             @"fuck\p{L}*|motherfuck\p{L}*|clusterfuck|fck|fuk|fuq|phuck|phuk|f0ck|f\W{1,2}u\W{1,2}c\W{1,2}k|f\W{1,2}ck|" +
@@ -36,18 +36,42 @@ namespace EchoProtocol.Networking
             if (words == null || words.Length > 256) return;
             if (Array.Exists(words, word => string.IsNullOrWhiteSpace(word) || word.Length > 50)) return;
             _adminWords = words.Length == 0 ? null : new Regex(
-                @"(?<![\p{L}\p{N}])(?:" + string.Join("|", Array.ConvertAll(words,
-                    word => Regex.Escape(NormalizeFilterText(word.Trim())).Replace(@"\ ", @"\s+")))
+                @"(?<![\p{L}\p{N}])(?:" + string.Join("|", Array.ConvertAll(words, BuildWordPattern))
+                + (Array.Exists(words, word => NormalizeFilterText(word.Trim()) == "du me") ? "|dm" : "")
                 + @")(?![\p{L}\p{N}])",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(50));
             _adminReplacesDefaults = replacesDefaults;
+        }
+
+        private static string BuildWordPattern(string word)
+        {
+            string value = NormalizeFilterText(word.Trim());
+            string[] parts = Regex.Split(value, @"\s+");
+            var pattern = new StringBuilder();
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (i > 0) pattern.Append(@"[\s\p{P}]*");
+                if (parts[i].Length < 3) pattern.Append(Regex.Escape(parts[i]));
+                else
+                {
+                    for (int j = 0; j < parts[i].Length; j++)
+                    {
+                        if (j > 0) pattern.Append(@"[\s\p{P}]*");
+                        pattern.Append(Regex.Escape(parts[i][j].ToString()));
+                        if (parts[i].Length >= 3) pattern.Append("{1,3}");
+                    }
+                }
+            }
+            return pattern.ToString();
         }
 
         private static string NormalizeFilterText(string text)
         {
             var normalized = new StringBuilder(text.Length);
-            foreach (char c in text.Normalize(NormalizationForm.FormKC))
-                if (char.GetUnicodeCategory(c) != UnicodeCategory.Format) normalized.Append(c);
+            foreach (char c in text.Normalize(NormalizationForm.FormKD))
+                if (char.GetUnicodeCategory(c) != UnicodeCategory.Format
+                    && char.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                    normalized.Append(c == 'đ' ? 'd' : c == 'Đ' ? 'D' : c);
             return normalized.ToString();
         }
 
@@ -55,8 +79,15 @@ namespace EchoProtocol.Networking
         {
             if (string.IsNullOrEmpty(text)) return false;
             string value = NormalizeFilterText(text);
-            return (_adminWords?.IsMatch(value) ?? false)
-                || (!_adminReplacesDefaults && BlockedWords.IsMatch(value));
+            try
+            {
+                return (_adminWords?.IsMatch(value) ?? false)
+                    || (!_adminReplacesDefaults && (BlockedWords.IsMatch(text) || BlockedWords.IsMatch(value)));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return true;
+            }
         }
 
         public static string Normalize(string text)

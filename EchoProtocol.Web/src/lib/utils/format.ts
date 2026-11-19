@@ -18,7 +18,7 @@ export function formatAdminDate(value: string | null | undefined): string {
   if (!value) return "—";
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(value)) + " GMT+7";
+  }).format(new Date(value));
 }
 
 export function paymentProductLabel(reference: string): string {

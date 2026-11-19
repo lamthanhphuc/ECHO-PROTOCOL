@@ -1,4 +1,3 @@
-import { Panel } from "@/components/ui/panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { adaptiveParameterLabels, adaptiveReasons } from "@/lib/types/adaptive";
 import type { AdaptiveMatchAudit } from "@/lib/types/adaptive";
@@ -16,8 +15,9 @@ function decisionLabel(approval: string, application: string) {
 
 export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAudit; matchId: string }) {
   const { baseline, preMatch, decisions, profile, teamProfile } = audit;
-  return <Panel className="mt-5 space-y-5">
-    <h2 className="text-lg font-semibold">Cấu hình và bằng chứng theo trận</h2>
+  return <details className="panel mt-5 p-5">
+    <summary className="cursor-pointer text-lg font-semibold">Cấu hình và bằng chứng theo trận</summary>
+    <div className="mt-5 space-y-5">
     {baseline && <section>
       <h3 className="mb-2 font-semibold">Cấu hình nền đã khóa</h3>
       <p className="text-sm">{baseline.source === "LOCAL" ? "Mặc định trong game" : baseline.source === "REMOTE_FIXED" ? `Cấu hình từ Web${baseline.version ? ` · ${baseline.version}` : ""}` : "Chưa xác định nguồn cấu hình"}
@@ -108,5 +108,6 @@ export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAud
         {audit.mayReprocess && <ProfileReprocessButton matchId={matchId} />}
       </div> : <p className="muted text-sm">Chưa có tác vụ xử lý hồ sơ.</p>}
     </section>
-  </Panel>;
+    </div>
+  </details>;
 }

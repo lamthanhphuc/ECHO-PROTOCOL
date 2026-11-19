@@ -71,6 +71,12 @@ export const adminApi = {
   rooms: () => authorized<AdminRoomSession[]>("/api/admin/rooms"),
   room: (id: string) => authorized<AdminRoomSession>(`/api/admin/rooms/${encodeURIComponent(id)}`),
   moderationHistory: (id: string) => authorized<AdminModerationAction[]>(`/api/admin/moderation/${encodeURIComponent(id)}`),
+  moderationAdminNames: async (history: AdminModerationAction[]) => Object.fromEntries(await Promise.all(
+    [...new Set(history.map((entry) => entry.adminUserId))].map(async (id) => {
+      try { return [id, (await authorized<AdminUser>(`/api/admin/users/${encodeURIComponent(id)}`)).username]; }
+      catch (error) { if (error instanceof BackendApiError && error.status === 404) return [id, id]; throw error; }
+    }),
+  )),
   users: (query: string) => authorized<AdminUsersPage>(`/api/admin/users${query}`),
   user: (id: string) => authorized<AdminUser>(`/api/admin/users/${encodeURIComponent(id)}`),
   payments: (query: string) => authorized<AdminPaymentsPage>(`/api/admin/payments${query}`),

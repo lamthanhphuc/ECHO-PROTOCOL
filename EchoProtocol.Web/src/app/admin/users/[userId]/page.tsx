@@ -12,6 +12,7 @@ export default async function UserDetailPage({ params, searchParams }: { params:
   const requestedPage = Number(param((await searchParams).profilePage));
   const page = Number.isInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000 ? requestedPage : 1;
   const [user, history, ai] = await Promise.all([adminApi.user(userId), adminApi.moderationHistory(userId), adminApi.playerAIHistory(userId, page)]);
+  const adminNames = await adminApi.moderationAdminNames(history);
   const profile = ai.profile;
   const dimensions: Record<string, string> = { Survival: "Sinh tồn", Noise: "Tiếng ồn", Objective: "Mục tiêu", ToolUsage: "Dùng công cụ" };
   const flagged = history.find((item) => item.action === "FLAG_USER" || item.action === "CLEAR_USER")?.action === "FLAG_USER";
@@ -37,7 +38,6 @@ export default async function UserDetailPage({ params, searchParams }: { params:
           ] as const).map(([label, score, status, count]) => <li key={label}>{label} · {count > 0 ? score ?? "—" : "—"} · {count} mẫu · {status}</li>)}
         </ul>
       </> : <p className="muted mb-2 text-sm">Chưa có hồ sơ AI hiện hành.</p>}
-      <p className="muted mb-2 text-sm">Điểm quan sát từng trận và trạng thái đóng góp vào hồ sơ.</p>
       {ai.rows.length === 0 ? <p className="muted text-sm">Trang này chưa có điểm trận.</p> : <div className="table-wrap"><table>
         <thead><tr><th>Trận</th><th>Chỉ số</th><th>Điểm</th><th>Công thức và cấu hình</th><th>Đóng góp</th></tr></thead>
         <tbody>{ai.rows.map((row) => <tr key={row.id}>
@@ -73,7 +73,7 @@ export default async function UserDetailPage({ params, searchParams }: { params:
     <section id="intervention"><h2 className="admin-section-title mt-5">Can thiệp tài khoản</h2>
     <AdminCreditGrant userId={user.userId} recipient={user.displayName ?? user.username} currentBalance={user.walletBalance ?? 0} />
     {user.role === "PLAYER" && <ModerationPanel key={`${user.status}-${flagged}`} targetId={userId}
-      actions={[flagged ? "CLEAR_USER" : "FLAG_USER", user.status === "LOCKED" ? "UNLOCK_USER" : "LOCK_USER"]} history={history} />}
+      actions={[flagged ? "CLEAR_USER" : "FLAG_USER", user.status === "LOCKED" ? "UNLOCK_USER" : "LOCK_USER"]} history={history} adminNames={adminNames} />}
     </section>
   </>;
 }

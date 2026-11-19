@@ -21,7 +21,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const pageParams = Object.fromEntries(Object.entries(values).filter(([, value]) => value));
 
   return <>
-    <PageHeader title="Thanh toán" description="Tra cứu đơn hàng, tình trạng thanh toán và việc cấp xu." />
+    <PageHeader title="Thanh toán" />
     <Panel className="mb-5"><h2 className="admin-section-title mb-3">Lọc đơn thanh toán</h2><form action="/admin/payments" className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
       <label className="admin-field">Trạng thái<select className="input" name="status" defaultValue={values.status}><option value="">Tất cả</option>{statuses.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></label>
       <label className="admin-field">Đơn vị thanh toán<input className="input" name="provider" defaultValue={values.provider} placeholder="Ví dụ: PAYOS" /></label>

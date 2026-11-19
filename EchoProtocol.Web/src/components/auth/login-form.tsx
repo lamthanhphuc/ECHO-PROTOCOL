@@ -11,6 +11,7 @@ export function LoginForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError("");
     const values = new FormData(event.currentTarget);
@@ -33,10 +34,56 @@ export function LoginForm() {
     } finally { setLoading(false); }
   }
   return <form onSubmit={submit} className="mt-7 grid gap-4">
-    <label className="grid gap-2 text-sm"><span>Tài khoản</span>
-      <input className="input" name="username" autoComplete="username" required placeholder="Nhập tài khoản" /></label>
-    <label className="grid gap-2 text-sm"><span>Mật khẩu</span>
-      <input className="input" name="password" type="password" autoComplete="current-password" required /></label>
+    <label className="grid gap-2 text-sm">
+      <span>Tên đăng nhập</span>
+      <input
+        className="input"
+        name="username"
+        autoComplete="username"
+        required
+        placeholder="Nhập tên đăng nhập"
+      />
+    </label>
+
+    <div className="grid gap-2 text-sm">
+      <label htmlFor="login-password">Mật khẩu</label>
+      <div className="relative">
+        <input
+          id="login-password"
+          className="input"
+          name="password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          placeholder="Nhập mật khẩu"
+          style={{ paddingRight: "3rem" }}
+          required
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((value) => !value)}
+          aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          aria-pressed={showPassword}
+          className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[#b4a29d] hover:text-white"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+            <circle cx="12" cy="12" r="3" />
+            {showPassword && <path d="M4 4 20 20" />}
+          </svg>
+        </button>
+      </div>
+    </div>
     {error && <p role="alert" className="rounded border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</p>}
     <button className="button mt-2" type="submit" disabled={loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
     <Link className="button button-secondary text-center" href="/register">Đăng ký tài khoản</Link>

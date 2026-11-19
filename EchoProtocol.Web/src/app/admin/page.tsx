@@ -13,42 +13,54 @@ export default async function AdminDashboard() {
     adminApi.purchases("?page=1&pageSize=5"),
   ]);
   const metrics = [
-    { label: "Người chơi online", value: dashboard.onlinePlayersEstimate,
-      detail: "Tín hiệu game gần đây hoặc phiên chơi còn hiệu lực", href: "/admin/matches" },
-    { label: "Phòng hoạt động", value: dashboard.activeRooms,
-      detail: "Phòng đã kích hoạt và còn lease backend", href: "/admin/matches" },
-    { label: "Trận đang diễn ra", value: dashboard.activeMatches,
-      detail: "Trận có quyền Host còn hiệu lực", href: "/admin/matches?status=InMatch" },
-    { label: "Tài khoản người chơi", value: dashboard.registeredPlayers,
-      detail: "Tổng tài khoản đã đăng ký", href: "/admin/users" },
+    {
+      label: "Người chơi online",
+      value: dashboard.onlinePlayersEstimate,
+      href: "/admin/matches",
+    },
+    {
+      label: "Phòng hoạt động",
+      value: dashboard.activeRooms,
+      href: "/admin/matches",
+    },
+    {
+      label: "Trận đang diễn ra",
+      value: dashboard.activeMatches,
+      href: "/admin/matches?status=InMatch",
+    },
+    {
+      label: "Tài khoản người chơi",
+      value: dashboard.registeredPlayers,
+      href: "/admin/users",
+    },
   ];
 
   return <>
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <PageHeader title="Tổng quan vận hành" description="Theo dõi người chơi, phòng và các công việc cần xử lý." />
+      <PageHeader title="Tổng quan vận hành" />
       <DashboardRefresh />
     </div>
-    <p className="muted -mt-3 mb-5 text-sm">Dữ liệu lúc {formatDate(dashboard.observedAtUtc)}. Trạng thái phòng dựa trên tín hiệu Host gửi về backend; hiện chưa có kết nối đối soát trực tiếp với Photon Cloud.</p>
+    <p className="muted -mt-3 mb-5 text-sm">
+      Dữ liệu lúc {formatDate(dashboard.observedAtUtc)}
+    </p>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {metrics.map((metric) => <Link key={metric.label} href={metric.href}
         className="panel block rounded-lg p-5 transition-colors hover:border-[#cf7774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffb5ab]">
         <p className="eyebrow">{metric.label}</p>
         <p className="mt-3 text-3xl font-semibold tabular-nums text-white">{metric.value.toLocaleString("vi-VN")}</p>
-        <p className="muted mt-2 text-xs">{metric.detail}</p>
       </Link>)}
     </div>
 
     <Panel className="mt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="admin-section-title">Phòng gần đây</h2><p className="muted mt-1 text-sm">Năm phòng mới nhất, kể cả phòng đã đóng hoặc hết lease.</p></div>
+        <div><h2 className="admin-section-title">Phòng gần đây</h2></div>
         <Link className="admin-link text-sm" href="/admin/matches">Xem phòng và trận đấu →</Link>
       </div>
       {dashboard.recentRooms.length === 0 ? <EmptyState title="Chưa có phòng được ghi nhận" /> :
-        <div className="table-wrap rounded-lg"><table><thead><tr><th>Phòng</th><th>Chủ phòng</th><th>Trạng thái backend</th><th>Tạo lúc</th></tr></thead><tbody>
+        <div className="table-wrap rounded-lg"><table><thead><tr><th>Phòng</th><th>Chủ phòng</th><th>Trạng thái</th><th>Tạo lúc</th></tr></thead><tbody>
           {dashboard.recentRooms.map((room) => <tr key={room.roomInstanceId}>
-            <td><Link className="admin-link font-semibold" href={`/admin/rooms/${room.roomInstanceId}`}>{room.fusionSessionName}</Link>
-              {room.currentMatchId && <p className="muted mt-1 text-xs">Trận {room.currentMatchId.slice(0, 8)}…</p>}</td>
+            <td><Link className="admin-link font-semibold" href={`/admin/rooms/${room.roomInstanceId}`}>{room.fusionSessionName}</Link></td>
             <td>{room.hostUsername || "—"}</td>
             <td>{room.closedAtUtc ? "Đã đóng" : !room.activatedAtUtc ? "Chờ kích hoạt" :
               Date.parse(room.leaseExpiresAtUtc) > Date.parse(dashboard.observedAtUtc) ? "Lease còn hiệu lực" : "Lease đã hết"}</td>
@@ -60,10 +72,18 @@ export default async function AdminDashboard() {
     <Panel className="mt-5">
       <h2 className="admin-section-title mb-3">Đi đến công việc</h2>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Link className="admin-action-card" href="/admin/matches"><strong>Phòng và trận đấu</strong><span>Tra cứu phòng, Kick và đóng phòng.</span></Link>
-        <Link className="admin-action-card" href="/admin/users"><strong>Người dùng</strong><span>Tìm tài khoản và kiểm tra trạng thái.</span></Link>
-        <Link className="admin-action-card" href="/admin/chat-words"><strong>Từ cấm chat</strong><span>Quản lý bộ lọc trò chuyện.</span></Link>
-        <Link className="admin-action-card" href="/admin/remote-fixed"><strong>Cấu hình trận</strong><span>Xem phiên bản đang áp dụng.</span></Link>
+        <Link className="admin-action-card" href="/admin/matches">
+          <strong>Phòng và trận đấu</strong>
+        </Link>
+        <Link className="admin-action-card" href="/admin/users">
+          <strong>Người dùng</strong>
+        </Link>
+        <Link className="admin-action-card" href="/admin/chat-words">
+          <strong>Từ cấm chat</strong>
+        </Link>
+        <Link className="admin-action-card" href="/admin/remote-fixed">
+          <strong>Cấu hình trận</strong>
+        </Link>
       </div>
     </Panel>
 

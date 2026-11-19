@@ -12,10 +12,16 @@ export default async function RegisterPage() {
   return (
     <main className="login-stage mx-auto grid min-h-screen w-full max-w-[1480px] items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-16">
       <div className="max-w-2xl">
-        <Image src="/echo-logo.webp" alt="Biểu tượng ECHO PROTOCOL" width={132} height={132} className="login-logo" priority />
-        <h1 className="login-title mt-10 text-5xl leading-[.95] text-[#f5eee6] sm:text-7xl xl:text-8xl">
-          ECHO<br />
-          <span className="text-[#bd4542]">PROTOCOL</span>
+        <Image src="/echo-login-logo.png" alt="Biểu tượng ECHO PROTOCOL" width={132} height={132} className="login-logo" priority />
+        <h1 className="mt-10">
+          <Image
+            src="/echo-title.png"
+            alt="ECHO PROTOCOL"
+            width={2048}
+            height={754}
+            className="h-auto w-full max-w-[580px]"
+            priority
+          />
         </h1>
         <div className="mt-8 h-px w-32 bg-[#9f2b30]" />
         <p className="mt-7 max-w-lg text-lg leading-relaxed text-[#c1aea5]">

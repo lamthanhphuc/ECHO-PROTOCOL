@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import type { AdminMatchDetail, AdminModerationAction } from "@/lib/types/admin";
+import { formatAdminDate as formatDate } from "@/lib/utils/format";
 
 type Player = AdminMatchDetail["players"][number];
 
@@ -63,18 +65,21 @@ export function KickPlayersPanel({ matchId, status, hostUserId, closed, players,
 
   return <section aria-labelledby="room-players-heading" className="panel mt-5 p-5">
     <h2 id="room-players-heading" className="admin-section-title mb-2">Thành viên trong phòng</h2>
-    <p className="muted mb-4 text-sm">Kick được ghi trên backend trước; Host xử lý sau. Trạng thái kết nối dựa trên lần báo gần nhất.</p>
+    <p className="muted mb-4 text-sm">Trạng thái kết nối dựa trên lần Host báo gần nhất; không chứng minh người chơi đang online. Kick được ghi trên backend trước; Host xử lý sau.</p>
     {players.length === 0 ? <p className="muted text-sm">Chưa có thành viên được ghi nhận trong trận hiện tại.</p> :
-      <div className="table-wrap rounded-lg"><table><thead><tr><th>Chọn</th><th>Người chơi</th><th>Vai trò</th><th>Trạng thái</th></tr></thead><tbody>
+      <div className="table-wrap rounded-lg"><table><thead><tr><th>Chọn</th><th>Người chơi</th><th>Vai trò</th><th>Trạng thái</th><th>Tham gia trận</th><th>Gián đoạn trong trận</th><th>Vào phòng</th><th>Cập nhật cuối</th><th>Rời phòng</th></tr></thead><tbody>
         {players.map((player) => {
           const decision = history.find((entry) => entry.action === "KICK_PLAYER" && entry.targetUserId === player.userId);
           const selectable = active && eligible.some((item) => item.userId === player.userId);
           return <tr key={player.userId}>
             <td><input type="checkbox" aria-label={`Chọn ${player.displayName || player.username || player.userId}`} checked={selected.includes(player.userId)} disabled={!selectable || busy}
               onChange={(event) => setSelected((current) => event.target.checked ? [...current, player.userId] : current.filter((id) => id !== player.userId))} /></td>
-            <td>{player.displayName || player.username || player.userId}<p className="code muted text-xs">{player.userId.slice(0, 8)}…</p></td>
-            <td>{player.userId === hostUserId ? "Host" : "Người chơi"}</td>
-            <td>{player.kickedAtUtc ? decision?.hostExecutedAtUtc ? "Đã Kick · Host xác nhận" : "Đã Kick · chờ Host" : player.disconnectedAtUtc ? "Đã báo rời" : "Chưa báo rời"}</td>
+            <td><Link className="admin-link" href={`/admin/users/${player.userId}`}>{player.displayName || player.username || player.userId}</Link></td>
+            <td>{player.userId === hostUserId ? "Chủ phòng" : "Người chơi"}</td>
+            <td>{player.kickedAtUtc ? decision?.hostExecutedAtUtc ? "Đã Kick · Host xác nhận" : "Đã Kick · chờ Host xác nhận" : player.disconnectedAtUtc ? "Đã báo rời" : "Chưa báo rời; kết nối chưa xác minh"}</td>
+            <td>{player.participated ? "Có" : "Chưa"}</td>
+            <td>{player.hadGameplayDisconnect ? "Có" : "Không"}</td>
+            <td>{formatDate(player.boundAtUtc)}</td><td>{formatDate(player.lastSeenAtUtc)}</td><td>{formatDate(player.disconnectedAtUtc)}</td>
           </tr>;
         })}
       </tbody></table></div>}

@@ -31,7 +31,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
     const copy = copyVersion ? await adminApi.remoteFixedVersion(copyVersion) : null;
     return <>
     <Link href={`/admin/remote-fixed${scopeQuery}`} className="mb-4 inline-block text-sm text-red-300">← Danh sách cấu hình</Link>
-    <PageHeader title="Tạo cấu hình trận" description="Chọn phạm vi và xem lại thông số. Bản mới được lưu ở trạng thái chưa kích hoạt." />
+    <PageHeader title="Tạo cấu hình trận" />
     <Panel><RemoteFixedCreateForm gameplayFields={gameplayFields} content={content} initialScope={{ mapId: copy?.mapId ?? mapId, difficulty: copy?.difficulty ?? difficulty, gameVersion }} copySnapshot={copy?.snapshotJson} /></Panel>
     </>;
   }
@@ -49,7 +49,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
     }
   }) : active.items;
   return <>
-    <PageHeader title="Cấu hình trận" description="Xem thông số dùng cho trận mới theo bản đồ, độ khó và phiên bản game." />
+    <PageHeader title="Cấu hình trận" />
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div className="text-sm">
         <p>{status.remoteFixedEnabled && compatibleActive.length > 0
@@ -68,7 +68,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
     </div>
     </details>
     <Panel className="mt-5">
-      <div className="mb-4"><h2 className="admin-section-title">Lọc theo phạm vi</h2><p className="admin-hint mt-1">Chọn bản game để xem nguồn có hiệu lực. Danh sách phiên bản bên dưới vẫn giữ lịch sử của mọi bản game trong bản đồ và độ khó đã chọn.</p></div>
+      <div className="mb-4"><h2 className="admin-section-title">Lọc theo phạm vi</h2></div>
       <form action="/admin/remote-fixed" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
         <label className="admin-field">Bản đồ<select className="input" name="mapId" defaultValue={mapId}><option value="">Tất cả bản đồ</option>{status.supportedMaps.map((map) => <option key={map} value={map}>{mapLabel(map)}</option>)}</select></label>
         <label className="admin-field">Độ khó<select className="input" name="difficulty" defaultValue={difficulty}><option value="">Tất cả độ khó</option><option value="EASY">Dễ</option><option value="NORMAL">Thường</option><option value="HARD">Khó</option></select></label>
@@ -76,7 +76,7 @@ export default async function RemoteFixedPage({ searchParams }: { searchParams: 
         <button className="button">Lọc cấu hình</button>
       </form>
     </Panel>
-    <Panel className="mt-5"><div className="mb-4"><h2 className="admin-section-title">Các phiên bản cấu hình</h2><p className="admin-hint mt-1">Chọn mã cấu hình để xem thông số và lịch sử trước khi kích hoạt.</p></div>
+    <Panel className="mt-5"><div className="mb-4"><h2 className="admin-section-title">Các phiên bản cấu hình</h2></div>
       <div className="mb-4 rounded border border-[var(--line)] p-4">
         <h3 className="font-semibold">Mặc định trong game</h3>
         <p className="muted mt-1 text-sm">Chỉ xem. Trận dùng cấu hình cố định mới dùng cấu hình có sẵn trong game khi phạm vi chưa có bản Web được kích hoạt hoặc nguồn Web đang tắt.</p>
