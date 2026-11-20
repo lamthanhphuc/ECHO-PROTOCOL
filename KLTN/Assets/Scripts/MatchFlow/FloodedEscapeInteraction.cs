@@ -4,7 +4,7 @@ namespace EchoProtocol.Networking
 {
     public sealed class FloodedEscapeInteraction : MonoBehaviour, IInteractable
     {
-        public string InteractionPrompt => "[E] LÊN TÀU SƠ TÁN";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("[E] LÊN TÀU SƠ TÁN", "[E] BOARD TO EVACUATE");
         public bool CanInteract(GameObject interactor)
         {
             var match = NetworkMatchState.Instance;

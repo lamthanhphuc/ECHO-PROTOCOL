@@ -131,14 +131,19 @@ namespace EchoProtocol.UI.HUD
             }
             if (FloodedMapMission.TryDescribe(out var mapTitle, out var mapDetail, out _))
             {
-                _title.text = "Nhiệm vụ · Vùng ngập";
-                _closeHint.text = "[J] Đóng";
+                _title.text = EchoProtocol.Settings.GameLanguage.Choose("Nhiệm vụ · Vùng ngập", "Objectives · Flooded Grounds");
+                _closeHint.text = EchoProtocol.Settings.GameLanguage.Choose("[J] Đóng", "[J] Close");
                 _compactText.text = mapTitle + "\n" + mapDetail;
-                _body.text = "1. Tìm 4 lõi và nạp vào hai trạm cấp điện.\n\n"
+                _body.text = EchoProtocol.Settings.GameLanguage.Choose("1. Tìm và nạp đủ lõi vào hai trạm cấp điện.\n\n"
                     + "2. Kiểm tra terminal, sửa 4 relay và xác thực để nhận mã.\n"
                     + "Nhập mã tại bảng điều khiển đĩa bay.\n\n"
                     + "3. Giữ [E] để nạp điện, sau đó đi gần hộ tống đĩa bay tới bến.\n"
-                    + "Tuyến cố định · Không cần tiếp nhiên liệu.\n\n" + mapTitle + "\n" + mapDetail;
+                    + "Tuyến cố định · Không cần tiếp nhiên liệu.\n\n",
+                    "1. Find and insert the required cores into both power stations.\n\n"
+                    + "2. Inspect the terminal, repair all 4 relays and authenticate to receive the code.\n"
+                    + "Enter the code at the saucer control panel.\n\n"
+                    + "3. Hold [E] to charge, then stay nearby to escort the saucer to the dock.\n"
+                    + "Fixed route · No refueling required.\n\n") + mapTitle + "\n" + mapDetail;
                 return;
             }
             _title.text = EchoProtocol.Settings.GameLanguage.Choose("Nhiệm vụ", "Objectives");

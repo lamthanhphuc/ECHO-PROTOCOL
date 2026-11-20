@@ -1884,6 +1884,8 @@ namespace EchoProtocol.Networking
         public bool DebugSkipToZone3()
         {
             if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded) return false;
+            if (FloodedMapMission.Instance != null && CurrentPhase != NetworkMatchPhase.CoreObjective
+                && CurrentPhase != NetworkMatchPhase.Zone2Objective) return false;
 
             ResetZone2AuthoritativeState();
             SecurityTerminalDiscovered = true;
@@ -1919,6 +1921,8 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            if (CurrentPhase != NetworkMatchPhase.CoreObjective) return false;
+
             ResetZone2AuthoritativeState();
 
             if (!InitializeZone2RelayRuntimeAuthoritative())
@@ -1929,13 +1933,10 @@ namespace EchoProtocol.Networking
             if (!TryAdvancePhase(
                     NetworkMatchPhase.CoreObjective,
                     NetworkMatchPhase.Zone2Objective,
-                    "DEBUG_SKIP_ZONE1"))
+                    "DEBUG_SKIP_ZONE1", () => TeleportGameplayPlayersAuthoritative(NetworkMatchPhase.Zone2Objective)))
             {
                 return false;
             }
-
-            TeleportGameplayPlayersAuthoritative(
-                NetworkMatchPhase.Zone2Objective);
 
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
@@ -2433,7 +2434,16 @@ namespace EchoProtocol.Networking
             Vector3 targetPosition;
             Quaternion targetRotation;
 
-            if (phase == NetworkMatchPhase.Zone3FindFrigate)
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                if (!flooded.TryGetDebugMissionPose(phase, 0, out targetPosition, out targetRotation))
+                {
+                    Debug.LogWarning($"[MatchState] No walkable debug destination near Flooded mission step {phase}; player positions unchanged.");
+                    return;
+                }
+            }
+            else if (phase == NetworkMatchPhase.Zone3FindFrigate)
             {
                 targetPosition = new Vector3(88.66215f, 2.080028f, -399.027f);
                 targetRotation = Quaternion.Euler(0f, -159.24f, 0f);
@@ -2471,6 +2481,12 @@ namespace EchoProtocol.Networking
                     targetPosition
                     + targetRotation * Vector3.right * side
                     - targetRotation * Vector3.forward * back;
+
+                if (flooded != null && !flooded.TryGetDebugMissionPose(phase, index, out position, out targetRotation))
+                {
+                    index++;
+                    continue;
+                }
 
                 movement.TeleportAuthoritative(position, targetRotation);
                 index++;

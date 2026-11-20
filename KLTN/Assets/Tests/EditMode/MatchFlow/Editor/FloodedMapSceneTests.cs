@@ -24,6 +24,81 @@ public sealed class FloodedMapSceneTests
         Assert.That(FloodedMapMission.PresentationBlend(0f), Is.Zero);
     }
 
+    [Test]
+    public void DebugSkipsResolveActualMissionTargetsWithoutZoneEntryTriggers()
+    {
+        var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene("Assets/Scenes/Scene_A.unity", OpenSceneMode.Additive);
+        try
+        {
+            var roots = scene.GetRootGameObjects();
+            var mission = roots.SelectMany(g => g.GetComponentsInChildren<FloodedMapMission>(true)).Single();
+            var terminal = roots.SelectMany(g => g.GetComponentsInChildren<Zone2MissionDirector>(true)).Single().SecurityTerminal;
+            Physics.SyncTransforms();
+            foreach (var phase in new[] { NetworkMatchPhase.Zone2Objective, NetworkMatchPhase.Zone3FindFrigate })
+                for (int player = 0; player < 4; player++)
+                {
+                    Assert.That(mission.TryGetDebugMissionPose(phase, player, out var position, out var rotation), Is.True,
+                        $"No usable debug destination for {phase}, player {player}");
+                    var target = phase == NetworkMatchPhase.Zone2Objective ? terminal.GetComponentInChildren<Collider>() : mission.ChargeTarget;
+                    Assert.That(Vector3.Distance(target.ClosestPoint(position), position), Is.LessThan(3f));
+                    Assert.That(UnityEngine.AI.NavMesh.SamplePosition(position, out var nav, .2f, UnityEngine.AI.NavMesh.AllAreas), Is.True);
+                    Assert.That(Vector3.Distance(nav.position, position), Is.LessThan(.2f));
+                    Assert.That(Vector3.Dot(rotation * Vector3.forward,
+                        Vector3.ProjectOnPlane(target.bounds.center - position, Vector3.up).normalized), Is.GreaterThan(.99f));
+                }
+        }
+        finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
+    }
+
+    [Test]
+    public void DebugApproachRejectsUnavailableTarget()
+    {
+        Assert.That(FloodedMapMission.TryGetDebugApproachPose(null, 0, out _, out _), Is.False);
+        var go = new GameObject("Disabled debug target");
+        try
+        {
+            var collider = go.AddComponent<BoxCollider>();
+            collider.enabled = false;
+            Assert.That(FloodedMapMission.TryGetDebugApproachPose(collider, 0, out _, out _), Is.False);
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    [Test]
+    public void SectorStationsBlockBakedPathsAndKeepWalkableApproaches()
+    {
+        var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene("Assets/Scenes/Scene_A.unity", OpenSceneMode.Additive);
+        try
+        {
+            var roots = scene.GetRootGameObjects();
+            var surface = roots.SelectMany(g => g.GetComponentsInChildren<Unity.AI.Navigation.NavMeshSurface>(true)).Single();
+            var filter = new UnityEngine.AI.NavMeshQueryFilter { agentTypeID = surface.agentTypeID, areaMask = UnityEngine.AI.NavMesh.AllAreas };
+            Physics.SyncTransforms();
+            foreach (var station in roots.SelectMany(g => g.GetComponentsInChildren<SectorBox>(true)))
+            {
+                var collider = station.GetComponent<Collider>();
+                Assert.That(FloodedMapMission.TryGetDebugApproachPose(collider, 0, out _, out _), Is.True, station.name);
+                var bounds = collider.bounds;
+                foreach (var direction in new[] { Vector3.right, Vector3.forward })
+                {
+                    float extent = direction.x != 0 ? bounds.extents.x : bounds.extents.z;
+                    var from = bounds.center - direction * (extent + 2f);
+                    var to = bounds.center + direction * (extent + 2f);
+                    from.y = to.y = bounds.min.y;
+                    Assert.That(UnityEngine.AI.NavMesh.SamplePosition(from, out var a, 2f, filter), Is.True);
+                    Assert.That(UnityEngine.AI.NavMesh.SamplePosition(to, out var b, 2f, filter), Is.True);
+                    Assert.That(UnityEngine.AI.NavMesh.Raycast(a.position, b.position, out _, filter), Is.True,
+                        $"Baked navigation passes through {station.name} along {direction}");
+                }
+            }
+        }
+        finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
+    }
+
     public static string Validate()
     {
         var original = SceneManager.GetActiveScene();

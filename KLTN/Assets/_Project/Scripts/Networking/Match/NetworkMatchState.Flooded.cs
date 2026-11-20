@@ -10,7 +10,20 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool FloodedEscortArrived { get; private set; }
         [Networked] public int FloodedRouteIndex { get; private set; }
         [Networked] public NetworkBool FloodedEscortMoving { get; private set; }
+        [Networked] public NetworkBool FloodedDebugFastEscort { get; private set; }
         private TickTimer _floodedChargeLease;
+
+        public bool ToggleDebugFloodedEscortSpeed()
+        {
+            if (!HasValidNetworkObject() || !Object.HasStateAuthority || IsEnded || !FloodedMapMission.Instance
+                || !TryGetLocalRequester(out var actor) || !TryResolveActivePlayer(actor, out var life)
+                || !life.DebugGodMode) return false;
+            FloodedDebugFastEscort = !FloodedDebugFastEscort;
+            EchoProtocol.UI.GameUIFeedback.Instance.Toast(EchoProtocol.Settings.GameLanguage.Choose(
+                FloodedDebugFastEscort ? "Tốc độ đĩa bay thử nghiệm ×20" : "Tốc độ đĩa bay bình thường ×1",
+                FloodedDebugFastEscort ? "Test escort speed ×20" : "Normal escort speed ×1"));
+            return true;
+        }
 
         public void RequestFloodedExit()
         {
@@ -32,8 +45,14 @@ namespace EchoProtocol.Networking
                 || (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate && CurrentPhase != NetworkMatchPhase.Escape)
                 || !TryResolveActivePlayer(actor, out var life)
                 || !TryValidateZone2Requester(actor, map.ExitTarget, 3f)) return;
-            if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
-                && !TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate, NetworkMatchPhase.Escape, "MAP2_ESCORT")) return;
+            if (CurrentPhase == NetworkMatchPhase.Zone3PushFrigate)
+            {
+                // Adaptive boundaries may complete asynchronously. Validate this actor
+                // again after Escape actually starts before committing their escape.
+                TryAdvancePhase(NetworkMatchPhase.Zone3PushFrigate, NetworkMatchPhase.Escape,
+                    "MAP2_ESCORT", () => TryFloodedExit(actor));
+                return;
+            }
             StartEscapeDeadlineIfNeededAuthoritative("MAP2_EXIT");
             LastActor = actor;
             if (!life.TryEscape()) return;
@@ -107,8 +126,8 @@ namespace EchoProtocol.Networking
             PlayerRef nearby = PlayerRef.None;
             foreach (var player in Runner.ActivePlayers)
                 if (TryResolveActivePlayer(player, out var life)
-                    && new Vector2(life.transform.position.x - Zone3FrigatePosition.x,
-                        life.transform.position.z - Zone3FrigatePosition.z).sqrMagnitude <= map.EscortRadius * map.EscortRadius)
+                    && (FloodedDebugFastEscort || new Vector2(life.transform.position.x - Zone3FrigatePosition.x,
+                        life.transform.position.z - Zone3FrigatePosition.z).sqrMagnitude <= map.EscortRadius * map.EscortRadius))
                 { nearby = player; break; }
             if (nearby.IsNone) return;
             var route = map.Route;
@@ -119,7 +138,8 @@ namespace EchoProtocol.Networking
                 if (!point) return;
                 var delta = point.position - Zone3FrigatePosition;
                 FloodedEscortMoving = delta.sqrMagnitude > .0001f;
-                Zone3FrigatePosition = Vector3.MoveTowards(Zone3FrigatePosition, point.position, map.Speed * Runner.DeltaTime);
+                float speed = map.Speed * (FloodedDebugFastEscort ? Zone3ConvoyController.DebugSpeedMultiplier : 1f);
+                Zone3FrigatePosition = Vector3.MoveTowards(Zone3FrigatePosition, point.position, speed * Runner.DeltaTime);
                 var horizontal = new Vector3(delta.x, 0f, delta.z);
                 if (horizontal.sqrMagnitude > .001f)
                     Zone3FrigateRotation = Quaternion.RotateTowards(Zone3FrigateRotation, Quaternion.LookRotation(horizontal), 45f * Runner.DeltaTime);

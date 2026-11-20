@@ -16,7 +16,7 @@ namespace EchoProtocol.Networking
                 return match && match.Object && match.Object.IsValid ? match.Zone3ChargeProgress01 : 0f;
             }
         }
-        public string InteractionPrompt => "GIỮ [E] - NẠP NĂNG LƯỢNG CHO ĐĨA BAY";
+        public string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("GIỮ [E] - NẠP NĂNG LƯỢNG CHO ĐĨA BAY", "HOLD [E] - CHARGE THE SAUCER");
         public bool CanInteract(GameObject interactor)
         {
             var match = NetworkMatchState.Instance;

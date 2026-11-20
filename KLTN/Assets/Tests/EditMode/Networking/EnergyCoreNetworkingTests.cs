@@ -13,6 +13,30 @@ namespace EchoProtocol.Networking.Tests
         private const string SectorBoxSourcePath =
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
 
+        [TestCase("NetworkSectorBox")]
+        [TestCase("NetworkPowerPuzzleStation")]
+        public void ObjectivePrefab_ReplicatesItsPoseAndBakesTransformBehaviour(string prefabName)
+        {
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.GameObject>(
+                $"Assets/Resources/Network/{prefabName}.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            var sync = prefab.GetComponent<NetworkTransform>();
+            Assert.That(sync, Is.Not.Null, "Clients need the authoritative objective pose to interact.");
+            Assert.That(prefab.GetComponent<NetworkObject>().NetworkedBehaviours, Does.Contain(sync),
+                "The transform must be baked into Fusion's replication layout.");
+        }
+
+        [TestCase("Scene_A", true)]
+        [TestCase("Scene_B", false)]
+        [TestCase("SciFi", false)]
+        public void TemporaryLizardSuppression_OnlyAppliesToExploration(string sceneName, bool disabled)
+        {
+            var type = ResolveProductionType("EchoProtocol.Networking.PlayerSpawner");
+            var method = type.GetMethod("IsExplorationLizardDisabled", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null);
+            Assert.That(method.Invoke(null, new object[] { sceneName }), Is.EqualTo(disabled));
+        }
+
         [Test]
         public void M2_CORE_Pickup_AcceptsAvailableOrDroppedUnownedCore()
         {

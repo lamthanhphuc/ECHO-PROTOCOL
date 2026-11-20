@@ -477,7 +477,7 @@ namespace EchoProtocol.Networking
         private int _requestedGameMode;
         public Task<bool> CreateRoomAsync(
             string sessionName, int maxPlayers = 4,
-            MatchDifficulty difficulty = MatchDifficulty.Normal, int gameMode = 0,
+            MatchDifficulty difficulty = MatchDifficulty.Normal, int? gameMode = null,
             ScenarioResolutionMode resolutionMode = ScenarioResolutionMode.Fixed)
 
         {
@@ -485,7 +485,7 @@ namespace EchoProtocol.Networking
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
 
             if (gameMode < 0 || gameMode > 1) return FailWithoutStarting("Invalid game mode.");
-            _requestedGameMode = gameMode;
+            _requestedGameMode = gameMode ?? Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("gamemode", 0), 0, 1);
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
             _matchAuthority.RequestDifficulty(resolutionMode == ScenarioResolutionMode.Fixed
                 ? (MatchDifficulty)EchoProtocol.UI.LobbySelectionMemory.Read("difficulty", (int)difficulty)
@@ -497,7 +497,7 @@ namespace EchoProtocol.Networking
 
         public Task<bool> CreateRoomAsync(string sessionName, int maxPlayers,
             MatchDifficulty difficulty, ScenarioResolutionMode resolutionMode) =>
-            CreateRoomAsync(sessionName, maxPlayers, difficulty, 0, resolutionMode);
+            CreateRoomAsync(sessionName, maxPlayers, difficulty, null, resolutionMode);
 
         public Task<bool> JoinRoomAsync(string sessionName) => StartSessionAsync(GameMode.Client, sessionName, null);
 
@@ -1565,7 +1565,7 @@ namespace EchoProtocol.Networking
                 && !IsSceneLoading
                 && !runner.IsSceneManagerBusy
                 && (State != NetworkSessionState.InMatch
-                    || SceneManager.GetActiveScene().name == LobbyManager.GameSceneName);
+                    || LobbyMapCatalog.SupportsGameplayHostMigration(SceneManager.GetActiveScene().name));
         }
 
         private async Task<bool> WaitForSnapshotWorldReadyAsync(
@@ -2076,16 +2076,16 @@ namespace EchoProtocol.Networking
             var migrationSourceScene =
                 SceneManager.GetActiveScene();
 
-            // OnSceneLoadDone can lag behind Unity activating SciFi. A
+            // OnSceneLoadDone can lag behind Unity activating gameplay. A
             // Host migration during that gap must preserve the ongoing
             // match rather than treating its snapshot as a Lobby snapshot.
             if (previousState == NetworkSessionState.InLobby
-                && migrationSourceScene.name == LobbyManager.GameSceneName)
+                && LobbyMapCatalog.SupportsGameplayHostMigration(migrationSourceScene.name))
             {
                 previousState = NetworkSessionState.InMatch;
                 RuntimeLog.Log(
                     RuntimeLogCategory.NetworkSession,
-                    "[NetworkSession] Migration scene/state race corrected: SciFi scene was already active while state was InLobby.");
+                    "[NetworkSession] Migration scene/state race corrected: gameplay scene was already active while state was InLobby.");
             }
 
             var migrationSceneInfo =
@@ -2283,8 +2283,7 @@ namespace EchoProtocol.Networking
                     if (_hostMigrationRetainDisconnectedPlayers
                         && previousState == NetworkSessionState.InMatch)
                     {
-                        if (SceneManager.GetActiveScene().name
-                            != LobbyManager.GameSceneName)
+                        if (!LobbyMapCatalog.SupportsGameplayHostMigration(SceneManager.GetActiveScene().name))
                         {
                             throw new InvalidOperationException(
                                 "Host Migration callback completed outside the gameplay scene.");
@@ -3196,8 +3195,7 @@ namespace EchoProtocol.Networking
 
                 bool sceneReconciled =
                     playerSpawner != null
-                    && (SceneManager.GetActiveScene().name ==
-                            LobbyManager.GameSceneName
+                    && (LobbyMapCatalog.SupportsGameplayHostMigration(SceneManager.GetActiveScene().name)
                         ? playerSpawner
                             .AdoptMigratedAuthoritativeWorldState(
                                 migrationRunner)

@@ -103,9 +103,6 @@ namespace EchoProtocol.Networking
 
                 PruneInvalidAuthoritativeWorldStateReferences();
 
-                if (!IsValidNetworkObject(_monsterInstance))
-                    return;
-
                 if (Time.time < _nextMinionSpawnCheckAt)
                     return;
 
@@ -340,8 +337,7 @@ namespace EchoProtocol.Networking
             if (runner == null
                 || !runner.IsRunning
                 || !runner.IsServer
-                || SceneManager.GetActiveScene().name
-                    != LobbyManager.GameSceneName)
+                || !LobbyMapCatalog.SupportsGameplayHostMigration(SceneManager.GetActiveScene().name))
             {
                 return false;
             }
@@ -584,6 +580,13 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
+                // Temporarily suppress restored Lizard instances in Flooded Grounds too.
+                if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+                {
+                    runner.Despawn(stalkerObject);
+                    continue;
+                }
+
                 if (migratedStalker == null)
                 {
                     migratedStalker =
@@ -591,7 +594,13 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            if (migratedStalker != null)
+            bool floodedMission = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
+            if (migratedStalker != null && floodedMission)
+            {
+                // Flooded Grounds keeps one Lizard throughout every mission step.
+                _monsterInstance = migratedStalker;
+            }
+            else if (migratedStalker != null)
             {
                 switch (migratedMatch.CurrentPhase)
                 {
@@ -616,13 +625,13 @@ namespace EchoProtocol.Networking
                 }
             }
 
-            _zone2MinionsActive =
+            _zone2MinionsActive = !floodedMission && (
                 migratedMatch.CurrentPhase ==
                     NetworkMatchPhase.Zone2Objective
                 || migratedMatch.CurrentPhase ==
                     NetworkMatchPhase.Puzzle
                 || migratedMatch.CurrentPhase ==
-                    NetworkMatchPhase.SecurityHold;
+                    NetworkMatchPhase.SecurityHold);
 
             _zone3SpawnFailureLogged = false;
             _nextMinionSpawnCheckAt =
@@ -1186,16 +1195,16 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            if (SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
+            if (!IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
             {
-                if (_map2RegionGraph != null && _map2LizardPrefab != null)
-                    EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2LizardPrefab);
-                else
-                    Debug.LogError("[PlayerSpawner] Map2 Stalker requires its Lizard prefab and scene RegionGraph.");
+                EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
             }
-            else EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
             BindAuthoritativeWorldState();
         }
+
+        // Temporary Scene_A-only switch; Purge uses Scene_B and keeps its boss.
+        internal static bool IsExplorationLizardDisabled(string sceneName) =>
+            sceneName == LobbyMapCatalog.ExplorationScene;
 
         private void EnsureInitialStalker(
             NetworkRunner runner,
@@ -1203,6 +1212,9 @@ namespace EchoProtocol.Networking
             RegionGraphAsset graph = null,
             NetworkObject prefab = null)
         {
+            if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+                return;
+
             prefab ??= _monsterPrefab;
             if (_monsterInstance == null && prefab != null)
 
@@ -1789,7 +1801,8 @@ namespace EchoProtocol.Networking
                 ? _zone3MonsterInstance
                 : (zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance);
 
-            return IsValidNetworkObject(stalker);
+            return IsValidNetworkObject(stalker)
+                || IsExplorationLizardDisabled(SceneManager.GetActiveScene().name);
         }
 
         private bool TryFindCreepMinionSpawnPosition(
@@ -1799,9 +1812,12 @@ namespace EchoProtocol.Networking
         {
             position = default;
 
-            if (!IsValidNetworkObject(stalker)
-                || !NavMesh.SamplePosition(
-                    stalker.transform.position,
+            var anchor = IsValidNetworkObject(stalker) ? stalker.transform : null;
+            // Keep minions active while the Scene_A Lizard is disabled.
+            if (anchor == null && IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+                anchor = GameObject.Find("MonsterSpawn_Stalker_EMPTY")?.transform;
+            if (anchor == null || !NavMesh.SamplePosition(
+                    anchor.position,
                     out var stalkerHit,
                     2f,
                     NavMesh.AllAreas))
@@ -2020,6 +2036,9 @@ namespace EchoProtocol.Networking
             RegionGraphAsset graph = null,
             NetworkObject prefab = null)
         {
+            if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+                return null;
+
             var spawned = runner.Spawn(prefab != null ? prefab : _monsterPrefab, position, rotation, PlayerRef.None,
                 (_, obj) =>
                 {

@@ -6,6 +6,7 @@ namespace EchoProtocol.Networking
 {
     /// <summary>A configurable puzzle input endpoint; all mutation is delegated to puzzle State Authority.</summary>
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(NetworkTransform))]
     public sealed class NetworkPowerPuzzleStation : NetworkInteractable
     {
         [SerializeField] private Renderer _fallbackRenderer;

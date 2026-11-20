@@ -8,6 +8,7 @@ namespace EchoProtocol.Networking
 {
     /// <summary>Authoritative objective source; match phase and final result live in NetworkMatchState.</summary>
     [DisallowMultipleComponent]
+    [RequireComponent(typeof(NetworkTransform))]
     public sealed class NetworkSectorBox : NetworkInteractable
     {
         public static event Action<NetworkSectorBox> ObjectiveStateChanged;
