@@ -10,6 +10,9 @@ public sealed class MatchResultPlayer
     public int DownedCount { get; set; }
     public int ReviveCount { get; set; }
     public int ObjectiveContribution { get; set; }
+    public int? ObjectiveActions { get; set; }
+    public int? RescueActions { get; set; }
+    public bool? EvidenceComplete { get; set; }
 
     public MatchResult MatchResult { get; set; } = null!;
     public MatchPlayerBinding PlayerBinding { get; set; } = null!;

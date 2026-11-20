@@ -15,7 +15,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const params: Record<string, string> = search ? { search } : {};
 
   return <>
-    <PageHeader title="Người dùng" description="Tìm tài khoản theo tên hoặc email. Online dựa trên tín hiệu game hoặc phiên chơi còn hiệu lực." />
+    <PageHeader title="Người dùng" />
     <Panel className="mb-5">
       <h2 className="admin-section-title mb-3">Tìm tài khoản</h2>
       <form className="flex flex-col gap-3 sm:flex-row" action="/admin/users">

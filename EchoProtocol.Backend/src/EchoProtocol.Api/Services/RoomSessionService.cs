@@ -262,7 +262,11 @@ public sealed class RoomSessionService(AppDbContext db, IOptions<MatchAuthorityS
         if (room is null) return Deny<RoomSessionResponse>("Room not found", ErrorCodes.NotFound);
         var action = await db.AdminModerationActions.AsNoTracking().SingleOrDefaultAsync(
             x => x.TargetId == id && x.Action == "CLOSE_ROOM", ct);
-        return ServiceResult<RoomSessionResponse>.Success(Map(room) with { HostExecutedAtUtc = action?.HostExecutedAtUtc });
+        return ServiceResult<RoomSessionResponse>.Success(Map(room) with
+        {
+            CurrentMatchId = room.ClosedAtUtc is null ? room.CurrentMatchId : null,
+            HostExecutedAtUtc = action?.HostExecutedAtUtc,
+        });
     }
 
     private Task<RoomSession?> LockRoom(Guid id, CancellationToken ct) => db.Database.IsNpgsql()

@@ -914,9 +914,20 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("MaxPlayers")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ProgressionPolicyVersion")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<string>("ResolutionMode")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("RewardConfigurationJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RewardPolicyVersion")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<Guid?>("RoomMatchRequestId")
                         .HasColumnType("uuid");
@@ -1058,6 +1069,9 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<DateTime>("EndedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("EvidenceVersion")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("ObjectiveCompletion")
                         .HasPrecision(5, 4)
                         .HasColumnType("numeric(5,4)");
@@ -1140,7 +1154,16 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("DownedCount")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("EvidenceComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("ObjectiveActions")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ObjectiveContribution")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RescueActions")
                         .HasColumnType("integer");
 
                     b.Property<int>("ReviveCount")
@@ -1157,7 +1180,11 @@ namespace EchoProtocol.Api.Migrations
 
                             t.HasCheckConstraint("CK_MatchResultPlayers_DownedCount_NonNegative", "\"DownedCount\" >= 0");
 
+                            t.HasCheckConstraint("CK_MatchResultPlayers_ObjectiveActions_Range", "\"ObjectiveActions\" IS NULL OR \"ObjectiveActions\" BETWEEN 0 AND 10000");
+
                             t.HasCheckConstraint("CK_MatchResultPlayers_ObjectiveContribution_NonNegative", "\"ObjectiveContribution\" >= 0");
+
+                            t.HasCheckConstraint("CK_MatchResultPlayers_RescueActions_Range", "\"RescueActions\" IS NULL OR \"RescueActions\" BETWEEN 0 AND 10000");
 
                             t.HasCheckConstraint("CK_MatchResultPlayers_ReviveCount_NonNegative", "\"ReviveCount\" >= 0");
                         });
@@ -2112,11 +2139,33 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("Contribution")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ContributionExperience")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(25);
+
                     b.Property<int>("Disconnected")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("EffectiveAtUtc")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FullTeamPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(100);
+
+                    b.Property<decimal>("LossCapCreditsPerMinute")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(7, 2)
+                        .HasColumnType("numeric(7,2)")
+                        .HasDefaultValue(2m);
+
+                    b.Property<int>("LossExperiencePerMinute")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<int>("Maximum")
                         .HasColumnType("integer");
@@ -2124,17 +2173,63 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("Objective")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ObjectiveActionCap")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(4);
+
+                    b.Property<int>("ObjectiveExperience")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(50);
+
+                    b.Property<int>("OneActionTeamPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(50);
+
                     b.Property<int>("Participation")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PolicyKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("REWARD_V2");
+
+                    b.Property<int>("RescueActionCap")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
+                    b.Property<int>("RescueBonusCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10);
+
                     b.Property<int>("Survival")
                         .HasColumnType("integer");
+
+                    b.Property<int>("SurvivalExperience")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(25);
+
+                    b.Property<int>("TwoActionTeamPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(75);
 
                     b.Property<Guid>("UpdatedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Win")
                         .HasColumnType("integer");
+
+                    b.Property<int>("WinExperience")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(75);
 
                     b.HasKey("Id");
 

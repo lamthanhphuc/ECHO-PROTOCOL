@@ -16,10 +16,12 @@ const labels: Record<AdminModerationAction["action"], string> = {
   UNLOCK_USER: "Mở khóa tài khoản",
 };
 
-export function ModerationPanel({ targetId, actions, history }: {
+export function ModerationPanel({ targetId, actions, history, usernames = {}, adminNames = {} }: {
   targetId: string;
   actions: AdminModerationAction["action"][];
   history: AdminModerationAction[];
+  usernames?: Record<string, string>;
+  adminNames?: Record<string, string>;
 }) {
   const router = useRouter();
   const [action, setAction] = useState<AdminModerationAction["action"]>(actions[0]);
@@ -57,6 +59,6 @@ export function ModerationPanel({ targetId, actions, history }: {
     </form>}
     {action === "STOP_MATCH" && <p className="muted mt-3 text-sm">Thao tác này chặn quyền phòng trên máy chủ; phiên Fusion có thể tiếp tục cho đến khi client ngắt kết nối.</p>}
     {message && <p role="status" className="mt-3 text-sm text-red-300">{message}</p>}
-    {history.length > 0 && <div className="table-wrap mt-5 rounded-lg"><table><thead><tr><th>Thời gian</th><th>Thao tác</th><th>Người chơi</th><th>Trạng thái thực thi</th><th>Lý do</th><th>Quản trị viên</th></tr></thead><tbody>{history.map((entry) => <tr key={entry.id}><td>{formatDate(entry.createdAtUtc)}</td><td>{labels[entry.action] ?? entry.action}</td><td className="code text-xs">{entry.targetUserId ?? "—"}</td><td>{entry.action === "KICK_PLAYER" ? entry.hostExecutedAtUtc ? <>Host đã xác nhận · {formatDate(entry.hostExecutedAtUtc)}<p className="muted text-xs">Client: chưa có xác nhận</p></> : "Backend đã ghi; chờ Host xác nhận" : "Đã ghi nhận"}</td><td>{entry.reason}</td><td className="code text-xs">{entry.adminUserId}</td></tr>)}</tbody></table></div>}
+    {history.length > 0 && <div className="table-wrap mt-5 rounded-lg"><table><thead><tr><th>Thời gian</th><th>Thao tác</th><th>Người chơi</th><th>Trạng thái thực thi</th><th>Lý do</th><th>Quản trị viên</th></tr></thead><tbody>{history.map((entry) => <tr key={entry.id}><td>{formatDate(entry.createdAtUtc)}</td><td>{labels[entry.action] ?? entry.action}</td><td>{entry.targetUserId ? usernames[entry.targetUserId] ?? entry.targetUserId : "—"}</td><td>{entry.action === "KICK_PLAYER" ? entry.hostExecutedAtUtc ? <>Host đã xác nhận · {formatDate(entry.hostExecutedAtUtc)}<p className="muted text-xs">Client: chưa có xác nhận</p></> : "Backend đã ghi; chờ Host xác nhận" : "Đã ghi nhận"}</td><td>{entry.reason}</td><td>{adminNames[entry.adminUserId] ?? entry.adminUserId}</td></tr>)}</tbody></table></div>}
   </section>;
 }

@@ -7,6 +7,7 @@ namespace EchoProtocol.UI.HUD
     public class HUD3DWorldMarker : MonoBehaviour
     {
         public static bool ShowDebugAlienDirection { get; set; }
+        public static bool ShowDebugStalkerDirection { get; set; }
         [System.Serializable]
         public class MarkerItemUI
         {
@@ -94,6 +95,21 @@ namespace EchoProtocol.UI.HUD
             _targetTransforms.Clear();
             _targetTitles.Clear();
             _targetColors.Clear();
+
+            if (ShowDebugStalkerDirection)
+            {
+                var stalker = FindAnyObjectByType<
+                    EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
+
+                if (stalker != null &&
+                    stalker.Object != null &&
+                    stalker.Object.IsValid)
+                {
+                    _targetTransforms.Add(stalker.transform);
+                    _targetTitles.Add("Stalker");
+                    _targetColors.Add(downedTeammateColor);
+                }
+            }
 
             // 1. Downed Teammates (Need Help)
             _staleRescueTitles.Clear();

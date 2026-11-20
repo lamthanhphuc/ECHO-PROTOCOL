@@ -156,6 +156,12 @@ namespace EchoProtocol.Networking.Authority
                 {
                     // Preserve rejected payloads too, for recovery; do not retry permanent errors forever.
                     entry.lastErrorCode = result?.ErrorCode ?? "NO_RESPONSE";
+                    Debug.LogWarning(
+                        $"[RESULT_DIAG] Submit failed " +
+                        $"match={id:D} " +
+                        $"status={result?.StatusCode} " +
+                        $"code={entry.lastErrorCode} " +
+                        $"detail={Describe(result)}");
                     entry.rejected = result != null && IsPermanentResultFailure(result.StatusCode,
                         entry.lastErrorCode, now < entry.notBeforeUtc + 120);
                     entry.attempts++;

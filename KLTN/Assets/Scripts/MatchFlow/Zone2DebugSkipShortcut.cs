@@ -21,6 +21,12 @@ public sealed class Zone2DebugSkipShortcut : MonoBehaviour
         var keyboard = Keyboard.current;
         if (keyboard == null || !keyboard[skipKey].wasPressedThisFrame) return;
 
+        if (AlienHuntMission.Instance != null)
+        {
+            NetworkMatchState.Instance?.RequestDebugCompleteNextFurnace();
+            return;
+        }
+
         var networkMatch = NetworkMatchState.Instance;
         if (networkMatch != null && networkMatch.Object != null)
         {

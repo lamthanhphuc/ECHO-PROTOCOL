@@ -65,6 +65,12 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
 
         if (keyboard.gKey.wasPressedThisFrame)
         {
+            if (localLife.DebugGodMode)
+            {
+                EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugAlienDirection = false;
+                EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugStalkerDirection = false;
+            }
+
             localLife.RequestDebugGodModeToggle();
             return;
         }
@@ -72,6 +78,7 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
         if (!localLife.DebugGodMode)
         {
             EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugAlienDirection = false;
+            EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugStalkerDirection = false;
             return;
         }
 
@@ -107,6 +114,13 @@ public sealed class PlayerGodModeDebugShortcut : MonoBehaviour
         {
             localLife.RequestDebugTeamTool(
                 LobbyPlayerState.CoreStabilizerToolId);
+            return;
+        }
+
+        if (keyboard.digit9Key.wasPressedThisFrame)
+        {
+            EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugStalkerDirection =
+                !EchoProtocol.UI.HUD.HUD3DWorldMarker.ShowDebugStalkerDirection;
             return;
         }
 

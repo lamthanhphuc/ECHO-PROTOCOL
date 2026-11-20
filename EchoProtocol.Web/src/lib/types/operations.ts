@@ -11,9 +11,22 @@ export interface EconomyData {
     reason: string; status: string; proposedByUserId: string; proposedAtUtc: string;
     reviewedByUserId: string | null; reviewedAtUtc: string | null; reviewReason: string | null;
   }[];
-  canReview: boolean;
-  adminId: string;
-  rewards?: Record<"participation" | "objective" | "win" | "survival" | "contribution" | "disconnected" | "maximum", number>;
+  rewards?: Record<"participation" | "objective" | "win" | "survival" | "contribution" | "disconnected" | "maximum", number> & {
+    policyKey: "REWARD_V1" | "REWARD_V2";
+    lossCapCreditsPerMinute: number;
+    rescueBonusCredits: number;
+    objectiveActionCap: number;
+    rescueActionCap: number;
+    oneActionTeamPercent: number;
+    twoActionTeamPercent: number;
+    fullTeamPercent: number;
+    winExperience: number;
+    objectiveExperience: number;
+    contributionExperience: number;
+    survivalExperience: number;
+    lossExperiencePerMinute: number;
+    effectiveAtUtc: string;
+  };
   rewardPolicy: string;
   maximumCurrencyPerMatch: number;
 }

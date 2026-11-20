@@ -82,7 +82,6 @@ export function ProfileTuningForm({ data }: { data: ProfileTuningData }) {
     </Panel>
     <Panel>
       <h2 className="mb-3 text-lg font-semibold">Thử tính điểm với một trận mẫu</h2>
-      <p className="muted mb-3 text-sm">Dữ liệu giả lập để so sánh điểm theo công thức đang dùng và công thức mới.</p>
       <details className="mb-4"><summary className="cursor-pointer text-sm font-medium">Chọn hành động gây tiếng ồn và nhập số lần</summary>
       <fieldset disabled={busy} className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         <legend className="mb-2 text-sm">Chọn tiếng ồn được tính và nhập số lần xuất hiện trong trận mẫu</legend>

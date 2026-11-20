@@ -100,3 +100,15 @@ with a non-zero status. TRX files are written under `TestResults/M4-009/<run-id>
 
 Running the PostgreSQL category directly without `ECHO_M4_POSTGRES_CONNECTION` fails explicitly
 with `PostgreSQL integration tests are NOT RUN`; it is never converted into a passing test.
+
+# Reward V2 pilot verification (2026-11-18)
+
+Pilot settings for a future opt-in: `REWARD_V2`, participation 0, objective 70,
+win 150, survival 10, contribution 70, disconnected 0, maximum 300,
+loss cap 2.0 credits/minute. Full-contribution win: 300 CR / 175 XP;
+one objective action and survival: 131 CR; zero actions: 0 CR / 0 XP and no
+eligible match increment. Tests cover action caps, short loss and disconnect
+caps, invalid evidence, pinned snapshot, replay, legacy V1 isolation, and
+shop seeder preservation of Admin price and inactive state. Gameplay playtests,
+Host Migration, and Unity serialization/runtime checks remain required before
+switching the shared policy key to V2.

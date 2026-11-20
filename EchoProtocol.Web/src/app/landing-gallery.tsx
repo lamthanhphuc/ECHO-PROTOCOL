@@ -8,7 +8,7 @@ const photos = [
   ["main-menu", "Menu chính"], ["lobby", "Phòng chờ"],
   ...[1, 2, 3, 4].map((n) => [`research-${n}`, `Cơ sở nghiên cứu · ${n}`]),
   ...[1, 2, 3, 4].map((n) => [`flooded-${n}`, `Vùng ngập · ${n}`]),
-  ["stalker", "Quái vật rình rập"], ["lizard", "Quái vật bò sát"],
+  ["stalker-v2", "Quái vật rình rập"], ["lizard", "Quái vật bò sát"],
 ];
 const title = "ECHO PROTOCOL: RESEARCH FACILITY";
 
@@ -42,7 +42,7 @@ export function LandingGallery() {
                 <iframe src="https://www.youtube-nocookie.com/embed/eWeeLHnXCnA?autoplay=1" title={title} allow="autoplay; encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
               ) : (
                 <button className={styles.galleryPlay} type="button" aria-label={`Phát ${title}`} onClick={() => setPlaying(true)}>
-                  <Image src="/media/stalker.webp" alt="" fill sizes="(max-width: 960px) 90vw, 56rem" />
+                  <Image src="/media/stalker-v2.webp" alt="" fill sizes="(max-width: 960px) 90vw, 56rem" />
                   <span aria-hidden="true">▶</span>
                   <strong>{title}</strong>
                 </button>

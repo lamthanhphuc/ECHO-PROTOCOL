@@ -10,7 +10,11 @@ public sealed class RewardPolicyV1 : IRewardPolicy
     public const int MaximumCurrencyPerMatch = 130;
 
     private readonly RewardConfiguration _settings;
-    public RewardPolicyV1() : this(new RewardConfiguration()) { }
+    public RewardPolicyV1() : this(new RewardConfiguration
+    {
+        PolicyKey = PolicyVersion, Participation = 20, Objective = 30, Win = 50,
+        Survival = 20, Contribution = 10, Disconnected = 10, Maximum = 130
+    }) { }
     public RewardPolicyV1(RewardConfiguration settings) => _settings = settings;
     public string Version => _settings.Id == Guid.Empty ? PolicyVersion : "REWARD_CUSTOM_V1";
     public bool IsConfigured => true;

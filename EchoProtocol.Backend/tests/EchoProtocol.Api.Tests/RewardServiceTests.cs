@@ -362,6 +362,108 @@ public sealed class RewardServiceTests
             Assert.Equal(ProgressionPolicyV1.PolicyVersion, grant.ProgressionPolicyVersion));
     }
 
+    [Fact]
+    public async Task V2MatchUsesPinnedConfigurationAndReplayDoesNotCreditTwice()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync(item => item.MatchId == harness.MatchId);
+        match.RewardPolicyVersion = "REWARD_V2";
+        match.ProgressionPolicyVersion = "PROGRESSION_V2";
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration
+        {
+            PolicyKey = "REWARD_V2", Participation = 0, Objective = 70, Win = 150,
+            Survival = 10, Contribution = 70, Disconnected = 0, Maximum = 300,
+            LossCapCreditsPerMinute = 2m, WinExperience = 95
+        });
+        var result = await harness.Db.MatchResults.Include(item => item.Players).SingleAsync(item => item.MatchId == harness.MatchId);
+        result.EvidenceVersion = 2;
+        harness.Db.RewardConfigurations.Add(new RewardConfiguration
+        {
+            Id = RewardConfiguration.SharedId, PolicyKey = "REWARD_V1", Win = 0,
+            EffectiveAtUtc = Now.UtcDateTime
+        });
+        foreach (var player in result.Players)
+        {
+            player.ObjectiveActions = player.UserId == match.HostUserId ? 4 : 0;
+            player.RescueActions = player.UserId == match.HostUserId ? 2 : 0;
+            player.EvidenceComplete = true;
+        }
+        await harness.Db.SaveChangesAsync();
+
+        var first = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.True(first.IsSuccess);
+        Assert.Equal("REWARD_V2", first.Data!.PolicyVersion);
+        Assert.Equal(300, first.Data.Grants.Single(item => item.UserId == match.HostUserId).CurrencyAmount);
+        Assert.Equal(195, (await harness.Db.MatchRewardGrants.SingleAsync(item => item.UserId == match.HostUserId)).ExperiencePointsAwarded);
+        Assert.Equal(0, first.Data.Grants.Single(item => item.UserId != match.HostUserId).CurrencyAmount);
+        var replay = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(2, await harness.Db.MatchRewardGrants.CountAsync());
+        Assert.Equal(0, (await harness.Db.PlayerProfiles.SingleAsync(item => item.UserId != match.HostUserId)).TotalMatches);
+    }
+
+    [Fact]
+    public async Task LegacyPendingMatchDoesNotUseV2Configuration()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        harness.Db.RewardConfigurations.Add(new RewardConfiguration
+        {
+            Id = RewardConfiguration.SharedId, PolicyKey = "REWARD_V2", Participation = 0,
+            Disconnected = 0, Maximum = 300, LossCapCreditsPerMinute = 2m,
+            EffectiveAtUtc = Now.UtcDateTime
+        });
+        await harness.Db.SaveChangesAsync();
+        var before = await harness.Db.Wallets.SumAsync(item => item.Balance);
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.False(processed.IsSuccess);
+        Assert.Equal(ErrorCodes.RewardPolicyInvalid, processed.ErrorCode);
+        Assert.Equal(before, await harness.Db.Wallets.SumAsync(item => item.Balance));
+    }
+
+    [Fact]
+    public async Task IncompleteV2EvidenceDoesNotMutateWallet()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync(item => item.MatchId == harness.MatchId);
+        match.RewardPolicyVersion = "REWARD_V2";
+        match.ProgressionPolicyVersion = "PROGRESSION_V2";
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration
+        {
+            PolicyKey = "REWARD_V2", Participation = 0, Disconnected = 0, Maximum = 300
+        });
+        await harness.Db.SaveChangesAsync();
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.False(processed.IsSuccess);
+        Assert.Empty(await harness.Db.MatchRewardGrants.ToListAsync());
+        Assert.Equal(200, await harness.Db.Wallets.SumAsync(item => item.Balance));
+    }
+
+    [Fact]
+    public async Task InvalidV2ConfigurationDoesNotMutateWallet()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.RewardPolicyVersion = "REWARD_V2";
+        match.ProgressionPolicyVersion = "PROGRESSION_V2";
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration
+        {
+            PolicyKey = "REWARD_V2", Participation = 20, Disconnected = 0, Maximum = 300
+        });
+        var result = await harness.Db.MatchResults.Include(item => item.Players).SingleAsync();
+        result.EvidenceVersion = 2;
+        foreach (var player in result.Players)
+        {
+            player.ObjectiveActions = 1;
+            player.RescueActions = 0;
+            player.EvidenceComplete = true;
+        }
+        await harness.Db.SaveChangesAsync();
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.Equal(ErrorCodes.RewardPolicyInvalid, processed.ErrorCode);
+        Assert.Empty(await harness.Db.MatchRewardGrants.ToListAsync());
+        Assert.Equal(200, await harness.Db.Wallets.SumAsync(item => item.Balance));
+    }
+
     private sealed class RewardHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

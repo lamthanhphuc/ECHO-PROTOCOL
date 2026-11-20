@@ -59,6 +59,24 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<RewardConfiguration>()
+            .Property(x => x.LossCapCreditsPerMinute).HasPrecision(7, 2);
+        modelBuilder.Entity<RewardConfiguration>()
+            .Property(x => x.LossCapCreditsPerMinute).HasDefaultValue(2m);
+        modelBuilder.Entity<RewardConfiguration>()
+            .Property(x => x.RescueBonusCredits).HasDefaultValue(10);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.ObjectiveActionCap).HasDefaultValue(4);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.RescueActionCap).HasDefaultValue(2);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.OneActionTeamPercent).HasDefaultValue(50);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.TwoActionTeamPercent).HasDefaultValue(75);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.FullTeamPercent).HasDefaultValue(100);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.WinExperience).HasDefaultValue(75);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.ObjectiveExperience).HasDefaultValue(50);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.ContributionExperience).HasDefaultValue(25);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.SurvivalExperience).HasDefaultValue(25);
+        modelBuilder.Entity<RewardConfiguration>().Property(x => x.LossExperiencePerMinute).HasDefaultValue(1);
+        modelBuilder.Entity<RewardConfiguration>()
+            .Property(x => x.PolicyKey).HasDefaultValue("REWARD_V2");
         modelBuilder.Entity<RoomSession>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -403,6 +421,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.BalanceVersion).HasMaxLength(80);
             entity.Property(e => e.BalanceHash).HasMaxLength(64);
             entity.Property(e => e.MatchDataPolicy).IsRequired().HasMaxLength(20).HasDefaultValue("STANDARD");
+            entity.Property(e => e.RewardPolicyVersion).HasMaxLength(30);
+            entity.Property(e => e.ProgressionPolicyVersion).HasMaxLength(30);
+            entity.Property(e => e.RewardConfigurationJson).HasColumnType("text");
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(e => new { e.FusionSessionName, e.Status });
             entity.HasIndex(e => e.HostUserId);
@@ -501,6 +522,10 @@ public class AppDbContext : DbContext
                 t.HasCheckConstraint(
                     "CK_MatchResultPlayers_ObjectiveContribution_NonNegative",
                     "\"ObjectiveContribution\" >= 0");
+                t.HasCheckConstraint("CK_MatchResultPlayers_ObjectiveActions_Range",
+                    "\"ObjectiveActions\" IS NULL OR \"ObjectiveActions\" BETWEEN 0 AND 10000");
+                t.HasCheckConstraint("CK_MatchResultPlayers_RescueActions_Range",
+                    "\"RescueActions\" IS NULL OR \"RescueActions\" BETWEEN 0 AND 10000");
             });
 
             entity.HasKey(e => new { e.MatchId, e.UserId });

@@ -531,6 +531,32 @@ TeamTool unequip is idempotent. M4-052 rejects Character unequip with
   A post-commit reward failure leaves the accepted Result at `Pending`; an identical Result replay
   retries reward processing without creating another Result or double-granting.
 
+**Reward V2 (default for new deployments, pinned at match start):** `RewardConfiguration.PolicyKey` defaults to
+`REWARD_V2`. Existing V1 configurations switch during migration only when they use the stock values
+and no legacy match is active or awaiting reward. Start stores the policy version, progression version, and full reward configuration
+snapshot on the match. Later Admin edits do not alter that match. A V2 Result must send
+`evidenceVersion: 2` and each player must send `objectiveActions` (0-10000),
+`rescueActions` (0-10000), and `evidenceComplete: true`. Missing or false evidence is rejected
+with `MATCH_RESULT_INVALID_PAYLOAD`; unsupported evidence versions are also rejected. V1
+payloads omit these fields and retain their original canonical hash. V2 hashes include the
+version and all three player evidence fields, so changing evidence on replay returns
+`MATCH_RESULT_CONFLICT`. `ReviveCount` still means times revived, not rescues performed.
+
+V2 contribution units = `min(objectiveActions,objectiveActionCap) + min(rescueActions,rescueActionCap)`;
+units 0/1/2/3+ use factors 0/`oneActionTeamPercent`/`twoActionTeamPercent`/`fullTeamPercent` (percentages).
+Reward = min(maximum, floor((win + objective) * factor)
++ floor(contribution * units / (objectiveActionCap + rescueActionCap))
++ rescueBonusCredits * min(rescueActions,rescueActionCap) + survival), with zero when units are zero.
+Defaults are action caps 4/2, team percentages 50/75/100, and rescue bonus 10. Loss or
+disconnect caps reward at `floor(lossCapCreditsPerMinute * durationSeconds / 60)`.
+The default V2 maximum is 320 credits per match; previously pinned matches retain their stored maximum.
+Progression V2 uses the same factor with configurable `winExperience`, `objectiveExperience`,
+`contributionExperience`, and `survivalExperience` (defaults 75/50/25/25).
+Loss or disconnect caps XP at `floor(lossExperiencePerMinute * durationSeconds / 60)` (default 1).
+All V2 settings are editable in Admin Economy and pinned at match start.
+Zero units grant zero XP and do not increment eligible match count. TEST_ONLY still grants
+zero credits and XP. Legacy matches without a snapshot cannot use live V2 settings.
+
 **Success data:**
 
 ```json

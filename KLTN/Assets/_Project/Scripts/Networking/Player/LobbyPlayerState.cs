@@ -160,6 +160,7 @@ namespace EchoProtocol.Networking
         public NetworkBool Disconnected { get; private set; }
 
         [Networked] public NetworkBool HasObjectiveContribution { get; set; }
+        [Networked] public int ObjectiveActions { get; set; }
         [Networked] public long DisconnectExpiresAtUtc { get; private set; }
 
         public void SetDisconnectedAuthoritative(bool disconnected)
@@ -186,6 +187,7 @@ namespace EchoProtocol.Networking
             IsReady = false;
             IsGameplayPlayer = false;
             HasObjectiveContribution = false;
+            ObjectiveActions = 0;
             DisconnectExpiresAtUtc = 0;
             GameplaySpawnReady = false;
             IsCoreStabilized = false;

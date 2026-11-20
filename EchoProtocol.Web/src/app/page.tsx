@@ -51,7 +51,7 @@ export default function Home() {
       <a className={styles.skip} href="#intro">Đến nội dung</a>
       <header className={styles.header}>
         <div className={styles.bar}>
-          <Link className={styles.brand} href="/" aria-label="ECHO PROTOCOL, trang chủ"><Image src="/media/logo-new.webp" alt="" width={159} height={160} /></Link>
+          <Link className={styles.brand} href="/" aria-label="ECHO PROTOCOL, trang chủ"><Image src="/echo-login-logo.png?v=3" alt="" width={159} height={160} /></Link>
           <nav className={styles.nav} aria-label="Trang chủ">
             <a href="#about">Giới thiệu</a>
             <a href="#story">Cốt truyện</a>
@@ -59,14 +59,23 @@ export default function Home() {
             <a href="#operators">Nhân vật</a>
             <a href="#gallery">Trưng bày</a>
           </nav>
-          <div className="flex items-center justify-end gap-3"><Link href="/legal" aria-label="18+ · Xem chính sách" className="rounded-full border px-2 py-1 text-xs font-semibold">18+</Link><Link className={styles.portal} href="/login">Đăng nhập</Link></div>
+          <Link className={styles.portal} href="/login">Đăng nhập</Link>
         </div>
       </header>
 
       <section id="intro" className={styles.hero} aria-labelledby="game-title">
         <Image className={styles.heroImage} src="/media/facility.webp" alt="" fill priority sizes="100vw" />
         <div className={styles.heroContent}>
-          <h1 id="game-title">ECHO<br />PROTOCOL</h1>
+          <h1 id="game-title" className={styles.heroLogo}>
+            <Image
+              src="/echo-title.png?v=2"
+              alt="ECHO PROTOCOL"
+              width={2048}
+              height={754}
+              sizes="(max-width: 640px) 92vw, 900px"
+              priority
+            />
+          </h1>
           <p className={styles.tagline}>Tín hiệu vẫn đang hoạt động.</p>
           <p className={styles.heroLead}>Echo Protocol là một trò chơi kinh dị sinh tồn hợp tác dành cho 1-4 người chơi. Cùng đồng đội khôi phục hệ thống, hoàn thành nhiệm vụ và tìm đường thoát khi có thứ đang săn đuổi.</p>
           <div className={styles.heroActions}>

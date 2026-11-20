@@ -13,6 +13,56 @@ namespace EchoProtocol.Api.Tests;
 public sealed class MatchResultServiceTests
 {
     [Fact]
+    public async Task V2RequiresCompleteEvidenceAndPersistsItWithoutChangingLegacyReplay()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.RewardPolicyVersion = "REWARD_V2";
+        await harness.Db.SaveChangesAsync();
+        var request = harness.ValidRequest();
+        var missing = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.Equal(ErrorCodes.MatchResultInvalidPayload, missing.ErrorCode);
+        request.EvidenceVersion = 2;
+        foreach (var player in request.Players)
+        {
+            player.ObjectiveActions = 0;
+            player.RescueActions = 0;
+            player.EvidenceComplete = true;
+        }
+        request.Players[0].EvidenceComplete = false;
+        var incomplete = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.Equal(ErrorCodes.MatchResultInvalidPayload, incomplete.ErrorCode);
+        request.Players[0].EvidenceComplete = true;
+        var accepted = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.True(accepted.IsSuccess);
+        var stored = await harness.Db.MatchResults.Include(item => item.Players).SingleAsync();
+        Assert.Equal(2, stored.EvidenceVersion);
+        Assert.All(stored.Players, player => { Assert.Equal(0, player.ObjectiveActions); Assert.Equal(0, player.RescueActions); Assert.True(player.EvidenceComplete); });
+        request.Players[0].ObjectiveActions = 1;
+        var changed = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.Equal(ErrorCodes.MatchResultConflict, changed.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(-1, 2)]
+    [InlineData(10001, 2)]
+    [InlineData(0, 3)]
+    public async Task V2RejectsInvalidActionCountsAndEvidenceVersion(int actions, int version)
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
+        request.EvidenceVersion = version;
+        foreach (var player in request.Players)
+        {
+            player.ObjectiveActions = actions;
+            player.RescueActions = 0;
+            player.EvidenceComplete = true;
+        }
+        var result = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.Equal(ErrorCodes.MatchResultInvalidPayload, result.ErrorCode);
+        Assert.Empty(harness.Db.MatchResults);
+    }
+    [Fact]
     public async Task LobbyHistoryIsExcludedFromStartedResultRoster()
     {
         await using var harness = await UnitHarness.CreateAsync();

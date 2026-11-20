@@ -34,9 +34,8 @@ export function PortalShell({ session, items, children, mode }: {
     <div className="min-w-0">
       <header className={admin ? "admin-topbar flex min-h-16 items-center justify-between gap-4 border-b border-[var(--line)] px-4 md:px-7" : "panel sticky top-0 z-20 flex min-h-20 items-center justify-between rounded-none border-x-0 border-t-0 px-4 pt-4 md:px-7"}>
         <div className={admin ? "lg:hidden" : "md:hidden"}><Brand mode={mode} compact /></div>
-        {admin && <div className="hidden min-w-0 lg:block"><p className="text-xs text-[var(--muted)]">Quản trị / {currentItem?.group ?? "Vận hành"}</p><p className="truncate text-sm font-semibold text-white">{currentItem?.label ?? "Tổng quan"}</p></div>}
-        {!admin && <div className="ml-auto"><Link href="/legal" aria-label="18+ · Xem chính sách" className="rounded-full border px-2 py-1 text-xs font-semibold">18+</Link></div>}
-        <div className={admin ? "ml-auto text-right" : "text-right"}>
+        {admin && <div className="hidden min-w-0 lg:block"><p className="truncate text-sm font-semibold text-white">{currentItem?.label ?? "Tổng quan"}</p></div>}
+        <div className="ml-auto text-right">
           <p className="text-sm text-white">{session.username}</p>
           <p className="text-xs text-[var(--muted)]">{statusLabel(session.role)}</p>
         </div>
@@ -62,11 +61,33 @@ export function PortalShell({ session, items, children, mode }: {
   </div>;
 }
 
-function Brand({ mode, compact = false }: { mode: string; compact?: boolean }) {
-  return <div className="flex items-center gap-2">
-    <Image src="/echo-logo.webp" alt="" width={44} height={44} className="shrink-0" />
-    <div><p className="brand-mark text-sm">ECHO PROTOCOL</p>
-      {!compact && <p className="muted mt-1 text-xs">{mode === "ADMIN" ? "Khu quản trị" : "Khu người chơi"}</p>}
+function Brand({
+  mode,
+  compact = false,
+}: {
+  mode: string;
+  compact?: boolean;
+}) {
+  if (mode === "ADMIN") {
+    return (
+      <div className="flex justify-center">
+        <Image src="/echo-title.png?v=2" alt="ECHO PROTOCOL" width={2048} height={754} className="block h-auto w-full max-w-[200px]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Image
+        src="/echo-title.png"
+        alt="ECHO PROTOCOL"
+        width={2048}
+        height={754}
+        className={`h-auto ${compact ? "w-[132px]" : "w-[190px]"}`}
+      />
+      {!compact && (
+        <p className="muted text-xs">Khu người chơi</p>
+      )}
     </div>
-  </div>;
+  );
 }

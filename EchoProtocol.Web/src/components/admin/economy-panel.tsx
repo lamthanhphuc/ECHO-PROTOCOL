@@ -16,6 +16,27 @@ const rewardFields = [
   ["maximum", "Tổng thưởng tối đa"],
 ] as const;
 
+const rewardPilotV2 = {
+  participation: 0, objective: 70, win: 150, survival: 10,
+  contribution: 70, disconnected: 0, maximum: 320,
+};
+
+const actionFields = [
+  ["objectiveActionCap", "Số hành động mục tiêu tối đa", 4, 1, 100],
+  ["rescueActionCap", "Số lần cứu tối đa", 2, 1, 100],
+  ["oneActionTeamPercent", "Hệ số đội khi có 1 hành động (%)", 50, 0, 100],
+  ["twoActionTeamPercent", "Hệ số đội khi có 2 hành động (%)", 75, 0, 100],
+  ["fullTeamPercent", "Hệ số đội khi có từ 3 hành động (%)", 100, 0, 100],
+] as const;
+
+const experienceFields = [
+  ["winExperience", "XP thắng trận", 75, 0, 10000],
+  ["objectiveExperience", "XP hoàn thành mục tiêu", 50, 0, 10000],
+  ["contributionExperience", "XP đóng góp", 25, 0, 10000],
+  ["survivalExperience", "XP sống sót", 25, 0, 10000],
+  ["lossExperiencePerMinute", "Trần XP/phút khi thua", 1, 0, 100],
+] as const;
+
 const itemCategories = [
   { value: "CHARACTER", label: "Nhân vật gốc" },
   { value: "CHARACTER_OUTFIT", label: "Trang phục nhân vật" },
@@ -34,6 +55,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [policyKey, setPolicyKey] = useState(data.rewards?.policyKey ?? "REWARD_V1");
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [itemId, setItemId] = useState("");
@@ -48,6 +70,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
   const itemsById = new Map(data.items.map((row) => [row.itemId, row]));
   const pending = data.proposals.filter((proposal) => proposal.status === "PENDING");
   const history = data.proposals.filter((proposal) => proposal.status !== "PENDING");
+  const switchingToV2 = policyKey === "REWARD_V2" && data.rewards?.policyKey !== "REWARD_V2";
 
   function selectItem(nextId: string) {
     if (nextId === itemId) return;
@@ -92,7 +115,15 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
       const response = await fetch("/api/bff/admin/economy/rewards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(rewardFields.map(([key]) => [key, Number(fields.get(key))]))),
+        body: JSON.stringify({
+          ...Object.fromEntries(rewardFields.map(([key]) => [key, Number(fields.get(key))])),
+          policyKey: String(fields.get("policyKey")),
+          lossCapCreditsPerMinute: Number(fields.get("lossCapCreditsPerMinute") ?? data.rewards?.lossCapCreditsPerMinute ?? 2),
+          rescueBonusCredits: Number(fields.get("rescueBonusCredits") ?? data.rewards?.rescueBonusCredits ?? 10),
+          ...Object.fromEntries([...actionFields, ...experienceFields].map(([key, , initial]) =>
+            [key, Number(fields.get(key) ?? data.rewards?.[key] ?? initial)])),
+          effectiveAtUtc: data.rewards?.effectiveAtUtc,
+        }),
       });
       const body = await response.json();
       if (!response.ok || !body.success) throw new Error(body.message || "Không lưu được mức thưởng.");
@@ -108,17 +139,33 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
   return <div className="grid gap-5">
     <Panel>
       <h2 className="mb-2 font-semibold">Luật kết quả và thưởng</h2>
-      <p className="text-sm">Chính sách {data.rewardPolicy} · Tối đa {data.maximumCurrencyPerMatch} xu mỗi trận.</p>
-      <p className="muted mt-1 text-sm">Mức thưởng này áp dụng khi hệ thống tính thưởng cho các trận chưa được trả thưởng.</p>
       {data.rewards && <form key={data.rewardPolicy} className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={saveRewards}>
-        {rewardFields.map(([key, label]) => <label className="admin-field" key={key}>{label} (xu)
-          <input className="input" name={key} type="number" min={0} max={10000} step={1} required defaultValue={data.rewards?.[key]} disabled={busy} />
+        <label className="admin-field">Reward Policy<select className="input" name="policyKey" value={policyKey} onChange={(event) => setPolicyKey(event.target.value === "REWARD_V2" ? "REWARD_V2" : "REWARD_V1")} disabled={busy}>
+          <option value="REWARD_V1">Reward V1</option><option value="REWARD_V2">Reward V2</option>
+        </select></label>
+        <h3 className="font-semibold sm:col-span-2">Xu thưởng</h3>
+        {rewardFields.filter(([key]) => policyKey === "REWARD_V1" || (key !== "participation" && key !== "disconnected")).map(([key, label]) => <label className="admin-field" key={key}>{label} (xu)
+          <input key={`${policyKey}-${key}`} className="input" name={key} type="number" min={0} max={10000} step={1} required defaultValue={switchingToV2 ? rewardPilotV2[key] : data.rewards?.[key]} disabled={busy} />
         </label>)}
+        {policyKey === "REWARD_V2" && <>
+          <label className="admin-field">Trần xu/phút khi thua<input className="input" name="lossCapCreditsPerMinute" type="number" min={0} max={100} step="0.1" required defaultValue={data.rewards.lossCapCreditsPerMinute ?? 2} disabled={busy} /></label>
+          <label className="admin-field">Xu mỗi lần cứu đồng đội<input className="input" name="rescueBonusCredits" type="number" min={0} max={10000} step={1} required defaultValue={data.rewards.rescueBonusCredits ?? 10} disabled={busy} /></label>
+          <p className="muted text-sm sm:col-span-2">Xu cứu đồng đội chịu trần thưởng và trần khi thua.</p>
+          <h3 className="font-semibold sm:col-span-2">Đóng góp và hệ số đội</h3>
+          {actionFields.map(([key, label, initial, min, max]) => <label className="admin-field" key={key}>{label}
+            <input className="input" name={key} type="number" min={min} max={max} step={1} required defaultValue={data.rewards?.[key] ?? initial} disabled={busy} />
+          </label>)}
+          <h3 className="font-semibold sm:col-span-2">Kinh nghiệm (XP)</h3>
+          {experienceFields.map(([key, label, initial, min, max]) => <label className="admin-field" key={key}>{label}
+            <input className="input" name={key} type="number" min={min} max={max} step={1} required defaultValue={data.rewards?.[key] ?? initial} disabled={busy} />
+          </label>)}
+        </>}
         <button className="button self-end justify-self-start" type="submit" disabled={busy}>Lưu mức thưởng</button>
       </form>}
     </Panel>
     <Panel>
       <h2 className="mb-3 font-semibold">Cập nhật giá Shop</h2>
+      <p className="muted mb-4 text-sm">Lưu giá mới để áp dụng ngay, không cần chờ duyệt.</p>
       <form onSubmit={(event) => submit(event)} className="grid gap-3 sm:grid-cols-2">
         <label className="admin-field">Loại mặt hàng<select className="input" required disabled={busy} value={category} onChange={(e) => {
           setCategory(e.target.value);
@@ -146,11 +193,11 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
       </form>
     </Panel>
     <Panel>
-      <h2 className="mb-2 font-semibold">Duyệt giá và lịch sử</h2>
-      <p className="muted mb-4 text-sm">{data.canReview ? "Bạn có quyền duyệt đề xuất của quản trị viên khác." : "Tài khoản này có quyền gửi đề xuất và xem lịch sử."}</p>
-      {[{ title: "Chờ duyệt", proposals: pending }, { title: "Lịch sử", proposals: history }].map((group) => <section className="mt-4" key={group.title}>
+      <h2 className="mb-2 font-semibold">Lịch sử thay đổi giá</h2>
+      {[{ title: "Đề xuất cũ chờ xử lý", proposals: pending }, { title: "Đã áp dụng và xử lý", proposals: history }]
+        .filter((group) => group.proposals.length > 0)
+        .map((group) => <section className="mt-4" key={group.title}>
         <h3 className="mb-2 font-semibold">{group.title} ({group.proposals.length})</h3>
-        {group.proposals.length === 0 && <p className="muted text-sm">Chưa có đề xuất.</p>}
         {group.proposals.map((proposal) => {
           const current = itemsById.get(proposal.itemId);
           const priceChanged = proposal.status === "PENDING" && current && current.price !== proposal.previousPrice;
@@ -165,8 +212,7 @@ export function EconomyPanel({ data }: { data: EconomyData }) {
           <p className="break-all">Người gửi · {proposal.proposedByUserId} · {formatDate(proposal.proposedAtUtc)}</p>
           {proposal.reviewedAtUtc && <p className="break-all">Người xử lý · {proposal.reviewedByUserId} · {formatDate(proposal.reviewedAtUtc)}</p>}
         </details>
-        {proposal.status === "PENDING" && proposal.proposedByUserId === data.adminId && <p className="muted mt-2">Một quản trị viên khác có quyền duyệt cần xử lý đề xuất này.</p>}
-        {data.canReview && proposal.status === "PENDING" && proposal.proposedByUserId !== data.adminId && <form
+        {proposal.status === "PENDING" && <form
           className="mt-3 grid gap-2" onSubmit={(event) => submit(event, proposal.id)}>
           <label className="admin-field">Lý do duyệt hoặc từ chối<textarea className="input" name="reason" required minLength={10} maxLength={500} /></label>
           <div className="flex gap-2"><button className="button" type="submit" value="approve" disabled={busy || !!priceChanged}>Duyệt giá</button>

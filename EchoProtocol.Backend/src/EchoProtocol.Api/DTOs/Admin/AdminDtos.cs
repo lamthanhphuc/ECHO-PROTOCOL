@@ -46,6 +46,15 @@ public sealed class AdminMatchesQuery : AdminPagedQuery
     public Guid? UserId { get; set; }
     public MatchAuthorityStatus? Status { get; set; }
     public bool FlaggedOnly { get; set; }
+    public string? Maps { get; set; }
+    public string? Difficulties { get; set; }
+    public string? PlayerCounts { get; set; }
+    public string? Statuses { get; set; }
+    public string? Outcomes { get; set; }
+    public DateTime? StartedFrom { get; set; }
+    public DateTime? StartedTo { get; set; }
+    public DateTime? EndedFrom { get; set; }
+    public DateTime? EndedTo { get; set; }
 }
 
 public sealed record AdminDashboardRoom(Guid RoomInstanceId, string FusionSessionName, string HostUsername,

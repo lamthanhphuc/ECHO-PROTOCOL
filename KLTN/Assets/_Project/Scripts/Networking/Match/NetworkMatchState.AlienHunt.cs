@@ -63,6 +63,47 @@ namespace EchoProtocol.Networking
                 !TryResolveActivePlayer(player, out var life) || !life.DebugGodMode) return;
             AlienHuntMission.Instance?.DebugGive(player, kind);
         }
+        public void RequestDebugCompleteNextFurnace(
+            int count = AlienHuntMission.FurnaceCapacity)
+        {
+            if (!HasValidNetworkObject() ||
+                (count != 1 && count != AlienHuntMission.FurnaceCapacity))
+                return;
+
+            if (Object.HasStateAuthority)
+            {
+                if (TryGetLocalRequester(out var player))
+                    TryDebugCompleteNextFurnace(player, count);
+            }
+            else
+            {
+                RpcDebugCompleteNextFurnace(count);
+            }
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RpcDebugCompleteNextFurnace(
+            int count,
+            RpcInfo info = default)
+        {
+            TryDebugCompleteNextFurnace(info.Source, count);
+        }
+
+        private void TryDebugCompleteNextFurnace(
+            PlayerRef player,
+            int count)
+        {
+            if (!Object.HasStateAuthority ||
+                IsEnded ||
+                !HuntReady ||
+                (count != 1 && count != AlienHuntMission.FurnaceCapacity) ||
+                !TryResolveActivePlayer(player, out var life) ||
+                !life.DebugGodMode)
+                return;
+
+            AlienHuntMission.Instance?.DebugCompleteNextFurnace(count);
+        }
+
         public void RecordHuntBurn(Vector3? ritualPosition = null)
         {
             if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;

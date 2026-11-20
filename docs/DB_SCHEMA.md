@@ -332,6 +332,7 @@ The M4-009 migration promotes `(MatchId, UserId)` to an alternate unique key so
 | PayloadHash | CHAR(64) | Canonical SHA-256 used for retry/conflict detection |
 | RewardStatus | VARCHAR(20) | `Pending` until idempotent reward processing completes, then `Completed` |
 | SubmittedAtUtc | TIMESTAMPTZ | Server audit timestamp |
+| EvidenceVersion | INT NULL | NULL for V1; 2 for V2 evidence payload |
 
 `MatchAuthorityBindings.StartedAtUtc` is nullable for compatibility with existing rows and is set
 once by `StartAsync`. A new result requires this value.
@@ -353,6 +354,16 @@ or fabricated seed ranking is stored.
 | Survived / Disconnected | BOOLEAN | Disconnected must match the stored binding state |
 | DetectionCount / DownedCount / ReviveCount | INT | CHECK >= 0 |
 | ObjectiveContribution | INT | CHECK >= 0 |
+| ObjectiveActions / RescueActions | INT NULL | V2 action counts, each CHECK 0-10000; NULL for V1 |
+| EvidenceComplete | BOOLEAN NULL | V2 Host evidence completeness; NULL for V1 |
+
+`MatchAuthorityBindings` additionally stores nullable `RewardPolicyVersion`,
+`ProgressionPolicyVersion`, and `RewardConfigurationJson` at actual match start. NULL
+versions identify legacy matches. `RewardConfigurations` stores `PolicyKey` (default
+`REWARD_V2`), `LossCapCreditsPerMinute` (NUMERIC(7,2), default 2.00), rescue bonus,
+action caps, team factors, and XP settings. It uses
+`EffectiveAtUtc` as an optimistic concurrency token. Historical results are not
+backfilled with synthetic V2 evidence.
 
 The Result transaction inserts both tables and transitions the authority binding to `Ended`.
 After that transaction commits, the Match Result API invokes the idempotent reward pipeline.

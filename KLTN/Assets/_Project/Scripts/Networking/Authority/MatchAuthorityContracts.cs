@@ -159,6 +159,7 @@ namespace EchoProtocol.Networking.Authority
     [Serializable]
     public sealed class SubmitMatchResultRequestDto
     {
+        public int evidenceVersion = 2;
         public string outcome;
         public float objectiveCompletion;
         public SubmitMatchResultPlayerDto[] players = Array.Empty<SubmitMatchResultPlayerDto>();
@@ -166,6 +167,29 @@ namespace EchoProtocol.Networking.Authority
 
     [Serializable]
     public sealed class SubmitMatchResultPlayerDto
+    {
+        public int objectiveActions;
+        public int rescueActions;
+        public bool evidenceComplete;
+        public string userId;
+        public bool survived;
+        public bool disconnected;
+        public int detectionCount;
+        public int downedCount;
+        public int reviveCount;
+        public int objectiveContribution;
+    }
+
+    [Serializable]
+    public sealed class LegacySubmitMatchResultRequestDto
+    {
+        public string outcome;
+        public float objectiveCompletion;
+        public LegacySubmitMatchResultPlayerDto[] players;
+    }
+
+    [Serializable]
+    public sealed class LegacySubmitMatchResultPlayerDto
     {
         public string userId;
         public bool survived;

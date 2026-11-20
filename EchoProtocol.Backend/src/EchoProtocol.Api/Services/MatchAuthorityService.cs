@@ -738,6 +738,15 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         match.ResolutionMode = mode;
         foreach (var player in match.Players)
             player.Participated = player.DisconnectedAtUtc == null;
+        var rewardConfiguration = await _db.RewardConfigurations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == RewardConfiguration.SharedId, cancellationToken)
+            ?? new RewardConfiguration();
+        if (rewardConfiguration.PolicyKey is not ("REWARD_V1" or "REWARD_V2"))
+            return Failure<MatchAuthorityResponse>("Unsupported reward policy", ErrorCodes.ValidationError);
+        match.RewardPolicyVersion = rewardConfiguration.PolicyKey;
+        match.ProgressionPolicyVersion = rewardConfiguration.PolicyKey == "REWARD_V2"
+            ? "PROGRESSION_V2" : ProgressionPolicyV1.PolicyVersion;
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(rewardConfiguration);
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
         // Unity scene loading can pause host heartbeats; resume the normal lease on the next renewal.

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function CopyReference({ value, label }: { value: string; label: string }) {
+export function CopyReference({ value, label, alwaysVisible = false }: { value: string; label: string; alwaysVisible?: boolean }) {
   const [message, setMessage] = useState("");
 
   async function copy() {
@@ -14,12 +14,16 @@ export function CopyReference({ value, label }: { value: string; label: string }
     }
   }
 
+  const content = <div className="mt-2 flex flex-wrap items-center gap-2">
+    <code className="code">{value}</code>
+    <button type="button" className="button button-secondary" onClick={copy}>Sao chép</button>
+    <span className="muted" role="status">{message}</span>
+  </div>;
+
+  if (alwaysVisible) return <div className="text-sm"><span className="eyebrow">{label}</span>{content}</div>;
+
   return <details className="text-sm">
     <summary>{label}</summary>
-    <div className="mt-2 flex flex-wrap items-center gap-2">
-      <code className="code">{value}</code>
-      <button type="button" className="button button-secondary" onClick={copy}>Sao chép</button>
-      <span className="muted" role="status">{message}</span>
-    </div>
+    {content}
   </details>;
 }

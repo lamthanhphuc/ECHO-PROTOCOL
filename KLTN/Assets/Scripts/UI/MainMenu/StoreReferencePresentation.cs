@@ -297,7 +297,7 @@ namespace EchoProtocol.UI.MainMenu
             if (mainMenu != null) { mainMenu.OpenTopUpWebsite(); return; }
             var lobby = Object.FindFirstObjectByType<LobbyUtilityBarController>();
             if (lobby != null) { lobby.OpenTopUp(); return; }
-            Application.OpenURL(UtilityBarStyle.WebsiteUrl + "wallet");
+            Application.OpenURL(UtilityBarStyle.WebsiteUrl + "topup");
         }
 
         private static void OpenWebsite()

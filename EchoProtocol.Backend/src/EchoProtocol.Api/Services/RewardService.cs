@@ -6,6 +6,7 @@ using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System.Text.Json;
 
 namespace EchoProtocol.Api.Services;
 
@@ -67,16 +68,58 @@ public sealed class RewardService : IRewardService
 
             var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly;
             var policy = _policy;
+            IProgressionService progressionService = _progressionService;
             if (!testOnly)
             {
-                var settings = await _db.RewardConfigurations.AsNoTracking()
-                    .SingleOrDefaultAsync(configuration => configuration.Id == RewardConfiguration.SharedId, cancellationToken);
-                if (settings != null) policy = new RewardPolicyV1(settings);
+                var version = result.Match.RewardPolicyVersion;
+                if (version is null)
+                {
+                    var legacySettings = await _db.RewardConfigurations.AsNoTracking()
+                        .SingleOrDefaultAsync(configuration => configuration.Id == RewardConfiguration.SharedId, cancellationToken);
+                    if (legacySettings?.PolicyKey == RewardPolicyV2.PolicyVersion)
+                        return Failure("Legacy match cannot use V2 configuration", ErrorCodes.RewardPolicyInvalid);
+                    if (legacySettings != null) policy = new RewardPolicyV1(legacySettings);
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(result.Match.RewardConfigurationJson))
+                        return Failure("Missing match reward configuration", ErrorCodes.RewardPolicyInvalid);
+                    RewardConfiguration settings;
+                    try
+                    {
+                        settings = JsonSerializer.Deserialize<RewardConfiguration>(result.Match.RewardConfigurationJson)
+                            ?? throw new JsonException();
+                    }
+                    catch (JsonException)
+                    {
+                        return Failure("Invalid match reward configuration", ErrorCodes.RewardPolicyInvalid);
+                    }
+                    if (settings.PolicyKey != version)
+                        return Failure("Reward policy snapshot mismatch", ErrorCodes.RewardPolicyInvalid);
+                    switch (version)
+                    {
+                        case "REWARD_V1":
+                            policy = new RewardPolicyV1(settings);
+                            progressionService = new ProgressionService(new ProgressionPolicyV1());
+                            break;
+                        case "REWARD_V2":
+                            if (!settings.HasValidV2Settings() ||
+                                result.EvidenceVersion != 2 || result.Players.Any(player => player.EvidenceComplete != true))
+                                return Failure("Invalid V2 reward configuration or evidence", ErrorCodes.RewardPolicyInvalid);
+                            policy = new RewardPolicyV2(settings);
+                            progressionService = new ProgressionService(new ProgressionPolicyV2(settings));
+                            break;
+                        default:
+                            return Failure("Unsupported match reward policy", ErrorCodes.RewardPolicyInvalid);
+                    }
+                    if (result.Match.ProgressionPolicyVersion != progressionService.PolicyVersion)
+                        return Failure("Progression policy snapshot mismatch", ErrorCodes.ProgressionPolicyInvalid);
+                }
             }
             var rewardVersion = testOnly ? TestOnlyRewardVersion : policy.Version;
             var progressionVersion = testOnly
                 ? TestOnlyProgressionVersion
-                : _progressionService.PolicyVersion;
+                : progressionService.PolicyVersion;
 
             if (!testOnly)
             {
@@ -93,7 +136,7 @@ public sealed class RewardService : IRewardService
                     return Failure("Reward policy version is invalid", ErrorCodes.RewardPolicyInvalid);
                 }
 
-                if (!_progressionService.IsConfigured)
+                if (!progressionService.IsConfigured)
                 {
                     return Failure(
                         "No approved progression policy is configured",
@@ -153,7 +196,7 @@ public sealed class RewardService : IRewardService
             Dictionary<Guid, ProgressionUpdate>? progressionByUser = null;
             if (!testOnly)
             {
-                var progressionResult = _progressionService.Calculate(CreateSnapshot(result), profiles);
+                var progressionResult = progressionService.Calculate(CreateSnapshot(result), profiles);
                 if (!progressionResult.IsSuccess)
                 {
                     return Failure(progressionResult.Message, progressionResult.ErrorCode!);
@@ -453,7 +496,10 @@ public sealed class RewardService : IRewardService
             item.DetectionCount,
             item.DownedCount,
             item.ReviveCount,
-            item.ObjectiveContribution)).ToArray());
+            item.ObjectiveContribution,
+            item.ObjectiveActions,
+            item.RescueActions,
+            item.EvidenceComplete)).ToArray());
 
     private static string? ValidateAllocations(
         ICollection<MatchResultPlayer> players,

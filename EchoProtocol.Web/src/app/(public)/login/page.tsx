@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Image from "next/image";
 import { getSession } from "@/lib/auth/session";
 import { LoginForm } from "@/components/auth/login-form";
+import { LoginBackToHome } from "@/components/auth/login-back-to-home";
 
 export const metadata = { title: "Đăng nhập" };
 
@@ -12,23 +13,30 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   return (
     <main className="login-stage mx-auto grid min-h-screen w-full max-w-[1480px] items-center gap-10 px-6 pb-10 pt-20 lg:grid-cols-[1fr_460px] lg:gap-20 lg:px-16">
-      <div className="max-w-2xl">
-        <Image src="/echo-logo.webp" alt="Biểu tượng ECHO PROTOCOL" width={132} height={132} className="login-logo" priority />
-        <h1 className="login-title mt-10 text-5xl leading-[.95] text-[#f5eee6] sm:text-7xl xl:text-8xl">
-          ECHO<br />
-          <span className="text-[#bd4542]">PROTOCOL</span>
-        </h1>
-        <div className="mt-8 h-px w-32 bg-[#9f2b30]" />
-        <p className="mt-7 max-w-lg text-lg leading-relaxed text-[#c1aea5]">
-          Đăng nhập để vào hệ thống.
-        </p>
+      <LoginBackToHome />
+      <div className="w-full max-w-2xl justify-self-center text-center">
+        <div className="flex justify-center">
+          <h1 className="w-full max-w-[580px]">
+            <Image
+              src="/echo-title.png?v=2"
+              alt="ECHO PROTOCOL"
+              width={2048}
+              height={754}
+              className="block h-auto w-full"
+              priority
+            />
+          </h1>
+        </div>
+        <div className="mx-auto mt-8 h-px w-32 bg-[#9f2b30]" />
       </div>
 
       <section className="panel login-card w-full rounded-sm p-7 shadow-[0_24px_90px_rgba(0,0,0,.55)] md:p-10">
         <h2 className="page-title text-3xl text-[#f5eee6]">Đăng nhập</h2>
-        <p className="muted mt-3 text-sm leading-relaxed">
-          {expired === "1" ? "Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục." : "Nhập tài khoản và mật khẩu để tiếp tục."}
-        </p>
+        {expired === "1" && (
+          <p className="muted mt-3 text-sm leading-relaxed">
+            Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục.
+          </p>
+        )}
         <LoginForm />
       </section>
     </main>

@@ -23,6 +23,9 @@ public sealed record RewardPlayerSnapshot(
     int DetectionCount,
     int DownedCount,
     int ReviveCount,
-    int ObjectiveContribution);
+    int ObjectiveContribution,
+    int? ObjectiveActions = null,
+    int? RescueActions = null,
+    bool? EvidenceComplete = null);
 
 public sealed record RewardAllocation(Guid UserId, int CurrencyAmount);

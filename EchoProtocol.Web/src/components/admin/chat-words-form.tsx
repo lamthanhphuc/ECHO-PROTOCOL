@@ -19,7 +19,7 @@ export function ChatWordsForm({ initialWords, updatedAtUtc }: { initialWords: st
   const [saving, setSaving] = useState(false);
 
   const changed = JSON.stringify(words) !== JSON.stringify(savedWords);
-  const visibleWords = words.filter((word) => word.toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi")));
+  const visibleWords = [...words].reverse().filter((word) => word.toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi")));
 
   function addWord(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

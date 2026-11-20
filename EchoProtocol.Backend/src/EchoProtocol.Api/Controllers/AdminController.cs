@@ -200,6 +200,22 @@ public sealed class AdminController(
                 .OrderByDescending(entry => entry.CreatedAtUtc).ThenByDescending(entry => entry.Id)
                 .Select(entry => entry.Action).FirstOrDefault() == "FLAG_MATCH");
 
+        static string[] Values(string? value) => (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var maps = Values(query.Maps);
+        var difficulties = Values(query.Difficulties);
+        var playerCounts = Values(query.PlayerCounts).Select(value => int.TryParse(value, out var count) ? count : -1).Where(count => count >= 0).ToArray();
+        var statuses = Values(query.Statuses).Select(value => Enum.TryParse<MatchAuthorityStatus>(value, true, out var statusValue) ? statusValue : (MatchAuthorityStatus)(-1)).ToArray();
+        var outcomes = Values(query.Outcomes).Select(value => Enum.TryParse<MatchOutcome>(value, true, out var outcomeValue) ? outcomeValue : (MatchOutcome)(-1)).ToArray();
+        if (maps.Length > 0) matches = matches.Where(item => item.MapId != null && maps.Contains(item.MapId));
+        if (difficulties.Length > 0) matches = matches.Where(item => item.Difficulty != null && difficulties.Contains(item.Difficulty));
+        if (playerCounts.Length > 0) matches = matches.Where(item => playerCounts.Contains(item.Result == null ? item.Players.Count() : item.Result.PlayerCount));
+        if (statuses.Length > 0) matches = matches.Where(item => statuses.Contains(item.Status));
+        if (outcomes.Length > 0) matches = matches.Where(item => item.Result != null && outcomes.Contains(item.Result.Outcome));
+        if (query.StartedFrom is { } startedFrom) { var boundary = DateTime.SpecifyKind(startedFrom.Date.AddHours(-7), DateTimeKind.Utc); matches = matches.Where(item => item.StartedAtUtc >= boundary); }
+        if (query.StartedTo is { } startedTo) { var boundary = DateTime.SpecifyKind(startedTo.Date.AddDays(1).AddHours(-7), DateTimeKind.Utc); matches = matches.Where(item => item.StartedAtUtc < boundary); }
+        if (query.EndedFrom is { } endedFrom) { var boundary = DateTime.SpecifyKind(endedFrom.Date.AddHours(-7), DateTimeKind.Utc); matches = matches.Where(item => item.EndedAtUtc >= boundary); }
+        if (query.EndedTo is { } endedTo) { var boundary = DateTime.SpecifyKind(endedTo.Date.AddDays(1).AddHours(-7), DateTimeKind.Utc); matches = matches.Where(item => item.EndedAtUtc < boundary); }
+
         var totalItems = await matches.CountAsync(ct);
         var items = await matches.OrderByDescending(item => item.CreatedAtUtc)
             .ThenByDescending(item => item.MatchId)
