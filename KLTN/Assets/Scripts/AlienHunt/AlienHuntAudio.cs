@@ -16,7 +16,8 @@ namespace EchoProtocol.Networking
         private bool _hasStage;
         private float _lastEatingTime = -1f;
         private float _idleRemaining, _baitCooldown, _burnElapsed;
-        private int _chewIndex, _idleIndex;
+        private int _chewIndex, _idleIndex, _hintLevel;
+        private float _hintRemaining;
 
         public void Initialize(Animator animator)
         {
@@ -45,7 +46,7 @@ namespace EchoProtocol.Networking
             return source;
         }
 
-        public void Present(HuntEntityState state, float delta)
+        public void Present(HuntEntityState state, float delta, int hintLevel = 0)
         {
             if (_voice == null) return;
             var stage = (AlienStage)state.Stage;
@@ -80,7 +81,23 @@ namespace EchoProtocol.Networking
                 _voice.volume = .75f * EffectsVolume * Mathf.Exp(-_burnElapsed * .9f);
             }
             if (stage == AlienStage.Eating) UpdateEating();
-            if (stage == AlienStage.Wandering && !state.Fleeing && !state.Returning)
+            if (hintLevel != _hintLevel)
+            {
+                if (hintLevel == 0) Stop(_voice);
+                _hintLevel = hintLevel;
+                _hintRemaining = 0f;
+                _voice.maxDistance = hintLevel >= 3 ? 30f : hintLevel > 0 ? 22f : 12f;
+            }
+            if (hintLevel > 0 && stage <= AlienStage.Running)
+            {
+                _hintRemaining -= delta;
+                if (_hintRemaining <= 0f)
+                {
+                    Play(_voice, "idle_0" + (++_idleIndex % 2 + 1), hintLevel >= 3 ? .8f : .58f);
+                    _hintRemaining = hintLevel >= 3 ? 6f : 12f;
+                }
+            }
+            else if (stage == AlienStage.Wandering && !state.Fleeing && !state.Returning)
             {
                 _idleRemaining -= delta;
                 if (_idleRemaining <= 0f)

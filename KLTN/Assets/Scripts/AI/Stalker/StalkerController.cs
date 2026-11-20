@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Common.AED;
@@ -317,6 +317,15 @@ namespace EchoProtocol.AI.Stalker
         private StalkerHidingInvestigation _hidingInvestigation;
         private readonly StalkerWorldInteractionDriver _worldInteractionDriver = new StalkerWorldInteractionDriver();
         private int _roomSweepFallbackNodeId = -1;
+        private readonly Dictionary<Vector2Int, int> _floodedPatrolVisits = new();
+        private int _floodedPatrolVisitSequence;
+
+        private static Vector2Int FloodedPatrolSector(Vector3 position) =>
+            new Vector2Int(Mathf.FloorToInt(position.x / 20f), Mathf.FloorToInt(position.z / 20f));
+
+        private int FloodedPatrolLastVisit(Vector3 position) =>
+            _floodedPatrolVisits.TryGetValue(FloodedPatrolSector(position), out var visit) ? visit : 0;
+
         private float _nextRoomSweepFallbackAttemptSeconds;
         private const int RoomSweepPathChecksPerTick = 4;
         private double _roomSweepPathBudgetSeconds = double.NegativeInfinity;
@@ -540,17 +549,82 @@ namespace EchoProtocol.AI.Stalker
             RestartHeardNoiseSearchAt(position);
             return true;
         }
+        public bool CanAcceptPurgeAreaSearch => _purgeControlled && _purgeHunting
+            && !SpecialEncounterOverrideActive && !HasActiveHideSpotInvestigation
+            && (currentState == StalkerState.PATROL || currentState == StalkerState.SEARCH);
+
+        private bool UseFloodedPurgePatrol => _purgeControlled && AlienHuntMission.Instance != null
+            && AlienHuntMission.Instance.gameObject.scene.name == AlienHuntMission.SceneName;
+
+        public bool CanAcceptPurgeRingPatrol => UseFloodedPurgePatrol
+            && !SpecialEncounterOverrideActive && !HasActiveHideSpotInvestigation
+            && (currentState == StalkerState.PATROL || currentState == StalkerState.SEARCH);
+
+        public bool TryBeginPurgeRingPatrol(Vector3 destination)
+        {
+            if (!CanAcceptPurgeRingPatrol || !CanUseNavigation()
+                || !_navigation.EvaluateDestination(destination).IsComplete) return false;
+            ClearDetectionContext();
+            ClearTargetContext();
+            ClearSearchRuntimeContext();
+            currentState = StalkerState.SEARCH;
+            searchElapsedTime = 0f;
+            Vector3 direction = destination - transform.position;
+            EnsureSearchContext(StalkerSearchSource.HeardNoise, destination,
+                direction.sqrMagnitude > .001f ? direction.normalized : transform.forward);
+            return TrySetSearchOriginDestination(destination);
+        }
+
+        public bool TryBeginPurgeAreaSearch(Vector3 destination)
+        {
+            if (!CanAcceptPurgeAreaSearch || !CanReachPurgeTarget(destination)) return false;
+            ClearDetectionContext();
+            ClearTargetContext();
+            currentState = StalkerState.SEARCH;
+            RestartHeardNoiseSearchAt(destination);
+            return true;
+        }
+
+        private PlayerId _purgeAssignedTarget = PlayerId.Invalid;
+        private Vector3 _purgeAssignedPosition;
+
+        public bool CanReachPurgeTarget(Vector3 position) =>
+            UseFloodedPurgePatrol && CanUseNavigation() && TryResolveReachableChaseDestination(position, out _);
+
+        public void ReleaseBlockedPurgeTarget()
+        {
+            if (!UseFloodedPurgePatrol || currentState != StalkerState.CHASE) return;
+            _purgeAssignedTarget = PlayerId.Invalid;
+            EndSpecialEncounterOverrideToPatrol();
+        }
+
+        public void SetPurgeHuntTarget(PlayerId target, Vector3 position)
+        {
+            _purgeAssignedTarget = target;
+            _purgeAssignedPosition = position;
+            if (!UseFloodedPurgePatrol || !CanAcceptPurgeAreaSearch || !target.IsValid) return;
+            ClearDetectionContext();
+            ClearTargetContext();
+            ClearSearchRuntimeContext();
+            _memory.SetCurrentTarget(target);
+            lastKnownPosition = position;
+            currentState = StalkerState.CHASE;
+            StopAgentPath();
+            ResetChaseDestinationTracking();
+            ApplyMovementSpeedForCurrentState();
+        }
+
         private bool _purgeControlled, _purgeHunting;
         private bool PurgeUvContactActive => _purgeControlled && AlienHuntMission.Instance != null
             && NetworkMatchState.Instance != null && NetworkMatchState.Instance.PurgeUvContact;
         private int PurgeTier => _purgeControlled && AlienHuntMission.Instance != null && NetworkMatchState.Instance != null ? NetworkMatchState.Instance.PurgeRageTier : -1;
         private float PurgeDetectSeconds => PurgeTier switch { 0 => 2.5f, 1 => 2f, 2 => 1.5f, 3 => .6f, _ => 2f };
-        private double _nextPurgeSeekAt = -1d;
-        private float _purgeChaseSpeed;
-        public void ApplyPurgePolicy(bool hunting, bool frozen, float speed)
+        private float _purgeChaseSpeed, _purgePatrolSpeed;
+        public void ApplyPurgePolicy(bool hunting, bool frozen, float speed, float patrol = 3.2f)
         {
             bool changed = _purgeControlled && _purgeHunting != hunting;
-            _purgeControlled = true; _purgeHunting = hunting; _purgeChaseSpeed = speed;
+            if (!hunting || frozen) _purgeAssignedTarget = PlayerId.Invalid;
+            _purgeControlled = true; _purgeHunting = hunting; _purgeChaseSpeed = speed; _purgePatrolSpeed = patrol;
             if (!frozen && PurgeUvContactActive && currentState == StalkerState.ATTACK)
             {
                 _attackController.ClearActiveEpisode();
@@ -558,11 +632,6 @@ namespace EchoProtocol.AI.Stalker
                 lastAttackResult = StalkerAttackResult.Miss;
                 currentState = StalkerState.CHASE;
                 ApplyMovementSpeedForCurrentState();
-            }
-            if (PurgeTier == 3)
-            {
-                smartPatrolSettings ??= new StalkerSmartPatrolSettings();
-                if (smartPatrolSettings.SeekPlayersAfterSeconds != 30f) smartPatrolSettings.SetSeekPlayersAfterSeconds(30f);
             }
             if(frozen) BeginSpecialEncounterOverride();
             else if(_specialEncounterOverrideActive || changed
@@ -1188,12 +1257,6 @@ namespace EchoProtocol.AI.Stalker
             switch (currentState)
             {
                 case StalkerState.PATROL:
-                    if (PurgeTier == 3)
-                    {
-                        if (_nextPurgeSeekAt < 0d) _nextPurgeSeekAt = _currentSimulationSeconds + 30d;
-                        else if (_currentSimulationSeconds >= _nextPurgeSeekAt) { _nextPurgeSeekAt = _currentSimulationSeconds + 30d; ReplanRoomSweepAfterStrategicChange(); }
-                    }
-                    else _nextPurgeSeekAt = -1d;
                     TickPatrol();
                     if (HasTypedTargetFrame)
                     {
@@ -1246,6 +1309,9 @@ namespace EchoProtocol.AI.Stalker
 
                 if (_navigation != null && _navigation.HasActiveDestination)
                 {
+                    if (UseFloodedPurgePatrol && _navigation.HasArrived()
+                        && _spatialPatrolGraph.TryGetNode(_roomSweepFallbackNodeId, out var visitedNode))
+                        _floodedPatrolVisits[FloodedPatrolSector(visitedNode.Position)] = ++_floodedPatrolVisitSequence;
                     MarkRoomSweepDestinationReached();
                 }
                 _rejectedRoomSweepFallbackNodeIds.Add(_roomSweepFallbackNodeId);
@@ -1261,7 +1327,7 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            if (!EnsureRoomSweepPatrolInitialized())
+            if (!EnsureRoomSweepPatrolInitialized() || UseFloodedPurgePatrol)
             {
                 ActivateRoomSweepPatrolFallback();
                 return;
@@ -1313,7 +1379,7 @@ namespace EchoProtocol.AI.Stalker
             detectionTarget = visibleCandidate;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(visibleCandidate.position);
+            if (PurgeTier == 0 || (UseFloodedPurgePatrol && _purgeHunting)) PromoteDetectionTargetToCurrentTarget(visibleCandidate.position);
             else EnterDetectState();
         }
 
@@ -1416,7 +1482,7 @@ namespace EchoProtocol.AI.Stalker
             currentTarget = null;
             detectionMeter = 0f;
             _detectMinimumHoldRemaining = 0f;
-            if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(selectedObservation);
+            if (PurgeTier == 0 || (UseFloodedPurgePatrol && _purgeHunting)) PromoteDetectionTargetToCurrentTarget(selectedObservation);
             else EnterDetectState();
             return true;
         }
@@ -1878,7 +1944,7 @@ namespace EchoProtocol.AI.Stalker
                 _chaseVisualLossElapsed = 0f;
 
                 lastKnownPosition = _memory.LastKnownPosition;
-                if (TryRetargetDuringChase(
+                if (currentTargetId != _purgeAssignedTarget && TryRetargetDuringChase(
                         currentTargetId,
                         observation))
                 {
@@ -1910,6 +1976,12 @@ namespace EchoProtocol.AI.Stalker
             if (hasDuplicate)
             {
                 InvalidateCurrentTarget();
+                return;
+            }
+
+            if (UseFloodedPurgePatrol && _purgeHunting && currentTargetId == _purgeAssignedTarget)
+            {
+                SetChaseDestination(_purgeAssignedPosition);
                 return;
             }
 
@@ -2729,7 +2801,7 @@ namespace EchoProtocol.AI.Stalker
                 _detectMinimumHoldRemaining =
                     searchReacquireDetectHoldSeconds;
 
-                if (PurgeTier == 0) PromoteDetectionTargetToCurrentTarget(observedPosition);
+                if (PurgeTier == 0 || (UseFloodedPurgePatrol && _purgeHunting)) PromoteDetectionTargetToCurrentTarget(observedPosition);
                 else EnterDetectState();
                 return;
             }
@@ -3130,8 +3202,14 @@ namespace EchoProtocol.AI.Stalker
             return true;
         }
 
+        private double _nextFloodedChasePathAttempt;
+
+        private static readonly Unity.Profiling.ProfilerMarker ChaseNavigationMarker =
+            new Unity.Profiling.ProfilerMarker("Stalker.ChaseNavigation");
+
         private void SetChaseDestination(Vector3 observedPosition)
         {
+            using var profile = ChaseNavigationMarker.Auto();
             if (!CanUseNavigation())
             {
                 _navigation?.ClearDestinationCache();
@@ -3151,6 +3229,13 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
+            // Keep failed path queries from repeating every simulation tick.
+            if (UseFloodedPurgePatrol)
+            {
+                if (_currentSimulationSeconds < _nextFloodedChasePathAttempt) return;
+                _nextFloodedChasePathAttempt = _currentSimulationSeconds + .25d;
+            }
+
             if (!TryResolveReachableChaseDestination(
                     observedPosition,
                     out var chaseDestination))
@@ -3158,9 +3243,9 @@ namespace EchoProtocol.AI.Stalker
                 return;
             }
 
-            var result = _navigation.RequestDestination(
-                chaseDestination,
-                NavigationRequestIntent.TrackMovingGoal);
+            var result = UseFloodedPurgePatrol
+                ? _navigation.FollowEvaluatedDestination(chaseDestination)
+                : _navigation.RequestDestination(chaseDestination, NavigationRequestIntent.TrackMovingGoal);
 
             if (!result.IsAccepted)
             {
@@ -5759,6 +5844,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void ResetChaseDestinationTracking()
         {
+            _nextFloodedChasePathAttempt = 0d;
             _hasLastChaseRequestedDestination = false;
             _lastChaseRequestedDestination = default;
             _chaseDestinationRefreshElapsed = 0f;
@@ -5954,6 +6040,7 @@ namespace EchoProtocol.AI.Stalker
 
         private bool SetRoomSweepPatrolDestination()
         {
+            if (UseFloodedPurgePatrol) return false;
             if (!EnsureRoomSweepPatrolInitialized())
             {
                 return false;
@@ -6744,7 +6831,7 @@ namespace EchoProtocol.AI.Stalker
 
         private void ActivateRoomSweepPatrolFallback()
         {
-            if (regionGraphFallbackReason == RegionGraphFallbackReason.None)
+            if (!UseFloodedPurgePatrol && regionGraphFallbackReason == RegionGraphFallbackReason.None)
             {
                 regionGraphFallbackReason = RegionGraphFallbackReason.MalformedRegionGraph;
             }
@@ -6763,7 +6850,7 @@ namespace EchoProtocol.AI.Stalker
             var destinationSet = TrySetRoomSweepLocalFallbackDestination();
             if (_roomSweepPlanningDeferred) return;
 
-            _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + 2.5f;
+            _nextRoomSweepFallbackAttemptSeconds = CurrentSimulationTimeSeconds + (UseFloodedPurgePatrol ? 0f : 2.5f);
             if (!destinationSet)
                 _rejectedRoomSweepFallbackNodeIds.Clear();
         }
@@ -6803,6 +6890,23 @@ namespace EchoProtocol.AI.Stalker
                         _roomSweepFallbackCandidates.Add(node);
                 _roomSweepFallbackCandidates.Sort((left, right) =>
                 {
+                    if (UseFloodedPurgePatrol)
+                    {
+                        bool leftRoom = IsFloodedPatrolRoom(left.Id);
+                        bool rightRoom = IsFloodedPatrolRoom(right.Id);
+                        if (leftRoom != rightRoom) return leftRoom ? 1 : -1;
+                        var currentSector = FloodedPatrolSector(origin);
+                        bool leftLocal = FloodedPatrolSector(left.Position) == currentSector;
+                        bool rightLocal = FloodedPatrolSector(right.Position) == currentSector;
+                        if (leftLocal != rightLocal) return leftLocal ? 1 : -1;
+                        bool leftShort = (left.Position - origin).sqrMagnitude < 64f;
+                        bool rightShort = (right.Position - origin).sqrMagnitude < 64f;
+                        if (leftShort != rightShort) return leftShort ? 1 : -1;
+                        int visits = FloodedPatrolLastVisit(left.Position)
+                            .CompareTo(FloodedPatrolLastVisit(right.Position));
+                        if (visits != 0) return visits;
+                    }
+
                     var comparison = (left.Position - origin).sqrMagnitude.CompareTo(
                         (right.Position - origin).sqrMagnitude);
                     return comparison != 0 ? comparison : left.Id.CompareTo(right.Id);
@@ -6820,7 +6924,7 @@ namespace EchoProtocol.AI.Stalker
                 var node = _roomSweepFallbackCandidates[_roomSweepFallbackCandidateIndex++];
                 if (!IsRoomSweepFallbackNodeInZone(node.Id, out var regionId)
                     || !_navigation.EvaluateDestination(node.Position, out var path).IsComplete
-                    || !IsRoomSweepFallbackPathInZone(path))
+                    || (!UseFloodedPurgePatrol && !IsRoomSweepFallbackPathInZone(path)))
                 {
                     _rejectedRoomSweepFallbackNodeIds.Add(node.Id);
                     continue;
@@ -6848,6 +6952,10 @@ namespace EchoProtocol.AI.Stalker
                 $"[STK_PATROL][FALLBACK_NODE] node={bestNode.Id} zone={_patrolZone}");
             return true;
         }
+
+        private bool IsFloodedPatrolRoom(int nodeId) =>
+            _regionGraph.TryGetNodeSemanticMetadata(nodeId, out var metadata)
+            && metadata.Kind == RegionSemanticKind.Room;
 
         private bool IsRoomSweepFallbackNodeInZone(int nodeId, out RegionId regionId)
         {
@@ -7057,7 +7165,7 @@ namespace EchoProtocol.AI.Stalker
                 || (rushingToHeardNoiseOrigin && (!_purgeControlled || _purgeHunting))
                     ? GetChaseSpeed()
                     : Mathf.Max(0f, _purgeControlled
-                        ? 3.2f
+                        ? _purgePatrolSpeed
                         : _hasRemoteFixedSpeeds
                             ? _remoteFixedPatrolSpeed
                             : patrolSpeed);

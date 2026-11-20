@@ -83,7 +83,7 @@ namespace EchoProtocol.Networking
                 var boss = collider.GetComponentInParent<EchoProtocol.AI.Stalker.Networking.StalkerFusionRuntime>();
                 var minion = collider.GetComponentInParent<CreepMinionRuntime>();
                 if (!(AlienHuntMission.Instance && boss) && (minion == null || minion.IsDying)) continue;
-                float distance = (collider.ClosestPoint(origin) - origin).sqrMagnitude;
+                float distance = (ResonanceClosestPoint(collider, origin) - origin).sqrMagnitude;
                 if (distance >= nearest || !HasResonanceLineOfSight(transform, origin, collider, ref _uvSight)) continue;
                 nearest = distance;
                 ResonanceEndpoint = collider.bounds.center;
@@ -100,9 +100,15 @@ namespace EchoProtocol.Networking
             var hits = new RaycastHit[128];
             var candidates = new System.Collections.Generic.List<Collider>();
             FillResonanceCandidates(owner, origin, forward, ref overlap, ref hits, candidates);
-            candidates.Sort((a, b) => (a.ClosestPoint(origin) - origin).sqrMagnitude.CompareTo((b.ClosestPoint(origin) - origin).sqrMagnitude));
+            candidates.Sort((a, b) => (ResonanceClosestPoint(a, origin) - origin).sqrMagnitude.CompareTo((ResonanceClosestPoint(b, origin) - origin).sqrMagnitude));
             return candidates.ToArray();
         }
+
+        private static Vector3 ResonanceClosestPoint(Collider collider, Vector3 origin) =>
+            collider is BoxCollider or SphereCollider or CapsuleCollider
+                || collider is MeshCollider { convex: true }
+                ? collider.ClosestPoint(origin)
+                : collider.bounds.ClosestPoint(origin);
 
         private static void FillResonanceCandidates(Transform owner, Vector3 origin, Vector3 forward,
             ref Collider[] overlap, ref RaycastHit[] hits, System.Collections.Generic.List<Collider> candidates)
@@ -120,7 +126,7 @@ namespace EchoProtocol.Networking
             {
                 if (!IgnoreResonanceCollider(owner, collider)
                     && Vector3.Dot(collider.bounds.center - origin, forward) >= -.01f
-                    && (collider.ClosestPoint(origin) - origin).sqrMagnitude <= ResonanceRange * ResonanceRange
+                    && (ResonanceClosestPoint(collider, origin) - origin).sqrMagnitude <= ResonanceRange * ResonanceRange
                     && !candidates.Contains(collider)) candidates.Add(collider);
             }
         }

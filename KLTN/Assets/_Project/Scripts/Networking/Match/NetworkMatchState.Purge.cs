@@ -42,6 +42,20 @@ namespace EchoProtocol.Networking
         public void Reset() { _hasSpawned = false; _refillStartedAt = 0f; _lastPopulation = 0; }
     }
 
+    public static class PurgeBossBalance
+    {
+        public static float SeekIntervalSeconds(int burned) => burned >= 7 ? 7f : burned >= 5 ? 10f : burned >= 3 ? 14f : 18f;
+        public static float CalmSeconds(int burned) => burned >= 7 ? 10f : burned >= 5 ? 20f : burned >= 3 ? 30f : 40f;
+        public static float PatrolSpeed(int burned) => burned >= 7 ? 6f : burned >= 5 ? 5.5f : burned >= 3 ? 5f : burned >= 1 ? 4.5f : 3.2f;
+        public static float ChaseSpeed(int burned, MatchDifficulty difficulty)
+        {
+            float normalSpeed = burned >= 7 ? 8f : burned >= 5 ? 7.5f : burned >= 3 ? 7f : burned >= 1 ? 6.5f : 4f;
+            return normalSpeed + (difficulty == MatchDifficulty.Easy ? -.5f : difficulty == MatchDifficulty.Hard ? .5f : 0f);
+        }
+        public static float HuntSeconds(int burned, float configuredBaseSeconds) =>
+            configuredBaseSeconds + 30f + Mathf.Max(0, burned - 1) * 15f;
+    }
+
     public enum PurgeBossMood { Calm, Warning, Hunting, Staggered }
     public struct PurgeAidSlot : INetworkStruct
     {
@@ -74,7 +88,7 @@ namespace EchoProtocol.Networking
         private const int PurgeAidCount = 9;
         [Networked, Capacity(PurgeAidCount)] public NetworkArray<PurgeAidSlot> PurgeAid => default;
         private StalkerFusionRuntime _purgeBoss;
-        public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned >= 6 ? 2 : HuntBurned >= 2 ? 1 : 0;
+        public int PurgeRageTier => HuntBurned >= 8 ? 3 : HuntBurned >= 6 ? 2 : HuntBurned >= 1 ? 1 : 0;
         [Networked] public int PurgePartySize { get; private set; }
         public int PurgeMinionCap => (int)Authority.RemoteFixedBalanceSnapshot.GameplayValue("purgeMinionCap", PurgeFishcatBalance.Cap(HuntBurned,
             Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers()),
@@ -95,16 +109,15 @@ namespace EchoProtocol.Networking
             return Mathf.Clamp(count, 1, 4);
         }
         public int PurgeStaggersRequired => PurgeRageTier + 1;
-        public float PurgeCalmSeconds => new[] { 20f, 14f, 9f, 5f }[PurgeRageTier];
-        public float PurgeHuntSeconds => Authority.RemoteFixedBalanceSnapshot.GameplayValue("purgeHuntSeconds", 90f)
-            + Mathf.Max(0, HuntBurned - 1) * 15f;
+        public float PurgeCalmSeconds => PurgeBossBalance.CalmSeconds(HuntBurned);
+        public float PurgeHuntSeconds => PurgeBossBalance.HuntSeconds(HuntBurned,
+            Authority.RemoteFixedBalanceSnapshot.GameplayValue("purgeHuntSeconds", 90f));
         public float PurgeChaseSpeed
         {
             get
             {
                 var d = Authority.MatchAuthorityRuntime.Instance ? Authority.MatchAuthorityRuntime.Instance.Difficulty : MatchDifficulty.Normal;
-                float normalSpeed = PurgeRageTier switch { 0 => 4f, 1 => 5.5f, 2 => 7f, _ => 8.5f };
-                float speed = normalSpeed + (d == MatchDifficulty.Easy ? -.5f : d == MatchDifficulty.Hard ? .5f : 0f);
+                float speed = PurgeBossBalance.ChaseSpeed(HuntBurned, d);
                 return (PurgeMood == PurgeBossMood.Hunting || PurgeMood == PurgeBossMood.Calm) && PurgeUvContact ? speed * .1f : speed;
             }
         }
@@ -129,8 +142,12 @@ namespace EchoProtocol.Networking
             PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds); PurgeStaggers=0; PurgeUvExposure=0;
             PurgeUvContact = false;
         }
+        private static readonly Unity.Profiling.ProfilerMarker BurnCompletedMarker =
+            new Unity.Profiling.ProfilerMarker("Purge.BurnCompleted");
+
         private void PurgeBurnCompleted(Vector3 position)
         {
+            using var profile = BurnCompletedMarker.Auto();
             if (IsEnded) return;
             PurgeRitualPosition=position;PurgeRitualVersion++;
             PurgeLastRitualElapsedSeconds = Mathf.Clamp(EffectiveMatchDurationSeconds - Remaining(MatchTimer), 0f, EffectiveMatchDurationSeconds);
@@ -162,6 +179,9 @@ namespace EchoProtocol.Networking
             if (_purgeBoss)
             {
                 float delta = Runner.DeltaTime;
+                // Once rituals awaken the boss, calm is a timed respite rather than a wait for another ritual.
+                if (PurgeMood == PurgeBossMood.Calm && PurgeRageTier > 0 && PurgeMoodTimer.Expired(Runner))
+                    BeginPurgeHunt();
                 if (PurgeMood == PurgeBossMood.Warning && PurgeMoodTimer.Expired(Runner)) PurgeMood = PurgeBossMood.Hunting;
                 else if (PurgeMood == PurgeBossMood.Staggered && PurgeMoodTimer.Expired(Runner))
                 {
@@ -181,7 +201,7 @@ namespace EchoProtocol.Networking
                 }
                 else { PurgeUvExposure = 0f; PurgeUvContact = false; }
                 var controller = _purgeBoss.GetComponent<EchoProtocol.AI.Stalker.StalkerController>();
-                if (controller) controller.ApplyPurgePolicy(PurgeRageTier == 0 || PurgeMood == PurgeBossMood.Hunting, PurgeMood == PurgeBossMood.Warning || PurgeMood == PurgeBossMood.Staggered || IsEnded, PurgeChaseSpeed);
+                if (controller) controller.ApplyPurgePolicy(PurgeRageTier == 0 || PurgeMood == PurgeBossMood.Hunting, PurgeMood == PurgeBossMood.Warning || PurgeMood == PurgeBossMood.Staggered || IsEnded, PurgeChaseSpeed, PurgeBossBalance.PatrolSpeed(HuntBurned));
             }
             else PurgeUvContact = false;
             TickPurgeAid();

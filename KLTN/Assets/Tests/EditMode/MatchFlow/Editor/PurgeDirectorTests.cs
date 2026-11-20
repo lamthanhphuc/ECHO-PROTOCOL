@@ -63,17 +63,17 @@ public sealed class PurgeDirectorTests
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
         match.RecordHuntBurn();
         Assert.That(match.HuntBurned, Is.EqualTo(1));
-        Assert.That(match.PurgeRageTier, Is.EqualTo(0));
-        Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Calm));
-        Assert.That(match.PurgeHuntsStarted, Is.Zero);
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(4f).Within(.01f));
+        Assert.That(match.PurgeRageTier, Is.EqualTo(1));
+        Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Warning));
+        Assert.That(match.PurgeHuntsStarted, Is.EqualTo(1));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(6.5f).Within(.01f));
         match.RecordHuntBurn();
         Assert.That(match.HuntBurned, Is.EqualTo(2));
         Assert.That(match.PurgeRageTier, Is.EqualTo(1));
         Assert.That(match.PurgeMood, Is.EqualTo(PurgeBossMood.Warning));
-        Assert.That(match.PurgeHuntSeconds, Is.EqualTo(105f));
+        Assert.That(match.PurgeHuntSeconds, Is.EqualTo(135f));
         Assert.That(match.PurgeHuntsStarted, Is.EqualTo(1));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(5.5f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(6.5f).Within(.01f));
         Assert.That(match.PurgeLastRitualElapsedSeconds,Is.GreaterThanOrEqualTo(0f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
@@ -95,20 +95,24 @@ public sealed class PurgeDirectorTests
         match.ProvokePurgeBoss();
         Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm),
             "The post-hunt calm grace period must prevent a nearby player from immediately restarting the hunt.");
-        // Calm may investigate players, but a timer alone must not start a new hunt.
+        // At two eggs, a completed hunt grants 40 seconds of calm and resumes without another ritual.
+        Assert.That(match.PurgeCalmSeconds, Is.EqualTo(40f));
+        Assert.That(match.PurgeMoodTimer.RemainingTime(runner), Is.InRange(39f,40f));
         Set(match,"PurgeMoodTimer",TickTimer.CreateFromSeconds(runner,.01f));
         yield return new WaitForSeconds(.1f);
-        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Calm));
+        Assert.That(match.PurgeMood,Is.EqualTo(PurgeBossMood.Warning));
+        Assert.That(match.PurgeHuntsStarted,Is.EqualTo(2));
+        Assert.That(match.HuntBurned,Is.EqualTo(2),"Resuming must not require another ritual.");
         yield return new WaitForSeconds(.1f);
         Assert.That(match.PurgeAidAvailable,Is.Zero,"Solo must not refill medkits.");
         for (int i = 2; i < 6; i++) match.RecordHuntBurn();
         Assert.That(match.HuntBurned, Is.EqualTo(6));
         Assert.That(match.PurgeRageTier, Is.EqualTo(2));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(7.5f).Within(.01f));
         for (int i = 6; i < 8; i++) match.RecordHuntBurn();
         Assert.That(match.HuntBurned,Is.EqualTo(8));
-        Assert.That(match.PurgeHuntSeconds,Is.EqualTo(195f));
-        Assert.That(match.PurgeHuntTimer.RemainingTime(runner),Is.GreaterThan(185f));
+        Assert.That(match.PurgeHuntSeconds,Is.EqualTo(225f));
+        Assert.That(match.PurgeHuntTimer.RemainingTime(runner),Is.GreaterThan(215f));
         Assert.That(match.PurgeHuntsStarted,Is.EqualTo(2));
         Assert.That(match.PurgeStaggersRequired,Is.EqualTo(4));
         Assert.That(match.PurgeMinionCap,Is.EqualTo(3));
@@ -116,7 +120,7 @@ public sealed class PurgeDirectorTests
         Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
             "A larger cap must not spawn Fishcat into an empty match.");
         Assert.That(match.PurgeRageTier, Is.EqualTo(3));
-        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(8.5f).Within(.01f));
+        Assert.That(match.PurgeChaseSpeed, Is.EqualTo(8f).Within(.01f));
         // UV immunity must reject another immediate stagger.
         Set(match,"PurgeMood",PurgeBossMood.Hunting);Set(match,"PurgeUvExposure",2.5f);
         Set(match,"PurgeUvImmunity",TickTimer.CreateFromSeconds(runner,4));
@@ -310,6 +314,36 @@ public sealed class PurgeDirectorTests
 
 namespace EchoProtocol.Networking.Tests
 {
+    public sealed class PurgeBossBalanceTests
+    {
+        [TestCase(1, 6.5f, 40f, 120f)] [TestCase(2, 6.5f, 40f, 135f)]
+        [TestCase(3, 7f, 30f, 150f)] [TestCase(4, 7f, 30f, 165f)]
+        [TestCase(5, 7.5f, 20f, 180f)] [TestCase(6, 7.5f, 20f, 195f)]
+        [TestCase(7, 8f, 10f, 210f)] [TestCase(8, 8f, 10f, 225f)]
+        public void EggProgressUsesApprovedBossPressure(int burned, float speed, float calm, float hunt)
+        {
+            Assert.That(PurgeBossBalance.ChaseSpeed(burned, MatchDifficulty.Normal), Is.EqualTo(speed));
+            Assert.That(PurgeBossBalance.CalmSeconds(burned), Is.EqualTo(calm));
+            Assert.That(PurgeBossBalance.HuntSeconds(burned, 90f), Is.EqualTo(hunt));
+            Assert.That(PurgeBossBalance.ChaseSpeed(burned, MatchDifficulty.Easy), Is.EqualTo(speed - .5f));
+            Assert.That(PurgeBossBalance.ChaseSpeed(burned, MatchDifficulty.Hard), Is.EqualTo(speed + .5f));
+        }
+
+        [TestCase(1, 18f)] [TestCase(2, 18f)] [TestCase(3, 14f)] [TestCase(4, 14f)]
+        [TestCase(5, 10f)] [TestCase(6, 10f)] [TestCase(7, 7f)] [TestCase(8, 7f)]
+        public void EggProgressShortensAreaSearchInterval(int burned, float expected)
+        {
+            Assert.That(PurgeBossBalance.SeekIntervalSeconds(burned), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void LongerHuntsPreserveConfiguredBaseAndUnawakenedSpeed()
+        {
+            Assert.That(PurgeBossBalance.HuntSeconds(2, 120f), Is.EqualTo(165f));
+            Assert.That(PurgeBossBalance.ChaseSpeed(0, MatchDifficulty.Normal), Is.EqualTo(4f));
+        }
+    }
+
     public sealed class PurgeFishcatBalanceTests
     {
         [TestCase(1, MatchDifficulty.Easy, 1f)]

@@ -11,6 +11,8 @@ namespace EchoProtocol.Networking
         [Networked] public NetworkBool HuntReady { get; private set; }
         [Networked] public int HuntBurned { get; private set; }
 
+        [Networked] public TickTimer LastAlienHintStart { get; private set; }
+
         private void TickAlienHunt()
         {
             var hunt = AlienHuntMission.Instance;
@@ -18,6 +20,10 @@ namespace EchoProtocol.Networking
             if (!HuntReady) { hunt.Initialize(); HuntReady = true; }
             hunt.ApplyNetworkNestHomes();
             hunt.Tick(Runner.DeltaTime);
+            if (hunt.FindNearestUncaughtAlien(Vector3.zero) < 0)
+                LastAlienHintStart = TickTimer.None;
+            else if (!LastAlienHintStart.IsRunning)
+                LastAlienHintStart = TickTimer.CreateFromSeconds(Runner, 180f);
             if (!IsEnded) TickPurgeDirector();
         }
         public void RequestHuntAction(int entity, int furnace)
@@ -34,7 +40,12 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority || IsEnded || !HuntReady || !AlienHuntMission.Instance
                 || !TryResolveActivePlayer(actor, out var life)) return;
             if (AlienHuntMission.Instance.Act(actor, life.transform, entity, furnace))
+            {
+                if (entity >= 0 && entity < AlienHuntMission.AlienCount
+                    && HuntEntities[entity].Stage == (int)AlienStage.Carried)
+                    LastAlienHintStart = TickTimer.None;
                 EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
+            }
         }
         public void RequestDebugHuntItem(HuntKind kind)
         {

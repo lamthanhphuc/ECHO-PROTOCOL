@@ -164,8 +164,12 @@ namespace EchoProtocol.Networking
             if (Application.isPlaying) source.PlayOneShot(clip, volume * EffectsVolume);
         }
 
+        private static readonly Unity.Profiling.ProfilerMarker FurnacePresentationMarker =
+            new Unity.Profiling.ProfilerMarker("Purge.FurnacePresentation");
+
         public void Present(HuntFurnaceState state, float delta)
         {
+            using var profile = FurnacePresentationMarker.Auto();
             if (!oil) return;
             bool burning = state.BurnRemaining > 0;
             oil.SetActive(state.Fuel > 0 || burning);

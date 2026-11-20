@@ -33,7 +33,7 @@ public sealed class AlienHuntAudioTests
             type.GetMethod("Initialize").Invoke(audio, new object[] { animator });
             var present = type.GetMethod("Present");
             Action<AlienStage, float> stage = (value, delta) => present.Invoke(audio,
-                new object[] { new HuntEntityState { Stage = (int)value }, delta });
+                new object[] { new HuntEntityState { Stage = (int)value }, delta, 0 });
             var voice = owner.transform.Find("Alien Voice").GetComponent<AudioSource>();
             var eating = owner.transform.Find("Alien Eating").GetComponent<AudioSource>();
             var contact = owner.transform.Find("Alien Contact").GetComponent<AudioSource>();
@@ -94,6 +94,13 @@ public sealed class AlienHuntAudioTests
             typeof(EchoProtocol.Audio.PurgeVoiceBudget).GetMethod("Flush", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 .Invoke(budget, new object[] { Time.unscaledTime });
             Assert.That(voice.clip.name, Does.StartWith("idle_"));
+            silence.Invoke(audio, null);
+            present.Invoke(audio, new object[] { new HuntEntityState { Stage = (int)AlienStage.Wandering }, .02f, 3 });
+            Assert.That(voice.clip.name, Does.StartWith("idle_"));
+            Assert.That(voice.maxDistance, Is.EqualTo(30f));
+            stage(AlienStage.Carried, .02f);
+            Assert.That(voice.clip, Is.Null, "Capture cancels the final Alien cue.");
+            Assert.That(voice.maxDistance, Is.EqualTo(12f));
             silence.Invoke(audio, null);
             owner.transform.position += Vector3.right * 100f;
             stage(AlienStage.Wandering, .02f);

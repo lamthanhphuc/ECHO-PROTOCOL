@@ -414,7 +414,14 @@ namespace EchoProtocol.AI.Stalker
                     : NavigationRequestIntent.NewGoal);
         }
 
-        public NavigationPlanResult RequestDestination(Vector3 destination, NavigationRequestIntent intent)
+        public NavigationPlanResult RequestDestination(Vector3 destination, NavigationRequestIntent intent) =>
+            RequestDestination(destination, intent, null);
+
+        // Use immediately after a successful EvaluateDestination for this destination.
+        internal NavigationPlanResult FollowEvaluatedDestination(Vector3 destination) =>
+            RequestDestination(destination, NavigationRequestIntent.TrackMovingGoal, _evaluationPath);
+
+        private NavigationPlanResult RequestDestination(Vector3 destination, NavigationRequestIntent intent, NavMeshPath evaluatedPath)
         {
             if (_agent == null || !_agent.enabled)
             {
@@ -438,7 +445,7 @@ namespace EchoProtocol.AI.Stalker
                 return new NavigationPlanResult(NavigationPlanStatus.AlreadyActive, destination);
             }
 
-            if (_pathSafetyValidator != null &&
+            if (evaluatedPath == null && _pathSafetyValidator != null &&
                 (!_agent.CalculatePath(destination, _evaluationPath) ||
                  _evaluationPath.status != NavMeshPathStatus.PathComplete ||
                  !DoesPathReachRequestedDestination(_evaluationPath, destination) ||
@@ -449,7 +456,7 @@ namespace EchoProtocol.AI.Stalker
             }
 
             // SetDestination accepts a request; it does not prove the resulting path is complete.
-            if (!_agent.SetDestination(destination))
+            if (!(evaluatedPath != null ? _agent.SetPath(evaluatedPath) : _agent.SetDestination(destination)))
             {
                 ClearDestinationCache();
                 _currentFailureReason = NavigationFailureReason.DestinationInvalid;

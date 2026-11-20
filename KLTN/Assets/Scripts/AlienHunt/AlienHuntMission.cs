@@ -32,6 +32,75 @@ namespace EchoProtocol.Networking
         private int _offlineBurned;
         private GameObject _offlinePlayer;
         private float _dropHintUntil;
+        private float _offlineLastAlienSearchSeconds;
+
+        internal int FindNearestUncaughtAlien(Vector3 origin)
+        {
+            if (!Ready || Completed) return -1;
+            int nearest = -1;
+            float bestDistance = float.PositiveInfinity;
+            for (int i = 0; i < AlienCount; i++)
+            {
+                var state = Read(i);
+                if (state.Stage >= (int)AlienStage.Carried) continue;
+                float distance = (state.Position - origin).sqrMagnitude;
+                if (distance >= bestDistance) continue;
+                nearest = i;
+                bestDistance = distance;
+            }
+            return nearest;
+        }
+
+        private int SearchHintLevel()
+        {
+            float elapsed = _offlineLastAlienSearchSeconds;
+            if (NetworkReady)
+                elapsed = Match.LastAlienHintStart.IsRunning
+                    ? 180f - (Match.LastAlienHintStart.RemainingTime(Match.Runner) ?? 0f) : 0f;
+            return elapsed >= 180f ? 3 : elapsed >= 120f ? 2 : elapsed >= 60f ? 1 : 0;
+        }
+
+        internal int LastAlienHintLevel(int alienIndex)
+        {
+            if (!Ready || Completed || Burned != AlienCount - 1
+                || Read(alienIndex).Stage >= (int)AlienStage.Carried) return 0;
+            return SearchHintLevel();
+        }
+
+        private string DescribeAlienHint()
+        {
+            if (!Ready || Completed) return string.Empty;
+            int level = SearchHintLevel();
+            if (level < 2) return string.Empty;
+            var camera = Camera.main;
+            int index = FindNearestUncaughtAlien(camera ? camera.transform.position : transform.position);
+            if (index < 0) return string.Empty;
+            Vector3 position = Read(index).Position;
+            int landmark = 0;
+            float nearest = float.PositiveInfinity;
+            for (int i = 0; i < furnaces.Length; i++)
+            {
+                if (!furnaces[i]) continue;
+                float distance = (furnaces[i].transform.position - position).sqrMagnitude;
+                if (distance >= nearest) continue;
+                nearest = distance;
+                landmark = i + 1;
+            }
+            string hint = landmark == 0 ? "Có dấu vết Alien trong vùng ngập" : $"Có dấu vết Alien ở khu vực lò {landmark}";
+            if (level < 3 || !camera) return hint;
+
+            // Point to a 40 m search cell, not to the creature.
+            const float cellSize = 40f;
+            Vector3 center = new Vector3((Mathf.Floor(position.x / cellSize) + .5f) * cellSize,
+                0f, (Mathf.Floor(position.z / cellSize) + .5f) * cellSize);
+            Vector3 offset = center - camera.transform.position;
+            offset.y = 0f;
+            if (Mathf.Abs(offset.x) <= cellSize / 2f && Mathf.Abs(offset.z) <= cellSize / 2f)
+                return hint + " · Trong vùng tìm kiếm";
+            float angle = Vector3.SignedAngle(Vector3.ProjectOnPlane(camera.transform.forward, Vector3.up), offset, Vector3.up);
+            string direction = Mathf.Abs(angle) <= 45f ? "↑" : Mathf.Abs(angle) >= 135f ? "↓" : angle > 0 ? "→" : "←";
+            return hint + " · Vùng tìm kiếm " + direction;
+        }
         private NetworkMatchState Match => NetworkMatchState.Instance;
         private bool NetworkReady => Match && Match.Object && Match.Object.IsValid;
         public bool Ready => NetworkReady ? Match.HuntReady : _offlineReady;
@@ -351,6 +420,7 @@ namespace EchoProtocol.Networking
                 }
                 if (actors[entity].Agent) actors[entity].Agent.enabled = false;
             }
+            if (!NetworkReady && kind == HuntKind.Alien) _offlineLastAlienSearchSeconds = 0f;
             state.Stage = kind == HuntKind.Alien ? (int)AlienStage.Carried : 1;
             state.LastGroundPosition = state.Position; state.Carrier = player; state.Target = -1; Write(entity, state); return true;
         }
@@ -396,6 +466,9 @@ namespace EchoProtocol.Networking
         }
         public void Tick(float delta)
         {
+            if (!NetworkReady)
+                _offlineLastAlienSearchSeconds = FindNearestUncaughtAlien(Vector3.zero) >= 0
+                    ? _offlineLastAlienSearchSeconds + delta : 0f;
             int availableMeat = 0;
             for (int i = 27; i < actors.Length; i++)
             {
@@ -736,6 +809,8 @@ namespace EchoProtocol.Networking
                 if (match.PurgeCoopAidEnabled)
                     detail += " | Sơ cứu: "+match.PurgeAidAvailable+"/9";
             }
+            string alienHint = m.DescribeAlienHint();
+            if (alienHint.Length > 0) detail = alienHint + "\n" + detail;
             if (Time.unscaledTime < m._dropHintUntil)
                 detail = "Không thể đặt alien ở đây. Hãy tìm mặt đất có lối về khu vực ổ trứng.";
             detail = detail.Replace("[E]", "[" + InteractKey + "]");

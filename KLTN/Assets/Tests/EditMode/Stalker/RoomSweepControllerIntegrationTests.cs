@@ -14,6 +14,36 @@ namespace EchoProtocol.AI.Stalker.Tests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
 
+        [TestCase("DETECT")] [TestCase("CHASE")] [TestCase("ATTACK")] [TestCase("RECOVER")]
+        public void PurgeAreaPressureDoesNotInterruptPerceptionOrCombat(string state)
+        {
+            var controller = CreateController();
+            var stateField = controller.GetType().GetField("currentState", BindingFlags.NonPublic | BindingFlags.Instance);
+            var activeState = Enum.Parse(stateField.FieldType, state);
+            SetPrivateField(controller, "_purgeControlled", true);
+            SetPrivateField(controller, "_purgeHunting", true);
+            stateField.SetValue(controller, activeState);
+            Assert.That((bool)controller.GetType().GetProperty("CanAcceptPurgeAreaSearch").GetValue(controller), Is.False);
+            Assert.That((bool)Invoke(controller, "TryBeginPurgeAreaSearch", new[] { typeof(Vector3) }, Vector3.one), Is.False);
+            Assert.That(stateField.GetValue(controller), Is.EqualTo(activeState));
+        }
+
+        [TestCase("PATROL", true)] [TestCase("SEARCH", true)]
+        public void PurgeAreaPressureOnlyAcceptsIdleHuntingStates(string state, bool expected)
+        {
+            var controller = CreateController();
+            var stateField = controller.GetType().GetField("currentState", BindingFlags.NonPublic | BindingFlags.Instance);
+            SetPrivateField(controller, "_purgeControlled", true);
+            SetPrivateField(controller, "_purgeHunting", true);
+            stateField.SetValue(controller, Enum.Parse(stateField.FieldType, state));
+            Assert.That((bool)controller.GetType().GetProperty("CanAcceptPurgeAreaSearch").GetValue(controller), Is.EqualTo(expected));
+            SetPrivateField(controller, "_purgeHunting", false);
+            Assert.That((bool)controller.GetType().GetProperty("CanAcceptPurgeAreaSearch").GetValue(controller), Is.False);
+            SetPrivateField(controller, "_purgeHunting", true);
+            SetPrivateField(controller, "_specialEncounterOverrideActive", true);
+            Assert.That((bool)controller.GetType().GetProperty("CanAcceptPurgeAreaSearch").GetValue(controller), Is.False);
+        }
+
         [Test]
         public void STK_RoomSweep_ProbeFailuresContinueNextTickWithoutClearingRoom()
         {

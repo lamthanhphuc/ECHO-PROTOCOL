@@ -201,7 +201,7 @@ namespace EchoProtocol.Networking
             if (!m || !m.Ready) { if (_audio) _audio.Silence(); return; }
             var state = m.Read(index);
             Present(state, m.Authority, Time.deltaTime);
-            if (_audio) _audio.Present(state, Time.deltaTime);
+            if (_audio) _audio.Present(state, Time.deltaTime, m.LastAlienHintLevel(index));
             if (kind == HuntKind.Alien && animator)
                 PresentPanStruggle((AlienStage)state.Stage, Time.deltaTime);
         }

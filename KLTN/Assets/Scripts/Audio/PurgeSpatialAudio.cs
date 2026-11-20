@@ -38,7 +38,7 @@ namespace EchoProtocol.Audio
             if (!audible) { _blocked = false; _filter.cutoffFrequency = 22000f; return; }
             if (Time.unscaledTime >= _nextProbe)
             { _blocked = IsBlocked(camera.transform.position); _nextProbe = Time.unscaledTime + .25f; }
-            _filter.cutoffFrequency = Mathf.Lerp(_filter.cutoffFrequency, _blocked ? 2400f : 22000f,
+            _filter.cutoffFrequency = Mathf.Lerp(_filter.cutoffFrequency, _blocked ? 12000f : 22000f,
                 1f - Mathf.Exp(-Time.unscaledDeltaTime * 10f));
         }
 

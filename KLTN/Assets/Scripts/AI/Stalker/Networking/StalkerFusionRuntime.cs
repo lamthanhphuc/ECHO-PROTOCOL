@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using EchoProtocol.AI.AED;
@@ -741,7 +741,6 @@ namespace EchoProtocol.AI.Stalker.Networking
             return -1;
         }
 
-        private int _lastPurgeRitualVersion;
 
         private bool RunAuthoritativePipeline(AiSimulationStep step)
         {
@@ -846,12 +845,8 @@ namespace EchoProtocol.AI.Stalker.Networking
                     foreach (var candidate in _visibleCandidates)
                         if ((candidate.Observation.ObservedPosition - transform.position).sqrMagnitude <= 2.5f * 2.5f) { purge.ProvokePurgeBoss(); break; }
                 bool frozen = purge.PurgeMood == PurgeBossMood.Warning || purge.PurgeMood == PurgeBossMood.Staggered || purge.IsEnded;
-                controller.ApplyPurgePolicy(purge.PurgeRageTier == 0 || hunt, frozen, purge.PurgeChaseSpeed);
-                if(hunt && _lastPurgeRitualVersion!=purge.PurgeRitualVersion
-                    && controller.InvestigatePurgeRitual(purge.PurgeRitualPosition))
-                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
-                if(purge.PurgeMood==PurgeBossMood.Calm)
-                    _lastPurgeRitualVersion=purge.PurgeRitualVersion;
+                controller.ApplyPurgePolicy(purge.PurgeRageTier == 0 || hunt, frozen, purge.PurgeChaseSpeed, PurgeBossBalance.PatrolSpeed(purge.HuntBurned));
+                UpdatePurgeIntercept(purge, step.Time.Seconds);
                 sustainedCoreCarrier=null;
             }
             var input =
