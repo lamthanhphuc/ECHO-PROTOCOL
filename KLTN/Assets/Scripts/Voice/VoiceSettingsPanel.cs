@@ -210,6 +210,18 @@ namespace EchoProtocol.Voice
             SettingsMenuWidgets.Button("SelectDevice", Find<RectTransform>(Body + "Devices"), 27, 59, 626, 38, "Chọn micrô");
             LayoutRect("Devices/Test", top: 216, height: 30);
             LayoutRect("Devices/LevelText", top: 216, height: 30);
+            foreach (string buttonPath in new[] { "Devices/Test", "Devices/Refresh", "Team/Retry" })
+            {
+                var button = Find<Button>(Body + buttonPath);
+                IndustrialUiStyle.Button(button);
+                var label = button.GetComponentInChildren<TMPro.TMP_Text>(true);
+                if (label == null) continue;
+                SettingsMenuWidgets.Stretch(label.rectTransform);
+                label.rectTransform.offsetMin = new Vector2(8f, 0f);
+                label.rectTransform.offsetMax = new Vector2(-8f, 0f);
+                label.alignment = TMPro.TextAlignmentOptions.Center;
+            }
+
             LayoutRect("Team", height: 280);
             LayoutRect("Team/List", height: 94);
             LayoutRect("Team/Retry", top: 241, height: 31);

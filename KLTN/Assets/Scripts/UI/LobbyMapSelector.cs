@@ -66,6 +66,7 @@ namespace EchoProtocol.UI
             if (_bootstrap.UpdateRoomProperties(new Dictionary<string, SessionProperty> {
                 [LobbyMapCatalog.GameModeKey] = mode, [LobbyMapCatalog.PropertyKey] = map }))
             {
+                LobbySelectionMemory.Write("gamemode", mode);
                 if (mode == 0) LobbyMapCatalog.TrySelect(runner, map);
                 _refreshAt = 0;
             }

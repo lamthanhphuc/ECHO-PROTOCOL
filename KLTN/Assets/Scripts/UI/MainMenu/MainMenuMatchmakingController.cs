@@ -189,6 +189,7 @@ namespace EchoProtocol.UI.MainMenu
                     roomCodeInput.textComponent.gameObject.SetActive(true);
                     roomCodeInput.textComponent.alignment = TextAnchor.MiddleCenter;
                     ClearRoomCodePlaceholder(roomCodeInput);
+                    RoomCodeVisibilityToggle.Attach(roomCodeInput);
                 }
                 foreach (var label in dialog.GetComponentsInChildren<Text>(true))
                     if (label.text == "MÃ PHÒNG" || label.text == "ROOM CODE")
@@ -544,6 +545,7 @@ namespace EchoProtocol.UI.MainMenu
         private void OpenDialog()
 
         {
+            if (roomCodeInput != null) RoomCodeVisibilityToggle.Attach(roomCodeInput).Hide();
 
             if (dialog != null)
 
@@ -757,7 +759,7 @@ namespace EchoProtocol.UI.MainMenu
 
                             maxPlayers,
 
-                            MatchDifficulty.Normal, 0)
+                            MatchDifficulty.Normal)
 
                         : await bootstrap.JoinRoomAsync(
 

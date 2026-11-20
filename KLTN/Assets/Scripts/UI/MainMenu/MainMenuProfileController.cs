@@ -825,6 +825,7 @@ namespace EchoProtocol.UI.MainMenu
       }
       _root.SetAsLastSibling();
       _root.gameObject.SetActive(true);
+      _panel.GetComponentInChildren<ProfileAvatarEditor>(true)?.Refresh();
       UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(_panel.Find("CloseButton").gameObject);
       int version = ++_requestVersion;
       UpdateLayout();
@@ -910,6 +911,7 @@ namespace EchoProtocol.UI.MainMenu
       image.preserveAspect = true;
       image.color = image.sprite != null ? Color.white : new Color(.08f, .09f, .09f);
       image.raycastTarget = false;
+      portrait.gameObject.AddComponent<ProfileAvatarEditor>().Initialize(image);
       _identity = Label("OperatorNameIdentity", 34, 480, 278, 80, 22, bodyFont);
       _identity.supportRichText = false;
       _name = Label("OperatorName", 350, 143, 880, 42, 28, headingFont);

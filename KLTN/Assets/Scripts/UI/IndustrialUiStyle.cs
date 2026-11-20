@@ -63,6 +63,28 @@ namespace EchoProtocol.UI
             }
         }
 
+        // Opaque worn face with an independently readable outline for modal actions.
+        public static void ActionButton(Button button, bool primary = false)
+        {
+            var image = button.GetComponent<Image>() ?? button.gameObject.AddComponent<Image>();
+            image.sprite = Resources.Load<Sprite>("UI/MainMenuTypography/ButtonWornFace");
+            image.type = Image.Type.Simple;
+            image.color = primary ? new Color(.38f, .075f, .095f, 1f) : new Color(.16f, .17f, .17f, 1f);
+            var outline = button.GetComponent<Outline>() ?? button.gameObject.AddComponent<Outline>();
+            outline.effectColor = Accent;
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+            button.targetGraphic = image;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = colors.selectedColor = new Color(1.4f, 1.3f, 1.2f);
+            colors.pressedColor = new Color(.65f, .6f, .6f);
+            colors.disabledColor = new Color(.35f, .35f, .35f, .65f);
+            colors.fadeDuration = .1f;
+            button.colors = colors;
+            foreach (var label in button.GetComponentsInChildren<Text>(true))
+            { UiTypographyTheme.Apply(label, true); label.color = Accent; label.alignment = TextAnchor.MiddleCenter; }
+        }
+
         private static void Stripe(Transform parent, string name, bool right)
         {
             if (parent.Find(name) != null) return;

@@ -597,8 +597,8 @@ namespace EchoProtocol.UI.MainMenu
         {
             if (_heading == null) return;
             _heading.enabled = true;
-            _heading.font = _font != null
-                ? _font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (_heading.font == null)
+                _heading.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             _heading.color = Pale;
             _heading.canvasRenderer.SetAlpha(1f);
             _heading.transform.SetAsLastSibling();

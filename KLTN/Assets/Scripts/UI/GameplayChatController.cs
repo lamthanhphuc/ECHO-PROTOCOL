@@ -30,8 +30,10 @@ namespace EchoProtocol.UI
         private bool _lobbyChat;
         private UnityEngine.UI.Button _lobbyStartButton;
         private Canvas _lobbyMenuCanvas;
+        private MainMenu.TeamToolShopPanel _lobbyShop;
 
         private bool LobbyMenuOpen => _lobbyChat && (EchoProtocol.Voice.VoiceSettingsPanel.IsOpen
+            || (_lobbyShop != null && _lobbyShop.gameObject.activeInHierarchy)
             || (_lobbyMenuCanvas != null
                 && (_lobbyMenuCanvas.GetComponent<MainMenu.MainMenuLeaderboardController>()?.IsOpen == true
                     || _lobbyMenuCanvas.GetComponent<MainMenu.UtilityProfileOverlay>()?.IsOpen == true)));
@@ -127,6 +129,7 @@ namespace EchoProtocol.UI
                 placeholder.alignment = TextAlignmentOptions.Left;
             }
 
+            _lobbyShop = FindAnyObjectByType<MainMenu.TeamToolShopPanel>(FindObjectsInactive.Include);
             _lobbyStartButton = FindAnyObjectByType<LobbyRuntimeBindingsController>()?.LobbyStartButton;
             _lobbyMenuCanvas = _lobbyStartButton != null ? _lobbyStartButton.GetComponentInParent<Canvas>() : null;
             if (entry.TryGetComponent<UnityEngine.UI.Image>(out var entryBackground)

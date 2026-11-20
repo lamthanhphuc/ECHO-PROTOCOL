@@ -73,7 +73,8 @@ namespace EchoProtocol.UI.MainMenu
             _title=Label("GuideTitle",panel,"",new Vector2(610,52),new Vector2(-30,254),32);
             _body=Label("GuideBody",panel,"",new Vector2(672,444),new Vector2(0,-6),21);
             var close=Button("CloseGuide",panel,"×",new Vector2(44,44),new Vector2(331,262));close.onClick.AddListener(Hide);
-            var done=Button("GuideDone",panel,GameLanguage.Choose("Đã hiểu","Got it"),new Vector2(220,48),new Vector2(0,-260));done.onClick.AddListener(Hide);
+            var done=Button("GuideDone",panel,GameLanguage.Choose("Đã hiểu","Got it"),new Vector2(240,52),new Vector2(0,-260));
+            IndustrialUiStyle.ActionButton(done, true);done.onClick.AddListener(Hide);
             _overlay.SetActive(false);
         }
         private void Hide()=>_overlay.SetActive(false);
@@ -110,6 +111,8 @@ namespace EchoProtocol.UI.MainMenu
         }
         private void RefreshContent()
         {
+            var done = _overlay.transform.Find("ToolGuideCard/GuideDone")?.GetComponent<Button>();
+            if (done != null) IndustrialUiStyle.ActionButton(done, true);
             _locale=GameLanguage.Current;
             string title,effect,use,note;
             string interact=GameplayInputSettings.GetKeyLabel(GameplayAction.Interact);

@@ -69,14 +69,11 @@ namespace EchoProtocol.UI.MainMenu
             if (nameText != null)
             {
                 nameText.text = mode == LeaderboardMode.Team
-                    ? (string.IsNullOrWhiteSpace(entry.squadLabel)
-                        ? GameLanguage.Choose("ĐỘI CHƯA ĐẶT TÊN", "UNNAMED SQUAD") : entry.squadLabel)
-                        + "\n" + SquadMembers(entry.players)
+                    ? SquadMembers(entry.players)
                     : (string.IsNullOrWhiteSpace(entry.displayName)
                         ? GameLanguage.Choose("NGƯỜI CHƠI", "UNKNOWN OPERATIVE") : entry.displayName);
-                nameText.fontSize = mode == LeaderboardMode.Team ? 12 : 15;
-                nameText.fontStyle = mode == LeaderboardMode.Team
-                    ? FontStyle.Normal : FontStyle.Bold;
+                nameText.fontSize = 15;
+                nameText.fontStyle = FontStyle.Bold;
                 nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
                 nameText.verticalOverflow = VerticalWrapMode.Truncate;
                 nameText.supportRichText = false;

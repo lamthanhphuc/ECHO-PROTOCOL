@@ -86,6 +86,11 @@ namespace EchoProtocol.Api
         callback));
     }
 
+    public void DeleteJson<TResponse>(string endpoint, Action<ApiResult<TResponse>> callback)
+    {
+      StartCoroutine(SendJsonCoroutine(UnityWebRequest.kHttpVerbDELETE, endpoint, null, true, callback));
+    }
+
     public void PostRawJson<TResponse>(
       string endpoint,
       string jsonBody,
