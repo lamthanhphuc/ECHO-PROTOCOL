@@ -114,6 +114,7 @@ public class AuthService : IAuthService
             UpdatedAt = now,
             PlayerProfile = new PlayerProfile
             {
+                LevelCurveVersion = "LEVEL_V3",
                 Id = Guid.NewGuid(),
                 DisplayName = displayName,
                 TotalMatches = 0,

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EchoProtocol.Api.Services;
 
-public sealed class AdminQueryService(AppDbContext db) : IAdminQueryService
+public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryService
 {
     public const int DefaultPageSize = 20;
     public const int MaximumPageSize = 100;

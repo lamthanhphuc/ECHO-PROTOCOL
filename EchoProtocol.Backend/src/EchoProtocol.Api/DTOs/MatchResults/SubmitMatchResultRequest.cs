@@ -13,6 +13,7 @@ public sealed class SubmitMatchResultRequest
     [Range(typeof(decimal), "0", "1")]
     public decimal ObjectiveCompletion { get; set; }
     public int? EvidenceVersion { get; set; }
+    public bool UsedDebugCheats { get; set; }
 
     [Required, MinLength(1), MaxLength(4)]
     public List<SubmitMatchResultPlayerRequest> Players { get; set; } = [];

@@ -27,6 +27,12 @@ export interface CreatePaymentOrderRequest {
 }
 
 export interface PaymentOrder {
+  fulfillmentKind?: "WALLET_CREDIT" | "INVENTORY_ITEM" | null;
+  walletCreditAmount?: number | null;
+  shopItemId?: string | null;
+  entitlementValidatedAtUtc?: string | null;
+  requiredLevelAtPurchase?: number | null;
+  requiredOwnedItemId?: string | null;
   paymentOrderId: string;
   provider: string;
   providerOrderId: string | null;

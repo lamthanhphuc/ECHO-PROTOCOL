@@ -9,6 +9,10 @@ public sealed class MatchRewardGrant
     public int CurrencyAmount { get; set; }
     public string PolicyVersion { get; set; } = string.Empty;
     public long ExperiencePointsAwarded { get; set; }
+    public int? LevelBefore { get; set; }
+    public int? LevelAfter { get; set; }
+    public string UnlockedItemsJson { get; set; } = "[]";
+    public string CosmeticRewardsJson { get; set; } = "[]";
     public string ProgressionPolicyVersion { get; set; } = string.Empty;
     public DateTime ProcessedAtUtc { get; set; }
 

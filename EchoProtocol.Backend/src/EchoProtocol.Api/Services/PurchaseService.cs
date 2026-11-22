@@ -85,6 +85,17 @@ public sealed class PurchaseService : IPurchaseService
                     ErrorCodes.ShopItemAlreadyOwned);
             }
 
+            var level = await _db.PlayerProfiles.Where(profile => profile.UserId == userId)
+                .Select(profile => profile.Level).SingleOrDefaultAsync(cancellationToken);
+            if (level < item.RequiredLevel)
+                return Failure($"This item requires level {item.RequiredLevel}", ErrorCodes.ShopLevelRequired);
+
+            var checkoutNow = _timeProvider.GetUtcNow().UtcDateTime;
+            if (await _db.PaymentOrders.AnyAsync(o => o.UserId == userId && o.FulfillmentShopItemId == item.ItemId &&
+                (o.Status == PaymentOrderStatus.PAID || ((o.Status == PaymentOrderStatus.CREATED || o.Status == PaymentOrderStatus.PENDING_PAYMENT)
+                    && (o.ExpiresAtUtc == null || o.ExpiresAtUtc > checkoutNow))), cancellationToken))
+                return Failure("An active payment already reserves this item", ErrorCodes.PaymentOrderConflict);
+
             if (wallet.Balance < item.Price)
             {
                 return Failure(

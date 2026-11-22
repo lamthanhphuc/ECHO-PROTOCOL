@@ -105,6 +105,8 @@ public sealed class CharacterOutfitCommerceTests
                 Id = userId,
                 Email = $"outfit-{userId:N}@echo.invalid",
                 Username = $"outfit-{userId:N}",
+                PlayerProfile = new PlayerProfile { Id = Guid.NewGuid(), DisplayName = "Buyer", Level = 1,
+                    CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime },
                 PasswordHash = "not-used",
                 Role = UserRole.PLAYER,
                 Status = UserStatus.ACTIVE,

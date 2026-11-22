@@ -15,6 +15,7 @@ public sealed class ShopItemResponse
     public string Name { get; init; } = string.Empty;
     public string Category { get; init; } = string.Empty;
     public int Price { get; init; }
+    public int RequiredLevel { get; init; } = 1;
     public string Description { get; init; } = string.Empty;
     public string AssetReference { get; init; } = string.Empty;
 }

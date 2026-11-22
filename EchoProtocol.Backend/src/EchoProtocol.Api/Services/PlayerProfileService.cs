@@ -31,6 +31,8 @@ public sealed class PlayerProfileService : IPlayerProfileService
                 TotalWins = item.TotalWins,
                 ExperiencePoints = item.ExperiencePoints,
                 Level = item.Level,
+                LifetimeExperiencePoints = item.LifetimeExperiencePoints,
+                LevelCurveVersion = item.LevelCurveVersion,
                 WalletBalance = item.User.Wallet!.Balance
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -63,6 +65,17 @@ public sealed class PlayerProfileService : IPlayerProfileService
             TotalWins = profile.TotalWins,
             ExperiencePoints = profile.ExperiencePoints,
             Level = profile.Level,
+            LifetimeExperiencePoints = profile.LifetimeExperiencePoints,
+            LevelCurveVersion = profile.LevelCurveVersion,
+            LevelCap = profile.LevelCurveVersion == ProgressionCurveV3.Version ? ProgressionCurveV3.LevelCap : 0,
+            CosmeticRewards = await ProgressionCosmeticService.ReadAsync(_db, userId, cancellationToken),
+            LevelUnlocks = await LevelUnlockService.ReadAsync(_db, userId, profile.Level,
+                profile.ExperiencePoints, profile.LevelCurveVersion, cancellationToken),
+            ExperienceInLevel = profile.LevelCurveVersion == ProgressionCurveV3.Version
+                ? (profile.Level >= ProgressionCurveV3.LevelCap ? 0 : profile.ExperiencePoints - ProgressionCurveV3.Threshold(profile.Level))
+                : profile.ExperiencePoints % 500,
+            ExperienceRequiredForNextLevel = profile.LevelCurveVersion == ProgressionCurveV3.Version
+                ? (profile.Level >= ProgressionCurveV3.LevelCap ? 0 : ProgressionCurveV3.RequiredForNextLevel(profile.Level)) : 500,
             WalletBalance = profile.WalletBalance,
             RecentMatch = await LatestAsync(activity),
             LatestWin = await LatestAsync(activity.Where(player =>

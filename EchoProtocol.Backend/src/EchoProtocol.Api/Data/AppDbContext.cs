@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +17,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
+    public DbSet<AdminExperienceGrant> AdminExperienceGrants => Set<AdminExperienceGrant>();
+    public DbSet<ProgressionCosmeticGrant> ProgressionCosmeticGrants => Set<ProgressionCosmeticGrant>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<MatchAuthorityBinding> MatchAuthorityBindings => Set<MatchAuthorityBinding>();
     public DbSet<RoomSession> RoomSessions => Set<RoomSession>();
@@ -59,6 +61,21 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ProgressionCosmeticGrant>(entity =>
+        {
+            entity.HasKey(g => new { g.UserId, g.RewardKey });
+            entity.Property(g => g.RewardKey).HasMaxLength(64);
+            entity.HasOne<User>().WithMany().HasForeignKey(g => g.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<MatchRewardGrant>().Property(x => x.UnlockedItemsJson).HasDefaultValue("[]");
+        modelBuilder.Entity<AdminExperienceGrant>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Reason).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.UserId, x.CreatedAtUtc });
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AdminUserId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<RewardConfiguration>()
             .Property(x => x.LossCapCreditsPerMinute).HasPrecision(7, 2);
         modelBuilder.Entity<RewardConfiguration>()
@@ -292,6 +309,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.TotalMatches).HasDefaultValue(0);
             entity.Property(e => e.TotalWins).HasDefaultValue(0);
             entity.Property(e => e.ExperiencePoints).HasDefaultValue(0L);
+            entity.Property(e => e.LevelCurveVersion).HasMaxLength(30).HasDefaultValue("LEVEL_V1");
             entity.Property(e => e.Level).HasDefaultValue(1);
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt).IsRequired();
@@ -379,7 +397,7 @@ public class AppDbContext : DbContext
                         AND "BalanceProtocolVersion" IS NULL
                         AND "BalanceVersion" IS NULL
                         AND "BalanceHash" IS NULL
-                        AND "MatchDataPolicy" = 'STANDARD'
+                        AND "MatchDataPolicy" IN ('TEST_ONLY', 'STANDARD')
                     )
                     OR
                     (
@@ -388,7 +406,7 @@ public class AppDbContext : DbContext
                         AND "BalanceProtocolVersion" = 'RFB-1'
                         AND "BalanceVersion" IS NULL
                         AND "BalanceHash" IS NULL
-                        AND "MatchDataPolicy" = 'STANDARD'
+                        AND "MatchDataPolicy" IN ('TEST_ONLY', 'STANDARD')
                         AND "MapId" IS NOT NULL
                         AND "Difficulty" IS NOT NULL
                     )
@@ -542,6 +560,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MatchRewardGrant>(entity =>
         {
+            entity.Property(g => g.CosmeticRewardsJson).HasDefaultValue("[]");
             entity.ToTable(t =>
             {
                 t.HasCheckConstraint(
@@ -619,6 +638,7 @@ public class AppDbContext : DbContext
 
             entity.HasKey(e => e.ItemId);
             entity.Property(e => e.ItemName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.RequiredLevel).HasDefaultValue(1);
             entity.Property(e => e.Description).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AssetReference).IsRequired().HasMaxLength(500);
@@ -854,7 +874,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Kind).HasConversion<string>().HasMaxLength(30);
             entity.HasIndex(item => item.FulfillmentReference).IsUnique();
             entity.HasIndex(item => item.WalletTransactionId).IsUnique();
-            entity.HasIndex(item => item.InventoryItemId).IsUnique();
+            entity.HasIndex(item => item.InventoryItemId);
             entity.HasOne(item => item.PaymentOrder)
                 .WithOne(item => item.Fulfillment)
                 .HasForeignKey<PaymentFulfillment>(item => item.PaymentOrderId)

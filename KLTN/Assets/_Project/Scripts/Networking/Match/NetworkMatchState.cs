@@ -99,6 +99,22 @@ namespace EchoProtocol.Networking
 
     public static class NetworkMatchStateRules
     {
+        public static float ObjectiveCompletion(NetworkMatchPhase phase, NetworkMatchResult result,
+            float cores, float security, float transport)
+        {
+            if (result == NetworkMatchResult.Win) return 1f;
+            return phase switch
+            {
+                NetworkMatchPhase.CoreObjective => .25f * Mathf.Clamp01(cores),
+                NetworkMatchPhase.Zone2Objective or NetworkMatchPhase.Puzzle or NetworkMatchPhase.SecurityHold
+                    => .25f + .25f * Mathf.Clamp01(security),
+                NetworkMatchPhase.Zone3FindFrigate or NetworkMatchPhase.Zone3PushFrigate
+                    => .5f + .25f * Mathf.Clamp01(transport),
+                NetworkMatchPhase.FinalHunt or NetworkMatchPhase.Escape => .75f,
+                _ => 0f
+            };
+        }
+
         public static bool CanApplyAEDv2Gameplay(
             bool enabled,
             ScenarioResolutionMode mode,
@@ -315,6 +331,12 @@ namespace EchoProtocol.Networking
         [Networked] public uint EndOrdinal { get; private set; }
         [Networked] public float FinalDurationSeconds { get; private set; }
         [Networked] public float FinalObjectiveCompletion { get; private set; }
+        [Networked] public NetworkBool DebugCheatsUsed { get; private set; }
+
+        public void MarkDebugCheatsUsed()
+        {
+            if (HasValidNetworkObject() && Object.HasStateAuthority) DebugCheatsUsed = true;
+        }
         [Networked] public ResultRosterEntry ResultRoster0 { get; private set; }
         [Networked] public ResultRosterEntry ResultRoster1 { get; private set; }
         [Networked] public ResultRosterEntry ResultRoster2 { get; private set; }
@@ -508,6 +530,9 @@ namespace EchoProtocol.Networking
                 EndOrdinal = 0;
                 FinalDurationSeconds = -1f;
                 FinalObjectiveCompletion = -1f;
+                DebugCheatsUsed = false;
+                for (int i = 0; i < AlienHuntMission.AlienCount; i++) HuntCaptureCredited.Set(i, false);
+                for (int i = 0; i < 3; i++) HuntFurnaceCreditMask.Set(i, 0);
                 ResultRoster0 = default;
                 ResultRoster1 = default;
                 ResultRoster2 = default;
@@ -4567,27 +4592,32 @@ namespace EchoProtocol.Networking
             };
         }
 
-        private static float CalculateObjectiveCompletion(
+        private float CalculateObjectiveCompletion(
             NetworkMatchPhase phase,
             NetworkMatchResult result)
         {
-            if (result == NetworkMatchResult.Win)
+            float cores = phase == NetworkMatchPhase.CoreObjective
+                && TryGetObjectiveProgress(out int current, out int required) && required > 0
+                    ? current / (float)required : 0f;
+            float security = (SecurityTerminalDiscovered ? .1f : 0f)
+                + .6f * CompletedRelayCount / 4f + .2f * SecurityHoldProgress01
+                + (RestoreMainPowerCompleted ? .1f : 0f);
+            float transport;
+            var flooded = FloodedMapMission.Instance;
+            if (flooded)
             {
-                return 1f;
+                float charge = phase == NetworkMatchPhase.Zone3FindFrigate
+                    ? Mathf.Clamp01(Zone3ChargeAccumulatedSeconds / Mathf.Max(1f, flooded.ChargeSeconds)) : 1f;
+                float escort = FloodedEscortArrived ? 1f : flooded.Route != null && flooded.Route.Length > 0
+                    ? Mathf.Clamp01(FloodedRouteIndex / (float)flooded.Route.Length) : 0f;
+                transport = .5f * charge + .5f * escort;
             }
-
-            return phase switch
+            else
             {
-                NetworkMatchPhase.CoreObjective => 0f,
-                NetworkMatchPhase.Zone2Objective => 0.25f,
-                NetworkMatchPhase.Puzzle => 0.25f,
-                NetworkMatchPhase.SecurityHold => 0.25f,
-                NetworkMatchPhase.Zone3FindFrigate => 0.5f,
-                NetworkMatchPhase.Zone3PushFrigate => 0.5f,
-                NetworkMatchPhase.FinalHunt => 0.75f,
-                NetworkMatchPhase.Escape => 0.75f,
-                _ => 0f,
-            };
+                transport = (Zone3MissionDirector.Instance?.IsFrigateAtDestination == true ? .5f : 0f)
+                    + .5f * Zone3ChargeProgress01;
+            }
+            return NetworkMatchStateRules.ObjectiveCompletion(phase, result, cores, security, transport);
         }
 
         private static string ReasonCode(NetworkMatchEndReason reason)

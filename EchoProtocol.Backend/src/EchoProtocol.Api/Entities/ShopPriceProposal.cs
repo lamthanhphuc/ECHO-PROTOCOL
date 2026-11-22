@@ -6,6 +6,8 @@ public sealed class ShopPriceProposal
     public Guid ItemId { get; set; }
     public int PreviousPrice { get; set; }
     public int ProposedPrice { get; set; }
+    public int? PreviousRequiredLevel { get; set; }
+    public int? ProposedRequiredLevel { get; set; }
     public DateTime ItemUpdatedAtUtc { get; set; }
     public Guid ProposedByUserId { get; set; }
     public DateTime ProposedAtUtc { get; set; }

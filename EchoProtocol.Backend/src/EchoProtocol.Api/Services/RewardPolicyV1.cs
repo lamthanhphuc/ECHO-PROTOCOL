@@ -86,6 +86,7 @@ internal static class RewardSnapshotRules
                 player.DetectionCount < 0 ||
                 player.DownedCount < 0 ||
                 player.ReviveCount < 0 ||
+                player.ParticipationSeconds is < 0 ||
                 player.ObjectiveContribution < 0) ||
             match.Players.Select(player => player.UserId).Distinct().Count() != match.Players.Count)
         {

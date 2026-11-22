@@ -79,13 +79,18 @@ public sealed class PaymentFulfillmentService(
         }
         else
         {
+            // Serialize with Credits purchases and other payments for this owner.
+            // Deliver the snapshotted entitlement even if level/catalog changed after payment.
+            if (await LoadWalletForUpdateAsync(order.UserId, cancellationToken) is null)
+                return Fail("Wallet not found", ErrorCodes.PaymentFulfillmentTargetInvalid);
             var shopItemId = product.ShopItemId!.Value;
             var itemExists = await db.ShopItems.AsNoTracking()
                 .AnyAsync(item => item.ItemId == shopItemId, cancellationToken);
             if (!itemExists)
                 return Fail("Inventory fulfillment item does not exist",
                     ErrorCodes.PaymentFulfillmentTargetInvalid);
-            var inventoryItem = new InventoryItem
+            var owned = await db.InventoryItems.SingleOrDefaultAsync(i => i.UserId == order.UserId && i.ShopItemId == shopItemId, cancellationToken);
+            var inventoryItem = owned ?? new InventoryItem
             {
                 InventoryItemId = Guid.NewGuid(),
                 UserId = order.UserId,
@@ -93,7 +98,7 @@ public sealed class PaymentFulfillmentService(
                 Source = InventoryAcquisitionSource.PAYMENT,
                 AcquiredAtUtc = now
             };
-            db.InventoryItems.Add(inventoryItem);
+            if (owned is null) db.InventoryItems.Add(inventoryItem);
             fulfillment.InventoryItemId = inventoryItem.InventoryItemId;
         }
 

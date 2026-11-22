@@ -9,6 +9,93 @@ namespace EchoProtocol.Api.Tests;
 public sealed partial class ScenarioServiceTests
 {
     [Fact]
+    public async Task AdminExperienceIsAuditedIdempotentAndDoesNotChangeMatchCounts()
+    {
+        await using var f = await Fixture.CreateAsync();
+        f.Db.PlayerProfiles.Add(new PlayerProfile { Id = Guid.NewGuid(), UserId = f.PlayerId, DisplayName = "XP test",
+            Level = 1, LevelCurveVersion = "LEVEL_V3", ExperiencePoints = 240, LifetimeExperiencePoints = 240,
+            TotalMatches = 4, TotalWins = 2, CreatedAt = Now, UpdatedAt = Now });
+        await f.Db.SaveChangesAsync();
+        var service = new AdminQueryService(f.Db);
+        var request = new EchoProtocol.Api.DTOs.Admin.AdminGrantExperienceRequest { RequestId = Guid.NewGuid(), Amount = 100, Reason = "Support progression test" };
+        Assert.True((await service.GrantExperienceAsync(f.HostId, f.PlayerId, request)).IsSuccess);
+        Assert.True((await service.GrantExperienceAsync(f.HostId, f.PlayerId, request)).IsSuccess);
+        var profile = await f.Db.PlayerProfiles.SingleAsync();
+        Assert.Equal(340, profile.ExperiencePoints); Assert.Equal(340, profile.LifetimeExperiencePoints); Assert.Equal(2, profile.Level);
+        Assert.Equal(4, profile.TotalMatches); Assert.Equal(2, profile.TotalWins);
+        var grant = Assert.Single(await f.Db.AdminExperienceGrants.ToListAsync());
+        Assert.Equal(f.HostId, grant.AdminUserId); Assert.Equal(1, grant.LevelBefore); Assert.Equal(2, grant.LevelAfter);
+        Assert.Equal(ErrorCodes.Conflict, (await service.GrantExperienceAsync(f.HostId, f.PlayerId,
+            new() { RequestId = request.RequestId, Amount = 101, Reason = request.Reason })).ErrorCode);
+        Assert.True((await service.GetProgressionAsync(f.PlayerId)).IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(-1)] [InlineData(100001)]
+    public async Task AdminExperienceRejectsInvalidAmount(int amount)
+    {
+        await using var f = await Fixture.CreateAsync();
+        var result = await new AdminQueryService(f.Db).GrantExperienceAsync(f.HostId, f.PlayerId,
+            new() { RequestId = Guid.NewGuid(), Amount = amount, Reason = "test" });
+        Assert.Equal(ErrorCodes.ValidationError, result.ErrorCode);
+        Assert.Empty(await f.Db.AdminExperienceGrants.ToListAsync());
+    }
+
+    [Fact]
+    public async Task UnlockMilestonesUseCurrentCatalogAndPreserveOwnedItems()
+    {
+        await using var f = await Fixture.CreateAsync();
+        await EchoProtocol.Api.Data.ShopCatalogSeeder.SeedProductionCatalogAsync(f.Db, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        var scanner = await f.Db.ShopItems.SingleAsync(x => x.ItemName == "Field Scanner");
+        var stabilizer = await f.Db.ShopItems.SingleAsync(x => x.ItemName == "Core Stabilizer");
+        Assert.Equal(6, scanner.RequiredLevel); Assert.Equal(4, stabilizer.RequiredLevel);
+        Assert.Equal(12, (await f.Db.ShopItems.SingleAsync(x => x.ItemName == "Soul Eater")).RequiredLevel);
+        Assert.Equal(5, (await f.Db.ShopItems.SingleAsync(x => x.ItemName == "Usurper")).RequiredLevel);
+        f.Db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = f.PlayerId,
+            ShopItemId = scanner.ItemId, AcquiredAtUtc = Now });
+        await f.Db.SaveChangesAsync();
+        var milestones = await LevelUnlockService.ReadAsync(f.Db, f.PlayerId, 2, 300, "LEVEL_V3", default);
+        Assert.True(milestones.Single(x => x.ItemId == scanner.ItemId).Owned);
+        Assert.Equal(575, milestones.Single(x => x.ItemId == stabilizer.ItemId).ExperienceRemaining);
+        var change = await new EconomyAdminService(f.Db, new FixedClock(Now)).ApplyPriceAsync(f.HostId,
+            new(scanner.ItemId, scanner.Price, scanner.Price, "Test scanner level change", 7, 6), default);
+        Assert.True(change.IsSuccess, change.Message);
+    }
+
+    [Fact]
+    public async Task RewardAdminActivatesV3WithNeutralReferencesAndRejectsChangedContribution()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var service = new EconomyAdminService(f.Db, new FixedClock(Now));
+        var request = new RewardConfiguration { PolicyKey = "REWARD_V3" };
+        var result = await service.SaveRewardsAsync(f.HostId, request, default);
+        Assert.True(result.IsSuccess, result.Message);
+        f.Db.ChangeTracker.Clear();
+        var saved = await f.Db.RewardConfigurations.SingleAsync();
+        Assert.True(saved.HasValidV3Settings());
+        Assert.Equal(20, saved.SciFiReferenceMinutes);
+        Assert.Equal(20, saved.FloodedReferenceMinutes);
+        Assert.Equal(20, saved.PurgeReferenceMinutes);
+        saved.OneActionTeamPercent = 51;
+        Assert.Equal(ErrorCodes.ValidationError, (await service.SaveRewardsAsync(f.HostId, saved, default)).ErrorCode);
+        Assert.True((await service.GetAsync(f.HostId, default)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task EssentialToolsCannotBeLockedBehindLevel()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var item = new ShopItem { ItemId = Guid.NewGuid(), ItemName = "Tool", Category = ShopItemCategories.TeamTool,
+            Price = 100, RequiredLevel = 1, CreatedAtUtc = Now, UpdatedAtUtc = Now };
+        f.Db.ShopItems.Add(item); await f.Db.SaveChangesAsync();
+        var result = await new EconomyAdminService(f.Db, new FixedClock(Now))
+            .ApplyPriceAsync(f.HostId, new(item.ItemId, 100, 100, "Test essential tool lock", 2, 1), default);
+        Assert.Equal(ErrorCodes.ValidationError, result.ErrorCode);
+        Assert.Empty(await f.Db.Set<ShopPriceProposal>().ToListAsync());
+    }
+
+    [Fact]
     public async Task RewardAdminRejectsStaleConfigurationAndInvalidV2Parameters()
     {
         await using var f = await Fixture.CreateAsync();

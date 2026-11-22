@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Api.Common;
+using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
@@ -216,6 +216,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         binding.FusionActorNumber = request.FusionActorNumber;
         binding.JoinProofId = proof.ProofId;
         binding.LastSeenAtUtc = now;
+        if (binding.DisconnectedAtUtc is { } disconnected && match.StartedAtUtc is { } started)
+        {
+            var offlineStart = disconnected > started ? disconnected : started;
+            binding.GameplayDisconnectedMilliseconds = checked(binding.GameplayDisconnectedMilliseconds
+                + Math.Max(0L, (long)(now - offlineStart).TotalMilliseconds));
+        }
         binding.DisconnectedAtUtc = null;
         if (userBinding is null)
         {
@@ -737,14 +743,28 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
         match.ResolutionMode = mode;
         foreach (var player in match.Players)
+        {
             player.Participated = player.DisconnectedAtUtc == null;
+            player.GameplayDisconnectedMilliseconds = 0;
+        }
         var rewardConfiguration = await _db.RewardConfigurations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == RewardConfiguration.SharedId, cancellationToken)
-            ?? new RewardConfiguration();
-        if (rewardConfiguration.PolicyKey is not ("REWARD_V1" or "REWARD_V2"))
+            ?? new RewardConfiguration { PolicyKey = RewardPolicyV3.PolicyVersion };
+        if (rewardConfiguration.PolicyKey is not ("REWARD_V1" or "REWARD_V2" or "REWARD_V3"))
             return Failure<MatchAuthorityResponse>("Unsupported reward policy", ErrorCodes.ValidationError);
+        if (rewardConfiguration.PolicyKey == "REWARD_V3" && !rewardConfiguration.HasValidV3Settings())
+            return Failure<MatchAuthorityResponse>("Invalid V3 reward configuration", ErrorCodes.ValidationError);
+        // Older start requests have no authoritative map/difficulty. Preserve V2 for
+        // those clients instead of creating a V3 match that cannot be rewarded.
+        if (rewardConfiguration.PolicyKey == "REWARD_V3" && mapId is null)
+        {
+            rewardConfiguration.PolicyKey = RewardPolicyV2.PolicyVersion;
+            rewardConfiguration.LossCapCreditsPerMinute = 2m;
+            rewardConfiguration.LossExperiencePerMinute = 1;
+        }
         match.RewardPolicyVersion = rewardConfiguration.PolicyKey;
-        match.ProgressionPolicyVersion = rewardConfiguration.PolicyKey == "REWARD_V2"
+        match.ProgressionPolicyVersion = rewardConfiguration.PolicyKey == "REWARD_V3"
+            ? ProgressionPolicyV3.PolicyVersion : rewardConfiguration.PolicyKey == "REWARD_V2"
             ? "PROGRESSION_V2" : ProgressionPolicyV1.PolicyVersion;
         match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(rewardConfiguration);
         match.Status = MatchAuthorityStatus.InMatch;

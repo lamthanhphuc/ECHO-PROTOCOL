@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using EchoProtocol.Api;
 using EchoProtocol.Auth;
 using EchoProtocol.Profile;
@@ -39,6 +39,7 @@ namespace EchoProtocol.UI.MainMenu
             public string description;
             public string assetReference;
             public int price;
+            public int requiredLevel = 1;
         }
 
         [Serializable]
@@ -454,6 +455,13 @@ namespace EchoProtocol.UI.MainMenu
             _status.text =
                 "LOADING TEAM TOOLS...";
 
+            runtime.PlayerProfileService.GetCurrentProfile(_ =>
+            {
+                if (this == null) return;
+                RefreshCredits();
+                SetBuyState();
+            });
+
             runtime.Client.GetJson<CatalogResponse>(
                 ApiEndpoints.ShopTeamTools,
                 true,
@@ -718,6 +726,14 @@ namespace EchoProtocol.UI.MainMenu
                 if (caption != null)
                     caption.text = EchoProtocol.Settings.GameLanguage.Choose("Mua ngay", "Buy Now");
 
+                return;
+            }
+
+            if (!owned && EchoProtocol.Profile.PlayerProfileSession.Level < _selected.requiredLevel)
+            {
+                _buyButton.interactable = false;
+                if (caption != null) caption.text = EchoProtocol.Settings.GameLanguage.Choose(
+                    $"Cần cấp {_selected.requiredLevel}", $"Requires level {_selected.requiredLevel}");
                 return;
             }
 

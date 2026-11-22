@@ -8,6 +8,13 @@ public sealed class PlayerProfileResponse
     public int TotalWins { get; init; }
     public long ExperiencePoints { get; init; }
     public int Level { get; init; }
+    public long LifetimeExperiencePoints { get; init; }
+    public string LevelCurveVersion { get; init; } = "LEVEL_V1";
+    public long ExperienceInLevel { get; init; }
+    public long ExperienceRequiredForNextLevel { get; init; }
+    public int LevelCap { get; init; }
+    public IReadOnlyList<LevelUnlockResponse> LevelUnlocks { get; init; } = [];
+    public IReadOnlyList<ProgressionCosmeticResponse> CosmeticRewards { get; init; } = [];
     public int WalletBalance { get; init; }
     public PlayerActivityResponse? RecentMatch { get; init; }
     public PlayerActivityResponse? LatestWin { get; init; }

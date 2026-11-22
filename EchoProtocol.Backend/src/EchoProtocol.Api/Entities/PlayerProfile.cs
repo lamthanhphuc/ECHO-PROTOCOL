@@ -9,6 +9,8 @@ public class PlayerProfile
     public int TotalMatches { get; set; }
     public int TotalWins { get; set; }
     public long ExperiencePoints { get; set; }
+    public long LifetimeExperiencePoints { get; set; }
+    public string LevelCurveVersion { get; set; } = "LEVEL_V1";
     public int Level { get; set; } = 1;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

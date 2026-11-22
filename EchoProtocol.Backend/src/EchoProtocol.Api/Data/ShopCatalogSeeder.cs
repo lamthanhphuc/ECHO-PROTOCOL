@@ -363,6 +363,12 @@ public static class ShopCatalogSeeder
                         ItemName = definition.ItemName,
                         Category = definition.Category,
                         Price = definition.Price,
+                        RequiredLevel = definition.ItemName switch
+                        {
+                            "Jammo" => 3, "Nightmare" => 4, "Usurper" => 5, "Cursed Priest" => 6,
+                            "Terror Bringer" => 8, "Mercenary" => 10, "Soul Eater" => 12,
+                            "Core Stabilizer" => 4, "Field Scanner" => 6, _ => 1
+                        },
                         Description = definition.Description,
                         AssetReference = definition.AssetReference,
                         IsActive = true,

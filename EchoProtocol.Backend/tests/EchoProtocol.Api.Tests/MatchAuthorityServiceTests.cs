@@ -211,6 +211,7 @@ public sealed class MatchAuthorityServiceTests
         Assert.True(started.IsSuccess);
         Assert.Equal("SciFi", started.Data!.MapId);
         Assert.Equal("NORMAL", started.Data.Difficulty);
+        Assert.Equal("REWARD_V3", (await db.MatchAuthorityBindings.SingleAsync()).RewardPolicyVersion);
 
         var changed = await service.StartAsync(hostId, matchId, CancellationToken.None,
             new StartMatchAuthorityRequest { MapId = "Scene_A", Difficulty = "HARD" });
@@ -231,6 +232,7 @@ public sealed class MatchAuthorityServiceTests
         Assert.Equal("STANDARD", result.Data!.MatchDataPolicy);
         Assert.Null(result.Data.ResolutionMode);
         Assert.Null(result.Data.BalanceVersion);
+        Assert.Equal("REWARD_V2", (await db.MatchAuthorityBindings.SingleAsync()).RewardPolicyVersion);
     }
 
     [Fact]
@@ -843,6 +845,12 @@ public sealed class MatchAuthorityServiceTests
         Assert.True((await service.MarkPlayerDisconnectedAsync(hostId, matchId, 2, playerId, CancellationToken.None)).IsSuccess);
         Assert.True(boundPlayer.HadGameplayDisconnect);
         var reconnectProof = await service.IssueJoinProofAsync(playerId, matchId, request, CancellationToken.None);
+        // A prior offline interval must survive reconnect and actor rebind retries.
+        var startedMatch = await db.MatchAuthorityBindings.SingleAsync(m => m.MatchId == matchId);
+        startedMatch.StartedAtUtc = Now.UtcDateTime.AddMinutes(-2);
+        boundPlayer.DisconnectedAtUtc = Now.UtcDateTime.AddSeconds(-30);
+        boundPlayer.GameplayDisconnectedMilliseconds = 15_000;
+        await db.SaveChangesAsync();
         Assert.True(reconnectProof.IsSuccess);
         Assert.False((await service.IssueJoinProofAsync(Guid.NewGuid(), matchId, request, CancellationToken.None)).IsSuccess);
         Assert.True((await service.BindPlayerAsync(hostId, matchId,
@@ -850,6 +858,10 @@ public sealed class MatchAuthorityServiceTests
             CancellationToken.None)).IsSuccess);
         Assert.Null((await db.MatchPlayerBindings.SingleAsync(item => item.UserId == playerId)).DisconnectedAtUtc);
         Assert.True(boundPlayer.HadGameplayDisconnect);
+        Assert.Equal(45_000, boundPlayer.GameplayDisconnectedMilliseconds);
+        Assert.True((await service.BindPlayerAsync(hostId, matchId,
+            new BindMatchPlayerRequest { FusionActorNumber = 2, JoinProof = reconnectProof.Data!.Proof }, CancellationToken.None)).IsSuccess);
+        Assert.Equal(45_000, boundPlayer.GameplayDisconnectedMilliseconds);
     }
 
     [Fact]

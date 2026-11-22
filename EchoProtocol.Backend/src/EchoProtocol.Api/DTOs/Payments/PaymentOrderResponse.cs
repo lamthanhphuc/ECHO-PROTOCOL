@@ -19,6 +19,13 @@ public sealed record PaymentOrderResponse(
     DateTime? FulfilledAtUtc,
     bool IsReplay)
 {
+    public string? FulfillmentKind { get; init; }
+    public int? WalletCreditAmount { get; init; }
+    public Guid? ShopItemId { get; init; }
+    public DateTime? EntitlementValidatedAtUtc { get; init; }
+    public int? RequiredLevelAtPurchase { get; init; }
+    public Guid? RequiredOwnedItemId { get; init; }
+
     public static PaymentOrderResponse From(PaymentOrder order, bool isReplay) => new(
         order.PaymentOrderId,
         order.Provider,
@@ -33,5 +40,10 @@ public sealed record PaymentOrderResponse(
         order.ExpiresAtUtc,
         order.PaidAtUtc,
         order.FulfilledAtUtc,
-        isReplay);
+        isReplay)
+        {
+            FulfillmentKind = order.FulfillmentKind?.ToString(), WalletCreditAmount = order.WalletCreditAmount,
+            ShopItemId = order.FulfillmentShopItemId, EntitlementValidatedAtUtc = order.EntitlementValidatedAtUtc,
+            RequiredLevelAtPurchase = order.RequiredLevelAtPurchase, RequiredOwnedItemId = order.RequiredOwnedItemId
+        };
 }

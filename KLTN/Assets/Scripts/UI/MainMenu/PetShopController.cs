@@ -48,6 +48,7 @@ namespace EchoProtocol.UI.MainMenu
             public string description;
             public string assetReference;
             public int price;
+            public int requiredLevel = 1;
         }
 
         [Serializable]
@@ -275,6 +276,13 @@ namespace EchoProtocol.UI.MainMenu
 
             SetStatus(
                 "LOADING PET CATALOG...");
+
+            runtime.PlayerProfileService.GetCurrentProfile(_ =>
+            {
+                if (this == null) return;
+                RefreshCredits();
+                SetBuyState();
+            });
 
             runtime.Client.GetJson<CatalogResponse>(
                 ApiEndpoints.ShopPets,
@@ -666,6 +674,14 @@ namespace EchoProtocol.UI.MainMenu
                     return;
                 }
 
+                if (EchoProtocol.Profile.PlayerProfileSession.Level < _selectedPetItem.requiredLevel)
+                {
+                    _buyButton.interactable = false;
+                    if (caption != null) caption.text = EchoProtocol.Settings.GameLanguage.Choose(
+                        $"Cần cấp {_selectedPetItem.requiredLevel}", $"Requires level {_selectedPetItem.requiredLevel}");
+                    return;
+                }
+
                 _buyButton.interactable =
                     !_purchasing;
 
@@ -782,6 +798,14 @@ namespace EchoProtocol.UI.MainMenu
                 if (caption != null)
                     caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
+                return;
+            }
+
+            if (EchoProtocol.Profile.PlayerProfileSession.Level < _selectedSkinItem.requiredLevel)
+            {
+                _buyButton.interactable = false;
+                if (caption != null) caption.text = EchoProtocol.Settings.GameLanguage.Choose(
+                    $"Cần cấp {_selectedSkinItem.requiredLevel}", $"Requires level {_selectedSkinItem.requiredLevel}");
                 return;
             }
 

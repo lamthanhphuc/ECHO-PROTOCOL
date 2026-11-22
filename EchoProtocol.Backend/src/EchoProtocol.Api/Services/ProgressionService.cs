@@ -65,7 +65,9 @@ public sealed class ProgressionService : IProgressionService
                 var totalMatches = checked(profile.TotalMatches + (allocation.CountsAsMatch ? 1 : 0));
                 var totalWins = checked(profile.TotalWins + (allocation.CountsAsWin ? 1 : 0));
                 var experiencePoints = checked(profile.ExperiencePoints + allocation.ExperiencePoints);
-                var level = _policy.GetLevel(experiencePoints);
+                var level = profile.LevelCurveVersion == ProgressionCurveV3.Version
+                    ? Math.Max(profile.Level, ProgressionCurveV3.GetLevel(experiencePoints))
+                    : _policy.GetLevel(experiencePoints);
                 if (level < profile.Level || level < 1 || totalWins > totalMatches)
                 {
                     throw new InvalidOperationException(

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader, Panel, StatCard } from "@/components/ui/panel";
 import { StatusBadge, statusLabel } from "@/components/ui/status-badge";
+import { AdminExperienceGrant } from "@/components/admin/admin-experience-grant";
 import { AdminCreditGrant } from "@/components/admin/admin-credit-grant";
 import { ModerationPanel } from "@/components/admin/moderation-panel";
 import { adminApi } from "@/lib/api/server-api";
@@ -72,6 +73,7 @@ export default async function UserDetailPage({ params, searchParams }: { params:
     </Panel>
     <section id="intervention"><h2 className="admin-section-title mt-5">Can thiệp tài khoản</h2>
     <AdminCreditGrant userId={user.userId} recipient={user.displayName ?? user.username} currentBalance={user.walletBalance ?? 0} />
+    <AdminExperienceGrant key={user.userId} userId={user.userId} recipient={user.displayName ?? user.username} />
     {user.role === "PLAYER" && <ModerationPanel key={`${user.status}-${flagged}`} targetId={userId}
       actions={[flagged ? "CLEAR_USER" : "FLAG_USER", user.status === "LOCKED" ? "UNLOCK_USER" : "LOCK_USER"]} history={history} adminNames={adminNames} />}
     </section>

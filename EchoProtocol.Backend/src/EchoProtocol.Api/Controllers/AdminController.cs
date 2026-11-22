@@ -67,6 +67,14 @@ public sealed class AdminController(
     public Task<IActionResult> Economy([FromServices] EconomyAdminService economy, CancellationToken ct) =>
         WithAdmin(id => economy.GetAsync(id, ct), ct);
 
+    [HttpGet("users/{userId:guid}/experience")]
+    public Task<IActionResult> UserProgression(Guid userId, CancellationToken ct) =>
+        Execute(() => service.GetProgressionAsync(userId, ct), ct);
+
+    [HttpPost("users/{userId:guid}/experience")]
+    public Task<IActionResult> GrantExperience(Guid userId, AdminGrantExperienceRequest request, CancellationToken ct) =>
+        WithAdmin(id => service.GrantExperienceAsync(id, userId, request, ct), ct);
+
     [HttpPost("economy/rewards")]
     public Task<IActionResult> SaveRewards(Entities.RewardConfiguration request, [FromServices] EconomyAdminService economy, CancellationToken ct) =>
         WithAdmin(id => economy.SaveRewardsAsync(id, request, ct), ct);

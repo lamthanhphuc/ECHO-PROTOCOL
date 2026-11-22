@@ -149,6 +149,8 @@ public sealed class InventoryServiceTests
             Status = UserStatus.ACTIVE,
             CreatedAt = Now.UtcDateTime,
             UpdatedAt = Now.UtcDateTime,
+            PlayerProfile = new PlayerProfile { Id = Guid.NewGuid(), DisplayName = name,
+                Level = 1, CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime },
             Wallet = new Wallet
             {
                 Id = Guid.NewGuid(),

@@ -155,6 +155,7 @@ namespace EchoProtocol.Networking.Authority
         private Guid _localRewardMatchId;
         private string _pendingBackendOutcome;
         private float _pendingObjectiveCompletion;
+        private bool _pendingUsedDebugCheats;
         private readonly Dictionary<int, Guid> _boundPlayers = new();
         private readonly HashSet<int> _disconnectedActors = new();
         private readonly HashSet<int> _objectiveContributors = new();
@@ -236,6 +237,7 @@ namespace EchoProtocol.Networking.Authority
             PlayerRef player,
             string reason)
         {
+            NetworkMatchState.Instance?.MarkDebugCheatsUsed();
             if (!HasStateAuthority || MatchId == Guid.Empty ||
                 (!_telemetryMatchActive && !_pendingAuthoritativeTelemetryMatchStart))
                 return;
@@ -2607,6 +2609,7 @@ namespace EchoProtocol.Networking.Authority
             _nextBackendMatchResultRetryAt = 0f;
             _pendingBackendOutcome = null;
             _pendingObjectiveCompletion = 0f;
+            _pendingUsedDebugCheats = false;
             StartedRosterCount = 0;
             _backendMatchStartedAtRealtime = -1f;
             _boundPlayers.Clear();
@@ -3328,6 +3331,7 @@ namespace EchoProtocol.Networking.Authority
 
             _pendingObjectiveCompletion =
                 Mathf.Clamp01(objectiveCompletion);
+            _pendingUsedDebugCheats |= NetworkMatchState.Instance?.DebugCheatsUsed == true;
 
             _pendingBackendMatchResult = true;
             CaptureResultOutbox();
@@ -3452,6 +3456,7 @@ namespace EchoProtocol.Networking.Authority
             {
                 outcome = _pendingBackendOutcome,
                 objectiveCompletion = _pendingObjectiveCompletion,
+                usedDebugCheats = _pendingUsedDebugCheats,
                 evidenceVersion = 2,
                 players = players.ToArray()
             };

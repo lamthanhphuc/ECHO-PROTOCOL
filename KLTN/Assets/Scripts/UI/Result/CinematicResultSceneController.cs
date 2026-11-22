@@ -424,7 +424,20 @@ namespace EchoProtocol.UI.Result
                 {
                     SetText("RewardXp", $"+{reward.ExperienceAwarded.Value:N0} XP");
                     SetText("RewardCredits", $"+{reward.CreditsAwarded.Value:N0} CREDITS");
-                    SetText("RewardStatus", string.Empty);
+                    var levelNotice = Find<Text>("RewardStatus");
+                    if (levelNotice != null && !string.IsNullOrEmpty(reward.LevelNotification))
+                    {
+                        levelNotice.rectTransform.anchoredPosition = new Vector2(868, -971);
+                        levelNotice.rectTransform.sizeDelta = new Vector2(500, 64);
+                        levelNotice.horizontalOverflow = HorizontalWrapMode.Wrap;
+                        levelNotice.verticalOverflow = VerticalWrapMode.Truncate;
+                        levelNotice.alignment = TextAnchor.UpperCenter;
+                        levelNotice.supportRichText = false;
+                        levelNotice.fontSize = 17;
+                        levelNotice.font = EchoProtocol.UI.UiTypographyTheme.BodyLegacy;
+                        levelNotice.color = new Color(.79f, .76f, .58f);
+                    }
+                    SetText("RewardStatus", reward.LevelNotification);
                     return;
                 }
                 SetText("RewardStatus", reward.Status switch

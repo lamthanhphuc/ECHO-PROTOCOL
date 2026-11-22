@@ -746,6 +746,50 @@ namespace EchoProtocol.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdminExperienceGrant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AdminUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("ExperienceAfter")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ExperienceBefore")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("LevelAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LevelBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminUserId");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("AdminExperienceGrants");
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.AdminModerationAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -964,7 +1008,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("MatchAuthorityBindings", null, t =>
                         {
-                            t.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", "COALESCE((\r\n    \"ResolutionMode\" IS NULL\r\n    AND \"BalanceSource\" IS NULL\r\n    AND \"BalanceProtocolVersion\" IS NULL\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" = 'STANDARD'\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'LOCAL'\r\n    AND \"ResolutionMode\" IN ('FIXED', 'ADAPTIVE')\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" = 'STANDARD'\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'REMOTE_FIXED'\r\n    AND (\"ResolutionMode\" = 'FIXED' OR\r\n        (\"ResolutionMode\" = 'ADAPTIVE' AND \"BalanceBuildVersion\" IS NOT NULL\r\n         AND \"MapId\" = 'SciFi' AND \"Difficulty\" = 'NORMAL'))\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NOT NULL\r\n    AND \"BalanceHash\" IS NOT NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n    AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B')\r\n    AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD')\r\n), FALSE)");
+                            t.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", "COALESCE((\r\n    \"ResolutionMode\" IS NULL\r\n    AND \"BalanceSource\" IS NULL\r\n    AND \"BalanceProtocolVersion\" IS NULL\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'LOCAL'\r\n    AND \"ResolutionMode\" IN ('FIXED', 'ADAPTIVE')\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'REMOTE_FIXED'\r\n    AND (\"ResolutionMode\" = 'FIXED' OR\r\n        (\"ResolutionMode\" = 'ADAPTIVE' AND \"BalanceBuildVersion\" IS NOT NULL\r\n         AND \"MapId\" = 'SciFi' AND \"Difficulty\" = 'NORMAL'))\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NOT NULL\r\n    AND \"BalanceHash\" IS NOT NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n    AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B')\r\n    AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD')\r\n), FALSE)");
 
                             t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
                         });
@@ -984,6 +1028,9 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<int>("FusionActorNumber")
                         .HasColumnType("integer");
+
+                    b.Property<long>("GameplayDisconnectedMilliseconds")
+                        .HasColumnType("bigint");
 
                     b.Property<bool>("HadGameplayDisconnect")
                         .HasColumnType("boolean");
@@ -1196,11 +1243,23 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CosmeticRewardsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]");
+
                     b.Property<int>("CurrencyAmount")
                         .HasColumnType("integer");
 
                     b.Property<long>("ExperiencePointsAwarded")
                         .HasColumnType("bigint");
+
+                    b.Property<int?>("LevelAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LevelBefore")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("MatchId")
                         .HasColumnType("uuid");
@@ -1217,6 +1276,12 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("UnlockedItemsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -1422,8 +1487,7 @@ namespace EchoProtocol.Api.Migrations
                     b.HasIndex("FulfillmentReference")
                         .IsUnique();
 
-                    b.HasIndex("InventoryItemId")
-                        .IsUnique();
+                    b.HasIndex("InventoryItemId");
 
                     b.HasIndex("WalletTransactionId")
                         .IsUnique();
@@ -1452,6 +1516,9 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character(3)")
                         .IsFixedLength();
+
+                    b.Property<DateTime?>("EntitlementValidatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1506,6 +1573,12 @@ namespace EchoProtocol.Api.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character(64)")
                         .IsFixedLength();
+
+                    b.Property<int?>("RequiredLevelAtPurchase")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("RequiredOwnedItemId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1854,6 +1927,16 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
+                    b.Property<string>("LevelCurveVersion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("LEVEL_V1");
+
+                    b.Property<long>("LifetimeExperiencePoints")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("TotalMatches")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -1915,6 +1998,26 @@ namespace EchoProtocol.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("ProfileTuningVersions");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ProgressionCosmeticGrant", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RewardKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("Equipped")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "RewardKey");
+
+                    b.ToTable("ProgressionCosmeticGrants");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>
@@ -2136,6 +2239,9 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("BaseMinutes")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("Contribution")
                         .HasColumnType("integer");
 
@@ -2147,14 +2253,23 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("Disconnected")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("EasyMultiplier")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime>("EffectiveAtUtc")
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("FloodedReferenceMinutes")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("FullTeamPercent")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(100);
+
+                    b.Property<decimal>("HardMultiplier")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("LossCapCreditsPerMinute")
                         .ValueGeneratedOnAdd()
@@ -2197,6 +2312,9 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("REWARD_V2");
 
+                    b.Property<decimal>("PurgeReferenceMinutes")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("RescueActionCap")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2206,6 +2324,9 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(10);
+
+                    b.Property<decimal>("SciFiReferenceMinutes")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("Survival")
                         .HasColumnType("integer");
@@ -2222,6 +2343,12 @@ namespace EchoProtocol.Api.Migrations
 
                     b.Property<Guid>("UpdatedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("V3LossCreditsPerMinute")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("V3LossExperiencePerMinute")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("Win")
                         .HasColumnType("integer");
@@ -2812,6 +2939,11 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("Price")
                         .HasColumnType("integer");
 
+                    b.Property<int>("RequiredLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2841,6 +2973,9 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int>("PreviousPrice")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PreviousRequiredLevel")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ProposedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2848,6 +2983,9 @@ namespace EchoProtocol.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("ProposedPrice")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProposedRequiredLevel")
                         .HasColumnType("integer");
 
                     b.Property<string>("Reason")
@@ -3335,6 +3473,21 @@ namespace EchoProtocol.Api.Migrations
                     b.Navigation("Snapshot");
                 });
 
+            modelBuilder.Entity("EchoProtocol.Api.Entities.AdminExperienceGrant", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AdminUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("EchoProtocol.Api.Entities.InventoryItem", b =>
                 {
                     b.HasOne("EchoProtocol.Api.Entities.PurchaseTransaction", "PurchaseTransaction")
@@ -3576,6 +3729,15 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.ProgressionCosmeticGrant", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.PurchaseTransaction", b =>

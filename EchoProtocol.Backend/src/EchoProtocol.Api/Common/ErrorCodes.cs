@@ -56,6 +56,7 @@ public static class ErrorCodes
     public const string ShopItemNotFound = "SHOP_ITEM_NOT_FOUND";
     public const string ShopItemInactive = "SHOP_ITEM_INACTIVE";
     public const string ShopItemAlreadyOwned = "SHOP_ITEM_ALREADY_OWNED";
+    public const string ShopLevelRequired = "SHOP_LEVEL_REQUIRED";
     public const string InsufficientWalletBalance = "INSUFFICIENT_WALLET_BALANCE";
     public const string PurchaseWalletNotFound = "PURCHASE_WALLET_NOT_FOUND";
     public const string PurchaseIdempotencyConflict = "PURCHASE_IDEMPOTENCY_CONFLICT";

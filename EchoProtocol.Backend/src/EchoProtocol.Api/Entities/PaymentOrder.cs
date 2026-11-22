@@ -13,6 +13,9 @@ public sealed class PaymentOrder
     public PaymentFulfillmentKind? FulfillmentKind { get; set; }
     public int? WalletCreditAmount { get; set; }
     public Guid? FulfillmentShopItemId { get; set; }
+    public DateTime? EntitlementValidatedAtUtc { get; set; }
+    public int? RequiredLevelAtPurchase { get; set; }
+    public Guid? RequiredOwnedItemId { get; set; }
     public decimal Amount { get; set; }
     public string Currency { get; set; } = string.Empty;
     public PaymentOrderStatus Status { get; set; }

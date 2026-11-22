@@ -36,6 +36,8 @@ public sealed class LoadoutServiceTests
     public async Task EquipOwnedCharacter()
     {
         await using var harness = await LoadoutHarness.CreateAsync();
+        (await harness.Db.ShopItems.SingleAsync(x => x.ItemId == harness.CharacterOneId)).RequiredLevel = 30;
+        await harness.Db.SaveChangesAsync();
         var result = await harness.Equip("CHARACTER", harness.CharacterOneId);
         Assert.True(result.IsSuccess);
         Assert.Equal(harness.CharacterOneId, result.Data!.ItemId);

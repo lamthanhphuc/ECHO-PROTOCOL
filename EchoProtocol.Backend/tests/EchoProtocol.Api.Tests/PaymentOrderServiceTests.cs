@@ -209,6 +209,112 @@ public sealed class PaymentOrderServiceTests
         Assert.Empty(await harness.Db.PaymentOrders.ToListAsync());
     }
 
+    [Fact]
+    public async Task CosmeticCheckoutValidatesLevelOwnershipAndReservesOnePurchase()
+    {
+        await using var h = await Harness.CreateAsync();
+        var item = await PrepareCosmeticAsync(h);
+        var service = CosmeticService(h.Db, item.ItemId);
+        var profile = await h.Db.PlayerProfiles.SingleAsync();
+        profile.Level = 2; await h.Db.SaveChangesAsync();
+        Assert.Equal(ErrorCodes.ShopLevelRequired, (await service.CreateAsync(h.OwnerId, Request("low-level", "COSMETIC_TEST"))).ErrorCode);
+        profile.Level = 10; await h.Db.SaveChangesAsync();
+        var order = await service.CreateAsync(h.OwnerId, Request("valid-cosmetic", "COSMETIC_TEST"));
+        Assert.True(order.IsSuccess, order.Message);
+        Assert.Equal(6, order.Data!.RequiredLevelAtPurchase);
+        Assert.NotNull(order.Data.EntitlementValidatedAtUtc);
+        Assert.True((await service.CreateAsync(h.OwnerId, Request("valid-cosmetic", "COSMETIC_TEST"))).Data!.IsReplay);
+        Assert.Equal(ErrorCodes.PaymentOrderConflict, (await service.CreateAsync(h.OwnerId, Request("second-cosmetic", "COSMETIC_TEST"))).ErrorCode);
+        var purchase = await new PurchaseService(h.Db, new FixedTimeProvider(Now)).PurchaseAsync(h.OwnerId,
+            new EchoProtocol.Api.DTOs.Shop.PurchaseRequest { ItemId = item.ItemId, IdempotencyKey = "credits-during-checkout" });
+        Assert.Equal(ErrorCodes.PaymentOrderConflict, purchase.ErrorCode);
+        Assert.Equal(10000, (await h.Db.Wallets.SingleAsync()).Balance);
+    }
+
+    [Theory]
+    [InlineData("TEAM_TOOL", true, "PAYMENT_CONFIGURATION_INVALID")]
+    [InlineData("CHARACTER", true, "PAYMENT_CONFIGURATION_INVALID")]
+    [InlineData("CHARACTER_OUTFIT", false, "SHOP_ITEM_INACTIVE")]
+    public async Task DirectPaymentCannotSellGameplayItemsOrInactiveCosmetics(string category, bool active, string expected)
+    {
+        await using var h = await Harness.CreateAsync();
+        var item = await PrepareCosmeticAsync(h); item.Category = category; item.IsActive = active;
+        await h.Db.SaveChangesAsync();
+        var result = await CosmeticService(h.Db, item.ItemId).CreateAsync(h.OwnerId, Request("invalid-cosmetic", "COSMETIC_TEST"));
+        Assert.Equal(expected, result.ErrorCode);
+        Assert.Empty(await h.Db.PaymentOrders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PaidCosmeticHonorsStoredTermsAndLegacyDuplicatePaymentsReuseTheEntitlement()
+    {
+        await using var h = await Harness.CreateAsync();
+        var item = await PrepareCosmeticAsync(h);
+        var order = await CosmeticService(h.Db, item.ItemId).CreateAsync(h.OwnerId, Request("paid-cosmetic", "COSMETIC_TEST"));
+        Assert.True(order.IsSuccess, order.Message);
+        var stored = await h.Db.PaymentOrders.SingleAsync(); stored.Status = PaymentOrderStatus.PAID;
+        stored.PaidAtUtc = Now.UtcDateTime; stored.ProviderOrderId = "test-order"; stored.ProviderTransactionId = "test-payment";
+        item.IsActive = false; item.RequiredLevel = 30;
+        (await h.Db.PlayerProfiles.SingleAsync()).Level = 1;
+        var inventory = new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = h.OwnerId, ShopItemId = item.ItemId,
+            Source = InventoryAcquisitionSource.PURCHASE, AcquiredAtUtc = Now.UtcDateTime };
+        h.Db.InventoryItems.Add(inventory);
+        await h.Db.SaveChangesAsync();
+        var fulfillment = new PaymentFulfillmentService(h.Db, Options.Create(new PaymentCatalogSettings()), new FixedTimeProvider(Now));
+        Assert.True((await fulfillment.FulfillAsync(stored.PaymentOrderId)).IsSuccess);
+        Assert.True((await fulfillment.FulfillAsync(stored.PaymentOrderId)).Data!.IsReplay);
+        var legacyDuplicate = new PaymentOrder { PaymentOrderId = Guid.NewGuid(), UserId = h.OwnerId, Provider = "TEST_PROVIDER",
+            Purpose = "LEGACY_DUPLICATE", ProductReference = "OLD_COSMETIC", FulfillmentKind = PaymentFulfillmentKind.INVENTORY_ITEM,
+            FulfillmentShopItemId = item.ItemId, Amount = 100, Currency = "VND", Status = PaymentOrderStatus.PAID,
+            ProviderOrderId = "legacy-order", ProviderTransactionId = "legacy-payment", PaidAtUtc = Now.UtcDateTime,
+            IdempotencyKey = "old-duplicate-paid", RequestFingerprint = new string('a', 64), CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime };
+        h.Db.PaymentOrders.Add(legacyDuplicate); await h.Db.SaveChangesAsync();
+        Assert.True((await fulfillment.FulfillAsync(legacyDuplicate.PaymentOrderId)).IsSuccess);
+        Assert.Single(await h.Db.InventoryItems.ToListAsync());
+        Assert.Equal(2, await h.Db.PaymentFulfillments.CountAsync());
+        Assert.All(await h.Db.PaymentFulfillments.ToListAsync(), f => Assert.Equal(inventory.InventoryItemId, f.InventoryItemId));
+        Assert.Empty(await h.Db.WalletTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PaidPetSkinRequiresTheOwnedBasePetAndCannotBePurchasedTwice()
+    {
+        await using var h = await Harness.CreateAsync();
+        var skin = await PrepareCosmeticAsync(h); skin.Category = "PET_SKIN";
+        var pet = new ShopItem { ItemId = Guid.NewGuid(), ItemName = "Base pet", Category = "PET", RequiredLevel = 1,
+            Price = 700, IsActive = true, CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime };
+        h.Db.ShopItems.Add(pet); await h.Db.SaveChangesAsync();
+        var service = CosmeticService(h.Db, skin.ItemId, pet.ItemId);
+        Assert.Equal(ErrorCodes.PaymentFulfillmentTargetInvalid,
+            (await service.CreateAsync(h.OwnerId, Request("missing-base", "COSMETIC_TEST"))).ErrorCode);
+        h.Db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = h.OwnerId, ShopItemId = pet.ItemId,
+            Source = InventoryAcquisitionSource.PURCHASE, AcquiredAtUtc = Now.UtcDateTime });
+        await h.Db.SaveChangesAsync();
+        var checkout = await service.CreateAsync(h.OwnerId, Request("with-base", "COSMETIC_TEST"));
+        Assert.True(checkout.IsSuccess, checkout.Message);
+        Assert.Equal(pet.ItemId, checkout.Data!.RequiredOwnedItemId);
+        h.Db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = h.OwnerId, ShopItemId = skin.ItemId,
+            Source = InventoryAcquisitionSource.PURCHASE, AcquiredAtUtc = Now.UtcDateTime });
+        await h.Db.SaveChangesAsync();
+        Assert.Equal(ErrorCodes.ShopItemAlreadyOwned,
+            (await service.CreateAsync(h.OwnerId, Request("already-owned-skin", "COSMETIC_TEST"))).ErrorCode);
+    }
+
+    private static async Task<ShopItem> PrepareCosmeticAsync(Harness h)
+    {
+        var item = new ShopItem { ItemId = Guid.NewGuid(), ItemName = "Test-only cosmetic", Category = "CHARACTER_OUTFIT",
+            Price = 100, RequiredLevel = 6, IsActive = true, AssetReference = "test-only", CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime };
+        h.Db.ShopItems.Add(item);
+        h.Db.Wallets.Add(new Wallet { Id = Guid.NewGuid(), UserId = h.OwnerId, Balance = 10000, UpdatedAt = Now.UtcDateTime });
+        h.Db.PlayerProfiles.Add(new PlayerProfile { Id = Guid.NewGuid(), UserId = h.OwnerId, Level = 10, DisplayName = "Test", CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime });
+        await h.Db.SaveChangesAsync(); return item;
+    }
+
+    private static PaymentOrderService CosmeticService(AppDbContext db, Guid itemId, Guid? parentId = null) => new(db,
+        Options.Create(new PaymentCatalogSettings { AllowedProviders = ["TEST_PROVIDER"], Products = [new PaymentProductSettings {
+            ProductReference = "COSMETIC_TEST", Purpose = "COSMETIC", IsActive = true, Amount = 100, Currency = "VND", ExpiresAfterMinutes = 30,
+            FulfillmentKind = "INVENTORY_ITEM", ShopItemId = itemId, RequiredOwnedItemId = parentId, UsesDefaultCharacter = parentId is null }] }), new FixedTimeProvider(Now));
+
     private static CreatePaymentOrderRequest Request(string key, string productReference) => new()
     {
         ProductReference = productReference,

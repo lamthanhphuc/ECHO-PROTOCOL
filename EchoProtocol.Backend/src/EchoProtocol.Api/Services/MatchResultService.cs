@@ -83,7 +83,7 @@ public sealed class MatchResultService : IMatchResultService
             }
 
             if (match.MatchDataPolicy != RemoteFixedBalanceContract.TestOnly &&
-                match.RewardPolicyVersion == "REWARD_V2" &&
+                match.RewardPolicyVersion is "REWARD_V2" or "REWARD_V3" &&
                 (request.EvidenceVersion != 2 || request.Players.Any(player => player.EvidenceComplete != true)))
                 return Failure("Complete V2 reward evidence is required", ErrorCodes.MatchResultInvalidPayload);
 
@@ -158,6 +158,7 @@ public sealed class MatchResultService : IMatchResultService
                 }).ToList()
             };
 
+            if (request.UsedDebugCheats) match.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
             match.Status = MatchAuthorityStatus.Ended;
             match.EndedAtUtc = now;
             match.UpdatedAtUtc = now;
@@ -331,6 +332,7 @@ public sealed class MatchResultService : IMatchResultService
         {
             writer.WriteStartObject();
             writer.WriteString("outcome", request.Outcome!.Value.ToString());
+            if (request.UsedDebugCheats) writer.WriteBoolean("usedDebugCheats", true);
             writer.WriteNumber("objectiveCompletion", request.ObjectiveCompletion);
             if (request.EvidenceVersion.HasValue)
                 writer.WriteNumber("evidenceVersion", request.EvidenceVersion.Value);

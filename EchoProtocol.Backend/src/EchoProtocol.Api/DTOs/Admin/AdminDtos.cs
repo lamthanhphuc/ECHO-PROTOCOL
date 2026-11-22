@@ -115,6 +115,13 @@ public sealed class AdminGrantCreditsRequest
     public string? Reason { get; init; }
 }
 
+public sealed class AdminGrantExperienceRequest
+{
+    public Guid RequestId { get; init; }
+    public int Amount { get; init; }
+    public string? Reason { get; init; }
+}
+
 public sealed class AdminGrantCreditsResponse
 {
     public Guid UserId { get; init; }

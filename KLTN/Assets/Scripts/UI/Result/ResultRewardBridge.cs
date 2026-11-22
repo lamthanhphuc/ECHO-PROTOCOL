@@ -37,6 +37,7 @@ namespace EchoProtocol.UI.Result
         public string ProgressionPolicyVersion { get; }
         public string ErrorCode { get; }
         public string Message { get; }
+        public string LevelNotification { get; }
         public bool HasConfirmedReward => Status == ResultRewardStatus.Confirmed
             && CreditsAwarded.HasValue && ExperienceAwarded.HasValue;
 
@@ -51,7 +52,7 @@ namespace EchoProtocol.UI.Result
             string policyVersion,
             string progressionPolicyVersion,
             string errorCode,
-            string message)
+            string message, string levelNotification = null)
         {
             MatchId = matchId;
             Status = status;
@@ -64,6 +65,7 @@ namespace EchoProtocol.UI.Result
             ProgressionPolicyVersion = progressionPolicyVersion ?? string.Empty;
             ErrorCode = errorCode ?? string.Empty;
             Message = message ?? string.Empty;
+            LevelNotification = levelNotification ?? string.Empty;
         }
 
         internal static ResultRewardInfo WithoutAmounts(
@@ -81,7 +83,28 @@ namespace EchoProtocol.UI.Result
                 reward.currencyAmount, reward.experiencePointsAwarded,
                 reward.balanceAfter, reward.currentExperiencePoints,
                 reward.currentLevel, reward.policyVersion,
-                reward.progressionPolicyVersion, null, null);
+                reward.progressionPolicyVersion, null, null, BuildLevelNotification(reward));
+
+        public static string BuildLevelNotification(RewardMeResponseDto reward)
+        {
+            if (reward == null) return string.Empty;
+            string gift = "";
+            if (reward.cosmeticRewards != null)
+                foreach (var cosmetic in reward.cosmeticRewards)
+                    if (cosmetic != null) gift += (gift.Length > 0 ? ", " : "") + cosmetic.displayName;
+            if (gift.Length > 0) gift = EchoProtocol.Settings.GameLanguage.Choose("Đã nhận: ", "Received: ") + gift;
+            if (reward.levelBefore < 1 || reward.levelAfter <= reward.levelBefore) return gift;
+            string title = EchoProtocol.Settings.GameLanguage.Choose($"ĐẠT CẤP {reward.levelAfter}", $"LEVEL {reward.levelAfter} REACHED")
+                + (gift.Length > 0 ? "\n" + gift : "");
+            if (reward.unlockedItems == null || reward.unlockedItems.Length == 0) return title;
+            var names = new System.Collections.Generic.List<string>();
+            foreach (var item in reward.unlockedItems)
+                if (item != null && !string.IsNullOrWhiteSpace(item.itemName) && names.Count < 2) names.Add(item.itemName);
+            if (names.Count == 0) return title;
+            string extra = reward.unlockedItems.Length > names.Count
+                ? EchoProtocol.Settings.GameLanguage.Choose($" và {reward.unlockedItems.Length - names.Count} món khác", $" + {reward.unlockedItems.Length - names.Count} more") : "";
+            return title + "\n" + EchoProtocol.Settings.GameLanguage.Choose("Mở quyền mua: ", "Purchase unlocked: ") + string.Join(", ", names) + extra;
+        }
     }
 
     /// <summary>

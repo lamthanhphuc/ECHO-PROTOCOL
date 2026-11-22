@@ -7,6 +7,24 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class NetworkMatchStateTests
     {
+        [TestCase("CoreObjective", .5f, 0f, 0f, .125f)]
+        [TestCase("Zone2Objective", 1f, .5f, 0f, .375f)]
+        [TestCase("Zone3FindFrigate", 1f, 1f, .25f, .5625f)]
+        [TestCase("Zone3PushFrigate", 1f, 1f, .75f, .6875f)]
+        [TestCase("Escape", 1f, 1f, 1f, .75f)]
+        public void RewardProgressIncludesPartialObjectives(string phase,
+            float cores, float security, float transport, float expected)
+        {
+            var rules = System.Type.GetType("EchoProtocol.Networking.NetworkMatchStateRules, Assembly-CSharp", true);
+            var phaseType = System.Type.GetType("EchoProtocol.Networking.NetworkMatchPhase, Assembly-CSharp", true);
+            var resultType = System.Type.GetType("EchoProtocol.Networking.NetworkMatchResult, Assembly-CSharp", true);
+            var method = rules.GetMethod("ObjectiveCompletion");
+            var inputs = new object[] { System.Enum.Parse(phaseType, phase), System.Enum.Parse(resultType, "Lose"), cores, security, transport };
+            Assert.That((float)method.Invoke(null, inputs), Is.EqualTo(expected).Within(.0001f));
+            inputs[1] = System.Enum.Parse(resultType, "Win");
+            Assert.That((float)method.Invoke(null, inputs), Is.EqualTo(1f));
+        }
+
         [Test]
         public void AdaptiveTakeoverFreezesDecisionsAndUsesTheReplicatedPhaseForSupply()
         {

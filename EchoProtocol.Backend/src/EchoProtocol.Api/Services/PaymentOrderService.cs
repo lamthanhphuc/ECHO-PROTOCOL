@@ -63,6 +63,42 @@ public sealed class PaymentOrderService : IPaymentOrderService
 
         var product = productResult.Data!;
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        ShopItem? purchasedItem = null;
+        if (Enum.Parse<PaymentFulfillmentKind>(product.FulfillmentKind!, true) == PaymentFulfillmentKind.INVENTORY_ITEM)
+        {
+            var wallet = _db.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL"
+                ? await _db.Wallets.FromSqlInterpolated($"SELECT * FROM \"Wallets\" WHERE \"UserId\" = {userId} FOR UPDATE").SingleOrDefaultAsync(cancellationToken)
+                : await _db.Wallets.SingleOrDefaultAsync(w => w.UserId == userId, cancellationToken);
+            if (wallet is null) return Fail("Wallet not found", ErrorCodes.PurchaseWalletNotFound);
+            existing = await LoadByIdempotencyKeyAsync(userId, idempotencyKey, cancellationToken);
+            if (existing is not null) return ResolveReplay(existing, requestFingerprint);
+            purchasedItem = await _db.ShopItems.AsNoTracking().SingleOrDefaultAsync(i => i.ItemId == product.ShopItemId, cancellationToken);
+            if (purchasedItem is null || !purchasedItem.IsActive)
+                return Fail("Cosmetic item is unavailable", ErrorCodes.ShopItemInactive);
+            if (purchasedItem.Category is not (ShopItemCategories.CharacterOutfit or ShopItemCategories.PetSkin))
+                return Fail("Direct payments are limited to cosmetics", ErrorCodes.PaymentConfigurationInvalid);
+            if (product.RequiredOwnedItemId is null && !(product.UsesDefaultCharacter && purchasedItem.Category == ShopItemCategories.CharacterOutfit)
+                || product.RequiredOwnedItemId is not null && product.UsesDefaultCharacter)
+                return Fail("Cosmetic base ownership terms are missing or ambiguous", ErrorCodes.PaymentConfigurationInvalid);
+            int level = await _db.PlayerProfiles.Where(p => p.UserId == userId).Select(p => p.Level).SingleOrDefaultAsync(cancellationToken);
+            if (level < purchasedItem.RequiredLevel)
+                return Fail("Required cosmetic level has not been reached", ErrorCodes.ShopLevelRequired);
+            if (await _db.InventoryItems.AnyAsync(i => i.UserId == userId && i.ShopItemId == purchasedItem.ItemId, cancellationToken))
+                return Fail("Cosmetic is already owned", ErrorCodes.ShopItemAlreadyOwned);
+            if (product.RequiredOwnedItemId is { } parent)
+            {
+                var parentCategory = purchasedItem.Category == ShopItemCategories.PetSkin ? ShopItemCategories.Pet : ShopItemCategories.Character;
+                if (!await _db.ShopItems.AnyAsync(i => i.ItemId == parent && i.Category == parentCategory, cancellationToken))
+                    return Fail("Cosmetic base product is invalid", ErrorCodes.PaymentConfigurationInvalid);
+                if (!await _db.InventoryItems.AnyAsync(i => i.UserId == userId && i.ShopItemId == parent, cancellationToken))
+                    return Fail("Own the base character or pet before checkout", ErrorCodes.PaymentFulfillmentTargetInvalid);
+            }
+            if (await _db.PaymentOrders.AnyAsync(o => o.UserId == userId && o.FulfillmentShopItemId == purchasedItem.ItemId &&
+                (o.Status == PaymentOrderStatus.PAID || ((o.Status == PaymentOrderStatus.CREATED || o.Status == PaymentOrderStatus.PENDING_PAYMENT)
+                    && (o.ExpiresAtUtc == null || o.ExpiresAtUtc > now))), cancellationToken))
+                return Fail("A payment for this cosmetic is already pending", ErrorCodes.PaymentOrderConflict);
+        }
         var order = new PaymentOrder
         {
             PaymentOrderId = Guid.NewGuid(),
@@ -73,6 +109,9 @@ public sealed class PaymentOrderService : IPaymentOrderService
             FulfillmentKind = Enum.Parse<PaymentFulfillmentKind>(product.FulfillmentKind!, true),
             WalletCreditAmount = product.WalletCreditAmount,
             FulfillmentShopItemId = product.ShopItemId,
+            EntitlementValidatedAtUtc = purchasedItem is null ? null : now,
+            RequiredLevelAtPurchase = purchasedItem?.RequiredLevel,
+            RequiredOwnedItemId = product.RequiredOwnedItemId,
             Amount = product.Amount,
             Currency = product.Currency.Trim().ToUpperInvariant(),
             Status = PaymentOrderStatus.CREATED,
@@ -89,12 +128,14 @@ public sealed class PaymentOrderService : IPaymentOrderService
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return ServiceResult<PaymentOrderResponse>.Success(
                 PaymentOrderResponse.From(order, false),
                 "Payment order created");
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
+            await transaction.RollbackAsync(cancellationToken);
             _db.ChangeTracker.Clear();
             existing = await LoadByIdempotencyKeyAsync(userId, idempotencyKey, cancellationToken);
             return existing is not null

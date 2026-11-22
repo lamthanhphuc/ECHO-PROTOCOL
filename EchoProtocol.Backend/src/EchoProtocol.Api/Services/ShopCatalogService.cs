@@ -73,6 +73,7 @@ public sealed class ShopCatalogService : IShopCatalogService
                 Name = item.ItemName,
                 Category = item.Category,
                 Price = item.Price,
+                RequiredLevel = item.RequiredLevel,
                 Description = item.Description,
                 AssetReference = item.AssetReference
             })

@@ -14,7 +14,9 @@ public sealed record RewardMatchSnapshot(
     MatchOutcome Outcome,
     decimal ObjectiveCompletion,
     int DurationSeconds,
-    IReadOnlyList<RewardPlayerSnapshot> Players);
+    IReadOnlyList<RewardPlayerSnapshot> Players,
+    string? MapId = null,
+    string? Difficulty = null);
 
 public sealed record RewardPlayerSnapshot(
     Guid UserId,
@@ -26,6 +28,7 @@ public sealed record RewardPlayerSnapshot(
     int ObjectiveContribution,
     int? ObjectiveActions = null,
     int? RescueActions = null,
-    bool? EvidenceComplete = null);
+    bool? EvidenceComplete = null,
+    int? ParticipationSeconds = null);
 
 public sealed record RewardAllocation(Guid UserId, int CurrencyAmount);

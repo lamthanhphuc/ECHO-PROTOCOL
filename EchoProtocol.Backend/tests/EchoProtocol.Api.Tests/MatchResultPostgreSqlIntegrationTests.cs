@@ -35,8 +35,145 @@ namespace EchoProtocol.Api.Tests;
 public sealed class M4PostgreSqlCollectionDefinition;
 
 [Collection("M4 PostgreSQL")]
-public sealed class MatchResultPostgreSqlIntegrationTests
+public sealed partial class MatchResultPostgreSqlIntegrationTests
 {
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task MilestoneMigrationPreservesOwnersAndConcurrentXpGrantAppliesOnce()
+    {
+        const string previous = "20261122051905_AddRewardProgressionV3";
+        await using var scope = await PostgresScope.CreateAsync(previous);
+        var seed = await scope.SeedRewardMatchAsync(legacyBindings: true);
+        await using (var db = scope.CreateDbContext())
+        {
+            await ShopCatalogSeeder.SeedProductionCatalogAsync(db, TimeProvider.System, NullLogger.Instance);
+            await db.Database.ExecuteSqlRawAsync("""
+                UPDATE "ShopItems" SET "RequiredLevel" = 1 WHERE "ItemName" IN ('Field Scanner', 'Core Stabilizer');
+                UPDATE "ShopItems" SET "RequiredLevel" = 5 WHERE "ItemName" = 'Soul Eater';
+                UPDATE "ShopItems" SET "RequiredLevel" = 12 WHERE "ItemName" = 'Usurper';
+                """);
+            var scanner = await db.ShopItems.SingleAsync(x => x.ItemName == "Field Scanner");
+            db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = seed.HostId, ShopItemId = scanner.ItemId,
+                Source = InventoryAcquisitionSource.PURCHASE, AcquiredAtUtc = Now.UtcDateTime });
+            var profile = await db.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId);
+            profile.LevelCurveVersion = "LEVEL_V3"; profile.ExperiencePoints = 240; profile.LifetimeExperiencePoints = 240;
+            await db.SaveChangesAsync();
+            await db.GetService<IMigrator>().MigrateAsync();
+            db.ChangeTracker.Clear();
+            Assert.Equal(6, (await db.ShopItems.SingleAsync(x => x.ItemName == "Field Scanner")).RequiredLevel);
+            Assert.Equal(4, (await db.ShopItems.SingleAsync(x => x.ItemName == "Core Stabilizer")).RequiredLevel);
+            Assert.Equal(12, (await db.ShopItems.SingleAsync(x => x.ItemName == "Soul Eater")).RequiredLevel);
+            Assert.Equal(5, (await db.ShopItems.SingleAsync(x => x.ItemName == "Usurper")).RequiredLevel);
+            Assert.True(await db.InventoryItems.AnyAsync(x => x.UserId == seed.HostId && x.ShopItemId == scanner.ItemId));
+        }
+        var request = new AdminGrantExperienceRequest { RequestId = Guid.NewGuid(), Amount = 100, Reason = "Concurrent XP grant test" };
+        async Task<ServiceResult<object>> Grant()
+        { await using var context = scope.CreateDbContext(); return await new AdminQueryService(context).GrantExperienceAsync(seed.HostId, seed.HostId, request); }
+        var results = await Task.WhenAll(Grant(), Grant());
+        Assert.All(results, x => Assert.True(x.IsSuccess, x.Message));
+        await using var verify = scope.CreateDbContext();
+        var current = await verify.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId);
+        Assert.Equal(340, current.ExperiencePoints); Assert.Equal(340, current.LifetimeExperiencePoints); Assert.Equal(2, current.Level);
+        Assert.Equal(0, current.TotalMatches); Assert.Equal(0, current.TotalWins);
+        Assert.Single(await verify.AdminExperienceGrants.ToListAsync());
+        await verify.GetService<IMigrator>().MigrateAsync(previous);
+        await verify.GetService<IMigrator>().MigrateAsync();
+        verify.ChangeTracker.Clear();
+        Assert.Equal(340, (await verify.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId)).ExperiencePoints);
+        Assert.True(await verify.InventoryItems.AnyAsync(x => x.UserId == seed.HostId));
+    }
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task RewardV3MigrationPreservesLevelFractionLifetimeAndLegacyOwners()
+    {
+        const string previous = "20261119043014_RaiseRewardV2Maximum320";
+        await using var scope = await PostgresScope.CreateAsync(previous);
+        var seed = await scope.SeedMatchAsync(legacyBindings: true);
+        await using var db = scope.CreateDbContext();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "PlayerProfiles" ("Id", "UserId", "DisplayName", "Level", "ExperiencePoints", "CreatedAt", "UpdatedAt")
+            VALUES ({Guid.NewGuid()}, {seed.HostId}, 'Veteran', 7, 3495, {Now.UtcDateTime}, {Now.UtcDateTime}),
+                   ({Guid.NewGuid()}, {seed.PlayerId}, 'Legacy', 35, 17000, {Now.UtcDateTime}, {Now.UtcDateTime});
+            """);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "RewardConfigurations" ("Id", "EffectiveAtUtc", "UpdatedByUserId", "Participation", "Objective", "Win",
+                "Survival", "Contribution", "Disconnected", "Maximum", "PolicyKey")
+            VALUES ({RewardConfiguration.SharedId}, {Now.UtcDateTime}, {seed.HostId}, 0, 70, 150, 10, 70, 0, 320, 'REWARD_V2');
+            """);
+        await db.GetService<IMigrator>().MigrateAsync();
+        Assert.True((await db.RewardConfigurations.SingleAsync()).HasValidV3Settings());
+        var host = await db.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId);
+        var legacy = await db.PlayerProfiles.SingleAsync(x => x.UserId == seed.PlayerId);
+        Assert.Equal(7, host.Level); Assert.Equal(2619, host.ExperiencePoints);
+        Assert.Equal(3495, host.LifetimeExperiencePoints); Assert.Equal("LEVEL_V3", host.LevelCurveVersion);
+        Assert.Equal(35, legacy.Level); Assert.Equal(40850, legacy.ExperiencePoints);
+        await ShopCatalogSeeder.SeedProductionCatalogAsync(db, TimeProvider.System, NullLogger.Instance);
+        var priest = await db.ShopItems.SingleAsync(x => x.ItemName == "Cursed Priest");
+        Assert.Equal(6, priest.RequiredLevel);
+        Assert.All(await db.ShopItems.Where(x => x.Category == "TEAM_TOOL" && x.ItemName != "Core Stabilizer" && x.ItemName != "Field Scanner").ToListAsync(), x => Assert.Equal(1, x.RequiredLevel));
+        Assert.Equal(4, (await db.ShopItems.SingleAsync(x => x.ItemName == "Core Stabilizer")).RequiredLevel);
+        Assert.Equal(6, (await db.ShopItems.SingleAsync(x => x.ItemName == "Field Scanner")).RequiredLevel);
+        db.InventoryItems.Add(new InventoryItem { InventoryItemId = Guid.NewGuid(), UserId = seed.HostId,
+            ShopItemId = priest.ItemId, Source = InventoryAcquisitionSource.PURCHASE, AcquiredAtUtc = Now.UtcDateTime });
+        await db.SaveChangesAsync();
+        var admin = new EconomyAdminService(db, new FixedTimeProvider(Now));
+        var update = await admin.ApplyPriceAsync(seed.HostId, new ProposeShopPrice(priest.ItemId, priest.Price,
+            priest.Price, "Test level unlock configuration", 8, 6), CancellationToken.None);
+        Assert.True(update.IsSuccess, update.Message);
+        db.ChangeTracker.Clear();
+        Assert.Equal(8, (await db.ShopItems.SingleAsync(x => x.ItemId == priest.ItemId)).RequiredLevel);
+        Assert.True(await db.InventoryItems.AnyAsync(x => x.UserId == seed.HostId && x.ShopItemId == priest.ItemId));
+        Assert.Equal(8, (await db.Set<ShopPriceProposal>().SingleAsync()).ProposedRequiredLevel);
+        // Debug markers also work for older matches without a remote balance snapshot.
+        var debugMatch = await db.MatchAuthorityBindings.SingleAsync();
+        debugMatch.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
+        await db.SaveChangesAsync();
+        debugMatch.MatchDataPolicy = RemoteFixedBalanceContract.Standard;
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
+        await db.GetService<IMigrator>().MigrateAsync(previous);
+        await db.GetService<IMigrator>().MigrateAsync();
+        db.ChangeTracker.Clear();
+        Assert.Equal(7, (await db.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId)).Level);
+        Assert.Equal(3495, (await db.PlayerProfiles.SingleAsync(x => x.UserId == seed.HostId)).LifetimeExperiencePoints);
+        Assert.True(await db.InventoryItems.AnyAsync(x => x.UserId == seed.HostId && x.ShopItemId == priest.ItemId));
+        Assert.Equal(RemoteFixedBalanceContract.TestOnly, (await db.MatchAuthorityBindings.SingleAsync()).MatchDataPolicy);
+    }
+
+    [Fact, Trait("Category", "M4RewardPostgreSqlIntegration")]
+    public async Task V3ConcurrentRewardUsesSnapshotAndFeedsEconomyTelemetry()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedRewardMatchAsync(mapId: "Scene_A");
+        await using (var db = scope.CreateDbContext())
+        {
+            var match = await db.MatchAuthorityBindings.SingleAsync();
+            match.RewardPolicyVersion = "REWARD_V3"; match.ProgressionPolicyVersion = "PROGRESSION_V3";
+            match.RewardConfigurationJson = JsonSerializer.Serialize(new RewardConfiguration { PolicyKey = "REWARD_V3" });
+            var result = await db.MatchResults.Include(x => x.Players).SingleAsync();
+            result.EvidenceVersion = 2;
+            foreach (var player in result.Players)
+            { player.ObjectiveActions = 4; player.RescueActions = 2; player.EvidenceComplete = true; }
+            foreach (var profile in await db.PlayerProfiles.ToListAsync())
+            { profile.LevelCurveVersion = "LEVEL_V3"; profile.ExperiencePoints = 249; }
+            await db.SaveChangesAsync();
+        }
+        var results = await Task.WhenAll(ProcessRewardAsync(scope, seed.MatchId), ProcessRewardAsync(scope, seed.MatchId));
+        Assert.All(results, result => Assert.True(result.IsSuccess, result.Message));
+        Assert.Single(results, x => x.Data!.IsReplay);
+        await using var verify = scope.CreateDbContext();
+        Assert.All(await verify.PlayerProfiles.ToListAsync(), x => { Assert.Equal(424, x.ExperiencePoints); Assert.Equal(2, x.Level); });
+        Assert.All(await verify.MatchRewardGrants.ToListAsync(), x => Assert.Equal(320, x.CurrencyAmount));
+        var telemetry = await new EconomyAdminService(verify, new FixedTimeProvider(Now)).GetAsync(seed.HostId, default);
+        var json = JsonSerializer.SerializeToElement(telemetry.Data);
+        var cohort = Assert.Single(json.GetProperty("RewardTelemetry").GetProperty("Cohorts").EnumerateArray());
+        Assert.Equal(1, cohort.GetProperty("Matches").GetInt32());
+        Assert.Equal(JsonValueKind.Null, cohort.GetProperty("SuggestedReferenceMinutes").ValueKind);
+        (await verify.MatchAuthorityBindings.SingleAsync()).MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
+        await verify.SaveChangesAsync();
+        telemetry = await new EconomyAdminService(verify, new FixedTimeProvider(Now)).GetAsync(seed.HostId, default);
+        Assert.Empty(JsonSerializer.SerializeToElement(telemetry.Data).GetProperty("RewardTelemetry").GetProperty("Cohorts").EnumerateArray());
+    }
+
     [Fact, Trait("Category", "M4PostgreSqlIntegration"), Trait("Feature", "AEDV02")]
     public async Task AEDV02PilotMigrationRoundTripPreservesExistingMatchAndUserRows()
     {
@@ -2685,7 +2822,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
 
         public AppDbContext CreateDbContext() => new(_options);
 
-        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false, bool testOnly = false)
+        public async Task<MatchSeed> SeedMatchAsync(bool legacyBindings = false, bool testOnly = false, string? mapId = null)
         {
             var hostId = Guid.NewGuid();
             var playerId = Guid.NewGuid();
@@ -2725,8 +2862,8 @@ public sealed class MatchResultPostgreSqlIntegrationTests
                 FusionSessionName = $"integration-{matchId:N}",
                 HostUserId = hostId,
                 MaxPlayers = 4,
-                MapId = testOnly ? "SciFi" : null,
-                Difficulty = testOnly ? "NORMAL" : null,
+                MapId = testOnly ? "SciFi" : mapId,
+                Difficulty = testOnly || mapId != null ? "NORMAL" : null,
                 ResolutionMode = testOnly ? "FIXED" : null,
                 BalanceSource = testOnly ? "REMOTE_FIXED" : null,
                 BalanceProtocolVersion = testOnly ? "RFB-1" : null,
@@ -2750,9 +2887,9 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             return new MatchSeed(matchId, hostId, playerId);
         }
 
-        public async Task<MatchSeed> SeedRewardMatchAsync(bool testOnly = false)
+        public async Task<MatchSeed> SeedRewardMatchAsync(bool testOnly = false, string? mapId = null, bool legacyBindings = false)
         {
-            var seed = await SeedMatchAsync(testOnly: testOnly);
+            var seed = await SeedMatchAsync(legacyBindings: legacyBindings, testOnly: testOnly, mapId: mapId);
             await using var db = CreateDbContext();
             var match = await db.MatchAuthorityBindings.SingleAsync(
                 item => item.MatchId == seed.MatchId);
@@ -2863,6 +3000,7 @@ public sealed class MatchResultPostgreSqlIntegrationTests
             var secondItemId = Guid.NewGuid();
             await using var db = CreateDbContext();
             db.Users.Add(CreateUser(userId, "buyer"));
+            db.PlayerProfiles.Add(CreateProfile(userId, "Buyer"));
             db.Wallets.Add(new Wallet
             {
                 Id = Guid.NewGuid(),

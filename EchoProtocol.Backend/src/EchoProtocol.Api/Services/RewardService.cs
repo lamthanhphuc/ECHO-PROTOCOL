@@ -48,6 +48,7 @@ public sealed class RewardService : IRewardService
 
             await _db.Entry(result).Collection(item => item.Players).LoadAsync(cancellationToken);
             await _db.Entry(result).Reference(item => item.Match).LoadAsync(cancellationToken);
+            await _db.Entry(result.Match).Collection(item => item.Players).LoadAsync(cancellationToken);
 
             if (result.RewardStatus == MatchRewardStatus.Completed)
             {
@@ -76,8 +77,8 @@ public sealed class RewardService : IRewardService
                 {
                     var legacySettings = await _db.RewardConfigurations.AsNoTracking()
                         .SingleOrDefaultAsync(configuration => configuration.Id == RewardConfiguration.SharedId, cancellationToken);
-                    if (legacySettings?.PolicyKey == RewardPolicyV2.PolicyVersion)
-                        return Failure("Legacy match cannot use V2 configuration", ErrorCodes.RewardPolicyInvalid);
+                    if (legacySettings?.PolicyKey is "REWARD_V2" or "REWARD_V3")
+                        return Failure("Legacy match requires its original V1 snapshot", ErrorCodes.RewardPolicyInvalid);
                     if (legacySettings != null) policy = new RewardPolicyV1(legacySettings);
                 }
                 else
@@ -101,6 +102,13 @@ public sealed class RewardService : IRewardService
                         case "REWARD_V1":
                             policy = new RewardPolicyV1(settings);
                             progressionService = new ProgressionService(new ProgressionPolicyV1());
+                            break;
+                        case "REWARD_V3":
+                            if (!settings.HasValidV3Settings() || result.EvidenceVersion != 2 ||
+                                result.Players.Any(player => player.EvidenceComplete != true))
+                                return Failure("Invalid V3 configuration or evidence", ErrorCodes.RewardPolicyInvalid);
+                            policy = new RewardPolicyV3(settings);
+                            progressionService = new ProgressionService(new ProgressionPolicyV3(settings));
                             break;
                         case "REWARD_V2":
                             if (!settings.HasValidV2Settings() ||
@@ -212,11 +220,13 @@ public sealed class RewardService : IRewardService
                 {
                     balancesAfter[userId] = checked(
                         wallet.Balance + allocationsByUser[userId].CurrencyAmount);
+                    if (!testOnly)
+                        _ = checked(profiles[userId].LifetimeExperiencePoints + progressionByUser![userId].ExperiencePointsAwarded);
                 }
             }
             catch (OverflowException)
             {
-                return Failure("Reward would overflow a wallet balance", ErrorCodes.RewardPolicyInvalid);
+                return Failure("Reward would overflow a wallet balance or lifetime XP", ErrorCodes.RewardPolicyInvalid);
             }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
@@ -228,6 +238,15 @@ public sealed class RewardService : IRewardService
                 var balanceBefore = wallet.Balance;
                 var balanceAfter = balancesAfter[userId];
                 var progression = testOnly ? null : progressionByUser![userId];
+                var levelBefore = profiles[userId].Level;
+                var levelAfter = progression?.Level ?? levelBefore;
+                var cosmetics = !testOnly ? await ProgressionCosmeticService.StageEligibleAsync(
+                    _db, userId, levelAfter, now, cancellationToken) : [];
+                var unlocked = levelAfter > levelBefore
+                    ? (await LevelUnlockService.ReadAsync(_db, userId, levelAfter, progression!.ExperiencePoints,
+                        profiles[userId].LevelCurveVersion, cancellationToken))
+                        .Where(x => !x.Owned && x.RequiredLevel > levelBefore && x.RequiredLevel <= levelAfter).ToArray()
+                    : [];
 
                 _db.MatchRewardGrants.Add(new MatchRewardGrant
                 {
@@ -238,6 +257,10 @@ public sealed class RewardService : IRewardService
                     CurrencyAmount = amount,
                     PolicyVersion = rewardVersion,
                     ExperiencePointsAwarded = progression?.ExperiencePointsAwarded ?? 0L,
+                    LevelBefore = levelBefore,
+                    LevelAfter = levelAfter,
+                    UnlockedItemsJson = JsonSerializer.Serialize(unlocked),
+                    CosmeticRewardsJson = JsonSerializer.Serialize(cosmetics),
                     ProgressionPolicyVersion = progressionVersion,
                     ProcessedAtUtc = now
                 });
@@ -262,6 +285,7 @@ public sealed class RewardService : IRewardService
                     profile.TotalMatches = progression!.TotalMatches;
                     profile.TotalWins = progression.TotalWins;
                     profile.ExperiencePoints = progression.ExperiencePoints;
+                    profile.LifetimeExperiencePoints = checked(profile.LifetimeExperiencePoints + progression.ExperiencePointsAwarded);
                     profile.Level = progression.Level;
                     profile.UpdatedAt = now;
                 }
@@ -368,6 +392,10 @@ public sealed class RewardService : IRewardService
             ExperiencePointsAwarded = grant.ExperiencePointsAwarded,
             CurrentExperiencePoints = profile.ExperiencePoints,
             CurrentLevel = profile.Level,
+            LevelBefore = grant.LevelBefore,
+            LevelAfter = grant.LevelAfter,
+            UnlockedItems = JsonSerializer.Deserialize<EchoProtocol.Api.DTOs.Player.LevelUnlockResponse[]>(grant.UnlockedItemsJson) ?? [],
+            CosmeticRewards = JsonSerializer.Deserialize<EchoProtocol.Api.DTOs.Player.ProgressionCosmeticResponse[]>(grant.CosmeticRewardsJson) ?? [],
             PolicyVersion = grant.PolicyVersion,
             ProgressionPolicyVersion = grant.ProgressionPolicyVersion,
             ProcessedAtUtc = grant.ProcessedAtUtc
@@ -499,7 +527,19 @@ public sealed class RewardService : IRewardService
             item.ObjectiveContribution,
             item.ObjectiveActions,
             item.RescueActions,
-            item.EvidenceComplete)).ToArray());
+            item.EvidenceComplete,
+            ParticipationSeconds(result, item.UserId))).ToArray(), result.Match.MapId, result.Match.Difficulty);
+
+    private static int ParticipationSeconds(MatchResult result, Guid userId)
+    {
+        var binding = result.Match.Players.SingleOrDefault(player => player.UserId == userId);
+        if (binding is null) return 0;
+        var start = binding.BoundAtUtc > result.StartedAtUtc ? binding.BoundAtUtc : result.StartedAtUtc;
+        var end = binding.DisconnectedAtUtc is { } disconnected && disconnected < result.EndedAtUtc
+            ? disconnected : result.EndedAtUtc;
+        var connectedMilliseconds = (end - start).TotalMilliseconds - binding.GameplayDisconnectedMilliseconds;
+        return (int)Math.Clamp(Math.Floor(connectedMilliseconds / 1000d), 0, result.DurationSeconds);
+    }
 
     private static string? ValidateAllocations(
         ICollection<MatchResultPlayer> players,

@@ -8,6 +8,8 @@ namespace EchoProtocol.Networking
         [Networked, Capacity(AlienHuntMission.EntityCount)] public NetworkArray<HuntEntityState> HuntEntities => default;
         [Networked, Capacity(AlienHuntMission.AlienCount)] public NetworkArray<Vector3> HuntNestPositions => default;
         [Networked, Capacity(3)] public NetworkArray<HuntFurnaceState> HuntFurnaces => default;
+        [Networked, Capacity(AlienHuntMission.AlienCount)] private NetworkArray<NetworkBool> HuntCaptureCredited => default;
+        [Networked, Capacity(3)] private NetworkArray<int> HuntFurnaceCreditMask => default;
         [Networked] public NetworkBool HuntReady { get; private set; }
         [Networked] public int HuntBurned { get; private set; }
 
@@ -39,12 +41,36 @@ namespace EchoProtocol.Networking
         {
             if (!Object.HasStateAuthority || IsEnded || !HuntReady || !AlienHuntMission.Instance
                 || !TryResolveActivePlayer(actor, out var life)) return;
+            var before = furnace >= 0 && furnace < 3 ? HuntFurnaces[furnace] : default;
             if (AlienHuntMission.Instance.Act(actor, life.transform, entity, furnace))
             {
                 if (entity >= 0 && entity < AlienHuntMission.AlienCount
                     && HuntEntities[entity].Stage == (int)AlienStage.Carried)
                     LastAlienHintStart = TickTimer.None;
-                EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
+                bool contribution = false;
+                if (furnace < 0 && entity >= 0 && entity < AlienHuntMission.AlienCount && !HuntCaptureCredited[entity])
+                {
+                    HuntCaptureCredited.Set(entity, true);
+                    contribution = true;
+                }
+                else if (furnace >= 0 && furnace < 3 && before.BurnedCount < AlienHuntMission.FurnaceCapacity)
+                {
+                    var after = HuntFurnaces[furnace];
+                    int step = before.Fuel == 0 && after.Fuel > 0 ? 0
+                        : before.AlienSlot == 0 && after.AlienSlot > 0 ? 1
+                        : before.BurnRemaining <= 0 && after.BurnRemaining > 0 ? 2 : -1;
+                    if (step >= 0)
+                    {
+                        int bit = 1 << (before.BurnedCount * 3 + step);
+                        if ((HuntFurnaceCreditMask[furnace] & bit) == 0)
+                        {
+                            HuntFurnaceCreditMask.Set(furnace, HuntFurnaceCreditMask[furnace] | bit);
+                            contribution = true;
+                        }
+                    }
+                }
+                if (contribution)
+                    EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
             }
         }
         public void RequestDebugHuntItem(HuntKind kind)

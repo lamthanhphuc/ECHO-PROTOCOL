@@ -20,4 +20,6 @@ public sealed class PaymentProductSettings
     public string? FulfillmentKind { get; init; }
     public int? WalletCreditAmount { get; init; }
     public Guid? ShopItemId { get; init; }
+    public Guid? RequiredOwnedItemId { get; init; }
+    public bool UsesDefaultCharacter { get; init; }
 }

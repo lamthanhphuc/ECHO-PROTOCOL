@@ -464,6 +464,106 @@ public sealed class RewardServiceTests
         Assert.Equal(200, await harness.Db.Wallets.SumAsync(item => item.Balance));
     }
 
+    [Theory]
+    [InlineData("REWARD_V2", "PROGRESSION_V2")]
+    [InlineData("REWARD_V3", "PROGRESSION_V3")]
+    public async Task SnapshottedRewardUsesMigratedCurveAndIsIdempotent(string rewardVersion, string progressionVersion)
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.MapId = "Scene_A"; match.Difficulty = "NORMAL";
+        match.RewardPolicyVersion = rewardVersion; match.ProgressionPolicyVersion = progressionVersion;
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration { PolicyKey = rewardVersion });
+        var stored = await harness.Db.MatchResults.Include(x => x.Players).SingleAsync();
+        stored.EvidenceVersion = 2;
+        foreach (var player in stored.Players)
+        { player.ObjectiveActions = 4; player.RescueActions = 2; player.EvidenceComplete = true; }
+        foreach (var profile in await harness.Db.PlayerProfiles.ToListAsync())
+        { profile.Level = 2; profile.LevelCurveVersion = "LEVEL_V3"; profile.ExperiencePoints = 500; profile.LifetimeExperiencePoints = 1000; }
+        // Live configuration must not change an already started match.
+        var unlockItem = new ShopItem { ItemId = Guid.NewGuid(), ItemName = "Jammo", Category = "CHARACTER",
+            RequiredLevel = 3, Price = 600, IsActive = true, CreatedAtUtc = Now.UtcDateTime, UpdatedAtUtc = Now.UtcDateTime };
+        harness.Db.ShopItems.Add(unlockItem);
+        harness.Db.RewardConfigurations.Add(new RewardConfiguration { Id = RewardConfiguration.SharedId, PolicyKey = "REWARD_V3", FloodedReferenceMinutes = 30 });
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.All(result.Data!.Grants, x => Assert.Equal(320, x.CurrencyAmount));
+        Assert.True((await harness.Service.ProcessAsync(harness.MatchId)).Data!.IsReplay);
+        // Changing the catalog later must not rewrite the original level-up notification.
+        unlockItem.RequiredLevel = 10; unlockItem.ItemName = "Renamed later";
+        await harness.Db.SaveChangesAsync();
+        var notification = await harness.Service.GetForUserAsync(harness.MatchId, result.Data.Grants[0].UserId);
+        Assert.Equal(2, notification.Data!.LevelBefore); Assert.Equal(3, notification.Data.LevelAfter);
+        Assert.Equal("Jammo", Assert.Single(notification.Data.UnlockedItems).ItemName);
+        Assert.All(await harness.Db.PlayerProfiles.AsNoTracking().ToListAsync(), x =>
+        { Assert.Equal(675, x.ExperiencePoints); Assert.Equal(1175, x.LifetimeExperiencePoints); Assert.Equal(3, x.Level); });
+    }
+
+    [Fact]
+    public async Task V3DisconnectedPlayerIsLimitedByBindingDuration()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.Include(x => x.Players).SingleAsync();
+        match.MapId = "Scene_A"; match.Difficulty = "NORMAL";
+        match.RewardPolicyVersion = "REWARD_V3"; match.ProgressionPolicyVersion = "PROGRESSION_V3";
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration { PolicyKey = "REWARD_V3" });
+        var stored = await harness.Db.MatchResults.Include(x => x.Players).SingleAsync();
+        stored.EvidenceVersion = 2;
+        foreach (var player in stored.Players)
+        {
+            player.ObjectiveActions = 4; player.RescueActions = 2; player.EvidenceComplete = true;
+            player.Disconnected = true;
+            match.Players.Single(x => x.UserId == player.UserId).DisconnectedAtUtc = stored.StartedAtUtc.AddSeconds(30);
+        }
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.All(result.Data!.Grants, x => Assert.Equal(2, x.CurrencyAmount));
+        Assert.All(await harness.Db.MatchRewardGrants.ToListAsync(), x => Assert.Equal(1, x.ExperiencePointsAwarded));
+    }
+
+    [Fact]
+    public async Task ReconnectedV3LossSubtractsAccumulatedOfflineTimeAndReplayCannotGrantAgain()
+    {
+        await using var harness = await RewardHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.Include(m => m.Players).SingleAsync();
+        match.MapId = "Scene_A"; match.Difficulty = "NORMAL";
+        match.RewardPolicyVersion = "REWARD_V3"; match.ProgressionPolicyVersion = "PROGRESSION_V3";
+        match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(new RewardConfiguration { PolicyKey = "REWARD_V3" });
+        var result = await harness.Db.MatchResults.Include(r => r.Players).SingleAsync();
+        result.EvidenceVersion = 2; result.Outcome = MatchOutcome.LOSE;
+        foreach (var player in result.Players)
+        {
+            player.ObjectiveActions = 4; player.RescueActions = 2; player.EvidenceComplete = true;
+            var binding = match.Players.Single(b => b.UserId == player.UserId);
+            binding.BoundAtUtc = result.StartedAtUtc;
+            binding.GameplayDisconnectedMilliseconds = 90_000;
+        }
+        await harness.Db.SaveChangesAsync();
+        var processed = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.True(processed.IsSuccess, processed.Message);
+        Assert.All(processed.Data!.Grants, g => Assert.Equal(2, g.CurrencyAmount));
+        Assert.All(await harness.Db.MatchRewardGrants.ToListAsync(), g => Assert.Equal(1, g.ExperiencePointsAwarded));
+        Assert.True((await harness.Service.ProcessAsync(harness.MatchId)).Data!.IsReplay);
+        Assert.Equal(2, await harness.Db.WalletTransactions.CountAsync());
+    }
+
+    [Fact]
+    public async Task RealRewardGrantsMilestoneCosmeticsButTestOnlyCannotGrantThem()
+    {
+        foreach (bool testOnly in new[] { false, true })
+        {
+            await using var harness = await RewardHarness.CreateAsync(testOnly: testOnly);
+            foreach (var profile in await harness.Db.PlayerProfiles.ToListAsync())
+            { profile.Level = 30; profile.LevelCurveVersion = "LEVEL_V3"; profile.ExperiencePoints = ProgressionCurveV3.Threshold(30); }
+            await harness.Db.SaveChangesAsync();
+            Assert.True((await harness.Service.ProcessAsync(harness.MatchId)).IsSuccess);
+            Assert.True((await harness.Service.ProcessAsync(harness.MatchId)).Data!.IsReplay);
+            Assert.Equal(testOnly ? 0 : 8, await harness.Db.ProgressionCosmeticGrants.CountAsync());
+        }
+    }
+
     private sealed class RewardHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

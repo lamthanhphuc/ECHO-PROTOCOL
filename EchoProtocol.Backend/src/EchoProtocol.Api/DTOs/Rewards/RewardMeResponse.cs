@@ -12,6 +12,10 @@ public sealed class RewardMeResponse
     public long ExperiencePointsAwarded { get; init; }
     public long CurrentExperiencePoints { get; init; }
     public int CurrentLevel { get; init; }
+    public int? LevelBefore { get; init; }
+    public int? LevelAfter { get; init; }
+    public IReadOnlyList<EchoProtocol.Api.DTOs.Player.LevelUnlockResponse> UnlockedItems { get; init; } = [];
+    public IReadOnlyList<EchoProtocol.Api.DTOs.Player.ProgressionCosmeticResponse> CosmeticRewards { get; init; } = [];
     public string PolicyVersion { get; init; } = string.Empty;
     public string ProgressionPolicyVersion { get; init; } = string.Empty;
     public DateTime ProcessedAtUtc { get; init; }

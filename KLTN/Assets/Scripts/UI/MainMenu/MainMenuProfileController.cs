@@ -17,7 +17,6 @@ namespace EchoProtocol.UI.MainMenu
     private const float ProfileRefreshIntervalSeconds = 20f;
     private const float ProfileOpenDurationSeconds = 0.27f;
     // Mirrors the currently registered backend PROGRESSION_V1 policy.
-    private const long ExperiencePerLevel = 500L;
 
     [SerializeField] private Text welcomeText;
     [SerializeField] private Text roleText;
@@ -272,7 +271,7 @@ namespace EchoProtocol.UI.MainMenu
         profileExperienceText.text = !PlayerProfileSession.HasProfile
           ? "-- XP"
           : IsCurrentProgressionPolicy()
-            ? $"{PlayerProfileSession.ExperiencePoints % ExperiencePerLevel:N0} / {ExperiencePerLevel:N0} XP"
+            ? PlayerProfileSession.ExperienceLabel
             : $"{PlayerProfileSession.ExperiencePoints:N0} XP";
       }
       UpdateProfileExperienceFill();
@@ -386,7 +385,6 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (profileExperienceFill == null) return;
 
-      long experience = PlayerProfileSession.ExperiencePoints;
       // If the server switches progression policies, do not show a false level fraction.
       bool levelMatchesCurrentPolicy = IsCurrentProgressionPolicy();
       profileExperienceFill.enabled = levelMatchesCurrentPolicy;
@@ -395,15 +393,12 @@ namespace EchoProtocol.UI.MainMenu
       profileExperienceFill.type = Image.Type.Filled;
       profileExperienceFill.fillMethod = Image.FillMethod.Horizontal;
       profileExperienceFill.fillOrigin = 0;
-      profileExperienceFill.fillAmount = (experience % ExperiencePerLevel) / (float)ExperiencePerLevel;
+      profileExperienceFill.fillAmount = PlayerProfileSession.LevelProgress;
     }
 
     private static bool IsCurrentProgressionPolicy()
     {
-      long experience = PlayerProfileSession.ExperiencePoints;
-      return PlayerProfileSession.HasProfile
-        && experience >= 0
-        && PlayerProfileSession.Level == (experience / ExperiencePerLevel) + 1L;
+      return PlayerProfileSession.HasLevelProgress;
     }
 
     private void ResolveProfileAnimationComponents()
@@ -775,6 +770,9 @@ namespace EchoProtocol.UI.MainMenu
     private Text _title;
     private Text _name;
     private Text _progress;
+    private Text _nextUnlock;
+    private Text _unlocks;
+    private ScrollRect _unlockScroll;
     private Text[] _statLabels;
     private Text[] _statValues;
     private Text[] _activityTitles;
@@ -912,11 +910,14 @@ namespace EchoProtocol.UI.MainMenu
       image.color = image.sprite != null ? Color.white : new Color(.08f, .09f, .09f);
       image.raycastTarget = false;
       portrait.gameObject.AddComponent<ProfileAvatarEditor>().Initialize(image);
+      _panel.gameObject.AddComponent<EchoProtocol.Profile.ProfileCosmeticRewardsPanel>().Initialize(image, bodyFont);
       _identity = Label("OperatorNameIdentity", 34, 480, 278, 80, 22, bodyFont);
       _identity.supportRichText = false;
       _name = Label("OperatorName", 350, 143, 880, 42, 28, headingFont);
       _name.supportRichText = false;
       _progress = Label("Progress", 350, 180, 880, 36, 19, bodyFont);
+      _nextUnlock = Label("NextUnlock", 350, 245, 880, 29, 17, bodyFont);
+      _nextUnlock.supportRichText = false;
       var track = Box("ExperienceTrack", 350, 229, 880, 12, new Color(.16f,.17f,.17f));
       var fill = Rect("Fill", track);
       fill.anchorMin = Vector2.zero;
@@ -953,8 +954,33 @@ namespace EchoProtocol.UI.MainMenu
       Decoration("PortraitTapeTop", visuals != null ? visuals.agedTape : null, 20, 104, 128, 28, -14);
       Decoration("PortraitTapeCorner", visuals != null ? visuals.agedTape : null, 213, 100, 115, 26, 17);
       Decoration("PortraitTapeBottom", visuals != null ? visuals.agedTape : null, 24, 441, 120, 25, 12);
-      Decoration("PersonalNote", visuals != null ? visuals.tornNote : null, 34, 573, 275, 95, -3);
-      Label("NoteCopy", 54, 594, 235, 55, 15, headingFont).color = new Color(.17f,.12f,.08f);
+      Label("UnlockHeading", 34, 574, 278, 23, 15, headingFont);
+      var unlockViewport = Box("UnlockViewport", 34, 600, 278, 82, new Color(.015f,.02f,.02f,.85f));
+      unlockViewport.GetComponent<Image>().raycastTarget = true;
+      unlockViewport.gameObject.AddComponent<RectMask2D>();
+      _unlocks = Label("UnlockList", 0, 0, 260, 400, 15, bodyFont);
+      _unlocks.transform.SetParent(unlockViewport, false);
+      _unlocks.alignment = TextAnchor.UpperLeft;
+      _unlocks.supportRichText = false;
+      _unlocks.rectTransform.anchoredPosition = new Vector2(5, -4);
+      _unlockScroll = unlockViewport.gameObject.AddComponent<ScrollRect>();
+      _unlockScroll.viewport = unlockViewport;
+      _unlockScroll.content = _unlocks.rectTransform;
+      _unlockScroll.horizontal = false;
+      _unlockScroll.vertical = true;
+      _unlockScroll.scrollSensitivity = 24;
+      var barRect = Rect("UnlockScrollbar", unlockViewport);
+      barRect.anchorMin = new Vector2(1, 0); barRect.anchorMax = Vector2.one;
+      barRect.pivot = Vector2.one; barRect.sizeDelta = new Vector2(5, 0);
+      barRect.gameObject.AddComponent<Image>().color = new Color(.18f,.17f,.15f);
+      var thumb = Rect("Handle", barRect);
+      thumb.anchorMin = Vector2.zero; thumb.anchorMax = Vector2.one;
+      thumb.offsetMin = thumb.offsetMax = Vector2.zero;
+      var thumbImage = thumb.gameObject.AddComponent<Image>(); thumbImage.color = new Color(.64f,.55f,.4f);
+      var scrollbar = barRect.gameObject.AddComponent<Scrollbar>();
+      scrollbar.handleRect = thumb; scrollbar.targetGraphic = thumbImage;
+      scrollbar.direction = Scrollbar.Direction.BottomToTop;
+      _unlockScroll.verticalScrollbar = scrollbar;
       Decoration("Fingerprint", visuals != null ? visuals.fingerprint : null, 1008, 507, 105, 160, 12);
       Decoration("SurveillancePhoto", visuals != null ? visuals.surveillanceStill : null, 1093, 524, 135, 115, 9);
       Decoration("PhotoTape", visuals != null ? visuals.agedTape : null, 1090, 514, 138, 23, 16);
@@ -1058,22 +1084,43 @@ namespace EchoProtocol.UI.MainMenu
       _title.text = GameLanguage.Choose("HỒ SƠ", "PROFILE");
       Copy("ProfileHeading", "HỒ SƠ ĐIỀU TRA VIÊN", "OPERATOR PROFILE");
       Copy("ActivityHeading", "HOẠT ĐỘNG GẦN ĐÂY", "RECENT ACTIVITY");
-      Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.ExperiencePoints:N0} XP",
-        $"TOTAL EXPERIENCE  ·  {PlayerProfileSession.ExperiencePoints:N0} XP");
-      Copy("NoteCopy", "MỖI NHIỆM VỤ\nĐỀU ĐỂ LẠI DẤU VẾT.", "EVERY MISSION\nLEAVES A TRACE.");
+      Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.LifetimeExperiencePoints:N0} XP",
+        $"TOTAL EXPERIENCE  ·  {PlayerProfileSession.LifetimeExperiencePoints:N0} XP");
+      Copy("UnlockHeading", "MỐC MỞ KHÓA · CUỘN ĐỂ XEM", "LEVEL UNLOCKS · SCROLL");
+      var unlocks = PlayerProfileSession.LevelUnlocks;
+      var rows = new System.Collections.Generic.List<string>();
+      EchoProtocol.Profile.LevelUnlockDto next = null;
+      var nextNames = new System.Collections.Generic.List<string>();
+      foreach (var item in unlocks)
+      {
+        if (item == null) continue;
+        string state = item.owned ? GameLanguage.Choose("Đã sở hữu", "Owned")
+          : item.requiredLevel <= PlayerProfileSession.Level ? GameLanguage.Choose("Đã mở quyền mua", "Purchase available")
+          : GameLanguage.Choose($"Còn {item.experienceRemaining:N0} XP", $"{item.experienceRemaining:N0} XP remaining");
+        rows.Add(GameLanguage.Choose($"Cấp {item.requiredLevel}", $"Level {item.requiredLevel}") + " · " + item.itemName + "\n" + state);
+        if (!item.owned && item.requiredLevel > PlayerProfileSession.Level && (next == null || item.requiredLevel < next.requiredLevel))
+        { next = item; nextNames.Clear(); }
+        if (next != null && !item.owned && item.requiredLevel == next.requiredLevel) nextNames.Add(item.itemName);
+      }
+      _unlocks.text = rows.Count > 0 ? string.Join("\n\n", rows) : GameLanguage.Choose("Chưa có dữ liệu mốc mở khóa", "Unlock data unavailable");
+      _unlocks.rectTransform.sizeDelta = new Vector2(260, Mathf.Max(82, _unlocks.preferredHeight + 8));
+      _unlockScroll.verticalNormalizedPosition = 1f;
+      _nextUnlock.text = unlocks.Length == 0 ? GameLanguage.Choose("Chưa có dữ liệu mốc mở khóa", "Unlock data unavailable")
+        : next == null ? GameLanguage.Choose("Đã đạt các mốc mở quyền mua hiện tại", "All current purchase milestones reached")
+        : GameLanguage.Choose($"Tiếp theo · Cấp {next.requiredLevel}", $"Next · Level {next.requiredLevel}")
+          + " · " + string.Join(", ", nextNames) + GameLanguage.Choose($" · Còn {next.experienceRemaining:N0} XP", $" · {next.experienceRemaining:N0} XP remaining");
       _name.text = string.IsNullOrWhiteSpace(PlayerProfileSession.DisplayName)
         ? (string.IsNullOrWhiteSpace(AuthSession.DisplayName)
           ? AuthSession.Username : AuthSession.DisplayName)
         : PlayerProfileSession.DisplayName;
       _identity.text = _name.text;
       long xp = PlayerProfileSession.ExperiencePoints;
-      bool knownPolicy = PlayerProfileSession.HasProfile && xp >= 0
-        && PlayerProfileSession.Level == xp / 500 + 1;
+      bool knownPolicy = PlayerProfileSession.HasLevelProgress;
       _progress.text = !PlayerProfileSession.HasProfile ? GameLanguage.Choose("CHƯA CÓ DỮ LIỆU", "NO PROFILE DATA")
         : GameLanguage.Choose($"CẤP {PlayerProfileSession.Level}", $"LEVEL {PlayerProfileSession.Level}")
-          + (knownPolicy ? $"    ·    {xp % 500:N0} / 500 XP" : $"    ·    {xp:N0} XP");
+          + (knownPolicy ? $"    ·    {PlayerProfileSession.ExperienceLabel}" : $"    ·    {xp:N0} XP");
       _xpFill.gameObject.SetActive(knownPolicy);
-      _xpFill.rectTransform.anchorMax = new Vector2(knownPolicy ? (xp % 500) / 500f : 0, 1);
+      _xpFill.rectTransform.anchorMax = new Vector2(knownPolicy ? PlayerProfileSession.LevelProgress : 0, 1);
       _section.text = GameLanguage.Choose("THỐNG KÊ NHIỆM VỤ", "MISSION STATISTICS");
       var total = PlayerProfileSession.TotalMatches;
       var wins = PlayerProfileSession.TotalWins;

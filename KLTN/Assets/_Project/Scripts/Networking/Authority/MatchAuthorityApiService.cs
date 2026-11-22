@@ -173,7 +173,7 @@ namespace EchoProtocol.Networking.Authority
             Guid matchId,
             SubmitMatchResultRequestDto request)
         {
-            if (request.evidenceVersion == 0)
+            if (request.evidenceVersion == 0 && !request.usedDebugCheats)
                 return PutAsync<LegacySubmitMatchResultRequestDto, MatchResultResponseDto>(
                     $"/api/matches/{matchId:D}/result",
                     new LegacySubmitMatchResultRequestDto
@@ -187,6 +187,13 @@ namespace EchoProtocol.Networking.Authority
                             downedCount = player.downedCount, reviveCount = player.reviveCount,
                             objectiveContribution = player.objectiveContribution
                         })
+                    });
+            if (!request.usedDebugCheats)
+                return PutAsync<StandardSubmitMatchResultRequestDto, MatchResultResponseDto>(
+                    $"/api/matches/{matchId:D}/result", new StandardSubmitMatchResultRequestDto
+                    {
+                        evidenceVersion = request.evidenceVersion, outcome = request.outcome,
+                        objectiveCompletion = request.objectiveCompletion, players = request.players
                     });
             return PutAsync<SubmitMatchResultRequestDto, MatchResultResponseDto>(
                 $"/api/matches/{matchId:D}/result", request);

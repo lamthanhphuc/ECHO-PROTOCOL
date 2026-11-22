@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getAccessToken } from "@/lib/auth/session";
 import { backendRequest } from "./backend-client";
 import { BackendApiError } from "@/lib/errors";
-import type { PlayerProfile } from "@/lib/types/player";
+import type { PlayerProfile, ProgressionCosmetic } from "@/lib/types/player";
 import type { AdaptiveAdminData, AdaptiveMatchAudit } from "@/lib/types/adaptive";
 import type { ProfileTuningData, RemoteGameplayField } from "@/lib/types/profile-tuning";
 import type { EconomyData, MatchContent } from "@/lib/types/operations";
@@ -44,6 +44,9 @@ async function authorized<T>(path: string, init?: { method?: string; body?: unkn
 }
 
 export const playerApi = {
+  reconcileCosmetics: () => authorized<ProgressionCosmetic[]>("/api/player/cosmetics/reconcile", { method: "POST", body: {} }),
+  equipCosmetic: (request: { category: string; rewardKey: string | null }) =>
+    authorized<ProgressionCosmetic[]>("/api/player/cosmetics/equip", { method: "POST", body: request }),
   profile: () => authorized<PlayerProfile>("/api/player/me"),
   paymentCatalog: () => authorized<PaymentCatalog>("/api/payments/catalog"),
   paymentOrder: (paymentOrderId: string) =>

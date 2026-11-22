@@ -46,6 +46,8 @@ public sealed class PurchaseServiceTests
         await using var harness = await PurchaseHarness.CreateAsync(balance: 1750);
         await ShopCatalogSeeder.SeedProductionCatalogAsync(harness.Db, TimeProvider.System, NullLogger.Instance);
         var itemId = Guid.Parse("13000000-0000-0000-0000-000000000003");
+        (await harness.Db.PlayerProfiles.SingleAsync()).Level = 10;
+        await harness.Db.SaveChangesAsync();
 
         var purchase = await harness.Service.PurchaseAsync(harness.UserId, Request(itemId, "mercenary"));
         var duplicate = await harness.Service.PurchaseAsync(harness.UserId, Request(itemId, "mercenary-again"));
@@ -206,6 +208,25 @@ public sealed class PurchaseServiceTests
         IdempotencyKey = key
     };
 
+    [Fact]
+    public async Task LevelGateRejectsWithoutSpendingAndUnlocksAtRequiredLevel()
+    {
+        await using var harness = await PurchaseHarness.CreateAsync();
+        var item = await harness.Db.ShopItems.SingleAsync(x => x.ItemId == harness.FirstItemId);
+        item.RequiredLevel = 3;
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.PurchaseAsync(harness.UserId, Request(item.ItemId, "level-gate"));
+        Assert.Equal("SHOP_LEVEL_REQUIRED", result.ErrorCode);
+        Assert.Equal(500, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Empty(await harness.Db.PurchaseTransactions.ToListAsync());
+        (await harness.Db.PlayerProfiles.SingleAsync()).Level = 3;
+        await harness.Db.SaveChangesAsync();
+        Assert.True((await harness.Service.PurchaseAsync(harness.UserId, Request(item.ItemId, "level-gate"))).IsSuccess);
+        item.RequiredLevel = 10;
+        await harness.Db.SaveChangesAsync();
+        Assert.True((await harness.Service.PurchaseAsync(harness.UserId, Request(item.ItemId, "level-gate"))).Data!.IsReplay);
+    }
+
     private sealed class PurchaseHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -263,6 +284,9 @@ public sealed class PurchaseServiceTests
                     UpdatedAt = Now.UtcDateTime
                 }
             });
+            db.PlayerProfiles.Add(new PlayerProfile { Id = Guid.NewGuid(), UserId = userId,
+                DisplayName = "Buyer", Level = 1, LevelCurveVersion = "LEVEL_V3",
+                CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime });
             db.ShopItems.AddRange(firstItem, secondItem);
             if (alreadyOwnsFirstItem)
             {

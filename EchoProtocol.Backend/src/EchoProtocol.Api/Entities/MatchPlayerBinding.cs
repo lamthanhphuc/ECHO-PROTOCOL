@@ -12,6 +12,7 @@ public sealed class MatchPlayerBinding
     public DateTime? DisconnectedAtUtc { get; set; }
     public DateTime? KickedAtUtc { get; set; }
     public bool HadGameplayDisconnect { get; set; }
+    public long GameplayDisconnectedMilliseconds { get; set; }
     public bool Participated { get; set; }
 
     public MatchAuthorityBinding? Match { get; set; }

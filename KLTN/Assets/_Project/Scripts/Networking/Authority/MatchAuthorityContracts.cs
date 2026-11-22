@@ -159,10 +159,21 @@ namespace EchoProtocol.Networking.Authority
     [Serializable]
     public sealed class SubmitMatchResultRequestDto
     {
+        public bool usedDebugCheats;
         public int evidenceVersion = 2;
         public string outcome;
         public float objectiveCompletion;
         public SubmitMatchResultPlayerDto[] players = Array.Empty<SubmitMatchResultPlayerDto>();
+    }
+
+    // Keep normal result payloads compatible during the backend/client rollout.
+    [Serializable]
+    public sealed class StandardSubmitMatchResultRequestDto
+    {
+        public int evidenceVersion;
+        public string outcome;
+        public float objectiveCompletion;
+        public SubmitMatchResultPlayerDto[] players;
     }
 
     [Serializable]
@@ -223,6 +234,10 @@ namespace EchoProtocol.Networking.Authority
         public long experiencePointsAwarded;
         public long currentExperiencePoints;
         public int currentLevel;
+        public int levelBefore;
+        public int levelAfter;
+        public EchoProtocol.Profile.LevelUnlockDto[] unlockedItems;
+        public EchoProtocol.Profile.ProgressionCosmeticDto[] cosmeticRewards;
         public string policyVersion;
         public string progressionPolicyVersion;
         public string processedAtUtc;

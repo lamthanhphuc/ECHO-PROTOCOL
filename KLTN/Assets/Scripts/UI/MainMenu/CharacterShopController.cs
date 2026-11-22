@@ -33,6 +33,7 @@ namespace EchoProtocol.UI.MainMenu
             public string description;
             public string assetReference;
             public int price;
+            public int requiredLevel = 1;
         }
 
         [Serializable]
@@ -408,6 +409,13 @@ namespace EchoProtocol.UI.MainMenu
 
             SetStatus(
                 "LOADING CHARACTERS...");
+
+            runtime.PlayerProfileService.GetCurrentProfile(_ =>
+            {
+                if (this == null) return;
+                RefreshCredits();
+                SetBuyState();
+            });
 
             runtime.Client.GetJson<CatalogResponse>(
                 ApiEndpoints.ShopCharacters,
@@ -853,6 +861,14 @@ namespace EchoProtocol.UI.MainMenu
                     return;
                 }
 
+                if (EchoProtocol.Profile.PlayerProfileSession.Level < _selectedOutfitItem.requiredLevel)
+                {
+                    _buyButton.interactable = false;
+                    if (caption != null) caption.text = EchoProtocol.Settings.GameLanguage.Choose(
+                        $"Cần cấp {_selectedOutfitItem.requiredLevel}", $"Requires level {_selectedOutfitItem.requiredLevel}");
+                    return;
+                }
+
                 _buyButton.interactable =
                     !_purchasing;
 
@@ -921,6 +937,14 @@ namespace EchoProtocol.UI.MainMenu
                 if (caption != null)
                     caption.text = EchoProtocol.Settings.GameLanguage.Choose("Chưa khả dụng", "Unavailable");
 
+                return;
+            }
+
+            if (EchoProtocol.Profile.PlayerProfileSession.Level < _selectedItem.requiredLevel)
+            {
+                _buyButton.interactable = false;
+                if (caption != null) caption.text = EchoProtocol.Settings.GameLanguage.Choose(
+                    $"Cần cấp {_selectedItem.requiredLevel}", $"Requires level {_selectedItem.requiredLevel}");
                 return;
             }
 

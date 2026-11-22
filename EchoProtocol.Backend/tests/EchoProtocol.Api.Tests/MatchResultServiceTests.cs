@@ -13,6 +13,20 @@ namespace EchoProtocol.Api.Tests;
 public sealed class MatchResultServiceTests
 {
     [Fact]
+    public async Task DebugResultIsTestOnlyAndReplayCannotRemoveTheFlag()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
+        request.UsedDebugCheats = true;
+        var result = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(RemoteFixedBalanceContract.TestOnly, (await harness.Db.MatchAuthorityBindings.SingleAsync()).MatchDataPolicy);
+        request.UsedDebugCheats = false;
+        Assert.Equal(ErrorCodes.MatchResultConflict,
+            (await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request)).ErrorCode);
+    }
+
+    [Fact]
     public async Task V2RequiresCompleteEvidenceAndPersistsItWithoutChangingLegacyReplay()
     {
         await using var harness = await UnitHarness.CreateAsync();
