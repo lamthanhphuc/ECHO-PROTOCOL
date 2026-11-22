@@ -42,6 +42,8 @@ namespace EchoProtocol.UI.Tests
                 var portrait = new GameObject("Portrait", typeof(RectTransform), typeof(UnityEngine.UI.Image));
                 portrait.transform.SetParent(root.transform);
                 portrait.GetComponent<RectTransform>().sizeDelta = new Vector2(278, 360);
+                portrait.GetComponent<UnityEngine.UI.Image>().sprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                    "Assets/Art/UI/ProfileDossier/OperatorPortrait.png");
                 Type type = Type.GetType("EchoProtocol.UI.MainMenu.ProfileAvatarEditor, Assembly-CSharp");
                 var editor = portrait.AddComponent(type);
                 type.GetMethod("Initialize").Invoke(editor, new object[] { portrait.GetComponent<UnityEngine.UI.Image>() });
@@ -49,8 +51,15 @@ namespace EchoProtocol.UI.Tests
                 var dialog = root.transform.Find("AvatarEditor");
                 Assert.That(dialog, Is.Not.Null);
                 Assert.That(dialog.gameObject.activeSelf, Is.True);
-                Assert.That(dialog.Find("CropPreview").GetComponent<RectTransform>().sizeDelta, Is.EqualTo(new Vector2(278, 360)));
-                Assert.That(portrait.transform.Find("CustomAvatar").GetComponent<RectTransform>().sizeDelta.x, Is.LessThan(278));
+                var photo = portrait.transform.Find("CustomAvatar").GetComponent<RectTransform>();
+                var preview = dialog.Find("CropPreview").GetComponent<RectTransform>();
+                Assert.That(preview.sizeDelta, Is.EqualTo(photo.sizeDelta));
+                Assert.That(photo.sizeDelta.x / photo.sizeDelta.y, Is.EqualTo(256f / 332).Within(.00001f));
+                var frame = portrait.transform.Find("PortraitFrame").GetComponent<UnityEngine.UI.Image>();
+                Assert.That(frame.type, Is.EqualTo(UnityEngine.UI.Image.Type.Sliced));
+                Assert.That(frame.fillCenter, Is.False);
+                Assert.That(frame.raycastTarget, Is.False);
+                Assert.That(frame.transform.GetSiblingIndex(), Is.GreaterThan(photo.GetSiblingIndex()));
             }
             finally { UnityEngine.Object.DestroyImmediate(root); }
         }

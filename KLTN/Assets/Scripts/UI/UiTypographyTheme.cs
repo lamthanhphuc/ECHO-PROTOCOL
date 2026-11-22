@@ -51,6 +51,7 @@ namespace EchoProtocol.UI
             if (label != null) label.font = button ? ButtonTmp : BodyTmp;
         }
 
+
         public static void Apply(Text label, bool button = false)
         {
             if (label != null) label.font = button ? ButtonLegacy : BodyLegacy;

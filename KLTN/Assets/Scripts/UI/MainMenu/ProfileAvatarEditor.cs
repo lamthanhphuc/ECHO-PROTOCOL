@@ -14,11 +14,13 @@ namespace EchoProtocol.UI.MainMenu
     {
         const string Endpoint = "/api/player/me/avatar";
         const int Width = 256, Height = 332;
+        static readonly Vector2 PhotoSize = new Vector2(266, 266f * Height / Width);
         [Serializable] public sealed class AvatarData { public string pixels; }
         [Serializable] public sealed class AvatarReply { public bool success; public AvatarData data; }
         RawImage _portrait, _preview;
         Texture2D _saved, _source;
         Sprite _defaultSprite;
+        Sprite _frameSprite;
         RectTransform _dialog;
         Text _message;
         Button _save, _reset, _choose, _close;
@@ -30,9 +32,22 @@ namespace EchoProtocol.UI.MainMenu
         public void Initialize(Image image)
         {
             _defaultSprite = image.sprite;
-            _portrait = Node("CustomAvatar", transform, Vector2.zero, ((RectTransform)transform).sizeDelta - new Vector2(12, 16)).gameObject.AddComponent<RawImage>();
+            _portrait = Node("CustomAvatar", transform, Vector2.zero, PhotoSize).gameObject.AddComponent<RawImage>();
             _portrait.raycastTarget = false;
             _portrait.gameObject.SetActive(false);
+            if (_defaultSprite != null)
+            {
+                // Reuse only the worn outer edges of the original portrait above the photograph.
+                _frameSprite = Sprite.Create(_defaultSprite.texture, _defaultSprite.rect,
+                    new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect, new Vector4(28, 28, 28, 28));
+                var frame = Node("PortraitFrame", transform, Vector2.zero,
+                    ((RectTransform)transform).sizeDelta).gameObject.AddComponent<Image>();
+                frame.sprite = _frameSprite;
+                frame.type = Image.Type.Sliced;
+                frame.fillCenter = false;
+                frame.pixelsPerUnitMultiplier = _defaultSprite.rect.width / ((RectTransform)transform).sizeDelta.x;
+                frame.raycastTarget = false;
+            }
             image.raycastTarget = true;
             var button = gameObject.AddComponent<Button>();
             button.targetGraphic = image;
@@ -90,7 +105,7 @@ namespace EchoProtocol.UI.MainMenu
             _dialog.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .96f);
             var title = Label("Title", new Vector2(0, 280), new Vector2(800, 48), 30);
             title.text = GameLanguage.Choose("ẢNH HỒ SƠ", "PROFILE PHOTO");
-            _preview = Node("CropPreview", _dialog, new Vector2(0, 55), new Vector2(278, 360)).gameObject.AddComponent<RawImage>();
+            _preview = Node("CropPreview", _dialog, new Vector2(0, 55), PhotoSize).gameObject.AddComponent<RawImage>();
             _preview.texture = _saved;
             if (_saved == null && _defaultSprite != null)
             {
@@ -152,7 +167,7 @@ namespace EchoProtocol.UI.MainMenu
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_preview.rectTransform, data.position, data.pressEventCamera, out var now);
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_preview.rectTransform, data.position - data.delta, data.pressEventCamera, out var before);
             var uv = _preview.uvRect;
-            _pan -= Vector2.Scale(now - before, new Vector2(uv.width / 278, uv.height / 360));
+            _pan -= Vector2.Scale(now - before, new Vector2(uv.width / PhotoSize.x, uv.height / PhotoSize.y));
             UpdateCrop();
         }
 
@@ -318,6 +333,15 @@ namespace EchoProtocol.UI.MainMenu
             ++_version;
             if (_dialog != null) { SetBusy(false); _dialog.gameObject.SetActive(false); }
         }
-        void OnDestroy() { if (_source != null) Destroy(_source); if (_saved != null) Destroy(_saved); }
+        void OnDestroy()
+        {
+            if (_source != null) Destroy(_source);
+            if (_saved != null) Destroy(_saved);
+            if (_frameSprite != null)
+            {
+                if (Application.isPlaying) Destroy(_frameSprite);
+                else DestroyImmediate(_frameSprite);
+            }
+        }
     }
 }

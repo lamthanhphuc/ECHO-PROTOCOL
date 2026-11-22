@@ -6,6 +6,44 @@ namespace EchoProtocol.UI
 {
     public static class SettingsMenuWidgets
     {
+        public const float HeadingFontSize = 27;
+        public const float BodyFontSize = 21;
+        public const float ControlFontSize = 19;
+        public const float NoteFontSize = 17;
+
+        // Apply to both the authored settings prefab and controls created at runtime.
+        public static void ApplyTypography(Transform root)
+        {
+            foreach (var label in root.GetComponentsInChildren<TMP_Text>(true))
+            {
+                var button = label.GetComponentInParent<Button>(true);
+                UiTypographyTheme.Apply(label, button != null);
+                if (button != null)
+                {
+                    label.fontSize = button.name == "Quit" || button.name == "Resume" ? 23
+                        : button.name == "CloseButton" ? 28 : ControlFontSize;
+                    label.fontStyle = FontStyles.Bold;
+                    continue;
+                }
+
+                if (label.name == "Heading")
+                {
+                    label.fontSize = HeadingFontSize;
+                    label.fontStyle = FontStyles.Normal;
+                    continue;
+                }
+                // Retain the large resolution preview and modal titles.
+                if (label.fontSize >= 30) continue;
+                bool note = label.name == "Hint" || label.name == "Description"
+                    || label.name == "SaveHint" || label.name == "Saved"
+                    || label.name == "DeviceText" || label.name == "Status";
+                bool value = label.name.EndsWith("Value")
+                    || label.name == "VolumeText" || label.name == "SensitivityText"
+                    || label.name == "LevelText" || label.name == "Quality";
+                label.fontSize = note ? NoteFontSize : value ? ControlFontSize : BodyFontSize;
+                label.fontStyle = FontStyles.Normal;
+            }
+        }
         public static readonly Color Ink = IndustrialUiStyle.Panel;
         public static readonly Color Accent = IndustrialUiStyle.Accent;
         public static readonly Color Foreground = IndustrialUiStyle.Text;

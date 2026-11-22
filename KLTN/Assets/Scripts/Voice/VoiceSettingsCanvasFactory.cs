@@ -195,7 +195,15 @@ namespace EchoProtocol.Voice
         }
 
         internal static string ControlsGuide =>
-            EchoProtocol.Settings.GameLanguage.Choose("G · Thả đồ    J · Nhiệm vụ    F2 · Hướng dẫn công cụ\nH · Gọi hỗ trợ    1 / 2 · Chọn vật phẩm\nChuột trái · Dùng công cụ\nChuột phải · Xem trước vị trí đặt / Đổi chế độ quét", "G · Drop    J · Missions    F2 · Tool guide\nH · Call for help    1 / 2 · Select item\nLeft click · Use tool\nRight click · Placement preview / Scanner mode");
+            EchoProtocol.Settings.GameLanguage.Choose(
+                $"{EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact)} · Nhặt đồ / Tương tác    Giữ Q · UV    Enter · Chat\n"
+                + "G · Thả đồ    J · Nhiệm vụ    F2 · Hướng dẫn công cụ\n"
+                + "Chuột trái · Dùng công cụ\n"
+                + "Chuột phải · Xem trước vị trí đặt / Đổi chế độ quét",
+                $"{EchoProtocol.Settings.GameplayInputSettings.GetKeyLabel(EchoProtocol.Settings.GameplayAction.Interact)} · Pick up / Interact    Hold Q · UV    Enter · Chat\n"
+                + "G · Drop    J · Missions    F2 · Tool guide\n"
+                + "Left click · Use tool\n"
+                + "Right click · Placement preview / Scanner mode");
 
         private static void BuildControlsNote(Transform body)
         {
@@ -208,7 +216,7 @@ namespace EchoProtocol.Voice
 
         public static Button AddListButton(Transform parent, string name, string title, bool selected)
         {
-            var button = Button(name, parent, 0, 0, 570, 40, title, selected, 17);
+            var button = Button(name, parent, 0, 0, 570, 40, title, selected, ControlFontSize);
             button.gameObject.AddComponent<LayoutElement>().preferredHeight = 40;
             var label = button.GetComponentInChildren<TMP_Text>();
             label.color = Foreground;

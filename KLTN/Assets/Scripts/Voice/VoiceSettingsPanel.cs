@@ -133,6 +133,7 @@ namespace EchoProtocol.Voice
             BuildQuickSettings();
             Bind();
             IndustrialUiStyle.Controls(_canvas.transform);
+            SettingsMenuWidgets.ApplyTypography(_canvas.transform);
             foreach (var label in _canvas.GetComponentsInChildren<TMP_Text>(true))
             {
                 string key = label.name;
@@ -271,7 +272,11 @@ namespace EchoProtocol.Voice
             LayoutRect("Display/SaveHint", top: 328);
 
             LayoutRect("ControlsNote", height: 278);
-            LayoutRect("ControlsNote/Body", top: 69, height: 150);
+            LayoutRect("ControlsNote/Body", top: 69, height: 190);
+            var controlsNote = TextAt(Body + "ControlsNote/Body");
+            controlsNote.rectTransform.sizeDelta = new Vector2(662, 190);
+            controlsNote.textWrappingMode = TextWrappingModes.Normal;
+            controlsNote.lineSpacing = 5;
             LayoutRect("Controls", height: 640);
             LayoutRect("Controls/Hint", top: 592);
         }
