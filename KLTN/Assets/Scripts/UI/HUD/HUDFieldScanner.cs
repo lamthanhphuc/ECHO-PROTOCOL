@@ -209,6 +209,7 @@ namespace EchoProtocol.UI.HUD
 
         private void HandleCoreResult(CoreScanResult result)
         {
+            EchoProtocol.Audio.GameAudioRuntime.TryScannerInterference();
             if (scannerAudio != null)
             {
                 scannerAudio.PlayScanPulse();
@@ -219,6 +220,7 @@ namespace EchoProtocol.UI.HUD
 
         private void HandleMotionResult(MotionScanResult result)
         {
+            EchoProtocol.Audio.GameAudioRuntime.TryScannerInterference();
             if (scannerAudio != null)
             {
                 scannerAudio.PlayScanPulse();
@@ -435,6 +437,7 @@ namespace EchoProtocol.UI.HUD
             radarGraphic.rectTransform.anchorMin = Vector2.zero;
             radarGraphic.rectTransform.anchorMax = Vector2.one;
             radarGraphic.rectTransform.offsetMin = radarGraphic.rectTransform.offsetMax = Vector2.zero;
+            if (Application.isPlaying) EchoProtocol.Audio.ScannerEchoOverlay.Attach(radar);
             scanTimerText = Label(scanTimerText, "ScanTimer", transform, 18, TextAnchor.MiddleCenter);
             Place(scanTimerText.rectTransform, 0f, 1f, 40f, 40f, 12f, 12f);
             scanTimerText.transform.SetAsLastSibling();

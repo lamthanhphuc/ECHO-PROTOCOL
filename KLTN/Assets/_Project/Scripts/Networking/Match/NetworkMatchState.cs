@@ -99,6 +99,8 @@ namespace EchoProtocol.Networking
 
     public static class NetworkMatchStateRules
     {
+        public static bool IsChargePhase(NetworkMatchPhase phase, bool flooded)
+            => phase == (flooded ? NetworkMatchPhase.Zone3FindFrigate : NetworkMatchPhase.Zone3PushFrigate);
         public static float ObjectiveCompletion(NetworkMatchPhase phase, NetworkMatchResult result,
             float cores, float security, float transport)
         {
@@ -392,7 +394,7 @@ namespace EchoProtocol.Networking
             && CurrentPhase == NetworkMatchPhase.Zone2Objective
             && Zone2Stage == Zone2MissionStage.SecurityHold
             && SecurityHoldParticipantCount > 0;
-        public bool IsZone3Charging => CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
+        public bool IsZone3Charging => NetworkMatchStateRules.IsChargePhase(CurrentPhase, FloodedMapMission.Instance != null)
             && Zone3ChargeOperator.IsRealPlayer;
         public float Zone3ChargeProgress01 => Zone3ChargeDurationSeconds > 0f
             ? Mathf.Clamp01(Zone3ChargeAccumulatedSeconds / Zone3ChargeDurationSeconds) : 0f;
@@ -711,6 +713,8 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority
                 || NetworkBootstrap.IsHostMigrationReconciliationPending)
                 return;
+
+            TickEnvironmentAudio();
 
             if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
                 && _aedv2Boundary.Transaction != null)

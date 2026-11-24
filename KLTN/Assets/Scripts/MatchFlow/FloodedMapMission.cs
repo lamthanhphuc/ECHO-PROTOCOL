@@ -17,6 +17,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private FloodedEscapeInteraction exitTarget;
         [SerializeField] private Animator escortAnimator;
         private bool _poseInitialized;
+        private AudioSource _escortAudio;
         [SerializeField, Min(1f)] private float escortRadius = 12f;
         [SerializeField, Min(.1f)] private float speed = 1.8f;
         [SerializeField, Min(1f)] private float chargeSeconds = 25f;
@@ -137,6 +138,8 @@ namespace EchoProtocol.Networking
             Instance = this;
             if (!escortAnimator && escort) escortAnimator = escort.GetComponentInChildren<Animator>(true);
             if (escortAnimator) escortAnimator.enabled = false;
+            if (Application.isPlaying && escort)
+                _escortAudio = EchoProtocol.Audio.GameAudioRuntime.CreateSource(escort.gameObject, true);
             if (destination)
             {
                 destination.gameObject.SetActive(true);
@@ -151,6 +154,7 @@ namespace EchoProtocol.Networking
 
         private void OnDisable()
         {
+            if (_escortAudio != null) _escortAudio.Stop();
             _poseInitialized = false;
             if (escortAnimator) escortAnimator.enabled = false;
         }
@@ -158,7 +162,10 @@ namespace EchoProtocol.Networking
         private void LateUpdate()
         {
             var match = NetworkMatchState.Instance;
-            if (!escort || match == null || match.Object == null || !match.Object.IsValid) return;
+            if (!escort || match == null || match.Object == null || !match.Object.IsValid)
+            { if (_escortAudio != null) _escortAudio.Stop(); return; }
+            EchoProtocol.Audio.GameAudioRuntime.Loop(_escortAudio,
+                !match.IsEnded && match.FloodedEscortMoving ? "objectives/frigate_grind_loop" : null, .35f);
             if (match.FloodedEscortPoseReady)
             {
                 bool snap = !_poseInitialized || match.Object.HasStateAuthority

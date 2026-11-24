@@ -37,7 +37,7 @@ namespace EchoProtocol.Networking
         private Zone3ConvoyRoutePoint _targetPoint = Zone3ConvoyRoutePoint.Point01;
         private float _currentSpeed;
         public bool DebugFastConvoy { get; private set; }
-        private const float NormalSpeedMultiplier = 5f;
+        public const float NormalSpeedMultiplier = 5f;
         public const float DebugSpeedMultiplier = 20f;
 
         public bool ToggleDebugFastConvoy()
@@ -267,19 +267,29 @@ namespace EchoProtocol.Networking
             }
 
             int escortCount = CountNearbyAlivePlayers();
-            float defaultMultiplier = DebugFastConvoy ? DebugSpeedMultiplier : NormalSpeedMultiplier;
-            float speed = DebugFastConvoy ? normalSpeed * defaultMultiplier
-                : RemoteFixedBalanceSnapshot.GameplayValue("convoySpeed", normalSpeed * defaultMultiplier);
-            float solo = RemoteFixedBalanceSnapshot.GameplayValue("convoySoloMultiplier", soloEscortSpeedMultiplier);
-            float targetSpeed = escortCount <= 0 ? 0f : speed * (escortCount == 1 ? solo : 1f);
-            float rate = targetSpeed > _currentSpeed
-                ? (DebugFastConvoy ? acceleration * defaultMultiplier
-                    : RemoteFixedBalanceSnapshot.GameplayValue("convoyAcceleration", acceleration * defaultMultiplier))
-                : (DebugFastConvoy ? deceleration * defaultMultiplier
-                    : RemoteFixedBalanceSnapshot.GameplayValue("convoyDeceleration", deceleration * defaultMultiplier));
-            _currentSpeed = Mathf.MoveTowards(_currentSpeed, targetSpeed,
-                rate * deltaTime);
+            _currentSpeed = AdvanceEscortSpeed(_currentSpeed, escortCount, normalSpeed, soloEscortSpeedMultiplier,
+                acceleration, deceleration, DebugFastConvoy, deltaTime);
             MoveTowardTarget(deltaTime);
+        }
+
+        public static float EscortTargetSpeed(int escorts, float baseSpeed, float solo, bool fast)
+        {
+            float multiplier = fast ? DebugSpeedMultiplier : NormalSpeedMultiplier;
+            float speed = fast ? baseSpeed * multiplier
+                : RemoteFixedBalanceSnapshot.GameplayValue("convoySpeed", baseSpeed * multiplier);
+            float soloFactor = RemoteFixedBalanceSnapshot.GameplayValue("convoySoloMultiplier", solo);
+            return escorts <= 0 ? 0f : speed * (escorts == 1 ? soloFactor : 1f);
+        }
+
+        public static float AdvanceEscortSpeed(float current, int escorts, float baseSpeed, float solo,
+            float acceleration, float deceleration, bool fast, float deltaTime)
+        {
+            float target = EscortTargetSpeed(escorts, baseSpeed, solo, fast);
+            float multiplier = fast ? DebugSpeedMultiplier : NormalSpeedMultiplier;
+            float rate = target > current
+                ? (fast ? acceleration * multiplier : RemoteFixedBalanceSnapshot.GameplayValue("convoyAcceleration", acceleration * multiplier))
+                : (fast ? deceleration * multiplier : RemoteFixedBalanceSnapshot.GameplayValue("convoyDeceleration", deceleration * multiplier));
+            return Mathf.MoveTowards(current, target, rate * Mathf.Max(0f, deltaTime));
         }
 
         public void ApplyReplicatedPose(Vector3 position, Quaternion rotation)

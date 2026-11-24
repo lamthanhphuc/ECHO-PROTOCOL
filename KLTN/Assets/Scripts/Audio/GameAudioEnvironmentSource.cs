@@ -8,12 +8,14 @@ namespace EchoProtocol.Audio
     {
         public string RoomKey { get; private set; }
         public StalkerFusionRuntime Stalker { get; private set; }
+        public StalkerFusionRuntime PresentationStalker { get; private set; }
         private void Awake()
         {
             if (GetComponent<EchoProtocol.RelayA.RelayAController>()!=null) RoomKey="map_ambience/electrical_room_loop";
             else if (GetComponent<EchoProtocol.RelayB.RelayBController>()!=null) RoomKey="map_ambience/server_room_loop";
             else if (GetComponent<SecurityTerminalDownload>()!=null) RoomKey="map_ambience/hvac_loop";
             Stalker=GetComponent<StalkerFusionRuntime>();
+            PresentationStalker = Stalker;
             if (GetComponent<EchoProtocol.AI.Stalker.Presentation.StalkerAudioController>()!=null) Stalker=null;
         }
         private void OnEnable() => GameAudioRuntime.RegisterEnvironment(this);

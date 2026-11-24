@@ -279,3 +279,25 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 71f76eb78cdbba6479fecc32f6ef376c, type: 3}
   - key: purge_furnace/pan_place
     clip: {fileID: 8300000, guid: 9c5e1a21a7f55d04d9bcfd8ba8612a25, type: 3}
+  - key: atmosphere/flooded_water
+    clip: {fileID: 8300000, guid: 18bddfe234e3d47479a19d75d0b0203c, type: 3}
+  - key: scifi/pressure_release_01
+    clip: {fileID: 8300000, guid: 10dbe0d3efc047c49ade2a16910ba3d5, type: 3}
+  - key: scifi/pressure_release_02
+    clip: {fileID: 8300000, guid: 6429ef6fc932abf48bd557105f587cfb, type: 3}
+  - key: scifi/engine_start
+    clip: {fileID: 8300000, guid: ec5ec348a6635df45b23a70c45d3ae7a, type: 3}
+  - key: flooded/Background
+    clip: {fileID: 8300000, guid: fb1bae38399f65b49afbec6f762e733b, type: 3}
+  - key: flooded/Wind
+    clip: {fileID: 8300000, guid: 2dc9a029d0f6a4d4f95eca9f86b410f2, type: 3}
+  - key: flooded/Horn
+    clip: {fileID: 8300000, guid: 560cd90a01d7d4040bfc37a476b2a7a3, type: 3}
+  - key: flooded/DeepRattle
+    clip: {fileID: 8300000, guid: da24e095fcd8c4a40816d0c04528c263, type: 3}
+  - key: flooded/LeafRustle
+    clip: {fileID: 8300000, guid: 0064191e8aa6fc945aefce68dc3e44ad, type: 3}
+  - key: flooded/Taps
+    clip: {fileID: 8300000, guid: aac2b03c203a5f3438b959e033e7bbdf, type: 3}
+  - key: flooded/WindHowl
+    clip: {fileID: 8300000, guid: 232fa66632b579d4cb807897eb2a1c60, type: 3}

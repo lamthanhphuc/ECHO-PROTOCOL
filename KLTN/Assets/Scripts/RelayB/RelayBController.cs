@@ -558,6 +558,7 @@ namespace EchoProtocol.RelayB
                 || snapshot.Status == RelayBStatus.DriftWarning;
             EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop,
                 repairing ? "objectives/relay_b_signal_loop" : null, 0.68f);
+            if (_statusLoop != null) _statusLoop.pitch = Mathf.Lerp(.85f, 1.12f, snapshot.Progress01);
             ui?.Refresh(snapshot);
             StateChanged?.Invoke(snapshot);
         }

@@ -7,6 +7,10 @@ namespace EchoProtocol.Voice
 {
     public sealed class VoicePlayerBinding : MonoBehaviour
     {
+        private static float _remoteSpeechUntil;
+        public static bool AnyRemoteSpeaking => Time.unscaledTime < _remoteSpeechUntil;
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSpeech() => _remoteSpeechUntil = 0f;
         private VoiceManager _manager;
         private string _key;
         private AudioSource _source;
@@ -40,6 +44,7 @@ namespace EchoProtocol.Voice
             _source.volume = _manager.OutputVolume;
             _source.outputAudioMixerGroup = _manager.OutputMixer;
             _source.mute = _player.HasInputAuthority || _manager.IsPlayerMuted(_key);
+            if (IsSpeaking) _remoteSpeechUntil = Time.unscaledTime + .3f;
         }
     }
 }

@@ -7,6 +7,7 @@ namespace EchoProtocol.Networking
     {
         private GameObject _interactor;
         private float _refreshAt;
+        private void Awake() => EchoProtocol.Audio.GameAudioRuntime.RegisterEmitter(this);
         public bool RequiresHold => true;
         public float Progress01
         {
@@ -20,8 +21,10 @@ namespace EchoProtocol.Networking
         public bool CanInteract(GameObject interactor)
         {
             var match = NetworkMatchState.Instance;
-            return interactor && match && match.Object && match.Object.IsValid && !match.IsEnded
-                && match.CurrentPhase == NetworkMatchPhase.Zone3FindFrigate;
+            if (!interactor || !match || !match.Object || !match.Object.IsValid || match.IsEnded
+                || match.CurrentPhase != NetworkMatchPhase.Zone3FindFrigate) return false;
+            var player = interactor.GetComponentInParent<Fusion.NetworkObject>();
+            return match.Zone3ChargeOperator.IsNone || player != null && player.InputAuthority == match.Zone3ChargeOperator;
         }
         public void Interact(GameObject interactor) => BeginHoldInteract(interactor);
         public void BeginHoldInteract(GameObject interactor)

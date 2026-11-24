@@ -478,7 +478,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             _lastSearchPlayTime = Time.time;
             voiceSource.clip   = searchClip;
-            voiceSource.pitch  = 1f;
+            voiceSource.pitch  = Random.Range(.96f, 1.04f);
             voiceSource.volume = 1f;
             voiceSource.Play();
         }
@@ -501,9 +501,9 @@ namespace EchoProtocol.AI.Stalker.Presentation
             if (!IsSourceInRange(movementSource, movementMaxDistance)) return;
 
             float vol = _chaseActive ? chaseFootstepVolume : walkFootstepVolume;
-            movementSource.pitch = 1f;
+            movementSource.pitch = Random.Range(.97f, 1.03f);
             movementSource.volume = Mathf.Clamp01(vol);
-            movementSource.PlayOneShot(clip, vol);
+            movementSource.PlayOneShot(clip); // Source volume already applies the authored gain once.
         }
 
         /// <summary>

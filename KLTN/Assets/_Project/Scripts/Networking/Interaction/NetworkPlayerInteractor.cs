@@ -783,7 +783,7 @@ namespace EchoProtocol.Networking
                 _offlineCoreStabilizerCooldownUntil = Time.time + CoreStabilizerRules.CooldownSeconds;
                 if (_coreStabilizerPulseClip != null)
                 {
-                    AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, transform.position);
+                    EchoProtocol.Audio.GameAudioRuntime.AtPoint(_coreStabilizerPulseClip, transform.position, .45f);
                 }
                 return true;
             }
@@ -1464,11 +1464,7 @@ namespace EchoProtocol.Networking
                         UpdateCoreStabilizerAuthoritative();
                         bool stabilizedAny = _stabilizerBuffedPlayers.Count > 0;
 
-                        if (_coreStabilizerPulseClip != null)
-                        {
-                            AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, transform.position);
-                        }
-
+                        // RPC targets All, including this host. Present exactly once on every peer.
                         RpcPlayCoreStabilizerFeedback(transform.position, stabilizedAny);
                     }
                 }
@@ -2296,7 +2292,7 @@ namespace EchoProtocol.Networking
         {
             if (_coreStabilizerPulseClip != null)
             {
-                AudioSource.PlayClipAtPoint(_coreStabilizerPulseClip, position);
+                EchoProtocol.Audio.GameAudioRuntime.AtPoint(_coreStabilizerPulseClip, position, .45f);
             }
         }
 

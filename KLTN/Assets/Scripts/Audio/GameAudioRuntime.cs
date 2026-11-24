@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace EchoProtocol.Audio
 {
     /// <summary>Client presentation only. Never submits AI noise or changes network state.</summary>
-    public sealed class GameAudioRuntime : MonoBehaviour
+    public sealed partial class GameAudioRuntime : MonoBehaviour
     {
         private static GameAudioRuntime _instance;
         private GameAudioCatalog _catalog;
@@ -47,6 +47,7 @@ namespace EchoProtocol.Audio
             _instance._roomCurrent = CreateSource(root, false);
             _instance._roomNext = CreateSource(root, false);
             _instance._dangerMusic = CreateSource(root, false);
+            _instance.InitializeAtmosphere();
             GameAudioSettings.RouteMusic(_instance._dangerMusic);
             SceneManager.activeSceneChanged += _instance.OnSceneChanged;
             SceneManager.sceneLoaded += _instance.OnSceneLoaded;
@@ -96,13 +97,7 @@ namespace EchoProtocol.Audio
         public static void AtPoint(AudioClip clip, Vector3 position, float volume = 1f)
         {
             if (_instance == null || clip == null || !Application.isPlaying) return;
-            var owner = new GameObject("OneShotAudio");
-            owner.transform.position = position;
-            var source = CreateSource(owner, true);
-            source.clip = clip;
-            source.volume = volume * _instance._catalog.effectsVolume;
-            source.Play();
-            Destroy(owner, clip.length + 0.1f);
+            _instance.PlayPooled(clip, position, volume);
         }
 
         private void OnInteractionCompleted(InteractionRequestResult result)
@@ -139,6 +134,7 @@ namespace EchoProtocol.Audio
 
         private void OnSceneChanged(Scene previous, Scene current)
         {
+            ResetAtmosphere();
             _nextEnvironmentUpdate = 0f;
             _roomKey = null;
             _roomTransitioning = false;
@@ -146,7 +142,8 @@ namespace EchoProtocol.Audio
             _roomNext.Stop();
             Loop(_dangerMusic, null);
             var inFacility = current.name == LobbyManager.GameSceneName || current.name == "Lobby";
-            Loop(_ambience, inFacility ? "map_ambience/facility_room_tone_loop" : null,
+            bool outdoor = current.name == "Scene_A" || current.name == "Scene_B";
+            Loop(_ambience, inFacility ? "map_ambience/facility_room_tone_loop" : outdoor ? "flooded/Background" : null,
                 _catalog.ambienceVolume);
             if (current.name == LobbyManager.GameSceneName) UI("ui/match_start");
         }
@@ -154,6 +151,7 @@ namespace EchoProtocol.Audio
         private void Update()
         {
             UpdateRoomFade();
+            UpdateAtmosphere();
             if (Time.unscaledTime < _nextEnvironmentUpdate) return;
             _nextEnvironmentUpdate = Time.unscaledTime + 1f;
             using (EnvironmentMarker.Auto()) UpdateEnvironment();
@@ -238,9 +236,9 @@ namespace EchoProtocol.Audio
                 }
             }
             Loop(_dangerMusic, danger ? "horror_ambience/tension_drone_loop" : null, 0.18f);
-            if (danger)
-                _dangerMusic.volume = 0.18f * _catalog.effectsVolume
-                    * Mathf.InverseLerp(34f, 6f, nearestDangerDistance);
+            _dangerBaseVolume = danger ? 0.18f * _catalog.effectsVolume
+                    * Mathf.InverseLerp(34f, 6f, nearestDangerDistance) : 0f;
+            _dangerMusic.volume = _dangerBaseVolume * _quietWeight;
         }
 
         private static void ConsiderRoom(Transform source, string key, Vector3 listener, ref float nearest, ref string room)
@@ -253,10 +251,10 @@ namespace EchoProtocol.Audio
 
         private void UpdateRoomFade()
         {
-            float target = _roomTransitioning && _roomNext.clip != null ? _catalog.ambienceVolume * 0.6f : 0f;
+            float target = _roomTransitioning && _roomNext.clip != null ? _catalog.ambienceVolume * 0.6f * _quietWeight : 0f;
             _roomNext.volume = Mathf.MoveTowards(_roomNext.volume, target, Time.unscaledDeltaTime * 0.12f);
             _roomCurrent.volume = Mathf.MoveTowards(_roomCurrent.volume,
-                _roomTransitioning ? 0f : (_roomCurrent.clip != null ? _catalog.ambienceVolume * 0.6f : 0f),
+                _roomTransitioning ? 0f : (_roomCurrent.clip != null ? _catalog.ambienceVolume * 0.6f * _quietWeight : 0f),
                 Time.unscaledDeltaTime * 0.12f);
             if (_roomTransitioning && _roomCurrent.volume <= 0.001f)
             {

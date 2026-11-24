@@ -11,6 +11,7 @@ namespace EchoProtocol.Networking
         [Networked] public int FloodedRouteIndex { get; private set; }
         [Networked] public NetworkBool FloodedEscortMoving { get; private set; }
         [Networked] public NetworkBool FloodedDebugFastEscort { get; private set; }
+        [Networked] public float FloodedEscortSpeed { get; private set; }
         private TickTimer _floodedChargeLease;
 
         public bool ToggleDebugFloodedEscortSpeed()
@@ -20,8 +21,8 @@ namespace EchoProtocol.Networking
                 || !life.DebugGodMode) return false;
             FloodedDebugFastEscort = !FloodedDebugFastEscort;
             EchoProtocol.UI.GameUIFeedback.Instance.Toast(EchoProtocol.Settings.GameLanguage.Choose(
-                FloodedDebugFastEscort ? "Tốc độ đĩa bay thử nghiệm ×20" : "Tốc độ đĩa bay bình thường ×1",
-                FloodedDebugFastEscort ? "Test escort speed ×20" : "Normal escort speed ×1"));
+                FloodedDebugFastEscort ? "Tốc độ đĩa bay thử nghiệm ×20" : "Tốc độ đĩa bay bình thường ×5",
+                FloodedDebugFastEscort ? "Test escort speed ×20" : "Normal escort speed ×5"));
             return true;
         }
 
@@ -116,20 +117,27 @@ namespace EchoProtocol.Networking
                     + Runner.DeltaTime * (Zone3ChargeOperator.IsRealPlayer ? 1f : -.2f), 0f, map.ChargeSeconds);
                 if (Zone3ChargeAccumulatedSeconds >= map.ChargeSeconds)
                 {
-                    Zone3ChargeOperator = PlayerRef.None;
-                    TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate, NetworkMatchPhase.Zone3PushFrigate, "MAP2_ESCORT_CHARGED");
+                    var actor = Zone3ChargeOperator;
+                    TryAdvancePhase(NetworkMatchPhase.Zone3FindFrigate, NetworkMatchPhase.Zone3PushFrigate, "MAP2_ESCORT_CHARGED", () =>
+                    {
+                        if (actor.IsRealPlayer) MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
+                        Zone3ChargeOperator = PlayerRef.None;
+                        _floodedChargeLease = TickTimer.None;
+                    });
                 }
                 return;
             }
             if (CurrentPhase != NetworkMatchPhase.Zone3PushFrigate) return;
             if (FloodedEscortArrived) return;
-            PlayerRef nearby = PlayerRef.None;
+            int escorts = 0;
             foreach (var player in Runner.ActivePlayers)
                 if (TryResolveActivePlayer(player, out var life)
                     && (FloodedDebugFastEscort || new Vector2(life.transform.position.x - Zone3FrigatePosition.x,
                         life.transform.position.z - Zone3FrigatePosition.z).sqrMagnitude <= map.EscortRadius * map.EscortRadius))
-                { nearby = player; break; }
-            if (nearby.IsNone) return;
+                { escorts++; }
+            FloodedEscortSpeed = Zone3ConvoyController.AdvanceEscortSpeed(FloodedEscortSpeed, escorts,
+                map.Speed, .7f, 2.2f, 3.5f, FloodedDebugFastEscort, Runner.DeltaTime);
+            if (FloodedEscortSpeed <= .001f) return;
             var route = map.Route;
             if (route == null || route.Length == 0) return;
             if (FloodedRouteIndex < route.Length)
@@ -137,9 +145,8 @@ namespace EchoProtocol.Networking
                 var point = route[FloodedRouteIndex];
                 if (!point) return;
                 var delta = point.position - Zone3FrigatePosition;
-                FloodedEscortMoving = delta.sqrMagnitude > .0001f;
-                float speed = map.Speed * (FloodedDebugFastEscort ? Zone3ConvoyController.DebugSpeedMultiplier : 1f);
-                Zone3FrigatePosition = Vector3.MoveTowards(Zone3FrigatePosition, point.position, speed * Runner.DeltaTime);
+                FloodedEscortMoving = delta.sqrMagnitude > .0001f && FloodedEscortSpeed > .001f;
+                Zone3FrigatePosition = Vector3.MoveTowards(Zone3FrigatePosition, point.position, FloodedEscortSpeed * Runner.DeltaTime);
                 var horizontal = new Vector3(delta.x, 0f, delta.z);
                 if (horizontal.sqrMagnitude > .001f)
                     Zone3FrigateRotation = Quaternion.RotateTowards(Zone3FrigateRotation, Quaternion.LookRotation(horizontal), 45f * Runner.DeltaTime);

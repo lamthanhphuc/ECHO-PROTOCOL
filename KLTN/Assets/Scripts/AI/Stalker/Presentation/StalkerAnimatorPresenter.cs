@@ -184,6 +184,7 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         private void OnDisable()
         {
+            _specialAudioSeeded = false;
             audioController?.StopAllLoops();
             if (animator != null)
             {
@@ -747,6 +748,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 ? presentation.AttackEpisodeId : StalkerAttackEpisodeId.Invalid;
         }
 
+        private bool _specialAudioSeeded;
+        private uint _specialAudioSequence;
         private void ApplyAudioPresentation(
             StalkerNetworkPresentationState presentation,
             bool moving,
@@ -764,6 +767,11 @@ namespace EchoProtocol.AI.Stalker.Presentation
             var pursuing = IsPursuing(presentation.SemanticState)
                 && (!purgeMood.HasValue || purgeMood == PurgeBossMood.Hunting);
             var isLocalTarget = IsTargetingLocalPlayer();
+            if (_specialAudioSeeded && presentation.SpecialSequenceOrdinal != _specialAudioSequence
+                && presentation.SpecialPhase == StalkerSpecialEncounterPhase.ApproachDownedPlayer && isLocalTarget)
+                audioController.PlaySearch(); // Existing creature cue at the real approach, no extra threat.
+            _specialAudioSequence = presentation.SpecialSequenceOrdinal;
+            _specialAudioSeeded = true;
 
             audioController.UpdateChasePresentation(pursuing, isLocalTarget);
 

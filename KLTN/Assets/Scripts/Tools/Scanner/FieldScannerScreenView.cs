@@ -28,6 +28,8 @@ namespace EchoProtocol.Tools.Scanner
         {
             if (scannerAudio == null) scannerAudio = GetComponentInChildren<FieldScannerAudio>(true);
             ResolveTextReferences();
+            if (tmpRadar != null) EchoProtocol.Audio.ScannerEchoOverlay.Attach(tmpRadar.transform);
+            else if (legacyRadar != null) EchoProtocol.Audio.ScannerEchoOverlay.Attach(legacyRadar.transform);
         }
 
         private void ResolveTextReferences()
@@ -125,6 +127,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private void HandleCoreResult(CoreScanResult result)
         {
+            EchoProtocol.Audio.GameAudioRuntime.TryScannerInterference();
             if (scannerAudio != null)
             {
                 scannerAudio.PlayScanPulse();
@@ -134,6 +137,7 @@ namespace EchoProtocol.Tools.Scanner
 
         private void HandleMotionResult(MotionScanResult result)
         {
+            EchoProtocol.Audio.GameAudioRuntime.TryScannerInterference();
             if (scannerAudio != null)
             {
                 scannerAudio.PlayScanPulse();

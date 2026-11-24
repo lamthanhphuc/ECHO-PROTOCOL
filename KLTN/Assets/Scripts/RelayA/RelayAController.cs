@@ -265,6 +265,7 @@ namespace EchoProtocol.RelayA
             EchoProtocol.Audio.GameAudioRuntime.Loop(_statusLoop,
                 snapshot.Phase == RelayACircuitPhase.Testing || (snapshot.Phase == RelayACircuitPhase.StabilizeOutput
                     && _circuit.Stabilization.Snapshot.IsRunning) ? "objectives/relay_a_motor_loop" : null, 0.72f);
+            if (_statusLoop != null) _statusLoop.pitch = Mathf.Lerp(.85f, 1.1f, _circuit.Stabilization.Snapshot.Stability01);
             ui?.RefreshCircuit(snapshot);
         }
 

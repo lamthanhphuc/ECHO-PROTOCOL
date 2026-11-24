@@ -15,6 +15,8 @@ namespace EchoProtocol.Audio
         private AudioReverbFilter _stalkerReverb;
         private NetworkObject _network;
         private NetworkPlayerMovement _player;
+        private NetworkPlayerInteractor _tools;
+        private AudioSource _stabilizerLoop;
         private NetworkPlayerLifeState _life;
         private NetworkPlayerFlashlight _flashlight;
         private LobbyPlayerState _lobby;
@@ -29,6 +31,7 @@ namespace EchoProtocol.Audio
         private NetworkMatchState _match;
         private SecurityTerminalDownload _terminal;
         private Zone3ChargeStation _charge;
+        private FloodedChargeInteraction _floodedCharge;
         private EchoProtocol.Gameplay.PushableObject _frigate;
         private NoiseMakerBeacon _beacon;
         private Vector3 _lastPosition;
@@ -47,6 +50,8 @@ namespace EchoProtocol.Audio
             _proximity = GameAudioRuntime.CreateSource(gameObject, true);
             _network = GetComponent<NetworkObject>();
             _player = GetComponent<NetworkPlayerMovement>();
+            _tools = GetComponent<NetworkPlayerInteractor>();
+            if (_tools != null) _stabilizerLoop = GameAudioRuntime.CreateSource(gameObject, true);
             _life = GetComponent<NetworkPlayerLifeState>();
             _flashlight = GetComponent<NetworkPlayerFlashlight>();
             _lobby = GetComponent<LobbyPlayerState>();
@@ -68,8 +73,9 @@ namespace EchoProtocol.Audio
             _match = GetComponent<NetworkMatchState>();
             _terminal = GetComponent<SecurityTerminalDownload>();
             _charge = GetComponent<Zone3ChargeStation>();
+            _floodedCharge = GetComponent<FloodedChargeInteraction>();
             _frigate = GetComponent<EchoProtocol.Gameplay.PushableObject>();
-            if (_charge != null)
+            if (_charge != null || _floodedCharge != null)
             {
                 _effects.rolloffMode = AudioRolloffMode.Linear;
                 _loop.rolloffMode = AudioRolloffMode.Linear;
@@ -117,6 +123,7 @@ namespace EchoProtocol.Audio
             if (_network != null && !_network.IsValid && _stalker == null)
             {
                 _loop.Stop();
+                if (_stabilizerLoop != null) _stabilizerLoop.Stop();
                 return;
             }
             var elapsed = Time.time - _lastSample;
@@ -156,7 +163,7 @@ namespace EchoProtocol.Audio
             if (_sector != null)
             {
                 if (Changed("cores", _sector.PlacedCoreCount))
-                    Play(_sector.IsCoreObjectiveComplete ? "sector_box_power_hub/fully_powered" : "sector_box_power_hub/core_insert_partial");
+                    Play(_sector.IsCoreObjectiveComplete ? "sector_box_power_hub/fully_powered" : "sector_box_power_hub/core_insert_partial", .65f);
                 GameAudioRuntime.Loop(_loop, _sector.IsCoreObjectiveComplete ? "sector_box_power_hub/idle_machinery_loop" : null, 0.15f);
             }
             if (_puzzle != null)
@@ -185,22 +192,26 @@ namespace EchoProtocol.Audio
                 GameAudioRuntime.Loop(_loop, _terminal.IsDownloading ? "security_terminal/download_progress_loop" : null, 0.3f);
                 UpdateTerminalDeadlineWarning();
             }
-            if (_charge != null) UpdateCharge();
+            if (_charge != null || _floodedCharge != null) UpdateCharge();
             if (_frigate != null) UpdateFrigate(speed);
             if (_beacon != null) GameAudioRuntime.Loop(_loop, "noise_maker/beacon_loop_loop", 0.5f);
         }
 
         private void UpdateCharge()
         {
-            bool charging = _charge.IsCharging;
-            if (Changed("zone3ChargeActive", charging))
+            var match = NetworkMatchState.Instance;
+            bool flooded = _floodedCharge != null;
+            if (flooded && (match == null || match.Object == null || !match.Object.IsValid || match.IsEnded))
+            { GameAudioRuntime.Loop(_loop, null); return; }
+            bool charging = flooded ? match.IsZone3Charging : _charge.IsCharging;
+            float progress = flooded ? _floodedCharge.Progress01 : _charge.Progress01;
+            bool completed = progress >= 1f && (flooded ? match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
+                : match == null || match.Object == null || !match.Object.IsValid
+                    || match.CurrentPhase == NetworkMatchPhase.FinalHunt);
+            if (Changed("zone3ChargeActive", charging) && (charging || !completed))
                 Play(charging ? "objectives/charge_engage" : "objectives/charge_interrupt", 0.9f);
             GameAudioRuntime.Loop(_loop,
                 charging ? "objectives/charge_transfer_loop" : null, 0.95f);
-            var match = NetworkMatchState.Instance;
-            bool completed = _charge.Progress01 >= 1f
-                && (match == null || match.Object == null || !match.Object.IsValid
-                    || match.CurrentPhase == NetworkMatchPhase.FinalHunt);
             if (Changed("zone3ChargeComplete", completed) && completed)
                 Play("sector_box_power_hub/fully_powered", 0.9f);
         }
@@ -212,6 +223,9 @@ namespace EchoProtocol.Audio
             bool pushPhase = match != null && match.Object != null && match.Object.IsValid
                 ? match.CurrentPhase == NetworkMatchPhase.Zone3PushFrigate
                 : zone3 != null && zone3.IsPushAvailable;
+            bool floodedEscort = FloodedMapMission.Instance != null
+                && FloodedMapMission.Instance.Escort == _frigate.transform;
+            if (floodedEscort) return; // FloodedMapMission presents the replicated escort-moving flag.
             bool moving = zone3 != null && zone3.Frigate == _frigate
                 && pushPhase && speed > 0.08f && speed < 4f;
             if (Changed("frigateMoving", moving))
@@ -256,6 +270,11 @@ namespace EchoProtocol.Audio
             if (_lobby != null && Changed("ready", (bool)_lobby.IsReady) && _lobby.IsReady)
                 GameAudioRuntime.UI("ui/lobby_ready");
             var gameplay = _lobby == null || _lobby.IsGameplayPlayer;
+            bool stabilizing = gameplay && _tools != null && _tools.Object != null && _tools.Object.IsValid
+                && _tools.IsCoreStabilizerActive;
+            GameAudioRuntime.Loop(_stabilizerLoop, stabilizing ? "energy_core/ambient_hum_loop" : null, .10f);
+            if (Changed("stabilizerActive", stabilizing) && !stabilizing)
+                Play("objectives/charge_interrupt", .22f);
             if (!gameplay) { GameAudioRuntime.Loop(_loop, null); return; }
             if (_flashlight != null && Changed("flashlight", _flashlight.IsOn))
                 Play(_flashlight.IsOn ? "player/flashlight_on" : "player/flashlight_off", 0.55f);
@@ -302,7 +321,7 @@ namespace EchoProtocol.Audio
             if (alive && !hidden && !modal && _player.IsPresentationGrounded)
             {
                 bool crouch = _player.IsAnimationCrouching;
-                Footstep(speed, crouch ? "player/crouch_footstep_" : _player.IsAnimationSprinting ? "player/sprint_footstep_" : "player/concrete_footstep_",
+                Footstep(speed, PlayerStepPrefix(crouch, _player.IsAnimationSprinting),
                     crouch ? .8f : _player.IsAnimationSprinting ? .4f : .56f,
                     crouch ? (local ? .25f : .35f) : local ? .45f : .65f);
             }
@@ -363,12 +382,55 @@ namespace EchoProtocol.Audio
             // Ignore standing still and teleport corrections.
             if (speed < 0.2f || speed > 12f || Time.time < _nextStep) return;
             _nextStep = Time.time + interval;
-            _step = (_step + 1) % 4;
+            _step = (_step + Random.Range(1, 4)) % 4;
             Play(prefix + (_step + 1).ToString("00"), volume);
+        }
+
+        private readonly RaycastHit[] _groundHits = new RaycastHit[8];
+        private float _nextSurfaceProbe;
+        private bool _metalGround, _softGround;
+        private Collider _lastGround;
+        private string PlayerStepPrefix(bool crouch, bool sprint)
+        {
+            if (Time.time >= _nextSurfaceProbe)
+            {
+                _nextSurfaceProbe = Time.time + .4f;
+                int count = Physics.RaycastNonAlloc(transform.position + Vector3.up * .3f, Vector3.down,
+                    _groundHits, 1.4f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                float nearest = float.MaxValue;
+                Collider ground = null;
+                for (int i = 0; i < count; i++)
+                {
+                    var hit = _groundHits[i];
+                    if (hit.collider == null || hit.collider.transform.IsChildOf(transform)
+                        || hit.distance >= nearest || !GameplayEnvironmentPhysics.IsEnvironment(hit.collider)) continue;
+                    nearest = hit.distance;
+                    ground = hit.collider;
+                }
+                if (ground != _lastGround)
+                {
+                    _lastGround = ground;
+                    var renderer = ground != null ? ground.GetComponent<Renderer>() : null;
+                    string material = ground == null ? "" : ground.sharedMaterial != null ? ground.sharedMaterial.name
+                        : renderer != null && renderer.sharedMaterial != null ? renderer.sharedMaterial.name : ground.name;
+                    _metalGround = material.IndexOf("metal", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || material.IndexOf("grate", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || material.IndexOf("steel", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                    _softGround = ground is TerrainCollider || material.IndexOf("grass", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || material.IndexOf("mud", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            return HorrorPresentationRules.StepPrefix(_metalGround, _softGround, crouch, sprint);
         }
 
         private void UpdateMatch()
         {
+            bool climax = !_match.IsEnded && (_match.CurrentPhase == NetworkMatchPhase.FinalHunt
+                || _match.CurrentPhase == NetworkMatchPhase.Escape);
+            _proximity.spatialBlend = 0f;
+            GameAudioSettings.RouteMusic(_proximity);
+            GameAudioRuntime.Loop(_proximity, climax ? "horror_ambience/low_frequency_rumble_loop" : null,
+                EchoProtocol.Voice.VoicePlayerBinding.AnyRemoteSpeaking ? .035f : .07f);
             if (Changed("phase", _match.CurrentPhase))
             {
                 switch (_match.CurrentPhase)
@@ -378,7 +440,7 @@ namespace EchoProtocol.Audio
                         GameAudioRuntime.UI("escape_endgame/final_hunt_start");
                         GameAudioRuntime.UI("escape_endgame/countdown_start");
                         break;
-                    case NetworkMatchPhase.Escape: GameAudioRuntime.UI("ui/objective_update"); break;
+                    case NetworkMatchPhase.Escape: GameAudioRuntime.UI("escape_endgame/escape_unlocked"); break;
                     case NetworkMatchPhase.MatchEnded:
                         GameAudioRuntime.UI(_match.Result == NetworkMatchResult.Win ? "escape_endgame/mission_success" : "escape_endgame/mission_failure"); break;
                     default: GameAudioRuntime.UI("ui/objective_update"); break;
@@ -391,6 +453,10 @@ namespace EchoProtocol.Audio
 
         private void OnDisable()
         {
+            _lastGround = null;
+            _metalGround = _softGround = false;
+            _nextSurfaceProbe = 0f;
+            if (_stabilizerLoop != null) _stabilizerLoop.Stop();
             if (_loop != null) _loop.Stop();
             if (_proximity != null) _proximity.Stop();
             if (_effects != null) _effects.Stop();
