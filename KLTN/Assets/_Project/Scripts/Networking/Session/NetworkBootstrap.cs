@@ -318,7 +318,11 @@ namespace EchoProtocol.Networking
                 code == "ADMIN_KICKED"
                     ? EchoProtocol.Settings.GameLanguage.Choose("Bạn đã bị mời khỏi trận", "You were removed from the match")
                     : EchoProtocol.Settings.GameLanguage.Choose("Phòng đã đóng", "The room was closed"),
-                () => detail, () => { }, "OK");
+                () => code == "ADMIN_KICKED"
+                    ? EchoProtocol.Settings.GameLanguage.Choose(
+                        "Bạn đã bị mời khỏi phòng.", "You were removed from the room.")
+                        + (string.IsNullOrWhiteSpace(reason) ? "" : "\n" + reason.Trim())
+                    : detail, () => { }, "OK");
         }
         public static bool IsHostMigrationResumeActive { get; private set; }
         // The Fusion scene callback may fire before HostMigrationResume has

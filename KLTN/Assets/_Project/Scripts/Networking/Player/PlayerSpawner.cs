@@ -46,6 +46,7 @@ namespace EchoProtocol.Networking
         [SerializeField] private NetworkObject _powerPuzzleStationPrefab;
         [SerializeField] private NetworkObject _monsterPrefab;
         [SerializeField] private NetworkObject _map2LizardPrefab;
+        [SerializeField] private NetworkObject _map2FlyingBeetlePrefab;
         [SerializeField] private RegionGraphAsset _map2RegionGraph;
         [SerializeField] private RegionGraphAsset _map2HuntRegionGraph;
 
@@ -561,6 +562,7 @@ namespace EchoProtocol.Networking
             // the surviving Stalker can be reattached from match phase
             // without inventing a new runtime identity.
             NetworkObject migratedStalker = null;
+            bool floodedMission = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
 
             var stalkers =
                 FindObjectsByType<StalkerController>(
@@ -580,8 +582,7 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
-                // Temporarily suppress restored Lizard instances in Flooded Grounds too.
-                if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+                if (floodedMission && !IsSceneAFlyingBeetle(stalkerObject, _map2FlyingBeetlePrefab))
                 {
                     runner.Despawn(stalkerObject);
                     continue;
@@ -592,12 +593,13 @@ namespace EchoProtocol.Networking
                     migratedStalker =
                         stalkerObject;
                 }
+                else if (floodedMission && migratedStalker != stalkerObject)
+                    runner.Despawn(stalkerObject);
             }
 
-            bool floodedMission = SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
             if (migratedStalker != null && floodedMission)
             {
-                // Flooded Grounds keeps one Lizard throughout every mission step.
+                // Flooded Grounds keeps its Beetle throughout every mission step.
                 _monsterInstance = migratedStalker;
             }
             else if (migratedStalker != null)
@@ -647,6 +649,10 @@ namespace EchoProtocol.Networking
             LogMigrationGameplayAudit(runner, migratedMatch);
             return true;
         }
+
+        internal static bool IsSceneAFlyingBeetle(NetworkObject instance, NetworkObject prefab) =>
+            instance != null && prefab != null
+            && (instance.name == prefab.name || instance.name == prefab.name + "(Clone)");
 
         // Restore the references, not the Core objects. Match scene-local
         // SectorBoxes to already-placed Core sockets with a strict distance
@@ -1195,16 +1201,17 @@ namespace EchoProtocol.Networking
             }
             // Zone 2 uses scene authorization panels with NetworkMatchState as
             // the authoritative multiplayer state. Keep the retired path dormant.
-            if (!IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+            if (SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
             {
-                EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
+                if (_map2FlyingBeetlePrefab != null && _map2RegionGraph != null)
+                    EnsureInitialStalker(runner, RegionSemanticZone.Zone01, _map2RegionGraph, _map2FlyingBeetlePrefab);
+                else
+                    Debug.LogError("[PlayerSpawner] Scene_A Stalker requires its Flying Beetle prefab and RegionGraph.");
             }
+            else
+                EnsureInitialStalker(runner, RegionSemanticZone.Zone01);
             BindAuthoritativeWorldState();
         }
-
-        // Temporary Scene_A-only switch; Purge uses Scene_B and keeps its boss.
-        internal static bool IsExplorationLizardDisabled(string sceneName) =>
-            sceneName == LobbyMapCatalog.ExplorationScene;
 
         private void EnsureInitialStalker(
             NetworkRunner runner,
@@ -1212,10 +1219,19 @@ namespace EchoProtocol.Networking
             RegionGraphAsset graph = null,
             NetworkObject prefab = null)
         {
-            if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
-                return;
-
             prefab ??= _monsterPrefab;
+            if (SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
+            {
+                foreach (var stalker in FindObjectsByType<StalkerController>(FindObjectsInactive.Include))
+                {
+                    var existing = stalker.GetComponentInParent<NetworkObject>();
+                    if (!IsValidNetworkObject(existing) || !existing.HasStateAuthority) continue;
+                    if (IsSceneAFlyingBeetle(existing, _map2FlyingBeetlePrefab) && _monsterInstance == null)
+                        _monsterInstance = existing;
+                    else if (existing != _monsterInstance)
+                        runner.Despawn(existing);
+                }
+            }
             if (_monsterInstance == null && prefab != null)
 
             {
@@ -1802,7 +1818,7 @@ namespace EchoProtocol.Networking
                 : (zone == RegionSemanticZone.Zone02 ? _zone2MonsterInstance : _monsterInstance);
 
             return IsValidNetworkObject(stalker)
-                || IsExplorationLizardDisabled(SceneManager.GetActiveScene().name);
+                || SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene;
         }
 
         private bool TryFindCreepMinionSpawnPosition(
@@ -1813,8 +1829,8 @@ namespace EchoProtocol.Networking
             position = default;
 
             var anchor = IsValidNetworkObject(stalker) ? stalker.transform : null;
-            // Keep minions active while the Scene_A Lizard is disabled.
-            if (anchor == null && IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
+            // Keep minions active while Scene_A's Stalker is temporarily unavailable.
+            if (anchor == null && SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
                 anchor = GameObject.Find("MonsterSpawn_Stalker_EMPTY")?.transform;
             if (anchor == null || !NavMesh.SamplePosition(
                     anchor.position,
@@ -1981,9 +1997,13 @@ namespace EchoProtocol.Networking
                 (_, obj) =>
                 {
                     // Map2 uses the same scene agent type for its Stalker and minions.
-                    if ((AlienHuntMission.Instance != null || SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene)
-                        && _map2LizardPrefab != null && obj.TryGetComponent<NavMeshAgent>(out var agent))
-                        agent.agentTypeID = _map2LizardPrefab.GetComponent<NavMeshAgent>().agentTypeID;
+                    var map2StalkerPrefab = AlienHuntMission.Instance != null
+                        ? _map2LizardPrefab
+                        : SceneManager.GetActiveScene().name == LobbyMapCatalog.ExplorationScene
+                            ? _map2FlyingBeetlePrefab : null;
+                    if (map2StalkerPrefab != null && obj.TryGetComponent<NavMeshAgent>(out var agent)
+                        && map2StalkerPrefab.TryGetComponent<NavMeshAgent>(out var stalkerAgent))
+                        agent.agentTypeID = stalkerAgent.agentTypeID;
                     obj.GetComponent<CreepMinionRuntime>()?.ConfigureBeforeSpawn(
                     zone,
                     AlienHuntMission.Instance != null ? CreepMinionRole.Catfish
@@ -2036,9 +2056,6 @@ namespace EchoProtocol.Networking
             RegionGraphAsset graph = null,
             NetworkObject prefab = null)
         {
-            if (IsExplorationLizardDisabled(SceneManager.GetActiveScene().name))
-                return null;
-
             var spawned = runner.Spawn(prefab != null ? prefab : _monsterPrefab, position, rotation, PlayerRef.None,
                 (_, obj) =>
                 {

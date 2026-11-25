@@ -13,6 +13,29 @@ namespace EchoProtocol.Networking.Tests
         private const string SectorBoxSourcePath =
             "Assets/_Project/Scripts/Networking/Interaction/NetworkSectorBox.cs";
 
+        [Test]
+        public void SceneAMigration_OnlyAdoptsFlyingBeetleIdentity()
+        {
+            var prefab = new UnityEngine.GameObject("StalkerNetwork_FlyingBeetle");
+            var beetle = new UnityEngine.GameObject("StalkerNetwork_FlyingBeetle(Clone)");
+            var lizard = new UnityEngine.GameObject("StalkerNetwork_Lizard(Clone)");
+            try
+            {
+                var method = ResolveProductionType("EchoProtocol.Networking.PlayerSpawner")
+                    .GetMethod("IsSceneAFlyingBeetle", BindingFlags.NonPublic | BindingFlags.Static);
+                Assert.That(method, Is.Not.Null);
+                var expected = prefab.AddComponent<NetworkObject>();
+                Assert.That(method.Invoke(null, new object[] { beetle.AddComponent<NetworkObject>(), expected }), Is.True);
+                Assert.That(method.Invoke(null, new object[] { lizard.AddComponent<NetworkObject>(), expected }), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(prefab);
+                UnityEngine.Object.DestroyImmediate(beetle);
+                UnityEngine.Object.DestroyImmediate(lizard);
+            }
+        }
+
         [TestCase("NetworkSectorBox")]
         [TestCase("NetworkPowerPuzzleStation")]
         public void ObjectivePrefab_ReplicatesItsPoseAndBakesTransformBehaviour(string prefabName)
@@ -24,17 +47,6 @@ namespace EchoProtocol.Networking.Tests
             Assert.That(sync, Is.Not.Null, "Clients need the authoritative objective pose to interact.");
             Assert.That(prefab.GetComponent<NetworkObject>().NetworkedBehaviours, Does.Contain(sync),
                 "The transform must be baked into Fusion's replication layout.");
-        }
-
-        [TestCase("Scene_A", true)]
-        [TestCase("Scene_B", false)]
-        [TestCase("SciFi", false)]
-        public void TemporaryLizardSuppression_OnlyAppliesToExploration(string sceneName, bool disabled)
-        {
-            var type = ResolveProductionType("EchoProtocol.Networking.PlayerSpawner");
-            var method = type.GetMethod("IsExplorationLizardDisabled", BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.That(method, Is.Not.Null);
-            Assert.That(method.Invoke(null, new object[] { sceneName }), Is.EqualTo(disabled));
         }
 
         [Test]

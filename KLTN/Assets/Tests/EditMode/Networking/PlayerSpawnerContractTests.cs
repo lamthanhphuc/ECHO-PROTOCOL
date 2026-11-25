@@ -12,6 +12,23 @@ namespace EchoProtocol.Networking.Tests
     public sealed class PlayerSpawnerContractTests
     {
         [Test]
+        public void FlyingBeetle_AnimatorOverridesResolveAfterClipImport()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork_FlyingBeetle.prefab");
+            Assert.That(prefab, Is.Not.Null);
+            var animator = prefab.GetComponentsInChildren<Animator>(true)
+                .Single(item => item.name == "FlyingBeetleVisual");
+            var controller = animator.runtimeAnimatorController as AnimatorOverrideController;
+            Assert.That(controller, Is.Not.Null);
+            var overrides = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<AnimationClip, AnimationClip>>();
+            controller.GetOverrides(overrides);
+            Assert.That(overrides, Is.Not.Empty);
+            Assert.That(overrides.All(item => item.Value != null), Is.True, "FBX reimport must not leave Beetle states without clips.");
+            Assert.That(overrides.Single(item => item.Key.name.Contains("Walk1")).Value.isLooping, Is.True);
+            Assert.That(overrides.Single(item => item.Key.name.Contains("Bite")).Value.isLooping, Is.False);
+        }
+
+        [Test]
         public void CreepMinionPrefab_DoesNotAttachNavMeshAgentAtPrefabOrigin()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/PF_CreepMinionNetwork.prefab");
@@ -188,6 +205,10 @@ namespace EchoProtocol.Networking.Tests
                 Assert.That(map2Lizard, Is.Not.Null);
                 Assert.That(map2Lizard.objectReferenceValue, Is.Not.Null);
                 Assert.That(map2Lizard.objectReferenceValue.name, Is.EqualTo("StalkerNetwork_Lizard"));
+                var map2Beetle = serializedSpawner.FindProperty("_map2FlyingBeetlePrefab");
+                Assert.That(map2Beetle, Is.Not.Null);
+                Assert.That(map2Beetle.objectReferenceValue, Is.Not.Null);
+                Assert.That(map2Beetle.objectReferenceValue.name, Is.EqualTo("StalkerNetwork_FlyingBeetle"));
             }
             finally
             {

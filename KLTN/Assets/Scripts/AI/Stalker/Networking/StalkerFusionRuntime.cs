@@ -204,6 +204,7 @@ namespace EchoProtocol.AI.Stalker.Networking
         private StalkerNetworkLifeStateConsequenceSink _productionConsequenceSink;
         private StalkerProductionTelemetryProducer _productionTelemetryProducer;
         private StalkerNetworkPresentationState _lastAuthoritativePresentationState;
+        private long _lastLocalBiteEpisodeId;
         private bool _hostMigrationFirstSimulationPending;
         private float _nextHearingDiagnosticTime;
 
@@ -490,6 +491,9 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (Object != null && !Object.HasStateAuthority)
             {
                 ConsumeReplicatedPresentationState();
+                if (ReplicatedAttackOutcome == (int)StalkerAttackOutcome.Hit
+                    && ReplicatedAttackEpisodeId > 0L)
+                    TryPresentStalkerBite(TargetPlayer, ReplicatedAttackEpisodeId, false);
             }
         }
 
@@ -1670,24 +1674,54 @@ namespace EchoProtocol.AI.Stalker.Networking
                     AEDPursuitFactKindV1.Eliminated, occurrence + ":eliminated",
                     tick, "STALKER_DIRECT_HIT", true);
 
-            RPC_PlayStalkerBite(
-                targetPlayer);
+            var episodeId = controller.ActiveAttackEpisodeId.Value;
+            Debug.Log($"[Stalker] Hit committed for {targetPlayer}, bite episode {episodeId}.");
+            TryPresentStalkerBite(targetPlayer, episodeId, false);
+            RPC_PlayStalkerBite(targetPlayer, episodeId);
         }
 
         [Rpc(
             RpcSources.StateAuthority,
             RpcTargets.All)]
         private void RPC_PlayStalkerBite(
-            [RpcTarget] PlayerRef targetPlayer)
+            [RpcTarget] PlayerRef targetPlayer,
+            long episodeId)
+        {
+            TryPresentStalkerBite(targetPlayer, episodeId, true);
+        }
+
+        private void TryPresentStalkerBite(PlayerRef targetPlayer, long episodeId, bool warnIfMissing)
         {
             if (Runner == null
                 || !Runner.IsRunning
                 || !targetPlayer.IsRealPlayer
-                || !Runner.TryGetPlayerObject(
-                    targetPlayer,
-                    out var playerObject)
-                || playerObject == null)
+                || Runner.LocalPlayer != targetPlayer
+                || episodeId <= 0L
+                || _lastLocalBiteEpisodeId == episodeId)
             {
+                return;
+            }
+
+            Runner.TryGetPlayerObject(targetPlayer, out var playerObject);
+            if (playerObject == null)
+            {
+                // The targeted RPC can arrive before the client player-object mapping.
+                foreach (var life in FindObjectsByType<NetworkPlayerLifeState>(FindObjectsInactive.Exclude))
+                {
+                    if (life.Object != null && life.Object.IsValid
+                        && life.Object.Runner == Runner
+                        && life.Object.InputAuthority == targetPlayer)
+                    {
+                        playerObject = life.Object;
+                        break;
+                    }
+                }
+            }
+
+            if (playerObject == null)
+            {
+                if (warnIfMissing)
+                    Debug.LogWarning($"[Stalker] Bite jumpscare skipped: player object missing for {targetPlayer}.");
                 return;
             }
 
@@ -1702,11 +1736,15 @@ namespace EchoProtocol.AI.Stalker.Networking
             if (jumpscare == null
                 || stalkerPresenter == null)
             {
+                if (warnIfMissing)
+                    Debug.LogWarning($"[Stalker] Bite jumpscare skipped: presentation component missing for {targetPlayer}.");
                 return;
             }
 
+            _lastLocalBiteEpisodeId = episodeId;
             jumpscare.PlayStalkerBite(
                 stalkerPresenter);
+            Debug.Log($"[Stalker] Local bite jumpscare requested for {targetPlayer}, episode {episodeId}.");
         }
 
         private void OnPlayerDownedByStalkerAuthoritative(

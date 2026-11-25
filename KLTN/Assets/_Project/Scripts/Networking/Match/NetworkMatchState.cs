@@ -708,8 +708,18 @@ namespace EchoProtocol.Networking
             _lastLoggedFusionScenarioConfigRevision = 0;
         }
 
+        private static readonly Unity.Profiling.ProfilerMarker FixedTickMarker =
+            new Unity.Profiling.ProfilerMarker("Echo.Match.FixedTick");
+        private static readonly Unity.Profiling.ProfilerMarker Zone2TickMarker =
+            new Unity.Profiling.ProfilerMarker("Echo.Match.Zone2Tick");
+        private static readonly Unity.Profiling.ProfilerMarker RelayATickMarker =
+            new Unity.Profiling.ProfilerMarker("Echo.Match.RelayA");
+        private static readonly Unity.Profiling.ProfilerMarker RelayBTickMarker =
+            new Unity.Profiling.ProfilerMarker("Echo.Match.RelayB");
+
         public override void FixedUpdateNetwork()
         {
+            using var fixedTickScope = FixedTickMarker.Auto();
             if (!Object.HasStateAuthority
                 || NetworkBootstrap.IsHostMigrationReconciliationPending)
                 return;
@@ -817,6 +827,7 @@ namespace EchoProtocol.Networking
 
             if (CurrentPhase == NetworkMatchPhase.Zone2Objective)
             {
+                using var zone2TickScope = Zone2TickMarker.Auto();
                 if (!Zone2RelayRuntimeInitialized)
                 {
                     InitializeZone2RelayRuntimeAuthoritative();
@@ -834,11 +845,18 @@ namespace EchoProtocol.Networking
                 if (relayDirector != null)
                 {
                     if (relayDirector.RelayA1 != null)
+                    {
+                        using var relayAScope = RelayATickMarker.Auto();
                         CaptureRelayACircuitState(RelaySlot.RelayA_1, relayDirector.RelayA1);
+                    }
                     if (relayDirector.RelayA2 != null)
+                    {
+                        using var relayAScope = RelayATickMarker.Auto();
                         CaptureRelayACircuitState(RelaySlot.RelayA_2, relayDirector.RelayA2);
+                    }
                     if (relayDirector.RelayB1 != null)
                     {
+                        using var relayBScope = RelayBTickMarker.Auto();
                         TickRelayBSurgeAuthoritative(RelaySlot.RelayB_1,relayDirector.RelayB1);
                         var b1Sync = relayDirector.RelayB1.Snapshot;
                         RelayB1SyncProgress = b1Sync.SyncProgressSeconds;
@@ -848,6 +866,7 @@ namespace EchoProtocol.Networking
                     }
                     if (relayDirector.RelayB2 != null)
                     {
+                        using var relayBScope = RelayBTickMarker.Auto();
                         TickRelayBSurgeAuthoritative(RelaySlot.RelayB_2,relayDirector.RelayB2);
                         var b2Sync = relayDirector.RelayB2.Snapshot;
                         RelayB2SyncProgress = b2Sync.SyncProgressSeconds;
@@ -1954,10 +1973,26 @@ namespace EchoProtocol.Networking
 
             if (CurrentPhase != NetworkMatchPhase.CoreObjective) return false;
 
+            var debugSkipStartedAt = Time.realtimeSinceStartup;
+
+            var flooded = FloodedMapMission.Instance;
+            if (flooded != null)
+            {
+                if (!flooded.TryGetDebugMissionPose(NetworkMatchPhase.Zone2Objective, 0,
+                        out _, out _)) return false;
+
+                var boxes = FindObjectsByType<NetworkSectorBox>(FindObjectsInactive.Exclude);
+                if (boxes.Length == 0) return false;
+                foreach (var box in boxes)
+                    box.DebugCompleteCoreSlotsAuthoritative();
+            }
+
             ResetZone2AuthoritativeState();
 
             if (!InitializeZone2RelayRuntimeAuthoritative())
                 return false;
+
+            var relayReadyAt = Time.realtimeSinceStartup;
 
             Zone2Stage = Zone2MissionStage.FindSecurityTerminal;
 
@@ -1972,6 +2007,7 @@ namespace EchoProtocol.Networking
             RuntimeLog.Log(
                 RuntimeLogCategory.MatchState,
                 "[MatchState] Debug skipped to Zone2Objective.");
+            Debug.Log($"[Zone2DebugSkip] relayInit={(relayReadyAt - debugSkipStartedAt) * 1000f:F1}ms phaseAndTeleport={(Time.realtimeSinceStartup - relayReadyAt) * 1000f:F1}ms");
 
             return true;
         }
@@ -3748,11 +3784,17 @@ namespace EchoProtocol.Networking
             }
         }
 
+        private Zone2MissionDirector _resolvedZone2Director;
+
         private bool TryGetZone2Director(out Zone2MissionDirector director)
         {
             director = Zone2MissionDirector.Instance;
             if (director == null) return false;
-            director.ResolveReferences();
+            if (_resolvedZone2Director != director)
+            {
+                director.ResolveReferences();
+                _resolvedZone2Director = director;
+            }
             return true;
         }
 

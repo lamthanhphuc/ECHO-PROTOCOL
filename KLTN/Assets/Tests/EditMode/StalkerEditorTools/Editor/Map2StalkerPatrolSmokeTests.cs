@@ -14,6 +14,10 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
 {
     public sealed class Map2StalkerPatrolSmokeTests
     {
+        public IEnumerator Map2_FlyingBeetlePatrolMovesOnSceneNavMesh() =>
+            PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath,
+                prefabPath: "Assets/Prefabs/StalkerNetwork_FlyingBeetle.prefab");
+
         public IEnumerator Map2_LizardPrefabPatrolMovesOnSceneNavMesh() =>
             PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath);
 
@@ -28,7 +32,8 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             PatrolMoves("Assets/Scenes/Scene_A.unity", Map2RegionGraphAuthoring.AssetPath,
                 new Vector3(490.142f, 16.844f, 544.636f));
 
-        private IEnumerator PatrolMoves(string scenePath, string graphPath, Vector3? startPosition = null)
+        private IEnumerator PatrolMoves(string scenePath, string graphPath, Vector3? startPosition = null,
+            string prefabPath = "Assets/Prefabs/StalkerNetwork_Lizard.prefab")
         {
             yield return SceneManager.LoadSceneAsync(scenePath, LoadSceneMode.Single);
 
@@ -39,7 +44,7 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
             var marker = GameObject.Find("MonsterSpawn_Stalker_EMPTY").transform;
             Assert.That(NavMesh.SamplePosition(startPosition ?? marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
             var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(graphPath);
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork_Lizard.prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             var holder = new GameObject("Map2 patrol smoke test");
             holder.SetActive(false);
             GameObject instance;

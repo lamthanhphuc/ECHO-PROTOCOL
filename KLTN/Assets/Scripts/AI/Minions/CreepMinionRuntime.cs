@@ -2558,7 +2558,14 @@ namespace EchoProtocol.AI.Minions
         private void CrossFade(string state)
         {
             foreach (var animator in _animators)
-                if (animator != null) animator.CrossFade(state, 0.05f);
+            {
+                if (animator == null) continue;
+                var stateHash = Animator.StringToHash(state);
+                if (state == "Walk" && !animator.HasState(0, stateHash))
+                    stateHash = Animator.StringToHash("Run");
+                if (animator.HasState(0, stateHash))
+                    animator.CrossFade(stateHash, 0.05f, 0);
+            }
         }
 
         private void RenderCatfishDeath()

@@ -25,6 +25,10 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [UnityTest]
+        public IEnumerator Map2_FlyingBeetlePatrolMovesOnSceneNavMesh() =>
+            Run(Create(PatrolFixture), nameof(Map2_FlyingBeetlePatrolMovesOnSceneNavMesh));
+
+        [UnityTest]
         public IEnumerator Map2_LizardPrefabPatrolMovesOnSceneNavMesh() =>
             Run(Create(PatrolFixture), nameof(Map2_LizardPrefabPatrolMovesOnSceneNavMesh));
 

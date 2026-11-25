@@ -46,6 +46,7 @@ public sealed class AlienHuntSceneTests
         foreach (var fuel in mission.Actors.Where(a => a.Kind == HuntKind.Jerrycan))
         {
             Assert.That(fuel.GetComponentsInChildren<Collider>().Length, Is.GreaterThan(0), fuel.name);
+            Assert.That(fuel.GetComponent<BoxCollider>().isTrigger, Is.True, fuel.name);
             Assert.That(fuel.GetComponentInChildren<Renderer>().bounds.size.y, Is.InRange(.60f, .69f),
                 fuel.name + " should be large enough to see and pick up.");
         }
@@ -58,6 +59,7 @@ public sealed class AlienHuntSceneTests
         var aliens = mission.Actors.Take(9).ToArray();
         foreach (var meat in mission.Actors.Where(a => a.Kind == HuntKind.Meat))
         {
+            Assert.That(meat.GetComponent<BoxCollider>().isTrigger, Is.True, meat.name);
             var meatSize = meat.GetComponentInChildren<Renderer>().bounds.size;
             Assert.That(meatSize.x, Is.InRange(1.20f, 1.44f), meat.name + " should be clearly visible at ground level.");
             Assert.That(meat.GetComponent<BoxCollider>().size.x, Is.InRange(1.20f, 1.44f),

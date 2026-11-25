@@ -31,12 +31,14 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
                 var asset = AssetDatabase.LoadAssetAtPath<RegionGraphAsset>(assetPath);
                 Assert.That(asset, Is.Not.Null);
                 var regions = asset.BuildRuntimeGraph();
-                Assert.That(RegionGraph.Validate(regions, graph), Is.EqualTo(RegionGraphValidationFailure.None));
                 var all = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>()).ToArray();
                 Assert.That(all.SelectMany(t => t.GetComponents<Unity.AI.Navigation.NavMeshModifier>())
                     .Any(m => m.name.Contains("_Door_") && m.ignoreFromBuild), Is.False);
                 var surface = UnityEngine.Object.FindAnyObjectByType<Unity.AI.Navigation.NavMeshSurface>();
-                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/StalkerNetwork_Lizard.prefab");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(scenePath.EndsWith("Scene_A.unity")
+                    ? "Assets/Prefabs/StalkerNetwork_FlyingBeetle.prefab"
+                    : "Assets/Prefabs/StalkerNetwork_Lizard.prefab");
+                Assert.That(prefab, Is.Not.Null);
                 Assert.That(surface.agentTypeID, Is.EqualTo(prefab.GetComponent<NavMeshAgent>().agentTypeID));
                 Assert.That(NavMesh.GetSettingsByID(0).agentRadius, Is.EqualTo(.65f), "Map1 bake clearance must stay unchanged.");
                 foreach (var door in all.Where(t => t.name.Contains("_Door_")).SelectMany(t => t.GetComponents<BoxCollider>()))
@@ -49,6 +51,13 @@ namespace EchoProtocol.AI.Stalker.EditorTools.Tests
                 }
                 var marker = all.Single(t => t.name == "MonsterSpawn_Stalker_EMPTY");
                 Assert.That(NavMesh.SamplePosition(marker.position, out var spawn, 1f, NavMesh.AllAreas), Is.True);
+                var agentFilter = new NavMeshQueryFilter { agentTypeID = surface.agentTypeID, areaMask = NavMesh.AllAreas };
+                Assert.That(NavMesh.SamplePosition(marker.position, out _, 1f, agentFilter), Is.True,
+                    "The Stalker spawn marker must resolve on its own agent's NavMesh.");
+                if (scenePath.EndsWith("Scene_A.unity"))
+                    Assert.That(NavMesh.SamplePosition(new Vector3(495.72f, 16.65f, 414.81f), out _, 2f, agentFilter), Is.True,
+                        "The reported minion spawn point must resolve on the Map 2 agent's NavMesh.");
+                Assert.That(RegionGraph.Validate(regions, graph), Is.EqualTo(RegionGraphValidationFailure.None));
                 // These floor samples cover a cabin interior and the villa's upper floor.
                 foreach (var point in new[] { new Vector3(421.74f, 17.53f, 536.27f), new Vector3(470.03f, 26.54f, 505.16f) })
                 {

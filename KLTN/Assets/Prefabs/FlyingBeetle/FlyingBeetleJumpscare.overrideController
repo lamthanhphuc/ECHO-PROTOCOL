@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!221 &22100000
+AnimatorOverrideController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: FlyingBeetleJumpscare
+  m_Controller: {fileID: 9100000, guid: eb741dc5d12bf5544a27f0206021340d, type: 2}
+  m_Clips:
+  - m_OriginalClip: {fileID: -6087772779972263259, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: 12032f68da0993d41bcee7217e8288f7, type: 3}
+  - m_OriginalClip: {fileID: -1464133427668720647, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: 8f8ad413d2c254e4b8e5bd1ee79e356b, type: 3}
+  - m_OriginalClip: {fileID: 6269228107325730253, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: 8f8ad413d2c254e4b8e5bd1ee79e356b, type: 3}
+  - m_OriginalClip: {fileID: 8308113279142031361, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: f6145ecde24cdf54b89e3e4990dd0f11, type: 3}
+  - m_OriginalClip: {fileID: 6854530201773087166, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 693eb987195b4674690a3b04d565c310, type: 3}
+  - m_OriginalClip: {fileID: -815216388795826607, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 495488b67c58bcd48b6e41fd3cc7a8a7, type: 3}
+  - m_OriginalClip: {fileID: -5256417810785657066, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: f6145ecde24cdf54b89e3e4990dd0f11, type: 3}
+  - m_OriginalClip: {fileID: 7344986953279484206, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 049efb7b4fef0ca4db6974da3489132d, type: 3}
+  - m_OriginalClip: {fileID: -5574319192343111270, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: 8f8ad413d2c254e4b8e5bd1ee79e356b, type: 3}
+  - m_OriginalClip: {fileID: 6175007238043633351, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 1827226128182048838, guid: 8f8ad413d2c254e4b8e5bd1ee79e356b, type: 3}
+  - m_OriginalClip: {fileID: 8087875513454036377, guid: af69d37b180cc2f49b87e760dfaa46bb, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: bf34b5e8e3924f043bc6c995d99928e6, type: 3}

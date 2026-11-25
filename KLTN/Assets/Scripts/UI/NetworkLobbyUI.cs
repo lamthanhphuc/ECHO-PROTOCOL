@@ -384,6 +384,9 @@ RefreshMemberList();
         private static string ConnectionFeedbackSource(string detail)
         {
             string error = (detail ?? string.Empty).ToLowerInvariant();
+            if (error.Contains("admin_kicked"))
+                return GameLanguage.Choose("BẠN ĐÃ BỊ MỜI KHỎI PHÒNG\nBạn có thể vào phòng khác từ menu chính.",
+                    "YOU WERE REMOVED FROM THE ROOM\nYou can join another room from the main menu.");
             if (error.Contains("authenticated user"))
                 return "PHIÊN ĐĂNG NHẬP KHÔNG HỢP LỆ\nVề menu chính và đăng nhập lại, sau đó thử kết nối.";
             if (error.Contains("session is busy") || error.Contains("operation is already in progress"))

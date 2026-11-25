@@ -84,6 +84,18 @@ namespace EchoProtocol.Networking
             return true;
         }
 
+        // F8 in Flooded Grounds skips the Core objective without spawning fake pickups.
+        public void DebugCompleteCoreSlotsAuthoritative()
+        {
+            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+                || Phase != NetworkMatchPhase.CoreObjective) return;
+            if (PlacedCoreCount >= RequiredCoreCount) return;
+
+            PlacedCoreCount = RequiredCoreCount;
+            AdvanceObjectiveOrdinal();
+            HandleObjectiveChanged();
+        }
+
         // Use the exact same socket/fallback pose as PlaceCarriedCore, so
         // spatial remapping cannot silently associate a Core with a wrong box.
         public bool TryGetPlacementPoseForMigration(int slotIndex, out Vector3 position)

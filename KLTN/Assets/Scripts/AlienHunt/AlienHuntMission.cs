@@ -507,7 +507,16 @@ namespace EchoProtocol.Networking
         private bool TryDropPose(int index, Transform owner, out Vector3 floor, out Quaternion floorRotation)
         {
             ItemDropPlacementUtility.GetFloorSnappedPose(owner, owner, 1.2f, 0f, out floor, out floorRotation);
-            if (actors[index].Kind == HuntKind.Alien)
+            var actor = actors[index];
+            if (actor.Kind == HuntKind.Meat || actor.Kind == HuntKind.Jerrycan)
+            {
+                // These pickup colliders are triggers, so placement must account for the
+                // model pivot rather than relying on a physics collision to settle it.
+                var box = actor.GetComponent<BoxCollider>();
+                if (box)
+                    floor.y -= (box.center.y - box.size.y * .5f) * actor.transform.lossyScale.y;
+            }
+            if (actor.Kind == HuntKind.Alien)
             {
                 // Keep a dropped alien on the connected roaming network so it can wake and return.
                 bool found = false; var path = new NavMeshPath();

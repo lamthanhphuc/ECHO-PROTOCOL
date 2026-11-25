@@ -27,6 +27,7 @@ public sealed class PlayerJumpscareController : MonoBehaviour
     private AudioSource _audio;
     private CanvasGroup _fade;
     private StalkerAnimatorPresenter _suppressedStalkerPresenter;
+    private StalkerAnimatorPresenter _pendingStalkerPresenter;
 
     private bool _playing;
     private bool _seenCatch;
@@ -34,10 +35,14 @@ public sealed class PlayerJumpscareController : MonoBehaviour
     private bool _screamed;
     private bool _hudWasActive;
     private bool _stalkerBite;
+    private bool _beetleJumpscare;
+    private Vector3 _beetleNearPosition;
+    private Vector3 _beetleStartPosition;
 
     private float _startedAt;
     private float _duration;
     private float _baseFov;
+    private float _pendingStalkerDeadline;
 
     private Quaternion _shake = Quaternion.identity;
     private uint _catchOrdinal;
@@ -61,8 +66,24 @@ public sealed class PlayerJumpscareController : MonoBehaviour
 
         if (!IsLocal)
         {
+            _pendingStalkerPresenter = null;
             StopJumpscare();
             return;
+        }
+
+        if (_pendingStalkerPresenter != null)
+        {
+            if (Time.unscaledTime > _pendingStalkerDeadline)
+            {
+                Debug.LogWarning("[Jumpscare] Stalker bite skipped: local player camera was unavailable.");
+                _pendingStalkerPresenter = null;
+            }
+            else if (TryBindLocalCamera())
+            {
+                var presenter = _pendingStalkerPresenter;
+                _pendingStalkerPresenter = null;
+                PlayStalkerBite(presenter);
+            }
         }
 
         // Stalker Bite is a transient local presentation.
@@ -119,10 +140,20 @@ public sealed class PlayerJumpscareController : MonoBehaviour
     public void PlayStalkerBite(
         StalkerAnimatorPresenter stalkerPresenter)
     {
-        if (!IsLocal
-            || stalkerPresenter == null
-            || !TryBindLocalCamera())
+        if (!IsLocal)
         {
+            Debug.LogWarning("[Jumpscare] Stalker bite skipped: player has no local input authority.");
+            return;
+        }
+        if (stalkerPresenter == null)
+        {
+            return;
+        }
+
+        if (!TryBindLocalCamera())
+        {
+            _pendingStalkerPresenter = stalkerPresenter;
+            _pendingStalkerDeadline = Time.unscaledTime + 1f;
             return;
         }
 
@@ -142,23 +173,67 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             .SetLocalVisibilitySuppressed(true);
 
         StartJumpscare(
-            Mathf.Max(0.2f, _stalkerBiteSeconds),
+            Mathf.Max(0.2f, stalkerPresenter.FitBiteJumpscareToCamera
+                ? 2.6f : _stalkerBiteSeconds),
             0f,
             true);
+    }
+
+    private void FitJumpscareToCamera(GameObject visual)
+    {
+        visual.transform.localPosition = Vector3.zero;
+        var bounds = new Bounds();
+        var hasBounds = false;
+        foreach (var renderer in visual.GetComponentsInChildren<Renderer>())
+        {
+            var world = renderer.bounds;
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var point = world.center + Vector3.Scale(world.extents, new Vector3(
+                    (corner & 1) == 0 ? -1f : 1f,
+                    (corner & 2) == 0 ? -1f : 1f,
+                    (corner & 4) == 0 ? -1f : 1f));
+                point = _camera.transform.InverseTransformPoint(point);
+                if (!hasBounds)
+                {
+                    bounds = new Bounds(point, Vector3.zero);
+                    hasBounds = true;
+                }
+                else bounds.Encapsulate(point);
+            }
+        }
+
+        if (!hasBounds)
+        {
+            visual.transform.localPosition = _ghostOffset;
+            return;
+        }
+
+        var halfVerticalFov = Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        var halfHorizontalFov = halfVerticalFov * Mathf.Max(0.5f, _camera.aspect);
+        var distance = Mathf.Max(bounds.extents.y / halfVerticalFov,
+            bounds.extents.x / halfHorizontalFov) * 0.65f + bounds.extents.z + 0.25f;
+        visual.transform.localPosition = new Vector3(-bounds.center.x, -bounds.center.y,
+            Mathf.Max(Mathf.Max(distance, _ghostOffset.z + bounds.center.z) - bounds.center.z,
+                0.75f - bounds.min.z));
     }
 
     private bool TryBindLocalCamera()
     {
         _camera = Camera.main;
+        if (_camera == null || _camera.GetComponent<PlayerCamera>() == null)
+        {
+            var localCamera = FindAnyObjectByType<PlayerCamera>();
+            _camera = localCamera != null ? localCamera.GetComponent<Camera>() : null;
+        }
 
         var cameraDriver =
             _camera != null
                 ? _camera.GetComponent<PlayerCamera>()
                 : null;
 
-        return _camera != null
-            && cameraDriver != null
-            && cameraDriver.Target == transform;
+        // The local camera may already follow a spectator after a direct elimination.
+        return _camera != null && cameraDriver != null;
     }
 
     private void StartJumpscare(
@@ -179,6 +254,9 @@ public sealed class PlayerJumpscareController : MonoBehaviour
         _baseFov = _camera.fieldOfView;
         _animated = false;
         _screamed = false;
+        _pendingStalkerPresenter = null;
+        _beetleJumpscare = stalkerBite && _suppressedStalkerPresenter != null
+            && _suppressedStalkerPresenter.FitBiteJumpscareToCamera;
 
         if (_gameplayHud == null)
         {
@@ -214,8 +292,27 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             _ghost.transform.localRotation =
                 Quaternion.Euler(
                     _ghostEuler);
+            if (_beetleJumpscare)
+            {
+                // The Beetle's head points down its local -Z axis.
+                _ghost.transform.localRotation = Quaternion.identity;
+                FitJumpscareToCamera(_ghost);
+                _beetleNearPosition = _ghost.transform.localPosition;
+                foreach (var bone in _ghost.GetComponentsInChildren<Transform>(true))
+                {
+                    if (bone.name != "head 1")
+                        continue;
 
-            // Root Animator owns the camera lunge.
+                    var head = _ghost.transform.InverseTransformPoint(bone.position);
+                    _beetleNearPosition = new Vector3(-head.x, 0.1f - head.y,
+                        1.45f - head.z);
+                    break;
+                }
+                _beetleStartPosition = _beetleNearPosition + Vector3.forward * 1.1f;
+                _ghost.transform.localPosition = _beetleStartPosition;
+            }
+
+            // The prefab root plays the bite clip; camera-relative movement stays local.
             _animator =
                 _ghost.GetComponent<Animator>();
 
@@ -229,7 +326,15 @@ public sealed class PlayerJumpscareController : MonoBehaviour
                     AnimatorUpdateMode.UnscaledTime;
             }
 
-            _ghost.SetActive(false);
+            if (_beetleJumpscare && _animator != null)
+            {
+                _ghost.SetActive(true);
+                _animator.speed = 2.2f;
+                _animator.Play(BiteStateHash, 0, 0f);
+                _animated = true;
+            }
+            else
+                _ghost.SetActive(false);
         }
 
         var audioObject =
@@ -317,20 +422,32 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             _ghost.SetActive(true);
         }
 
+        if (_beetleJumpscare && _ghost != null)
+        {
+            var approach = Mathf.SmoothStep(0f, 1f,
+                Mathf.Clamp01(elapsed / 0.35f));
+            _ghost.transform.localPosition = Vector3.Lerp(
+                _beetleStartPosition, _beetleNearPosition, approach);
+        }
+
         if (!_animated
-            && elapsed >= 0.1f)
+            && elapsed >= (_beetleJumpscare ? 0f : 0.1f))
         {
             _animated = true;
 
             // Root visual lunge.
             if (_animator != null)
             {
-                _animator.SetTrigger(
-                    "Jumpscare");
+                if (_beetleJumpscare)
+                    _animator.speed = 2.2f;
+                if (_stalkerBite && _animator.HasState(0, BiteStateHash))
+                    _animator.Play(BiteStateHash, 0, 0f);
+                else
+                    _animator.SetTrigger("Jumpscare");
             }
 
             // New Stalker model animation.
-            if (_stalkerBite
+            if (_stalkerBite && !_beetleJumpscare
                 && _ghost != null)
             {
                 var animators =
@@ -358,7 +475,7 @@ public sealed class PlayerJumpscareController : MonoBehaviour
         }
 
         if (!_screamed
-            && elapsed >= 0.15f)
+            && elapsed >= (_beetleJumpscare ? 0.35f : 0.15f))
         {
             _screamed = true;
 
@@ -369,11 +486,12 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             }
         }
 
+        var shakeStart = _beetleJumpscare ? 0.35f : 0.2f;
         var envelope =
-            elapsed >= 0.2f
+            elapsed >= shakeStart
                 ? Mathf.Clamp01(
                     1f
-                    - (elapsed - 0.2f)
+                    - (elapsed - shakeStart)
                     / 0.8f)
                 : 0f;
 
@@ -397,10 +515,9 @@ public sealed class PlayerJumpscareController : MonoBehaviour
             - _fovPunch
             * envelope;
 
-        var fadeStart =
-            Mathf.Min(
-                1.5f,
-                _duration * 0.75f);
+        var fadeStart = _beetleJumpscare
+            ? 2f
+            : Mathf.Min(1.5f, _duration * 0.75f);
 
         _fade.alpha =
             Mathf.Clamp01(
@@ -458,6 +575,7 @@ public sealed class PlayerJumpscareController : MonoBehaviour
 
         _playing = false;
         _stalkerBite = false;
+        _beetleJumpscare = false;
 
         if (_camera != null)
         {
@@ -495,6 +613,7 @@ public sealed class PlayerJumpscareController : MonoBehaviour
 
     private void OnDisable()
     {
+        _pendingStalkerPresenter = null;
         StopJumpscare();
         _seenCatch = false;
     }

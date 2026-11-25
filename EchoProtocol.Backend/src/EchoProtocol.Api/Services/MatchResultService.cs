@@ -158,7 +158,6 @@ public sealed class MatchResultService : IMatchResultService
                 }).ToList()
             };
 
-            if (request.UsedDebugCheats) match.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
             match.Status = MatchAuthorityStatus.Ended;
             match.EndedAtUtc = now;
             match.UpdatedAtUtc = now;

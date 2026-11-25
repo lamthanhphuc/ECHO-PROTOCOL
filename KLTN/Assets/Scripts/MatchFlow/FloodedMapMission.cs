@@ -53,16 +53,20 @@ namespace EchoProtocol.Networking
             rotation = Quaternion.identity;
             if (!target || !target.enabled || !target.gameObject.activeInHierarchy) return false;
             var bounds = target.bounds;
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < 48; i++)
             {
-                float angle = (playerIndex * 2 + i) * Mathf.PI / 8f;
+                float angle = (playerIndex * 2 + i % 16) * Mathf.PI / 8f;
                 var direction = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
-                var candidate = bounds.center + new Vector3(direction.x * (bounds.extents.x + 1.2f), 0f,
-                    direction.z * (bounds.extents.z + 1.2f));
+                float distance = 1.2f + i / 16 * 1.2f;
+                var candidate = bounds.center + new Vector3(direction.x * (bounds.extents.x + distance), 0f,
+                    direction.z * (bounds.extents.z + distance));
                 candidate.y = bounds.min.y;
                 if (!UnityEngine.AI.NavMesh.SamplePosition(candidate, out var hit, 2f, UnityEngine.AI.NavMesh.AllAreas)
                     || Mathf.Abs(hit.position.y - bounds.min.y) > 2f
-                    || (target.ClosestPoint(hit.position) - hit.position).sqrMagnitude > 2.7f * 2.7f) continue;
+                    || (hit.position - candidate).sqrMagnitude > 1f
+                    || (target.ClosestPoint(hit.position) - hit.position).sqrMagnitude > 5f * 5f
+                    || FloodedWaterBoundary.TryGetSwimSurface(hit.position, out var waterY, .45f)
+                        && hit.position.y < waterY - .1f) continue;
                 var facing = bounds.center - hit.position;
                 facing.y = 0f;
                 position = hit.position + Vector3.up * .05f;
@@ -136,6 +140,13 @@ namespace EchoProtocol.Networking
         private void Awake()
         {
             Instance = this;
+            // Scene_A's 300 m tree range renders over eight million triangles at the terminal.
+            foreach (var terrain in Terrain.activeTerrains)
+            {
+                if (terrain.gameObject.scene != gameObject.scene) continue;
+                terrain.treeDistance = Mathf.Min(terrain.treeDistance, 140f);
+                terrain.detailObjectDistance = Mathf.Min(terrain.detailObjectDistance, 35f);
+            }
             if (!escortAnimator && escort) escortAnimator = escort.GetComponentInChildren<Animator>(true);
             if (escortAnimator) escortAnimator.enabled = false;
             if (Application.isPlaying && escort)

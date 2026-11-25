@@ -51,6 +51,23 @@ namespace EchoProtocol.Networking.Tests
         }
 
         [Test]
+        public void RoamingMinion_UsesRunWhenAnimatorHasNoWalkState()
+        {
+            var animator = _minion.gameObject.AddComponent<Animator>();
+            animator.runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(
+                "Assets/Animations/Minion/AC_CreepMinion.controller");
+            animator.Rebind();
+            animator.Update(0f);
+            Assert.That(animator.HasState(0, Animator.StringToHash("Walk")), Is.False);
+            Field("_animators", new[] { animator });
+
+            _minion.GetType().GetMethod("CrossFade", PrivateInstance).Invoke(_minion, new object[] { "Walk" });
+            animator.Update(.2f);
+
+            Assert.That(animator.GetCurrentAnimatorStateInfo(0).IsName("Run"), Is.True);
+        }
+
+        [Test]
         public void StationaryWatchdogWaitsFiveSecondsAndResetsAfterMovement()
         {
             var monitor = _minion.GetType().GetField("_stationaryRecovery", PrivateInstance).GetValue(_minion);

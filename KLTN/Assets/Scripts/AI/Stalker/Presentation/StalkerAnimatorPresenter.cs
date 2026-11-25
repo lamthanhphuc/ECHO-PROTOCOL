@@ -65,8 +65,15 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
         [Header("Dependencies")]
         [SerializeField] private GameObject biteJumpscarePrefab;
+        [SerializeField] private bool fitBiteJumpscareToCamera;
+        [SerializeField, Min(0.01f)] private float bitePlaybackSpeed = 1f;
+        [SerializeField, Min(0f)] private float biteVisualDrop;
+        [SerializeField, Min(0f)] private float biteVisualBackoff;
+        [SerializeField] private bool flyingJumpPresentation;
+        [SerializeField, Min(0f)] private float flyingJumpHeight = 6f;
 
         public GameObject BiteJumpscarePrefab => biteJumpscarePrefab;
+        public bool FitBiteJumpscareToCamera => fitBiteJumpscareToCamera;
 
         [SerializeField]
         private Animator animator;
@@ -143,6 +150,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         private Vector3 _lastRootPosition;
 
         private bool _hasLastRootPosition;
+        private Vector3 _biteVisualRestLocalPosition;
+        private bool _hasBiteVisualRestPosition;
 #if AED_V02_PILOT_HARNESS
         private float _nativePresentedMoveSpeed;
         private int _nativePresentationFrame = -10;
@@ -186,6 +195,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
         {
             _specialAudioSeeded = false;
             audioController?.StopAllLoops();
+            if (_hasBiteVisualRestPosition && animator != null)
+                animator.transform.localPosition = _biteVisualRestLocalPosition;
             if (animator != null)
             {
                 int upperLayer = animator.GetLayerIndex("Purge Upper");
@@ -211,6 +222,8 @@ namespace EchoProtocol.AI.Stalker.Presentation
 
             var presentation =
                 ResolvePresentationState();
+
+            UpdateBiteVisualPlacement(presentation);
 
             var moveSpeed =
                 ResolveMoveSpeed();
@@ -245,6 +258,41 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 moveSpeed,
                 forceRefresh,
                 immediate: false);
+        }
+
+        private void UpdateBiteVisualPlacement(StalkerNetworkPresentationState presentation)
+        {
+            if ((biteVisualDrop <= 0f && biteVisualBackoff <= 0f && !flyingJumpPresentation) || animator == null)
+                return;
+
+            if (!_hasBiteVisualRestPosition)
+            {
+                _biteVisualRestLocalPosition = animator.transform.localPosition;
+                _hasBiteVisualRestPosition = true;
+            }
+
+            var biting = presentation.PresentationAction == StalkerPresentationAction.None
+                && (presentation.SemanticState == StalkerState.ATTACK
+                    || (presentation.SemanticState == StalkerState.RECOVER
+                        && presentation.HasAttackEpisode
+                        && presentation.AttackOutcome == StalkerAttackOutcome.Hit));
+            float flight = 0f;
+            if (flyingJumpPresentation)
+            {
+                float progress = Mathf.Clamp01(presentation.PresentationActionProgress01);
+                if (presentation.SpecialPhase == StalkerSpecialEncounterPhase.JumpOut)
+                    flight = Mathf.SmoothStep(0f, flyingJumpHeight, progress);
+                else if (presentation.SpecialPhase == StalkerSpecialEncounterPhase.HiddenTransfer)
+                    flight = flyingJumpHeight;
+                else if (presentation.SpecialPhase == StalkerSpecialEncounterPhase.JumpIn)
+                    flight = Mathf.SmoothStep(flyingJumpHeight, 0f, progress);
+            }
+            var target = _biteVisualRestLocalPosition
+                + Vector3.down * (biting ? biteVisualDrop : 0f)
+                + Vector3.back * (biting ? biteVisualBackoff : 0f)
+                + Vector3.up * flight;
+            animator.transform.localPosition = flight > 0f ? target : Vector3.MoveTowards(
+                animator.transform.localPosition, target, Time.deltaTime * 12f);
         }
 
         private bool ResolveDependencies()
@@ -1051,6 +1099,12 @@ namespace EchoProtocol.AI.Stalker.Presentation
                 0.01f,
                 patrolPlaybackSpeed);
         }
+
+        if (presentation.SemanticState == StalkerState.ATTACK
+            || (presentation.SemanticState == StalkerState.RECOVER
+                && presentation.HasAttackEpisode
+                && presentation.AttackOutcome == StalkerAttackOutcome.Hit))
+            return Mathf.Max(0.01f, bitePlaybackSpeed);
 
         return presentation.SemanticState switch
         {
