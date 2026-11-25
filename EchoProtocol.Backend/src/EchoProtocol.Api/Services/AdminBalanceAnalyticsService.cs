@@ -26,7 +26,10 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
         var matches = await query.OrderByDescending(x => x.EndedAtUtc).ThenBy(x => x.MatchId).Take(limit + 1)
             .Select(x => new
             {
-                x.MatchId, x.Outcome, x.DurationSeconds, x.Match.ResolutionMode,
+                x.MatchId, x.Outcome, x.DurationSeconds, x.PlayerCount, x.Match.ResolutionMode,
+                x.Match.MapId, x.Match.Difficulty, x.Match.BalanceSource, x.Match.BalanceVersion,
+                x.Match.BalanceHash, x.Match.BalanceBuildVersion, x.Match.BalanceProtocolVersion,
+                x.Match.MatchDataPolicy, x.Match.AdaptivePolicyConfigVersion,
                 Players = x.Players.Count, Survivors = x.Players.Count(p => p.Survived)
             }).ToListAsync(ct);
         var truncated = matches.Count > limit;
@@ -38,7 +41,9 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
         var revisions = await db.AEDV02Decisions.AsNoTracking().Where(x => ids.Contains(x.MatchId))
             .Select(x => new
             {
-                x.MatchId, x.ApprovalStatus, x.ApplyStatus, x.ReasonCode, x.ReceiptId, x.ChangedKey,
+                x.MatchId, x.ApprovalStatus, x.ApplyStatus, x.ReasonCode, x.ReceiptId, x.EffectEventId,
+                x.AppliedTick, x.AppliedAtUtc, x.ChangedKey, x.PolicyVersion, x.CatalogVersion,
+                x.SceneManifestFingerprint,
                 ClientObserved = db.Set<Entities.AEDV02ClientObservation>().Any(c => c.DecisionId == x.DecisionId)
             }).ToListAsync(ct);
         var byMatch = revisions.ToLookup(x => x.MatchId);
@@ -50,11 +55,15 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
         {
             var decisions = scenarios[match.MatchId];
             var adaptive = decisions.Where(x => x.ResolutionMode == ScenarioResolutionMode.Adaptive).ToArray();
-            if (byMatch[match.MatchId].Any(x => x.ApplyStatus == "APPLIED" && x.ReceiptId != null && x.ChangedKey != "") ||
-                adaptive.Any(x => x.Applied && !x.UsedFixedFallback) || (adaptive.Length > 0 && legacyApplied.Contains(match.MatchId)))
+            if (byMatch[match.MatchId].Any(x => Verified(x.ApprovalStatus, x.ApplyStatus, x.ReceiptId,
+                    x.EffectEventId, x.AppliedTick, x.AppliedAtUtc) && !string.IsNullOrWhiteSpace(x.ChangedKey)))
                 return "ADAPTIVE_APPLIED";
-            if (adaptive.Any(x => x.UsedFixedFallback) || byMatch[match.MatchId].Any(x => x.ReasonCode.StartsWith("HOLD_")))
+            if (adaptive.Any(x => x.Applied && !x.UsedFixedFallback) || (adaptive.Length > 0 && legacyApplied.Contains(match.MatchId)))
+                return "ADAPTIVE_CONFIG_CONFIRMED";
+            if (adaptive.Any(x => x.UsedFixedFallback))
                 return "ADAPTIVE_FALLBACK";
+            if (byMatch[match.MatchId].Any(x => x.ApprovalStatus == "HOLD"))
+                return "ADAPTIVE_HOLD";
             if (match.ResolutionMode == "ADAPTIVE" || adaptive.Length > 0 || byMatch.Contains(match.MatchId))
                 return "ADAPTIVE_UNVERIFIED";
             return match.ResolutionMode == "FIXED" || decisions.Any(x => x.ResolutionMode == ScenarioResolutionMode.Fixed)
@@ -67,7 +76,34 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
             RecentMatchIds = group.Take(5).Select(x => x.MatchId)
         });
         var approved = revisions.Where(x => x.ApprovalStatus == "APPROVED").ToArray();
-        var applied = approved.Where(x => x.ApplyStatus == "APPLIED" && x.ReceiptId != null).ToArray();
+        var applied = approved.Where(x => Verified(x.ApprovalStatus, x.ApplyStatus, x.ReceiptId,
+            x.EffectEventId, x.AppliedTick, x.AppliedAtUtc)).ToArray();
+        var fixedMatches = matches.Where(x => x.ResolutionMode == "FIXED" && !byMatch.Contains(x.MatchId)
+            && !scenarios[x.MatchId].Any(s => s.ResolutionMode == ScenarioResolutionMode.Adaptive)).ToArray();
+        var adaptiveMatches = matches.Where(x => x.ResolutionMode == "ADAPTIVE"
+            || byMatch.Contains(x.MatchId) || scenarios[x.MatchId].Any(s => s.ResolutionMode == ScenarioResolutionMode.Adaptive)).ToArray();
+        static bool HasMetadata(string? value) => !string.IsNullOrWhiteSpace(value);
+        var metadataComplete = matches.All(x => HasMetadata(x.MapId) && HasMetadata(x.Difficulty)
+            && x.PlayerCount > 0 && x.PlayerCount == x.Players && HasMetadata(x.BalanceSource)
+            && HasMetadata(x.BalanceVersion) && x.BalanceHash is { Length: 64 }
+            && x.BalanceHash.All(Uri.IsHexDigit)
+            && HasMetadata(x.BalanceBuildVersion) && HasMetadata(x.BalanceProtocolVersion));
+        var contextCount = matches.Select(x => (x.MapId, x.Difficulty, x.PlayerCount,
+            x.BalanceSource, x.BalanceVersion, x.BalanceHash, x.BalanceBuildVersion,
+            x.BalanceProtocolVersion, x.MatchDataPolicy)).Distinct().Count();
+        var adaptivePolicyComplete = adaptiveMatches.All(x => HasMetadata(x.AdaptivePolicyConfigVersion))
+            && revisions.All(x => HasMetadata(x.PolicyVersion) && HasMetadata(x.CatalogVersion)
+                && HasMetadata(x.SceneManifestFingerprint));
+        var adaptivePolicyCount = adaptiveMatches.Select(x => x.AdaptivePolicyConfigVersion).Distinct().Count();
+        var decisionPolicyCount = revisions.Select(x => (x.PolicyVersion, x.CatalogVersion, x.SceneManifestFingerprint)).Distinct().Count();
+        var qualification = matches.Count == 0 ? "NO_DATA"
+            : truncated ? "TRUNCATED"
+            : fixedMatches.Length == 0 ? "ONLY_ADAPTIVE"
+            : adaptiveMatches.Length == 0 ? "ONLY_FIXED"
+            : !metadataComplete || !adaptivePolicyComplete ? "MISSING_METADATA"
+            : contextCount != 1 || adaptivePolicyCount > 1 || decisionPolicyCount > 1 ? "INCOMPATIBLE"
+            : fixedMatches.Length + adaptiveMatches.Length != matches.Count ? "INSUFFICIENT_EVIDENCE"
+            : "COMPARABLE_DESCRIPTIVE";
         var reasons = revisions.Where(x => x.ReasonCode.StartsWith("HOLD_")).Select(x => (x.MatchId, Reason: x.ReasonCode))
             .Concat(scenarios.SelectMany(group => group.Where(x => x.UsedFixedFallback && x.FallbackReasonCode != null)
                 .Select(x => (x.MatchId, Reason: x.FallbackReasonCode!))))
@@ -75,13 +111,19 @@ public sealed class AdminBalanceAnalyticsService(AppDbContext db)
             .OrderByDescending(x => x.Matches).ThenBy(x => x.Reason);
         return ServiceResult<object>.Success(new
         {
-            Total = matches.Count, truncated, limit, cohorts, reasons,
+            Total = matches.Count, truncated, limit, cohorts, reasons, qualification,
+            FixedMatches = fixedMatches.Length, AdaptiveMatches = adaptiveMatches.Length,
             Approved = approved.Length, Applied = applied.Length,
             ClientObserved = applied.Count(x => x.ClientObserved),
             ConfirmedRollbacks = applied.Count(x => x.ReasonCode is AEDV02DecisionService.ApprovedChaseRollback or AEDV02DecisionService.ApprovedRelativeRollback),
             FailedEffect = approved.Count(x => x.ApplyStatus == "FAILED_EFFECT")
         });
     }
+
+    private static bool Verified(string approval, string application, Guid? receiptId,
+        Guid? effectEventId, long? appliedTick, DateTime? appliedAtUtc) =>
+        approval == "APPROVED" && application == "APPLIED" && receiptId is { } receipt && receipt != Guid.Empty
+        && effectEventId is { } effect && effect != Guid.Empty && appliedTick >= 0 && appliedAtUtc.HasValue;
 
     public async Task<ServiceResult<object>> PlayerAsync(Guid userId, int page, CancellationToken ct)
     {

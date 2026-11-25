@@ -9,6 +9,9 @@ export interface BalanceAnalytics {
   clientObserved: number;
   failedEffect: number;
   confirmedRollbacks?: number;
+  qualification?: string;
+  fixedMatches?: number;
+  adaptiveMatches?: number;
 }
 
 export interface PlayerAIHistory {
