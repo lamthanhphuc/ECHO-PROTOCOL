@@ -39,6 +39,7 @@ public class PlayerInteractionControlLock
 
     public static bool IsGameplayInputBlocked(GameObject player = null)
     {
+        if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return true;
         // Do not let a click used to close a panel also use a tool in the same frame.
         if (_releasedFrame == Time.frameCount) return true;
         foreach (var entry in Locks)

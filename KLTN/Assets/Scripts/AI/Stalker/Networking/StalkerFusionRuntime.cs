@@ -422,6 +422,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         public override void FixedUpdateNetwork()
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             if (NetworkBootstrap.IsHostMigrationReconciliationPending)
             {
                 ClearFrameBuffers();

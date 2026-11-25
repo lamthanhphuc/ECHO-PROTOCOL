@@ -157,6 +157,7 @@ namespace EchoProtocol.Networking
             if (_bootstrap.State != NetworkSessionState.InMatch
                 || (!AlienHuntMission.Instance && SceneManager.GetActiveScene().name != LobbyManager.GameSceneName)) return;
 
+            if (!matchState.IsGameplayReleased) return;
             EnsureZone3Stalker(runner, matchState);
 
             var phase = matchState.CurrentPhase;

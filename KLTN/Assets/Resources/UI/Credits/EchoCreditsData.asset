@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 862826e04571f844ba90507ba4700b70, type: 3}
+  m_Name: EchoCreditsData
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.Credits.CreditsData
+  projectTitle: ECHO PROTOCOL
+  logo: {fileID: 21300000, guid: ff876ee3a32a6844881af4c7d9a72d2c, type: 3}
+  sections:
+  - role: "GAMEPLAY \xB7 UI \xB7 LEVEL DESIGN"
+    names:
+    - "\u0110\u1EB7ng Huy Ho\xE0ng"
+    contribution: Player systems, mission flow, maps and presentation.
+    evidence: "docs/04_ECHO_PROTOCOL_Project_Management_Baseline_REVISED.md, 01_MODULE_OWNERSHIP;
+      A\u2013D names confirmed by user on 2026-11-26."
+  - role: "MULTIPLAYER \xB7 NETWORKING"
+    names:
+    - "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+    contribution: Lobby, host authority, state replication and scene synchronization.
+    evidence: "docs/04_ECHO_PROTOCOL_Project_Management_Baseline_REVISED.md, 01_MODULE_OWNERSHIP;
+      A\u2013D names confirmed by user on 2026-11-26."
+  - role: "MONSTER AI \xB7 AED \xB7 TELEMETRY"
+    names:
+    - "L\xE2m Thanh Ph\xFAc"
+    contribution: Monster behavior, player and team modeling, adaptive experience
+      and research.
+    evidence: "docs/04_ECHO_PROTOCOL_Project_Management_Baseline_REVISED.md, 01_MODULE_OWNERSHIP;
+      A\u2013D names confirmed by user on 2026-11-26."
+  - role: "BACKEND \xB7 DATABASE \xB7 ECONOMY"
+    names:
+    - "Nguy\u1EC5n Nh\u1EADt L\u1EC7 Thuy\xEAn"
+    contribution: Authentication, profiles, APIs, rewards, shop and payment sandbox.
+    evidence: "docs/04_ECHO_PROTOCOL_Project_Management_Baseline_REVISED.md, 01_MODULE_OWNERSHIP;
+      A\u2013D names confirmed by user on 2026-11-26."
+  - role: ACADEMIC SUPERVISOR
+    names:
+    - "\u0110\xE0o Qu\u1ED1c Tu\u1EA5n"
+    contribution: 
+    evidence: Supervisor identity confirmed by user on 2026-11-26; no academic degree
+      was supplied.
+  closingMessage: THANK YOU FOR PLAYING

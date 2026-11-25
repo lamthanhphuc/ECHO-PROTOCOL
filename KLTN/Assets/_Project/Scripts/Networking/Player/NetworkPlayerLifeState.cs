@@ -389,7 +389,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
-            if (!Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || DebugGodMode
                 || damage <= 0f
                 || !NetworkPlayerLifeStateRules.CanReceiveDamage(Status, HasReviveProtection))
@@ -412,7 +412,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyAuthoritativeNonLethalDamage(float damage, string sourceType, Vector3 hitPosition)
         {
-            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || DebugGodMode
                 || damage <= 0f
                 || Status != NetworkPlayerLifeStatus.Alive
@@ -440,7 +440,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
-            if (!Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || DebugGodMode
                 || HasReviveProtection
                 || !NetworkPlayerLifeStateRules.CanDown(Status))

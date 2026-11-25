@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using EchoProtocol.Audio;
 using EchoProtocol.Auth;
 using EchoProtocol.Core;
+using EchoProtocol.UI.Credits;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
 using Fusion;
@@ -30,6 +31,8 @@ namespace EchoProtocol.UI.Result
         private static readonly Color SecondaryButtonText = IndustrialUiStyle.Accent;
 
         [SerializeField] private bool previewDefeatWithoutMatch;
+        [SerializeField] private bool autoPlayCredits = true;
+        [SerializeField, Min(0f)] private float creditsResultReadSeconds = 8f;
 
         private ResultSnapshot _snapshot;
         private CanvasGroup _titleGroup;
@@ -58,6 +61,9 @@ namespace EchoProtocol.UI.Result
         private bool _introComplete;
         private bool _navigating;
         private bool _victory;
+        private bool _rewardConfirmed;
+        private float _rewardConfirmedAt, _introCompletedAt;
+        public bool CanShowCredits => CreditsRollPlayback.CanPresentAfterResult(_snapshot != null, _rewardConfirmed);
         private float _introStartedAt;
         private Vector2 _titleBasePosition;
 
@@ -146,7 +152,13 @@ namespace EchoProtocol.UI.Result
                 _backgroundShade.color = new Color(0.025f, 0.028f, 0.028f,
                     0.55f + Mathf.PerlinNoise(Time.unscaledTime * 0.65f, 0.37f) * 0.025f);
 
-            if (_introComplete) return;
+            if (_introComplete)
+            {
+                if (autoPlayCredits && !_navigating && CanShowCredits
+                    && Time.unscaledTime - Mathf.Max(_rewardConfirmedAt, _introCompletedAt) >= creditsResultReadSeconds)
+                    NavigateToLobby(false);
+                return;
+            }
             if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame
                 || Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 FinishIntro();
@@ -382,6 +394,7 @@ namespace EchoProtocol.UI.Result
         {
             if (_introComplete) return;
             _introComplete = true;
+            _introCompletedAt = Time.unscaledTime;
             if (_intro != null) StopCoroutine(_intro);
             SetAlpha(_introBlack, 0f);
             if (_defeatFlash != null) _defeatFlash.color = Color.clear;
@@ -422,6 +435,9 @@ namespace EchoProtocol.UI.Result
                 if (token.IsCancellationRequested) return;
                 if (reward.HasConfirmedReward)
                 {
+                    _rewardConfirmed = true;
+                    _rewardConfirmedAt = Time.unscaledTime;
+                    SetText("ReturnLabel", EchoProtocol.Settings.GameLanguage.Choose("XEM CREDITS", "VIEW CREDITS"));
                     SetText("RewardXp", $"+{reward.ExperienceAwarded.Value:N0} XP");
                     SetText("RewardCredits", $"+{reward.CreditsAwarded.Value:N0} CREDITS");
                     var levelNotice = Find<Text>("RewardStatus");
@@ -475,27 +491,12 @@ namespace EchoProtocol.UI.Result
 
             try
             {
-                if (host)
-                {
-                    if (retry) ResultRetryCoordinator.Begin();
-                    await GameUIFeedback.LoadNetworkSceneAsync(runner, NetworkBootstrap.LobbySceneName);
-                }
-                else if (bootstrap != null && inRoom)
-                    await bootstrap.ShutdownRunnerAsync();
+                if (!retry && CanShowCredits)
+                    await CreditsFlow.PlayAndReturnToLobbyAsync();
                 else
-                {
-                    ResultSession.Clear();
-                    if (bootstrap != null && AuthSession.IsAuthenticated)
-                        GameUIFeedback.LoadScene(GameConstants.SceneLobby, LoadSceneMode.Single);
-                    else
-                    {
-                        // A direct Result preview must initialize persistent session services
-                        // and pass the normal authentication check before entering Lobby.
-                        BootstrapSceneFlowController.RequestLobbyAfterAuthentication();
-                        GameUIFeedback.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
-                    }
-                }
+                    await NavigateSessionToLobbyAsync(retry);
             }
+            catch (OperationCanceledException) when (this == null || !Application.isPlaying) { }
             catch (Exception exception)
             {
                 if (retry) ResultRetryCoordinator.Cancel();
@@ -504,6 +505,41 @@ namespace EchoProtocol.UI.Result
                 _navigating = false;
                 SetText("ActionStatus", "RETURN FAILED");
                 SetActionsEnabled(true);
+            }
+        }
+
+        // Shared by the existing Result buttons and the local credits handoff. Resolve the current
+        // runner AFTER viewing: a host may already have returned the shared session to Lobby.
+        internal static async Task NavigateSessionToLobbyAsync(bool retry)
+        {
+            var bootstrap = NetworkBootstrap.Instance;
+            var runner = bootstrap?.Runner;
+            bool inRoom = runner != null && runner.IsRunning;
+            bool host = inRoom && runner.IsServer && runner.IsSceneAuthority;
+            if (!retry && SceneManager.GetActiveScene().name == GameConstants.SceneLobby
+                && (!inRoom || bootstrap.State == NetworkSessionState.InLobby))
+            {
+                ResultSession.Clear();
+                return;
+            }
+            if (retry && inRoom && !host) return;
+            if (host)
+            {
+                if (retry) ResultRetryCoordinator.Begin();
+                await GameUIFeedback.LoadNetworkSceneAsync(runner, NetworkBootstrap.LobbySceneName);
+            }
+            else if (bootstrap != null && inRoom)
+                await bootstrap.ShutdownRunnerAsync();
+            else
+            {
+                ResultSession.Clear();
+                if (bootstrap != null && AuthSession.IsAuthenticated)
+                    GameUIFeedback.LoadScene(GameConstants.SceneLobby, LoadSceneMode.Single);
+                else
+                {
+                    BootstrapSceneFlowController.RequestLobbyAfterAuthentication();
+                    GameUIFeedback.LoadScene(GameConstants.SceneBootstrap, LoadSceneMode.Single);
+                }
             }
         }
     }
