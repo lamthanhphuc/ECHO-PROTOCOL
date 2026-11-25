@@ -271,6 +271,7 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
         private void RpcToggleFlashlight(NetworkBool nextState)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             IsFlashlightOn = nextState;
         }
 

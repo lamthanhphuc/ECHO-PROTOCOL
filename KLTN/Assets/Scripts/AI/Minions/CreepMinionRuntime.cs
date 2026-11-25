@@ -615,7 +615,7 @@ namespace EchoProtocol.AI.Minions
 
         public override void FixedUpdateNetwork()
         {
-            if (!Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || _agent == null
                 || NetworkBootstrap.IsHostMigrationReconciliationPending)
                 return;

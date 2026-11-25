@@ -743,6 +743,13 @@ namespace EchoProtocol.Networking
             if (NetworkBootstrap.IsHostMigrationReconciliationPending)
                 return;
 
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked)
+            {
+                AnimationMoveX = AnimationMoveY = 0f;
+                AnimationSprintHeld = AnimationPushHeld = false;
+                return;
+            }
+
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid)
             {
@@ -1125,12 +1132,14 @@ namespace EchoProtocol.Networking
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
         private void RpcSetAnimationPushing(NetworkBool active)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             AnimationPushHeld = active;
         }
 
         [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
         public void RpcRequestTeleport(Vector3 position, Quaternion rotation)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             if (_controller != null)
             {
                 _controller.Teleport(position, rotation);
@@ -1149,6 +1158,7 @@ namespace EchoProtocol.Networking
             Vector3 position,
             Quaternion rotation)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             ulong previousSpotId = CurrentHideSpotId;
 
             if (isHidden)

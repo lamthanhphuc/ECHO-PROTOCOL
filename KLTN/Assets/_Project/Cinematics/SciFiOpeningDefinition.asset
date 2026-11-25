@@ -1,0 +1,80 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b86f417d11282948b9e975601797e9e, type: 3}
+  m_Name: SciFiOpeningDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Cinematics.OpeningCutsceneDefinition
+  sceneName: SciFi
+  timeline: {fileID: 11400000, guid: 8dd950bc29bc0494a8ede7854cd3d2d0, type: 2}
+  shots:
+  - name: Shot01_Establishing
+    sourceHierarchy: GameObject/Zone01_ResearchStorage/AED_Z1_RESOURCE_ENTRY
+    startPosition: {x: 36.378, y: 2.733334, z: -81}
+    endPosition: {x: 36.35911, y: 2.733334, z: -80.200226}
+    startEuler: {x: 0.43148082, y: 358.64716, z: 4.168935e-10}
+    endEuler: {x: 0.45189914, y: 358.64716, z: 0}
+    duration: 6
+    subtitle: "\u0110\u1ED9i ph\u1EA3n \u1EE9ng ECHO. Khu v\u1EF1c nghi\xEAn c\u1EE9u
+      \u0111ang b\u1ECB phong t\u1ECFa."
+    subtitleEnglish: ECHO response team. The research facility is under lockdown.
+    audioKey: 
+    fillMultiplier: 1
+  - name: Shot02_Incident
+    sourceHierarchy: GameObject/Zone01_ResearchStorage/04_Server_Room_C2_EMPTY/route/Corridor
+      Wide
+    startPosition: {x: 63.59, y: 2.733334, z: -135.43001}
+    endPosition: {x: 63.77859, y: 2.733334, z: -134.65256}
+    startEuler: {x: 0.5375781, y: 13.635311, z: 0}
+    endEuler: {x: 0.5696449, y: 13.635313, z: -0.000000020011306}
+    duration: 6
+    subtitle: "Sau s\u1EF1 c\u1ED1, nhi\u1EC7m v\u1EE5 c\u1EE7a \u0111\u1ED9i l\xE0
+      kh\xF4i ph\u1EE5c h\u1EC7 th\u1ED1ng v\xE0 t\xECm \u0111\u01B0\u1EDDng tho\xE1t."
+    subtitleEnglish: Following the incident, restore the systems and find a way out.
+    audioKey: security_terminal/terminal_boot
+    fillMultiplier: 1
+  - name: Shot03_Mission
+    sourceHierarchy: NetworkSectorBox
+    startPosition: {x: 36.39, y: 2.733334, z: -172.11}
+    endPosition: {x: 36.39, y: 2.733334, z: -171.31}
+    startEuler: {x: 5.826428, y: -0, z: -0}
+    endEuler: {x: 7.5351834, y: -0, z: -0}
+    duration: 7
+    subtitle: "T\xECm c\xE1c L\xF5i N\u0103ng L\u01B0\u1EE3ng v\xE0 \u0111\u01B0a
+      ch\xFAng v\u1EC1 b\u1ED9 ti\u1EBFp nh\u1EADn."
+    subtitleEnglish: Locate the Energy Cores and bring them to the power hub.
+    audioKey: ui/objective_update
+    fillMultiplier: 0.35
+  - name: Shot04_Threat
+    sourceHierarchy: GameObject/Zone01_ResearchStorage/03_Central_Junction/route/Corridor
+      Passthrough (1)/Tunnel Floor
+    startPosition: {x: -5.5000057, y: 2.733334, z: -165.6}
+    endPosition: {x: -6.300006, y: 2.733334, z: -165.6}
+    startEuler: {x: -0, y: 270, z: 0}
+    endEuler: {x: -0, y: 270, z: 0}
+    duration: 5
+    subtitle: 
+    subtitleEnglish: 
+    audioKey: 
+    fillMultiplier: 0.5
+  - name: Shot05_PlayerSpawn
+    sourceHierarchy: GameObject/SpawnPoints/PlayerStart_EMPTY
+    startPosition: {x: 33.67, y: 2.8416672, z: -70.060005}
+    endPosition: {x: 33.86222, y: 2.8416672, z: -70.83657}
+    startEuler: {x: 358.85458, y: 166.09691, z: -0.000000026685761}
+    endEuler: {x: 358.7671, y: 166.09691, z: -0.000000013343302}
+    duration: 6
+    subtitle: "Ph\u1ED1i h\u1EE3p c\xF9ng \u0111\u1ED3ng \u0111\u1ED9i. Ho\xE0n th\xE0nh
+      nhi\u1EC7m v\u1EE5 v\xE0 tho\xE1t kh\u1ECFi khu phong t\u1ECFa."
+    subtitleEnglish: Work together. Complete the mission and escape the lockdown.
+    audioKey: ui/match_start
+    fillMultiplier: 1
+  fieldOfView: 58
+  holdToSkipSeconds: 1

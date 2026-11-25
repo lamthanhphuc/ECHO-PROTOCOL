@@ -419,7 +419,7 @@ namespace EchoProtocol.Networking
              || CurrentPhase == NetworkMatchPhase.Escape)
             && EscapeTimer.IsRunning;
         public float EscapeRemainingSeconds => Remaining(EscapeTimer);
-        public float MatchRemainingSeconds => Remaining(MatchTimer);
+        public float MatchRemainingSeconds => IsGameplayReleased ? Remaining(MatchTimer) : EffectiveMatchDurationSeconds;
         public float CurrentScenarioEscapeDoorTimerSeconds =>
             Mathf.Max(
                 0.1f,
@@ -513,7 +513,9 @@ namespace EchoProtocol.Networking
                 ResultRoster3 = default;
                 EscapeTimer = TickTimer.None;
                 EscapeDurationSeconds = 0f;
-                MatchTimer = TickTimer.CreateFromSeconds(Runner, EffectiveMatchDurationSeconds);
+                InitializeOpeningAuthoritative();
+                MatchTimer = IsGameplayReleased
+                    ? TickTimer.CreateFromSeconds(Runner, EffectiveMatchDurationSeconds) : TickTimer.None;
                 ReturnToResultTimer = TickTimer.None;
                 ReturnToResultRequested = false;
                 _serverGeneratedAuthCode = UnityEngine.Random.Range(0, 10000).ToString("D4");
@@ -685,6 +687,8 @@ namespace EchoProtocol.Networking
             if (!Object.HasStateAuthority
                 || NetworkBootstrap.IsHostMigrationReconciliationPending)
                 return;
+
+            if (TickOpeningAuthoritative()) return;
 
             if (_aedv2Boundary.State == AEDv2BoundaryState.AwaitingReceipt
                 && _aedv2Boundary.Transaction != null)
@@ -2534,6 +2538,7 @@ namespace EchoProtocol.Networking
             string completedPhase,
             Action afterTransition = null)
         {
+            if (!IsGameplayReleased) return false;
             if (!Object.HasStateAuthority
                 || !NetworkMatchStateRules.CanAdvance(Status, CurrentPhase, expected, next))
             {
@@ -3123,6 +3128,7 @@ namespace EchoProtocol.Networking
             NetworkMatchEndReason reason,
             PlayerRef actor)
         {
+            if (!IsGameplayReleased) return false;
             if (!Object.HasStateAuthority || !NetworkMatchStateRules.CanEnd(Status, result))
             {
                 return false;
@@ -4462,7 +4468,7 @@ namespace EchoProtocol.Networking
         private bool TryResolveActivePlayer(PlayerRef player, out NetworkPlayerLifeState lifeState)
         {
             lifeState = null;
-            return player.IsRealPlayer
+            return IsGameplayReleased && player.IsRealPlayer
                 && Runner.TryGetPlayerObject(player, out var playerObject)
                 && playerObject != null
                 && playerObject.IsValid
@@ -4476,7 +4482,7 @@ namespace EchoProtocol.Networking
         
         private bool ValidateObjectiveSource(NetworkSectorBox source)
         {
-            return Object != null
+            return IsGameplayReleased && Object != null
                 && Object.HasStateAuthority
                 && !IsEnded
                 && ObjectiveSourceId.IsValid
