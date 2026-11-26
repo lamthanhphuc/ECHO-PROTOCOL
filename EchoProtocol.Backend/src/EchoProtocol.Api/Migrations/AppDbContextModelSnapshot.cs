@@ -3338,6 +3338,9 @@ namespace EchoProtocol.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActorAdminUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Amount")
                         .HasColumnType("integer");
 

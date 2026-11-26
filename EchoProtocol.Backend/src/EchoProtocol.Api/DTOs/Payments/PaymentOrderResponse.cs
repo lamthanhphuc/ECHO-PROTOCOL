@@ -47,3 +47,10 @@ public sealed record PaymentOrderResponse(
             RequiredLevelAtPurchase = order.RequiredLevelAtPurchase, RequiredOwnedItemId = order.RequiredOwnedItemId
         };
 }
+
+public sealed record PaymentOrderHistoryResponse(
+    IReadOnlyList<PaymentOrderResponse> Items,
+    int Page,
+    int PageSize,
+    int TotalItems,
+    int TotalPages);

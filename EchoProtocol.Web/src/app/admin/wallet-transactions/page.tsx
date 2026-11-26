@@ -33,7 +33,11 @@ export default async function WalletTransactionsPage({ searchParams }: { searchP
         <details className="muted text-xs"><summary>Chi tiết giao dịch</summary>
           <CopyReference label="Sao chép mã giao dịch" value={item.transactionId} />
           <CopyReference label="Sao chép mã tham chiếu" value={item.reference} />
-          {item.type === "ADMIN_GRANT" && <p>{item.description}</p>}
+          {item.type === "ADMIN_GRANT" && <>
+            <p>{item.description}</p>
+            <p>Quản trị viên: {item.actorAdminUsername ?? "Chưa ghi nhận"}</p>
+            {item.actorAdminUserId && <CopyReference label="Sao chép mã quản trị viên" value={item.actorAdminUserId} />}
+          </>}
         </details></td><td><Link className="admin-link" href={`/admin/users/${item.userId}`}>{item.displayName ?? item.username}</Link></td><td>{statusLabel(item.type)}</td><td className={item.amount >= 0 ? "text-emerald-300" : "text-rose-300"}>{item.amount >= 0 ? "+" : ""}{formatNumber(item.amount)}</td><td>{formatNumber(item.balanceBefore)} → {formatNumber(item.balanceAfter)}</td><td>{formatDate(item.createdAtUtc)}</td></tr>)}
     </tbody></table></div>}
     <Pagination page={result.page} totalPages={result.totalPages} pathname="/admin/wallet-transactions" params={pageParams} />

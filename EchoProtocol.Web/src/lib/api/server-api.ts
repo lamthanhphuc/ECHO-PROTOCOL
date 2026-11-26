@@ -9,7 +9,13 @@ import type { AdaptiveAdminData, AdaptiveMatchAudit } from "@/lib/types/adaptive
 import type { ProfileTuningData, RemoteGameplayField } from "@/lib/types/profile-tuning";
 import type { EconomyData, MatchContent } from "@/lib/types/operations";
 import type { BalanceAnalytics, PlayerAIHistory } from "@/lib/types/balance-analytics";
-import type { PaymentCatalog, PaymentCheckout, PaymentOrder, CreatePaymentOrderRequest } from "@/lib/types/payment";
+import type {
+  PaymentCatalog,
+  PaymentCheckout,
+  PaymentOrder,
+  PaymentOrderHistoryPage,
+  CreatePaymentOrderRequest,
+} from "@/lib/types/payment";
 import type {
   AdminPaymentDetail,
   AdminDashboard,
@@ -49,6 +55,8 @@ export const playerApi = {
     authorized<ProgressionCosmetic[]>("/api/player/cosmetics/equip", { method: "POST", body: request }),
   profile: () => authorized<PlayerProfile>("/api/player/me"),
   paymentCatalog: () => authorized<PaymentCatalog>("/api/payments/catalog"),
+  paymentHistory: (page: number, pageSize: number) =>
+    authorized<PaymentOrderHistoryPage>(`/api/payments/orders?page=${page}&pageSize=${pageSize}`),
   paymentOrder: (paymentOrderId: string) =>
     authorized<PaymentOrder>(`/api/payments/orders/${encodeURIComponent(paymentOrderId)}`),
   createPayment: (request: CreatePaymentOrderRequest) =>

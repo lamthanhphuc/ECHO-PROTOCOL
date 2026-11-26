@@ -16,6 +16,12 @@ public interface IPaymentOrderService
         Guid paymentOrderId,
         CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<PaymentOrderHistoryResponse>> GetOwnedHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<PaymentOrderResponse>> TransitionAsync(
         Guid paymentOrderId,
         PaymentOrderTransition transition,
