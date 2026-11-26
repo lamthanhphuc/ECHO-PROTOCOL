@@ -136,6 +136,9 @@ namespace EchoProtocol.UI.HUD
                 _targetColors.Add(downedTeammateColor);
             }
 
+            // Salvage interactables use the existing outline presentation, not world HUD labels.
+            if (EchoProtocol.Salvage.SalvageSite.IsActive) return;
+
             // 2. Sector Box (Trạm nạp điện Zone 1) - Only shown when player carries Energy Core (Replaced by 3D X-Ray Outline if false)
             if (showSectorBoxHUDMarker)
             {

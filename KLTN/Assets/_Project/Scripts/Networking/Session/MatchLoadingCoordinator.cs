@@ -347,7 +347,12 @@ namespace EchoProtocol.Networking
                 || _runner.IsSceneManagerBusy || SceneManager.GetActiveScene().name != _barrier.SceneName
                 || !AuthoritativeSpawnReady(_runner.LocalPlayer)) return false;
             var match = NetworkMatchState.Instance;
-            if (match == null || match.Object == null || !match.Object.IsValid || match.Runner != _runner) return false;
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var run = EchoProtocol.Salvage.SalvageRunState.Instance;
+                if (run == null || run.Object == null || !run.Object.IsValid || run.Runner != _runner || !run.LocalMapReady) return false;
+            }
+            else if (match == null || match.Object == null || !match.Object.IsValid || match.Runner != _runner) return false;
             if (!_runner.TryGetPlayerObject(_runner.LocalPlayer, out var player) || !player.HasInputAuthority) return false;
             var camera = FindAnyObjectByType<PlayerCamera>();
             return camera != null && camera.Target == player.transform;

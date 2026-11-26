@@ -540,6 +540,19 @@ namespace EchoProtocol.AI.Stalker
                 decayWindowSeconds);
         }
 
+        public void ConfigureSalvageGraph(RegionGraphAsset asset)
+        {
+            if(!EchoProtocol.Salvage.SalvageSite.IsActive)return;
+            regionGraphAsset=asset;ConfigurePatrolZone(RegionSemanticZone.Zone01);
+        }
+        public bool InvestigateSalvageNoise(Vector3 position)
+        {
+            if(!EchoProtocol.Salvage.SalvageSite.IsActive || currentState==StalkerState.CHASE || currentState==StalkerState.ATTACK
+                || EchoProtocol.Salvage.SalvageRunState.EnemySafe(position)) return false;
+            ClearDetectionContext();ClearTargetContext();currentState=StalkerState.SEARCH;
+            RestartHeardNoiseSearchAt(position);return true;
+        }
+
         public bool InvestigatePurgeRitual(Vector3 position)
         {
             if(!_purgeControlled || !_purgeHunting || currentState==StalkerState.CHASE || currentState==StalkerState.ATTACK)return false;

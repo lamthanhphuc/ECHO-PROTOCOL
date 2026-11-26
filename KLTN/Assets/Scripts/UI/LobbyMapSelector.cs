@@ -46,23 +46,25 @@ namespace EchoProtocol.UI
             modePicker.name = "ReferenceGameModePicker";
             _modeValue = modePicker.transform.Find("Value").GetComponent<TMP_Text>();
             _modeButtons = modePicker.GetComponentsInChildren<Button>(true);
-            foreach (var button in _modeButtons)
+            for (int i = 0; i < _modeButtons.Length; i++)
             {
+                var button = _modeButtons[i];
+                int direction = i == 0 ? -1 : 1;
                 button.onClick = new Button.ButtonClickedEvent();
-                button.onClick.AddListener(ChangeMode);
+                button.onClick.AddListener(() => ChangeMode(direction));
             }
             Move("ReferenceGameModeLabel", 508); Move("ReferenceGameModePicker", 508);
             Move("ReferenceDifficultyLabel", 568); Move("ReferenceDifficultyPicker", 568);
             Move("ReferenceToolLabel", 628); Move("ReferenceToolPicker", 628);
             for (int i = 0; i < 3; i++) { Move("ReferenceSettingLabel" + i, 688 + 60 * i); Move("ReferenceSettingPicker" + i, 688 + 60 * i); }
         }
-        private void ChangeMode()
+        private void ChangeMode(int direction)
         {
             var runner = _bootstrap ? _bootstrap.Runner : null;
             if (runner == null || !runner.IsServer || _bootstrap.State != NetworkSessionState.InLobby
                 || _manager == null || _manager.IsStartingMatch) return;
-            int mode = 1 - LobbyMapCatalog.RoomGameMode(runner);
-            int map = mode == 1 ? 2 : Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, 1);
+            int mode = (LobbyMapCatalog.RoomGameMode(runner) + direction + 3) % 3;
+            int map = mode == 1 ? 2 : mode == LobbyMapCatalog.SalvageMode ? 0 : Mathf.Clamp(LobbySelectionMemory.Read("map", 0), 0, 1);
             if (_bootstrap.UpdateRoomProperties(new Dictionary<string, SessionProperty> {
                 [LobbyMapCatalog.GameModeKey] = mode, [LobbyMapCatalog.PropertyKey] = map }))
             {
@@ -122,8 +124,9 @@ namespace EchoProtocol.UI
             var runner = _bootstrap != null ? _bootstrap.Runner : null;
             if (_modeValue != null)
             {
-                _modeValue.text = LobbyMapCatalog.RoomGameMode(runner) == 1
-                    ? GameLanguage.Choose("Thanh trừng", "Purge") : GameLanguage.Choose("Khám phá", "Expedition");
+                int selectedMode = LobbyMapCatalog.RoomGameMode(runner);
+                _modeValue.text = selectedMode == LobbyMapCatalog.SalvageMode ? "Salvage"
+                    : selectedMode == 1 ? GameLanguage.Choose("Thanh trừng", "Purge") : GameLanguage.Choose("Khám phá", "Expedition");
                 foreach (var button in _modeButtons) button.interactable = runner != null && runner.IsServer
                     && _bootstrap.State == NetworkSessionState.InLobby && _manager != null && !_manager.IsStartingMatch;
             }
@@ -152,6 +155,8 @@ namespace EchoProtocol.UI
                 ? GameLanguage.Choose("Vùng ngập · Săn alien", "Flooded Grounds · Alien Hunt") : map == 1
                 ? GameLanguage.Choose("Vùng ngập", "Flooded Grounds") : GameLanguage.Choose("Cơ sở nghiên cứu", "Research Facility"));
             _previous.interactable = _next.interactable = CanEdit;
+            if (LobbyMapCatalog.RoomGameMode(runner) == LobbyMapCatalog.SalvageMode)
+                _title.text = "Salvage • SciFi";
         }
     }
 }

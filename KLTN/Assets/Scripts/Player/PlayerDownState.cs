@@ -54,7 +54,18 @@ public class PlayerDownState : MonoBehaviour
         ? _authoritativeProtectionRemaining
         : Mathf.Max(0f, _protectionUntil - Time.time);
     public float Health => _health;
-    public float MaxHealth => maxHealth;
+    public float MaxHealth
+    {
+        get
+        {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var life = GetComponentInParent<EchoProtocol.Networking.NetworkPlayerLifeState>();
+                if (life != null && life.Object != null && life.Object.IsValid) return life.MaximumHealth;
+            }
+            return maxHealth;
+        }
+    }
     public float BleedoutRemaining => _bleedoutRemaining;
     public float Bleedout01 => bleedoutSeconds <= 0f ? 0f : Mathf.Clamp01(_bleedoutRemaining / bleedoutSeconds);
 
@@ -243,7 +254,7 @@ public class PlayerDownState : MonoBehaviour
         bool applyLocalControls)
     {
         var previousState = _state;
-        _health = Mathf.Clamp(health, 0f, maxHealth);
+        _health = Mathf.Clamp(health, 0f, MaxHealth);
         _bleedoutRemaining = Mathf.Max(0f, bleedoutRemaining);
         _authoritativeProtectionRemaining = Mathf.Max(0f, protectionRemaining);
         _authoritativeReviveProtection = _authoritativeProtectionRemaining > 0f;

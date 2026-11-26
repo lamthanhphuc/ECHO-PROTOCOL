@@ -87,7 +87,10 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
     private bool _wasCarryingFuel;
     private void LateUpdate()
     {
-        bool carryingFuel = (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
+        if(_visual!=null && lobbyState!=null && lobbyState.Object!=null && lobbyState.Object.IsValid && lobbyState.ToolId==3)
+            EchoProtocol.Salvage.SalvageAidVisual.Apply(_visual,lobbyState.TeamToolUsesRemaining);
+        bool carryingFuel = EchoProtocol.Salvage.SalvageRunState.HasSelectedCargo(gameObject)
+            || (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject));
         if (carryingFuel != _wasCarryingFuel)
         {
             _wasCarryingFuel = carryingFuel;
@@ -141,7 +144,7 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             return;
         }
 
-        int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing()
+        int toolId = lobbyState.CarriedCoreId.IsValid || IsPushing() || EchoProtocol.Salvage.SalvageRunState.HasSelectedCargo(gameObject)
             || (EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)) ? 0 : lobbyState.ToolId;
         if (ShouldSuppressLocalNetworkToolView(toolId))
         {
@@ -300,6 +303,34 @@ public sealed class NetworkTeamToolHeldView : MonoBehaviour
             case 6: return coreStabilizerLocalPosition;
             default: return localPosition;
         }
+    }
+
+    // Visual-only reuse of the existing serialized tool calibration; no inventory or tool activation.
+    public GameObject CreateCargoDisplay(int toolId, Transform anchor)
+    {
+        var source = ResolveToolPrefab(toolId);
+        var display = InstantiateHeldVisualSafely(source, anchor);
+        if (display == null) return null;
+        foreach (var collider in display.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+        foreach (var body in display.GetComponentsInChildren<Rigidbody>(true)) { body.isKinematic = true; body.detectCollisions = false; }
+        foreach (var audio in display.GetComponentsInChildren<AudioSource>(true)) audio.enabled = false;
+        foreach (var behaviour in display.GetComponentsInChildren<MonoBehaviour>(true)) behaviour.enabled = false;
+        ApplyCargoDisplayPose(display.transform, toolId);
+        DisableToolShadows(display);
+        return display;
+    }
+    public void ApplyCargoDisplayPose(Transform display, int toolId)
+    {
+        var character = GetComponentInParent<PlayerCharacterPresenter>();
+        display.localPosition = ResolveToolPosition(toolId) + (display.parent != null
+            ? display.parent.InverseTransformVector(character?.ToolHeldOffset(toolId) ?? Vector3.zero) : Vector3.zero);
+        display.localRotation = Quaternion.Euler(ResolveToolEulerAngles(toolId));
+        display.localScale = ResolveToolScale(toolId) * (character?.ToolHeldScale(toolId) ?? 1f);
+        var child = display.Find("Visual"); if (child == null && display.childCount > 0) child = display.GetChild(0);
+        if (child != null && toolId == 1)
+        { child.localPosition = fieldScannerChildLocalPosition; child.localRotation = Quaternion.Euler(fieldScannerChildLocalEulerAngles); child.localScale = fieldScannerChildLocalScale; }
+        if (child != null && toolId == 3)
+        { child.localPosition = firstAidChildLocalPosition; child.localRotation = Quaternion.Euler(firstAidChildLocalEulerAngles); child.localScale = firstAidChildLocalScale; }
     }
 
     private Vector3 ResolveToolEulerAngles(int toolId)

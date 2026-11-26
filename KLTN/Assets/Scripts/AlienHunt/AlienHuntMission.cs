@@ -409,6 +409,10 @@ namespace EchoProtocol.Networking
         {
             var owner = Carrier(carrier);
             if (!owner) { position = transform.position; rotation = Quaternion.identity; return; }
+            ResolveHeldPose(owner, kind, out position, out rotation, presentation);
+        }
+        public static void ResolveHeldPose(Transform owner, HuntKind kind, out Vector3 position, out Quaternion rotation, bool presentation)
+        {
             var anchor = PlayerHeldItemAnchor.ResolveRightHandAnchor(owner.gameObject);
             // The meshes have different pivots. Keep their grip points at the right
             // hand and rotate from the player's heading so the alien and can stay upright.

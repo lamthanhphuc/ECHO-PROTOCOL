@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,6 +51,7 @@ namespace EchoProtocol.Networking.Authority
         private static MatchAuthorityRuntime _instance;
         private MatchAuthorityApiService _api;
         private RemoteFixedBalanceSnapshot _remoteFixedBalance;
+        private bool _salvagePlaytestStart;
         public bool HasAutomaticBalance { get; private set; }
 
         public double V02StalkerValue(AEDV02Plan plan, AEDV02Key key) => V02EffectiveValue(plan, key);
@@ -237,6 +238,7 @@ namespace EchoProtocol.Networking.Authority
             PlayerRef player,
             string reason)
         {
+            EchoProtocol.Salvage.SalvageRunState.Instance?.DisableAccountRewards();
             NetworkMatchState.Instance?.MarkDebugCheatsUsed();
             if (!HasStateAuthority || MatchId == Guid.Empty ||
                 (!_telemetryMatchActive && !_pendingAuthoritativeTelemetryMatchStart))
@@ -993,8 +995,9 @@ namespace EchoProtocol.Networking.Authority
             TickV02Coordinator(matchState);
             TickV02WorldSource(matchState);
             if (HasBinding
-                && matchState != null
-                && matchState.IsEnded
+                && ((matchState != null && matchState.IsEnded) ||
+                    EchoProtocol.Salvage.SalvageSite.IsActive && EchoProtocol.Salvage.SalvageRunState.Instance!=null &&
+                    (EchoProtocol.Salvage.SalvageRunState.Instance.Phase==EchoProtocol.Salvage.SalvagePhase.Ended||EchoProtocol.Salvage.SalvageRunState.Instance.Phase==EchoProtocol.Salvage.SalvagePhase.Failed))
                 && _localRewardMatchId != MatchId)
             {
                 QueueLocalRewardFetch(MatchId);
@@ -2481,11 +2484,23 @@ namespace EchoProtocol.Networking.Authority
                 return (false, "Remote Fixed requires FIXED mode.");
 
             var matchId = MatchId;
-            var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
+            bool salvage = LobbyMapCatalog.RoomGameMode(runner) == LobbyMapCatalog.SalvageMode;
+            if (EchoProtocol.Salvage.SalvagePlaytest.SkipBackendStart(LobbyMapCatalog.RoomGameMode(runner)))
+            {
+                // Keep authenticated lobby/roster and Fusion authority; only skip backend /start.
+                // The backend lease remains a lobby lease and is ended normally, without a result.
+                _salvagePlaytestStart = true;
+                _remoteFixedBalance = null;
+                StartedRosterCount = runner.ActivePlayers.Count();
+                _backendMatchStartedAtRealtime = -1f;
+                Debug.LogWarning("[Salvage] Development gameplay test: backend match start skipped; no account results or match telemetry.");
+                return (true, string.Empty);
+            }
+            var mapId = LobbyMapCatalog.SceneName(LobbyMapCatalog.RoomGameMode(runner), LobbyMapCatalog.Selected(runner));
             var difficulty = requestedDifficulty.ToString().ToUpperInvariant();
             bool automaticAdaptive = !Debug.isDebugBuild &&
                 requestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive;
-            var result = useRemoteFixed || HasAutomaticBalance || automaticAdaptive
+            var result = !salvage && (useRemoteFixed || HasAutomaticBalance || automaticAdaptive)
                 ? await _api.StartV2Async(matchId, mapId, difficulty, automaticAdaptive)
                 : await _api.StartAsync(matchId, mapId, difficulty);
 
@@ -2560,6 +2575,12 @@ namespace EchoProtocol.Networking.Authority
             }
 
             StartedRosterCount = result.Data.data.players?.Length ?? 0;
+            if(salvage)
+            {
+                _migratedResultRoster.Clear();
+                foreach(var participant in result.Data.data.players??Array.Empty<MatchRosterPlayerDto>())
+                    if(Guid.TryParse(participant.userId,out var id))_migratedResultRoster[id]=participant.disconnected;
+            }
             _backendMatchStartedAtRealtime = Time.realtimeSinceStartup;
 
             RuntimeLog.Log(
@@ -2590,6 +2611,7 @@ namespace EchoProtocol.Networking.Authority
 
         public void ResetBinding()
         {
+            _salvagePlaytestStart = false;
             _bindingGeneration++;
             var oldMatchId = MatchId;
             MatchId = Guid.Empty;
@@ -2698,6 +2720,7 @@ namespace EchoProtocol.Networking.Authority
 
         private void RequestAuthoritativeTelemetryMatchStart()
         {
+            if (_salvagePlaytestStart) return;
             if (_telemetryMatchActive) return;
             if (!_pendingAuthoritativeTelemetryMatchStart)
             {
@@ -3293,9 +3316,9 @@ namespace EchoProtocol.Networking.Authority
                 || result.FailureKind == EchoProtocol.Api.ApiFailureKind.Timeout;
 
             if ((retryableBusinessError || retryableTransportError)
-                && _localRewardFetchAttempts < LocalRewardMaxAttempts)
+                && _localRewardFetchAttempts < (EchoProtocol.Salvage.SalvageSite.IsActive?120:LocalRewardMaxAttempts))
             {
-                _nextLocalRewardFetchAt = Time.unscaledTime + LocalRewardRetryIntervalSeconds;
+                _nextLocalRewardFetchAt = Time.unscaledTime + (EchoProtocol.Salvage.SalvageSite.IsActive?5:LocalRewardRetryIntervalSeconds);
                 return;
             }
 
@@ -3377,6 +3400,28 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
+            var salvage=EchoProtocol.Salvage.SalvageRunState.Instance;
+            if(EchoProtocol.Salvage.SalvageSite.IsActive&&salvage!=null)
+            {
+                var roster=new List<SubmitMatchResultPlayerDto>();
+                foreach(var user in (_migratedResultRoster.Count>0?_migratedResultRoster.Keys:(IEnumerable<Guid>)_boundPlayers.Values))
+                {
+                    if(roster.Exists(p=>p.userId==user.ToString("D")))continue;
+                    int seat=-1;for(int i=0;i<4;i++)if(salvage.Crew[i].User.ToString()==user.ToString("D")){seat=i;break;}
+                    var obj=seat>=0?salvage.Player(seat):null;
+                    var state=obj!=null?obj.GetComponent<LobbyPlayerState>():null;
+                    bool disconnected=_boundPlayers.Any(p=>p.Value==user&&_disconnectedActors.Contains(p.Key))
+                        ||(seat>=0&&(state==null||state.Disconnected))
+                        ||(state==null&&_migratedResultRoster.TryGetValue(user,out var wasDisconnected)&&wasDisconnected);
+                    roster.Add(new SubmitMatchResultPlayerDto{userId=user.ToString("D"),disconnected=disconnected,
+                        survived=!disconnected&&salvage.Phase==EchoProtocol.Salvage.SalvagePhase.Ended,
+                        objectiveActions=0,rescueActions=0,evidenceComplete=true});
+                }
+                request=new SubmitMatchResultRequestDto{salvageEvidence=true,salvageCompletedLevels=salvage.CompletedRewardLevels,
+                    salvageCompletedDays=salvage.CompletedRewardDays,usedDebugCheats=salvage.AccountRewardsDisabled,
+                    outcome=_pendingBackendOutcome,objectiveCompletion=_pendingObjectiveCompletion,evidenceVersion=2,players=roster.ToArray()};
+                return roster.Count>0;
+            }
             var players = new List<SubmitMatchResultPlayerDto>(_boundPlayers.Count);
             var matchSnapshot = NetworkMatchState.Instance;
             if (matchSnapshot != null)

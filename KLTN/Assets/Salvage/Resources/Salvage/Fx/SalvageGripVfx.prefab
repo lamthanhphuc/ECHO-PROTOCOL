@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5811499606255797163
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8181568086841390178}
+  - component: {fileID: 2727028602737867611}
+  m_Layer: 0
+  m_Name: SalvageGripVfx
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8181568086841390178
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5811499606255797163}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2727028602737867611
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5811499606255797163}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 168005f3ab0bc024499540c08d877bbc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Salvage.SalvageGripVfx
+  BeamMaterial: {fileID: 2100000, guid: f4380f0d595d0e84a82ea7179b9873a7, type: 2}
+  OrbMaterial: {fileID: 2100000, guid: b62daef7031a3b744b67821ee8cd87ba, type: 2}
+  VolumeMaterial: {fileID: 2100000, guid: 9042d9d8a03f19243bac142cfde3af84, type: 2}
+  Energy: {r: 0.18, g: 1.25, b: 1.1, a: 1}
+  Contact: {r: 0.2, g: 1.25, b: 1.1, a: 1}
+  CoreWidth: 0.012
+  HumVolume: 0.055

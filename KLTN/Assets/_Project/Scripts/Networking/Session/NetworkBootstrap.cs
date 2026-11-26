@@ -398,8 +398,8 @@ namespace EchoProtocol.Networking
                 RecoverLocalInputProvider();
             }
 
-            if (State == NetworkSessionState.InMatch && NetworkMatchState.Instance != null
-                && NetworkMatchState.Instance.IsEnded)
+            if (State == NetworkSessionState.InMatch && (SalvageRunFinished
+                || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded))
                 _completedMatchObserved = true;
             if (!_reconnectIdentityPending || !HasRunningRunner
                 || Time.unscaledTime < _nextReconnectProofRetryAt) return;
@@ -474,6 +474,17 @@ namespace EchoProtocol.Networking
             UnregisterCallbacks();
         }
 
+        private bool SalvageRunFinished
+        {
+            get
+            {
+                var run = EchoProtocol.Salvage.SalvageRunState.Instance;
+                return EchoProtocol.Salvage.SalvageSite.IsActive && run != null && run.Object != null
+                    && run.Object.IsValid && run.Runner == Runner && (run.Phase == EchoProtocol.Salvage.SalvagePhase.Ended
+                        || run.Phase == EchoProtocol.Salvage.SalvagePhase.Failed);
+            }
+        }
+
         public Task<bool> StartHost() => CreateRoomAsync(_hostSessionName, _maxPlayers);
         internal Task<bool> StartHost(string sessionName, int maxPlayers) => CreateRoomAsync(sessionName, maxPlayers);
         public Task<bool> JoinGame(string sessionName) => JoinRoomAsync(sessionName);
@@ -488,8 +499,8 @@ namespace EchoProtocol.Networking
             if (maxPlayers is < 2 or > 4)
                 return FailWithoutStarting("A room must allow between 2 and 4 players.");
 
-            if (gameMode < 0 || gameMode > 1) return FailWithoutStarting("Invalid game mode.");
-            _requestedGameMode = gameMode ?? Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("gamemode", 0), 0, 1);
+            if (gameMode < 0 || gameMode > LobbyMapCatalog.SalvageMode) return FailWithoutStarting("Invalid game mode.");
+            _requestedGameMode = gameMode ?? Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("gamemode", 0), 0, LobbyMapCatalog.SalvageMode);
             _matchAuthority ??= MatchAuthorityRuntime.EnsureExists(this);
             _matchAuthority.RequestDifficulty(resolutionMode == ScenarioResolutionMode.Fixed
                 ? (MatchDifficulty)EchoProtocol.UI.LobbySelectionMemory.Read("difficulty", (int)difficulty)
@@ -932,7 +943,7 @@ namespace EchoProtocol.Networking
                     args.SessionProperties = _matchAuthority.BuildHostSessionProperties();
                     args.SessionProperties[LobbyMapCatalog.GameModeKey] = _requestedGameMode;
                     args.SessionProperties[LobbyMapCatalog.PropertyKey] = _requestedGameMode == 1 ? 2
-                        : Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1);
+                        : _requestedGameMode == LobbyMapCatalog.SalvageMode ? 0 : Mathf.Clamp(EchoProtocol.UI.LobbySelectionMemory.Read("map", 0), 0, 1);
 
                 }
 
@@ -1823,6 +1834,7 @@ namespace EchoProtocol.Networking
 
             var matchFinished = State == NetworkSessionState.InMatch
                 && (_completedMatchObserved
+                    || SalvageRunFinished
                     || SceneManager.GetActiveScene().name == EchoProtocol.Core.GameConstants.SceneResult
                     || SceneManager.GetActiveScene().name == LobbySceneName
                     || NetworkMatchState.Instance != null && NetworkMatchState.Instance.IsEnded);
@@ -2106,6 +2118,9 @@ namespace EchoProtocol.Networking
                 && NetworkMatchState.Instance.Object.IsValid
                     ? NetworkMatchState.Instance.Object.Id
                     : default;
+            var salvageRun = EchoProtocol.Salvage.SalvageRunState.Instance;
+            if (_hostMigrationRetainDisconnectedPlayers && salvageRun != null && salvageRun.Object != null && salvageRun.Object.IsValid)
+                _hostMigrationAuthoritativeMatchStateId = salvageRun.Object.Id;
 
             _hostMigrationRetainedBackendActors.Clear();
 
@@ -2689,8 +2704,8 @@ namespace EchoProtocol.Networking
                 resumeObjects.Add(
                     resumeObject);
 
-                if (!resumeObject.TryGetBehaviour<NetworkMatchState>(
-                        out _))
+                if (!resumeObject.TryGetBehaviour<NetworkMatchState>(out _)
+                    && !resumeObject.TryGetBehaviour<EchoProtocol.Salvage.SalvageRunState>(out _))
                 {
                     continue;
                 }
@@ -2775,8 +2790,8 @@ namespace EchoProtocol.Networking
             foreach (var resumeObject in
                      resumeObjects)
             {
-                if (resumeObject.TryGetBehaviour<NetworkMatchState>(
-                        out _)
+                if ((resumeObject.TryGetBehaviour<NetworkMatchState>(out _)
+                        || resumeObject.TryGetBehaviour<EchoProtocol.Salvage.SalvageRunState>(out _))
                     && (!_hostMigrationRetainDisconnectedPlayers
                         || resumeObject.Id != canonicalMatchStateId))
                 {

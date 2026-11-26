@@ -281,6 +281,8 @@ namespace EchoProtocol.Networking
             if (_zone3MonsterInstance == null) _zone3MonsterSpawned = false;
             DisableLegacyObjectiveMutators();
             EnsureGameplayHUD();
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+                FindAnyObjectByType<EchoProtocol.Salvage.SalvageSite>()?.EnterGameplay();
             if (!runner.IsServer) return;
 
             TryAttachLifecycle(runner);
@@ -296,6 +298,12 @@ namespace EchoProtocol.Networking
                 }
 
                 ConfigureExistingPlayerObject(player, playerObject, gameplay: true);
+            }
+
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                FindAnyObjectByType<EchoProtocol.Salvage.SalvageSite>()?.Begin(runner);
+                return;
             }
 
             // A delayed scene-ready callback after a Runner handoff must
@@ -335,6 +343,10 @@ namespace EchoProtocol.Networking
         public bool AdoptMigratedAuthoritativeWorldState(
             NetworkRunner runner)
         {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+                return runner != null && runner.IsServer && EchoProtocol.Salvage.SalvageRunState.Instance != null
+                    && EchoProtocol.Salvage.SalvageRunState.Instance.Runner == runner
+                    && EchoProtocol.Salvage.SalvageRunState.Instance.AdoptSnapshot();
             if (runner == null
                 || !runner.IsRunning
                 || !runner.IsServer
@@ -2629,7 +2641,7 @@ var enteringGameplay =
     gameplay && !state.IsGameplayPlayer;
 
 var toolId =
-    enteringGameplay
+    enteringGameplay && EchoProtocol.Salvage.SalvageSite.IsActive ? 0 : enteringGameplay
     && state.ToolId ==
         LobbyPlayerState.FirstAidKitToolId
         ? 0
@@ -2791,6 +2803,12 @@ var toolId =
 
         private static SpawnPose GetGameplaySpawnPose(int slot)
         {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var site = FindAnyObjectByType<EchoProtocol.Salvage.SalvageSite>();
+                if (site != null && site.CrewSpawn != null)
+                    return new SpawnPose(site.CrewPosition(slot), site.CrewSpawn.rotation);
+            }
             var points = FindObjectsByType<NetworkPlayerSpawnPoint>(FindObjectsInactive.Exclude);
             System.Array.Sort(points, (left, right) => left.Order.CompareTo(right.Order));
             if (slot >= 0 && slot < points.Length)

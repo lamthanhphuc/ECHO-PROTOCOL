@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using EchoProtocol.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
@@ -241,7 +241,7 @@ namespace EchoProtocol.Networking
             try
             {
                 loadingAttempt = MatchLoadingCoordinator.EnsureExists(_bootstrap).BeginHost(
-                    runner, LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner)));
+                    runner, LobbyMapCatalog.SceneName(LobbyMapCatalog.RoomGameMode(runner), LobbyMapCatalog.Selected(runner)));
             }
             catch (Exception error)
             {
@@ -261,7 +261,7 @@ namespace EchoProtocol.Networking
 
         private async Task StartMatchAsync(NetworkRunner runner, string loadingAttempt)
         {
-            string selectedScene = LobbyMapCatalog.SceneName(LobbyMapCatalog.Selected(runner));
+            string selectedScene = LobbyMapCatalog.SceneName(LobbyMapCatalog.RoomGameMode(runner), LobbyMapCatalog.Selected(runner));
             var loading = MatchLoadingCoordinator.Instance;
             MatchAuthorityRuntime authority = null;
             bool backendAccepted = false, sceneRequested = false, backendAbortAttempted = false;
@@ -308,7 +308,9 @@ namespace EchoProtocol.Networking
                 }
 
                 var settings = ScenarioConfigAuthorityRuntime.EnsureExists().RuntimeSettings;
-                bool automaticMode = !Debug.isDebugBuild;
+                bool salvage = LobbyMapCatalog.RoomGameMode(runner) == LobbyMapCatalog.SalvageMode;
+                if (salvage) authority.RequestScenarioResolutionMode(ScenarioResolutionMode.Fixed);
+                bool automaticMode = !Debug.isDebugBuild && !salvage;
                 if (automaticMode)
                 {
                     var prepared = await authority.PrepareAutomaticBalanceAsync(selectedScene);

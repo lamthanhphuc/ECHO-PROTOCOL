@@ -81,6 +81,12 @@ namespace EchoProtocol.Networking.Authority
         {
             if (_authority == null || !_authority.HasStateAuthority)
             {
+                // Development Salvage can run without a backend match lease. Keep local hearing
+                // functional without fabricating a backend noise receipt or telemetry event.
+                var salvage=EchoProtocol.Salvage.SalvageRunState.Instance;
+                if(EchoProtocol.Salvage.SalvageSite.IsActive && salvage!=null && salvage.Object!=null
+                    && salvage.Object.HasStateAuthority && salvage.Seat(actor)>=0)
+                    salvage.AlertEnemies(position,noiseType==RuntimeNoiseType.NOISE_MAKER?25:noiseType==RuntimeNoiseType.SPRINT?14:noiseType==RuntimeNoiseType.WALK?7:16);
                 noiseEvent = default;
                 LastRejectReason = NoiseValidationRejectReason.NotStateAuthority;
                 LastDiagnosticReason = NoiseSystemDiagnosticReason.SubsystemUnavailable;

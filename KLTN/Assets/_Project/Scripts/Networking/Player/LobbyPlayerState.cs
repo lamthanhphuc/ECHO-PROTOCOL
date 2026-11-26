@@ -379,7 +379,7 @@ namespace EchoProtocol.Networking
 
             ToolId = toolId;
             TeamToolUsesRemaining =
-                toolId == 0
+                toolId == FirstAidKitToolId && EchoProtocol.Salvage.SalvageSite.IsActive ? Mathf.Clamp(remainingUses,1,2) : toolId == 0
                     ? 0
                     : toolId == NoiseMakerToolId
                       || toolId == DoorJammerToolId

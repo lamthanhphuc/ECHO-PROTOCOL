@@ -44,7 +44,7 @@ namespace EchoProtocol.UI.HUD
 
         public static bool IsPurgeScene => AlienHuntMission.Instance != null
             || SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
-        public bool CanOpenExpeditionMissions => _player != null && _down != null && _down.IsActive
+        public bool CanOpenExpeditionMissions => !EchoProtocol.Salvage.SalvageSite.IsActive && _player != null && _down != null && _down.IsActive
             && !(NetworkMatchState.Instance != null && NetworkMatchState.Instance.Object != null
                 && NetworkMatchState.Instance.Object.IsValid && NetworkMatchState.Instance.CurrentPhase == NetworkMatchPhase.MatchEnded);
         public static bool CanShowGameplay(bool bound, bool modal, bool ended, bool spectating)
@@ -150,7 +150,11 @@ namespace EchoProtocol.UI.HUD
             }
 
             float now = Time.unscaledTime;
-            if (!IsPurgeScene)
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                Fade(_objective, false); Fade(_held, false);
+            }
+            else if (!IsPurgeScene)
             {
                 _objective.Icon.Kind = PurgeIcon.Missions;
                 _objective.Label.text = (_manager.ObjectiveTracker != null ? _manager.ObjectiveTracker.PresentationText : "EXPEDITION")

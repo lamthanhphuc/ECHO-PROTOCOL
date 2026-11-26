@@ -384,6 +384,9 @@ RefreshMemberList();
         private static string ConnectionFeedbackSource(string detail)
         {
             string error = (detail ?? string.Empty).ToLowerInvariant();
+            if (error.Contains("custom session properties") || error.Contains("session property limit"))
+                return GameLanguage.Choose("CẤU HÌNH PHÒNG KHÔNG HỢP LỆ\nBản game vượt giới hạn thuộc tính phòng của dịch vụ. Cần cập nhật bản game đã sửa lỗi; đổi mã phòng hoặc mạng sẽ không khắc phục được.",
+                    "INVALID ROOM CONFIGURATION\nThis build exceeds the service room-property limit. Update to a fixed build; changing the room code or network will not resolve it.");
             if (error.Contains("admin_kicked"))
                 return GameLanguage.Choose("BẠN ĐÃ BỊ MỜI KHỎI PHÒNG\nBạn có thể vào phòng khác từ menu chính.",
                     "YOU WERE REMOVED FROM THE ROOM\nYou can join another room from the main menu.");
