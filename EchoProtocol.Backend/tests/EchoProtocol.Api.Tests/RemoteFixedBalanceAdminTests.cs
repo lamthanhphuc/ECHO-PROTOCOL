@@ -35,6 +35,89 @@ public sealed class RemoteFixedBalanceAdminTests
         Assert.Equal(ErrorCodes.ValidationError, result.ErrorCode);
     }
 
+    [Fact]
+    public async Task InvalidDraftCannotReplaceActiveVersion()
+    {
+        await using var h = await Harness.CreateAsync();
+        var adminId = Guid.NewGuid();
+        var created = await h.Service.CreateVersionAsync(
+            adminId, Request("RFB-001"), default);
+        Assert.True(created.IsSuccess, created.Message);
+
+        var activated = await h.Service.ActivateVersionAsync(
+            adminId,
+            "RFB-001",
+            new ChangeRemoteFixedActivationRequest
+            {
+                ExpectedActiveVersion = string.Empty,
+                Reason = "Initial approved version"
+            },
+            default);
+        Assert.True(activated.IsSuccess, activated.Message);
+
+        var invalidDraft = await h.Service.CreateVersionAsync(
+            adminId, Request("RFB-002", json: "{}"), default);
+        Assert.False(invalidDraft.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationError, invalidDraft.ErrorCode);
+
+        h.Db.ChangeTracker.Clear();
+        var active = await h.Db.RemoteFixedBalanceVersions
+            .SingleAsync(item => item.IsActive);
+        Assert.Equal("RFB-001", active.Version);
+        Assert.Equal(2, await h.Db.RemoteFixedBalanceAuditEntries.CountAsync());
+        var activationAudit = await h.Db.RemoteFixedBalanceAuditEntries
+            .SingleAsync(item => item.Action == "ACTIVATE");
+        Assert.Equal(adminId, activationAudit.AdminUserId);
+        Assert.Equal("Initial approved version", activationAudit.Reason);
+    }
+
+    [Fact]
+    public async Task PreviouslyValidDraftCannotActivateAfterGameVersionIsRemovedFromAllowlist()
+    {
+        var settings = new MatchAuthoritySettings
+        {
+            EnableRemoteFixed = true,
+            EnableRemoteFixedGameplayTest = true,
+            RemoteFixedGameVersions = ["0.1.0"]
+        };
+        await using var h = await Harness.CreateAsync(settings);
+        var adminId = Guid.NewGuid();
+
+        Assert.True((await h.Service.CreateVersionAsync(adminId, Request("RFB-001"), default)).IsSuccess);
+        Assert.True((await h.Service.ActivateVersionAsync(adminId, "RFB-001", new()
+        {
+            ExpectedActiveVersion = string.Empty,
+            Reason = "Initial approved version"
+        }, default)).IsSuccess);
+
+        var versionedSnapshot = RemoteFixedBalanceTests.ValidSnapshot.Replace("RFB-1", "RFB-2").TrimEnd();
+        versionedSnapshot = versionedSnapshot[..^1] +
+            ",\"gameplay\":[],\"content\":{\"gameVersion\":\"0.1.0\",\"mode\":\"EXPEDITION\",\"monster\":\"STALKER\",\"route\":\"DEFAULT_ROUTE\"}}";
+        var draft = await h.Service.CreateVersionAsync(adminId,
+            Request("RFB-002", json: versionedSnapshot), default);
+        Assert.True(draft.IsSuccess, draft.Message);
+        var auditCountBeforeRevalidation = await h.Db.RemoteFixedBalanceAuditEntries.CountAsync();
+
+        settings.RemoteFixedGameVersions = ["0.1.1"];
+        var activation = await h.Service.ActivateVersionAsync(adminId, "RFB-002", new()
+        {
+            ExpectedActiveVersion = "RFB-001",
+            Reason = "Compatibility was withdrawn"
+        }, default);
+
+        Assert.False(activation.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationError, activation.ErrorCode);
+        h.Db.ChangeTracker.Clear();
+        Assert.Equal("RFB-001", await h.Db.RemoteFixedBalanceVersions
+            .Where(item => item.IsActive)
+            .Select(item => item.Version)
+            .SingleAsync());
+        Assert.False((await h.Db.RemoteFixedBalanceVersions
+            .SingleAsync(item => item.Version == "RFB-002")).IsActive);
+        Assert.Equal(auditCountBeforeRevalidation,
+            await h.Db.RemoteFixedBalanceAuditEntries.CountAsync());
+    }
+
     [Fact] public async Task RejectUnknownMap()
     {
         await using var h = await Harness.CreateAsync();
@@ -111,20 +194,26 @@ public sealed class RemoteFixedBalanceAdminTests
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
-        private Harness(SqliteConnection connection, AppDbContext db)
+        private Harness(
+            SqliteConnection connection,
+            AppDbContext db,
+            MatchAuthoritySettings settings)
         {
             this.connection = connection; Db = db;
-            Service = new(db, TimeProvider.System, Options.Create(new MatchAuthoritySettings()));
+            Settings = settings;
+            Service = new(db, TimeProvider.System, Options.Create(settings));
         }
         public AppDbContext Db { get; }
+        public MatchAuthoritySettings Settings { get; }
         public RemoteFixedBalanceAdminService Service { get; }
         public Task<ServiceResult<RemoteFixedVersionDetailResponse>> Create(string version, string? json = null) =>
             Service.CreateVersionAsync(Guid.NewGuid(), Request(version, json: json), default);
-        public static async Task<Harness> CreateAsync()
+        public static async Task<Harness> CreateAsync(MatchAuthoritySettings? settings = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:"); await connection.OpenAsync();
             var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
-            await db.Database.EnsureCreatedAsync(); return new(connection, db);
+            await db.Database.EnsureCreatedAsync();
+            return new(connection, db, settings ?? new MatchAuthoritySettings());
         }
         public async ValueTask DisposeAsync() { await Db.DisposeAsync(); await connection.DisposeAsync(); }
     }

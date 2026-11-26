@@ -140,6 +140,64 @@ public sealed class AdminBalanceAnalyticsTests
     }
 
     [Fact]
+    public async Task AnalyticsReadsDoNotMutateHistoricalMatchOrDecisionRecords()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var db = new AppDbContext(options);
+        var matchId = Guid.NewGuid();
+        var endedAt = DateTime.UtcNow;
+        var match = new MatchResult
+        {
+            MatchId = matchId,
+            DurationSeconds = 300,
+            PlayerCount = 1,
+            EndedAtUtc = endedAt,
+            Outcome = EchoProtocol.Api.Enums.MatchOutcome.WIN,
+            Match = new MatchAuthorityBinding
+            {
+                MatchId = matchId,
+                ResolutionMode = "ADAPTIVE",
+                MatchDataPolicy = "STANDARD",
+                AdaptivePolicyConfigVersion = "AED_ADMIN_TEST"
+            },
+            Players = { new MatchResultPlayer { UserId = Guid.NewGuid(), Survived = true } }
+        };
+        var decision = new AEDV02Decision
+        {
+            DecisionId = Guid.NewGuid(),
+            MatchId = matchId,
+            ApprovalStatus = "HOLD",
+            ApplyStatus = "NOT_APPLICABLE",
+            ReasonCode = "HOLD_RULE",
+            PolicyVersion = "AED-V02",
+            CatalogVersion = "catalog-before"
+        };
+        db.MatchResults.Add(match);
+        db.AEDV02Decisions.Add(decision);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var service = new AdminBalanceAnalyticsService(db);
+        Assert.True((await service.GetAsync(30, null, null, null, null, false, default)).IsSuccess);
+        Assert.True((await service.PlayerAsync(Guid.NewGuid(), 1, default)).IsSuccess);
+        Assert.DoesNotContain(db.ChangeTracker.Entries(),
+            entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted);
+
+        var storedMatch = await db.MatchResults.AsNoTracking().SingleAsync(item => item.MatchId == matchId);
+        var storedBinding = await db.MatchAuthorityBindings.AsNoTracking()
+            .SingleAsync(item => item.MatchId == matchId);
+        var storedDecision = await db.AEDV02Decisions.AsNoTracking()
+            .SingleAsync(item => item.DecisionId == decision.DecisionId);
+        Assert.Equal(endedAt, storedMatch.EndedAtUtc);
+        Assert.Equal(EchoProtocol.Api.Enums.MatchOutcome.WIN, storedMatch.Outcome);
+        Assert.Equal("AED_ADMIN_TEST", storedBinding.AdaptivePolicyConfigVersion);
+        Assert.Equal("HOLD", storedDecision.ApprovalStatus);
+        Assert.Equal("catalog-before", storedDecision.CatalogVersion);
+    }
+
+    [Fact]
     public async Task CohortsSeparateVerifiedChangesNeutralReceiptsAndTestMatches()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
