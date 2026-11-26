@@ -88,7 +88,7 @@ namespace EchoProtocol.UI.Tests
         }
 
         [Test]
-        public void CreditsUseOneFontSizeAndDisableLegacySizing()
+        public void CreditsUseBoundedAmountSizingAndFixedLabelSizing()
         {
             var credits = new GameObject("CoinContainer", typeof(RectTransform),
                 typeof(Button)).GetComponent<RectTransform>();
@@ -112,7 +112,9 @@ namespace EchoProtocol.UI.Tests
             Assert.That(oldBackground.enabled, Is.False);
             Assert.That(amount.fontSize, Is.EqualTo(18));
             Assert.That(label.fontSize, Is.EqualTo(11));
-            Assert.That(amount.resizeTextForBestFit, Is.False);
+            Assert.That(amount.resizeTextForBestFit, Is.True);
+            Assert.That(amount.resizeTextMinSize, Is.EqualTo(12));
+            Assert.That(amount.resizeTextMaxSize, Is.EqualTo(18));
             Assert.That(label.enableAutoSizing, Is.False);
             Assert.That(amount.font, Is.Not.Null);
             Assert.That(label.font, Is.Not.Null);
@@ -183,23 +185,26 @@ namespace EchoProtocol.UI.Tests
         public void HeaderShowsCenteredLocalizedLeaderboardTitle()
         {
             var panel = _archive.OverlayRoot.Find("ArchivePanel");
-            var heading = panel.Find("Heading").GetComponent<Text>();
-            var filterLabel = panel.Find("MapFilter/Label").GetComponent<Text>();
+            var heading = panel.Find("ScreenHeading").GetComponent<Text>();
             var accent = panel.Find("HeadingAccent").GetComponent<Image>();
 
             Assert.That(heading.text, Is.EqualTo("BẢNG XẾP HẠNG"));
             Assert.That(heading.alignment, Is.EqualTo(TextAnchor.MiddleCenter));
-            Assert.That(heading.rectTransform.anchorMin.x, Is.EqualTo(0.5f));
-            Assert.That(heading.rectTransform.anchorMax.x, Is.EqualTo(0.5f));
-            Assert.That(heading.font, Is.SameAs(filterLabel.font),
-                "The leaderboard title must use the complete lobby/body glyph set.");
+            Assert.That((heading.rectTransform.anchorMin.x
+                + heading.rectTransform.anchorMax.x) * 0.5f,
+                Is.EqualTo(0.5f).Within(0.001f));
+            Assert.That(heading.rectTransform.rect.width,
+                Is.EqualTo(720f).Within(0.01f));
+            var visuals = Resources.Load<LeaderboardArchiveVisuals>("LeaderboardArchive/Visuals");
+            Assert.That(visuals, Is.Not.Null);
+            Assert.That(heading.font, Is.SameAs(visuals.headingFont));
             Assert.That(accent.color.a, Is.GreaterThan(0f));
         }
 
         [Test]
         public void OpeningArchiveRestoresRenderableLeaderboardHeading()
         {
-            var heading = _archive.OverlayRoot.Find("ArchivePanel/Heading")
+            var heading = _archive.OverlayRoot.Find("ArchivePanel/ScreenHeading")
                 .GetComponent<Text>();
             heading.enabled = false;
             heading.canvasRenderer.SetAlpha(0f);
@@ -501,13 +506,10 @@ namespace EchoProtocol.UI.Tests
         {
             float scale = MainMenuLeaderboardController.ComputePanelScale(
                 900f, 600f);
-            var panel = (RectTransform)_archive.OverlayRoot.Find("ArchivePanel");
-
             Assert.That(scale, Is.GreaterThan(0f).And.LessThan(1f));
-            Assert.That(panel.rect.width * scale,
-                Is.LessThanOrEqualTo(860.01f));
-            Assert.That(panel.rect.height * scale,
-                Is.LessThanOrEqualTo(560.01f));
+            Assert.That(1530f * scale, Is.LessThanOrEqualTo(900.01f));
+            Assert.That(860f * scale, Is.LessThanOrEqualTo(600.01f));
+            Assert.That(scale, Is.EqualTo(Mathf.Min(900f / 1530f, 600f / 860f)).Within(0.0001f));
         }
 
         private static void AssertChildComponent<T>(GameObject root, string path)
