@@ -74,4 +74,62 @@ public sealed class AgreementsTests
         await middleware.InvokeAsync(context,db);
         Assert.True(nextCalled);
     }
+
+    // TC-MF-01-02-03: BM04 assertion gap: a stale acceptance for an old bundle version
+    // is not sufficient for the current version; the account must reaccept with the
+    // current BundleVersion/Hash before the gate allows protected access again.
+    [Fact]
+    public async Task PriorVersionAcceptanceRequiresRenewalBeforeProtectedAccess()
+    {
+        await using var db = Database();
+        var user = Guid.NewGuid();
+
+        // Seed an acceptance for a stale bundle version.
+        db.UserAgreementAcceptances.Add(new EchoProtocol.Api.Entities.UserAgreementAcceptance
+        {
+            UserId           = user,
+            BundleVersion    = "stale-bundle-v0",
+            ContentSha256    = new string('0', 64),
+            DocumentVersions = "transactions=OLD",
+            AcceptedAtUtc    = DateTime.UtcNow.AddDays(-30),
+            Locale           = "vi",
+            AdultConfirmed          = true,
+            WarningAcknowledged     = true,
+            TermsAccepted           = true,
+            PrivacyNoticeAcknowledged = true,
+            CommunityAccepted       = true,
+            TransactionsAccepted    = true
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Gate must still block because the stale bundle does not match the live catalog version.
+        bool nextCalled = false;
+        var middleware = new AgreementGateMiddleware(_ => { nextCalled = true; return Task.CompletedTask; });
+        var context = Controller(db, user).HttpContext;
+        context.Request.Path   = "/api/payments/orders";
+        context.Request.Method = "POST";
+        context.Response.Body  = new MemoryStream();
+        await middleware.InvokeAsync(context, db);
+        Assert.Equal(403, context.Response.StatusCode);
+        Assert.False(nextCalled);
+
+        // Reaccept with the current bundle.
+        var reaccept = await Controller(db, user).Accept(Valid(), default);
+        Assert.IsType<OkObjectResult>(reaccept);
+
+        // After reacceptance the gate permits access.
+        context.Response.StatusCode = 200;
+        nextCalled = false;
+        await middleware.InvokeAsync(context, db);
+        Assert.True(nextCalled);
+
+        // The persisted current-version record reflects the live catalog.
+        db.ChangeTracker.Clear();
+        var current = await db.UserAgreementAcceptances
+            .SingleAsync(a => a.UserId == user && a.BundleVersion == AgreementCatalog.Version);
+        Assert.Equal(AgreementCatalog.Hash, current.ContentSha256);
+        Assert.Contains("transactions=", current.DocumentVersions);
+        Assert.Equal(DateTimeKind.Utc, current.AcceptedAtUtc.Kind);
+    }
 }

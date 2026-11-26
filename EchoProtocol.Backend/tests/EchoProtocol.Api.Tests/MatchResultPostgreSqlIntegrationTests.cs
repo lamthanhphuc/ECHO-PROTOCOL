@@ -647,6 +647,13 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     {
         await using var scope = await PostgresScope.CreateAsync();
         var seed = await scope.SeedPurchaseAsync();
+        await using (var setup = scope.CreateDbContext())
+        {
+            var item = await setup.ShopItems.SingleAsync(
+                shopItem => shopItem.ItemId == seed.FirstItemId);
+            item.Category = "TEAM_TOOL";
+            await setup.SaveChangesAsync();
+        }
 
         var result = await ProcessPurchaseAsync(
             scope, seed.UserId, seed.FirstItemId, "atomic-purchase");
@@ -664,6 +671,13 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
         Assert.Equal(ledger.Id, purchase.WalletTransactionId);
         var inventory = await verify.InventoryItems.AsNoTracking().SingleAsync();
         Assert.Equal(purchase.PurchaseId, inventory.PurchaseId);
+
+        var equip = await EquipLoadoutAsync(
+            scope, seed.UserId, "TEAM_TOOL_1", seed.FirstItemId);
+        Assert.True(equip.IsSuccess, equip.Message);
+        await using var reloaded = scope.CreateDbContext();
+        var loadout = await CreateLoadoutService(reloaded).GetCurrentAsync(seed.UserId);
+        Assert.Equal(seed.FirstItemId, Assert.Single(loadout.Data!.TeamTools).ItemId);
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
@@ -761,11 +775,17 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
-    public async Task ConcurrentRewardCreditAndPurchaseDebitDoNotLoseWalletUpdate()
+    public async Task ConcurrentRewardPurchaseAndPaymentTopUpReconcileSameWallet()
     {
         await using var scope = await PostgresScope.CreateAsync();
         var rewardSeed = await scope.SeedRewardMatchAsync();
         var itemId = await scope.SeedShopItemAsync(30);
+        int initialHostBalance;
+        await using (var initial = scope.CreateDbContext())
+            initialHostBalance = await initial.Wallets.AsNoTracking()
+                .Where(wallet => wallet.UserId == rewardSeed.HostId)
+                .Select(wallet => wallet.Balance)
+                .SingleAsync();
 
         var rewardTask = ProcessRewardAsync(scope, rewardSeed.MatchId);
         var purchaseTask = ProcessPurchaseAsync(
@@ -784,6 +804,58 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
         Assert.Equal(1, await verify.PurchaseTransactions.CountAsync());
         Assert.Equal(1, await verify.InventoryItems.CountAsync());
         Assert.Equal(3, await verify.WalletTransactions.CountAsync());
+
+        var paymentOrderId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.PaymentOrders.Add(new PaymentOrder
+            {
+                PaymentOrderId = paymentOrderId,
+                UserId = rewardSeed.HostId,
+                Provider = "PAYOS",
+                ProviderOrderId = $"topup-{paymentOrderId:N}",
+                Purpose = "AUTOMATED_TEST_ONLY",
+                ProductReference = "TEST_TOPUP",
+                FulfillmentKind = PaymentFulfillmentKind.WALLET_CREDIT,
+                WalletCreditAmount = 150,
+                Amount = 125_000,
+                Currency = "VND",
+                Status = PaymentOrderStatus.PAID,
+                IdempotencyKey = $"topup-key-{paymentOrderId:N}",
+                RequestFingerprint = new string('A', 64),
+                ProviderTransactionId = $"topup-payment-{paymentOrderId:N}",
+                CreatedAtUtc = Now.UtcDateTime,
+                UpdatedAtUtc = Now.UtcDateTime,
+                PaidAtUtc = Now.UtcDateTime
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var fulfillmentDb = scope.CreateDbContext())
+        {
+            var fulfillment = new PaymentFulfillmentService(
+                fulfillmentDb,
+                Options.Create(new PaymentCatalogSettings()),
+                new FixedTimeProvider(Now));
+            var topUp = await fulfillment.FulfillAsync(paymentOrderId);
+            Assert.True(topUp.IsSuccess, topUp.Message);
+        }
+
+        await using var reconciled = scope.CreateDbContext();
+        var reconciledWallet = await reconciled.Wallets.AsNoTracking()
+            .SingleAsync(wallet => wallet.UserId == rewardSeed.HostId);
+        var hostLedger = await reconciled.WalletTransactions.AsNoTracking()
+            .Where(item => item.WalletId == reconciledWallet.Id)
+            .ToListAsync();
+        Assert.Equal(245, reconciledWallet.Balance);
+        Assert.Equal(initialHostBalance + hostLedger.Sum(item => item.Amount),
+            reconciledWallet.Balance);
+        Assert.Equal(3, hostLedger.Count);
+        Assert.Equal(150, hostLedger.Single(
+            item => item.Type == WalletTransactionType.PAYMENT_FULFILLMENT).Amount);
+        Assert.Equal(paymentOrderId,
+            (await reconciled.PaymentFulfillments.AsNoTracking().SingleAsync())
+                .PaymentOrderId);
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
@@ -2632,11 +2704,97 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     public async Task StartedMatchKeepsLockedVersionAfterPublish()
     {
         await using var scope = await PostgresScope.CreateAsync(); var seed = await SeedRemoteStartMatchAsync(scope);
-        await using (var add = scope.CreateDbContext()) { var next = CreateRemoteBalance("RFB-NEXT"); next.IsActive = false; add.Add(next); await add.SaveChangesAsync(); }
+        var adaptiveVersion = AdaptiveConfigurationService.VersionPrefix + "PRESERVE";
+        var adaptiveJson = JsonSerializer.Serialize(new AdaptiveConfiguration(
+            true, 30, 70, 30, 70, 1, 1, true, null, null, null,
+            new Dictionary<string, AdaptiveParameter>
+            {
+                ["ChaseSpeed"] = new(9, [8, 9, 10])
+            },
+            AdaptiveConfigurationService.DefaultPilot));
+        var nextSnapshot = RemoteFixedBalanceTests.ValidSnapshot
+            .Replace("\"maxHealth\": 100", "\"maxHealth\": 101");
+        await using (var add = scope.CreateDbContext())
+        {
+            var next = CreateRemoteBalance("RFB-NEXT", nextSnapshot);
+            next.IsActive = false;
+            add.Add(next);
+            add.AdaptiveConfigurationVersions.Add(new AdaptiveConfigurationVersion
+            {
+                Version = adaptiveVersion,
+                Compatibility = MatchAuthoritySettings.CurrentGameVersion,
+                Revision = 1,
+                ConfigurationJson = adaptiveJson,
+                PublishedByUserId = Guid.NewGuid(),
+                PublishedAtUtc = Now.UtcDateTime
+            });
+            add.MatchAuthorityBindings.Add(new MatchAuthorityBinding
+            {
+                MatchId = Guid.NewGuid(),
+                FusionSessionName = $"aed-preserve-{Guid.NewGuid():N}",
+                HostUserId = seed.HostId,
+                MaxPlayers = 4,
+                MapId = "SciFi",
+                Difficulty = "NORMAL",
+                ResolutionMode = "ADAPTIVE",
+                BalanceSource = "LOCAL",
+                BalanceProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion,
+                AdaptivePolicyConfigVersion = adaptiveVersion,
+                MatchDataPolicy = RemoteFixedBalanceContract.Standard,
+                Status = MatchAuthorityStatus.Lobby,
+                LeaseExpiresAtUtc = Now.AddMinutes(1).UtcDateTime,
+                CreatedAtUtc = Now.UtcDateTime,
+                UpdatedAtUtc = Now.UtcDateTime
+            });
+            await add.SaveChangesAsync();
+        }
+        string persistedAdaptiveSnapshot;
+        await using (var read = scope.CreateDbContext())
+            persistedAdaptiveSnapshot = await read.AdaptiveConfigurationVersions
+                .Where(x => x.Version == adaptiveVersion)
+                .Select(x => x.ConfigurationJson)
+                .SingleAsync();
         await using (var start = scope.CreateDbContext()) Assert.True((await CreateRemoteMatchService(start).StartV2Async(seed.HostId, seed.MatchId, RemoteStartRequest(), default)).IsSuccess);
-        await using (var publish = scope.CreateDbContext()) Assert.True((await CreateRemoteAdminService(publish).ActivateVersionAsync(Guid.NewGuid(), "RFB-NEXT", Change("RFB-START-1"), default)).IsSuccess);
-        await using var verify = scope.CreateDbContext(); var match = await verify.MatchAuthorityBindings.SingleAsync(x => x.MatchId == seed.MatchId);
+        var adminId = Guid.NewGuid();
+        const string reason = "Publish verified balance version";
+        await using (var publish = scope.CreateDbContext())
+        {
+            var result = await CreateRemoteAdminService(publish).ActivateVersionAsync(adminId, "RFB-NEXT",
+                new ChangeRemoteFixedActivationRequest
+                {
+                    ExpectedActiveVersion = "RFB-START-1",
+                    Reason = reason
+                }, default);
+            Assert.True(result.IsSuccess, result.Message);
+        }
+
+        await using var verify = scope.CreateDbContext();
+        var match = await verify.MatchAuthorityBindings.SingleAsync(x => x.MatchId == seed.MatchId);
         Assert.Equal("RFB-START-1", match.BalanceVersion);
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(RemoteFixedBalanceTests.ValidSnapshot),
+            match.BalanceHash);
+        var active = await verify.RemoteFixedBalanceVersions.SingleAsync(x => x.IsActive);
+        Assert.Equal("RFB-NEXT", active.Version);
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(nextSnapshot), active.ContentHash);
+        var audit = await verify.RemoteFixedBalanceAuditEntries.SingleAsync(x => x.Action == "ACTIVATE");
+        Assert.Equal(adminId, audit.AdminUserId);
+        Assert.Equal("RFB-START-1", audit.PreviousVersion);
+        Assert.Equal("RFB-NEXT", audit.TargetVersion);
+        Assert.Equal(reason, audit.Reason);
+        Assert.Equal(Now.UtcDateTime, audit.CreatedAtUtc);
+
+        var adaptiveMatch = await verify.MatchAuthorityBindings
+            .SingleAsync(x => x.AdaptivePolicyConfigVersion == adaptiveVersion);
+        var adaptiveSnapshot = await verify.AdaptiveConfigurationVersions
+            .SingleAsync(x => x.Version == adaptiveVersion);
+        Assert.Equal(adaptiveVersion, adaptiveMatch.AdaptivePolicyConfigVersion);
+        Assert.Equal(persistedAdaptiveSnapshot, adaptiveSnapshot.ConfigurationJson);
+        using var snapshotJson = JsonDocument.Parse(adaptiveSnapshot.ConfigurationJson);
+        Assert.Equal(9, snapshotJson.RootElement.GetProperty("Parameters")
+            .GetProperty("ChaseSpeed").GetProperty("Baseline").GetDouble());
+        Assert.Equal([8d, 9d, 10d], snapshotJson.RootElement.GetProperty("Parameters")
+            .GetProperty("ChaseSpeed").GetProperty("Tiers").EnumerateArray()
+            .Select(value => value.GetDouble()).ToArray());
     }
 
     [Fact, Trait("Category", "PR5PostgreSqlIntegration")]

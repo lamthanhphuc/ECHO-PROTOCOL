@@ -220,6 +220,95 @@ public sealed class AuthRefreshTokenTests
             result.ErrorCode);
     }
 
+    // TC-MF-01-01-01: registration persists a hashed password, profile, and wallet.
+    [Fact]
+    public async Task RegisterPersistsHashedPasswordAndOwnProfile()
+    {
+        await using var harness = await AuthHarness.CreateAsync();
+
+        var result = await harness.Service.RegisterAsync(new RegisterRequest
+        {
+            Email = "new-player@echo.invalid",
+            Username = "new-player",
+            Password = Password,
+            ConfirmPassword = Password
+        });
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.NotNull(result.Data);
+        var user = await harness.Db.Users
+            .Include(item => item.PlayerProfile)
+            .Include(item => item.Wallet)
+            .SingleAsync(item => item.Id == result.Data!.Id);
+        Assert.Equal("new-player", user.Username);
+        Assert.NotEqual(Password, user.PasswordHash);
+        Assert.True(user.PasswordHash.Length > 0);
+        Assert.NotNull(user.Wallet);
+        Assert.Equal(GameConstants.DefaultPlayerWalletBalance, user.Wallet!.Balance);
+        Assert.NotNull(user.PlayerProfile);
+        Assert.Equal("new-player", user.PlayerProfile!.DisplayName);
+        Assert.Equal(1, await harness.Db.Wallets.CountAsync(item => item.UserId == user.Id));
+
+        var profile = await harness.Service.GetCurrentUserAsync(user.Id);
+        Assert.True(profile.IsSuccess);
+        Assert.Equal(user.Id, profile.Data!.Id);
+        Assert.Equal("new-player", profile.Data.Username);
+
+        var login = await harness.Service.LoginAsync(
+            new LoginRequest { Username = "new-player", Password = Password });
+        Assert.True(login.IsSuccess);
+        Assert.Equal(user.Id, login.Data!.User.Id);
+        var session = await harness.Db.RefreshSessions.SingleAsync();
+        Assert.Equal(Hash(login.Data.RefreshToken), session.TokenHash);
+    }
+
+    // TC-MF-01-01-02: a wrong password must not create a session or mutate account state.
+    [Fact]
+    public async Task InvalidCredentialsDoNotCreateSessionOrMutateAccount()
+    {
+        await using var harness = await AuthHarness.CreateAsync();
+
+        var balanceBefore = (await harness.Db.Wallets.SingleAsync()).Balance;
+        var sessionsBefore = await harness.Db.RefreshSessions.CountAsync();
+
+        // Wrong password: must fail and leave all state unchanged.
+        var badLogin = await harness.Service.LoginAsync(
+            new LoginRequest { Username = "player", Password = "WrongPassword!" });
+
+        Assert.False(badLogin.IsSuccess);
+        Assert.Null(badLogin.Data);
+
+        harness.Db.ChangeTracker.Clear();
+
+        Assert.Equal(sessionsBefore, await harness.Db.RefreshSessions.CountAsync());
+        Assert.Equal(balanceBefore, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Equal(1, await harness.Db.Users.CountAsync());
+    }
+
+    // TC-MF-01-01-02: a duplicate username must not create an account or wallet.
+    [Fact]
+    public async Task InvalidRegistrationDoesNotCreateAccountOrWallet()
+    {
+        await using var harness = await AuthHarness.CreateAsync();
+
+        var usersBefore = await harness.Db.Users.CountAsync();
+        var walletsBefore = await harness.Db.Wallets.CountAsync();
+        var result = await harness.Service.RegisterAsync(new RegisterRequest
+        {
+            Email = "another-email@echo.invalid",
+            Username = "player",
+            Password = Password,
+            ConfirmPassword = Password
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.UsernameAlreadyExists, result.ErrorCode);
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(usersBefore, await harness.Db.Users.CountAsync());
+        Assert.Equal(walletsBefore, await harness.Db.Wallets.CountAsync());
+        Assert.Empty(await harness.Db.RefreshSessions.ToListAsync());
+    }
+
     private static string Hash(string value) =>
         Convert.ToHexString(
             SHA256.HashData(
