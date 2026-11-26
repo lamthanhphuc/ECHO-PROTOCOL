@@ -50,6 +50,14 @@ public sealed class RewardService : IRewardService
             await _db.Entry(result).Reference(item => item.Match).LoadAsync(cancellationToken);
             await _db.Entry(result.Match).Collection(item => item.Players).LoadAsync(cancellationToken);
 
+            bool salvage=MatchContentCatalog.IsSalvage(result.Match.MapId);
+            if(salvage && (result.Match.RewardPolicyVersion!=SalvageRewardPolicy.PolicyVersion
+                || result.Match.ProgressionPolicyVersion!=SalvageProgressionPolicy.PolicyVersion
+                || result.SalvageCompletedLevels is null || result.SalvageCompletedDays is null
+                || !SalvageRewardPolicy.ValidEvidence(result.SalvageCompletedLevels.Value,result.SalvageCompletedDays.Value)
+                || result.EvidenceVersion!=2 || result.Players.Any(p=>p.EvidenceComplete!=true)))
+                return Failure("Missing approved Salvage reward evidence",ErrorCodes.RewardPolicyInvalid);
+
             if (result.RewardStatus == MatchRewardStatus.Completed)
             {
                 await transaction.RollbackAsync(cancellationToken);
@@ -67,10 +75,15 @@ public sealed class RewardService : IRewardService
                     ErrorCodes.RewardInvalidResult);
             }
 
-            var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly;
+            var testOnly = result.Match.MatchDataPolicy == RemoteFixedBalanceContract.TestOnly && !salvage;
             var policy = _policy;
             IProgressionService progressionService = _progressionService;
-            if (!testOnly)
+            if(salvage)
+            {
+                policy=new SalvageRewardPolicy();
+                progressionService=new ProgressionService(new SalvageProgressionPolicy());
+            }
+            if (!testOnly && !salvage)
             {
                 var version = result.Match.RewardPolicyVersion;
                 if (version is null)
@@ -528,7 +541,7 @@ public sealed class RewardService : IRewardService
             item.ObjectiveActions,
             item.RescueActions,
             item.EvidenceComplete,
-            ParticipationSeconds(result, item.UserId))).ToArray(), result.Match.MapId, result.Match.Difficulty);
+            ParticipationSeconds(result, item.UserId))).ToArray(), result.Match.MapId, result.Match.Difficulty, result.SalvageCompletedLevels, result.SalvageCompletedDays, result.SalvageUsedDebugCheats==true);
 
     private static int ParticipationSeconds(MatchResult result, Guid userId)
     {

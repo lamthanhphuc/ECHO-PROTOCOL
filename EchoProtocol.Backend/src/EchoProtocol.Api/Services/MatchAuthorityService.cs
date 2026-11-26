@@ -598,7 +598,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         }
 
         if ((mapId is null) != (difficulty is null)
-            || (mapId is not null && !LeaderboardCatalog.IsKnownMap(mapId))
+            || (mapId is not null && !LeaderboardCatalog.IsKnownMap(mapId) && !MatchContentCatalog.IsSalvage(mapId))
             || (difficulty is not null && !LeaderboardCatalog.IsKnownDifficulty(difficulty)))
         {
             return Failure<MatchAuthorityResponse>(
@@ -617,6 +617,9 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             return Failure<MatchAuthorityResponse>(
                 "Invalid Remote Fixed start context", ErrorCodes.ValidationError);
         }
+
+        if (MatchContentCatalog.IsSalvage(mapId) && isV2 && (mode != "FIXED" || source != "LOCAL" || prepare))
+            return Failure<MatchAuthorityResponse>("Salvage Core requires local fixed rules", ErrorCodes.ValidationError);
 
         var authorityFailure = ValidateActiveHost(match, hostUserId);
         if (authorityFailure is not null)
@@ -727,6 +730,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             match.BalanceHash = selected?.ContentHash;
             match.MatchDataPolicy = selected is not null && RemoteFixedBalanceContract.UsesGameplayTuning(selected.SnapshotJson)
                 ? RemoteFixedBalanceContract.TestOnly : RemoteFixedBalanceContract.Standard;
+            if (MatchContentCatalog.IsSalvage(mapId)) match.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
         }
         if (prepare)
         {
@@ -767,6 +771,12 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
             ? ProgressionPolicyV3.PolicyVersion : rewardConfiguration.PolicyKey == "REWARD_V2"
             ? "PROGRESSION_V2" : ProgressionPolicyV1.PolicyVersion;
         match.RewardConfigurationJson = System.Text.Json.JsonSerializer.Serialize(rewardConfiguration);
+        if(MatchContentCatalog.IsSalvage(mapId))
+        {
+            match.RewardPolicyVersion=SalvageRewardPolicy.PolicyVersion;
+            match.ProgressionPolicyVersion=SalvageProgressionPolicy.PolicyVersion;
+            match.RewardConfigurationJson="{\"policy\":\"SALVAGE_REWARD_V1\",\"creditsPerLevel\":40,\"xpPerLevel\":100,\"maximumPaidLevels\":5,\"minimumSecondsPerLevel\":180}";
+        }
         match.Status = MatchAuthorityStatus.InMatch;
         match.StartedAtUtc ??= now;
         // Unity scene loading can pause host heartbeats; resume the normal lease on the next renewal.

@@ -15,6 +15,27 @@ public sealed class RewardServiceTests
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 13, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LegacySalvageWithoutApprovedPolicyNeverGrantsAccountRewards(bool testOnly)
+    {
+        await using var harness = await RewardHarness.CreateAsync(testOnly: testOnly);
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync(x => x.MatchId == harness.MatchId);
+        match.MapId = MatchContentCatalog.SalvageMap;
+        match.Difficulty = "NORMAL";
+        match.ResolutionMode = null; match.BalanceSource = null; match.BalanceProtocolVersion = null;
+        match.BalanceVersion = null; match.BalanceHash = null; match.BalanceBuildVersion = null;
+        await harness.Db.SaveChangesAsync();
+        var result = await harness.Service.ProcessAsync(harness.MatchId);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.RewardPolicyInvalid, result.ErrorCode);
+        Assert.Empty(await harness.Db.MatchRewardGrants.ToListAsync());
+        Assert.Empty(await harness.Db.WalletTransactions.ToListAsync());
+        Assert.All(await harness.Db.Wallets.ToListAsync(), wallet => Assert.Equal(100, wallet.Balance));
+        Assert.All(await harness.Db.PlayerProfiles.ToListAsync(), profile => Assert.Equal(0, profile.ExperiencePoints));
+    }
+
     [Fact, Trait("Category", "M4RewardUnit")]
     public async Task ApprovedPolicyProcessesRewardSuccessfully()
     {
@@ -562,6 +583,30 @@ public sealed class RewardServiceTests
             Assert.True((await harness.Service.ProcessAsync(harness.MatchId)).Data!.IsReplay);
             Assert.Equal(testOnly ? 0 : 8, await harness.Db.ProgressionCosmeticGrants.CountAsync());
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApprovedSalvageRewardsAreAtomicIdempotentAndDebugSafe(bool debug)
+    {
+        await using var harness=await RewardHarness.CreateAsync();
+        var match=await harness.Db.MatchAuthorityBindings.Include(m=>m.Result).ThenInclude(r=>r!.Players).Include(m=>m.Players).SingleAsync();
+        match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";
+        match.MatchDataPolicy=RemoteFixedBalanceContract.TestOnly;
+        match.RewardPolicyVersion=SalvageRewardPolicy.PolicyVersion;
+        match.ProgressionPolicyVersion=SalvageProgressionPolicy.PolicyVersion;
+        match.StartedAtUtc=Now.AddMinutes(-10).UtcDateTime;
+        foreach(var binding in match.Players)binding.BoundAtUtc=Now.AddMinutes(-12).UtcDateTime;
+        var stored=match.Result!;stored.StartedAtUtc=match.StartedAtUtc.Value;stored.DurationSeconds=600;
+        stored.EvidenceVersion=2;stored.SalvageCompletedLevels=2;stored.SalvageCompletedDays=6;stored.SalvageUsedDebugCheats=debug;
+        foreach(var player in stored.Players){player.EvidenceComplete=true;player.ObjectiveActions=0;player.RescueActions=0;}
+        await harness.Db.SaveChangesAsync();
+        var first=await harness.Service.ProcessAsync(harness.MatchId);Assert.True(first.IsSuccess,first.Message);
+        var replay=await harness.Service.ProcessAsync(harness.MatchId);Assert.True(replay.IsSuccess,replay.Message);Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(2,await harness.Db.MatchRewardGrants.CountAsync());
+        Assert.All(await harness.Db.Wallets.ToListAsync(),w=>Assert.Equal(debug?100:180,w.Balance));
+        Assert.All(await harness.Db.PlayerProfiles.ToListAsync(),p=>Assert.Equal(debug?0:200,p.ExperiencePoints));
     }
 
     private sealed class RewardHarness : IAsyncDisposable

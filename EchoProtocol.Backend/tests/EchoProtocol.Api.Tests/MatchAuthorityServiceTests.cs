@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Api.Configurations;
+using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.Entities;
@@ -13,6 +13,23 @@ namespace EchoProtocol.Api.Tests;
 
 public sealed class MatchAuthorityServiceTests
 {
+    [Fact]
+    public async Task SalvageSceneUsesAuthenticatedStartAndStaysOutsideRewardLearningData()
+    {
+        await using var db = CreateDb(); var service = CreateService(db); var host = Guid.NewGuid();
+        var created = await service.CreateAsync(host, new CreateMatchAuthorityRequest
+            { FusionSessionName = "recovery-core", MaxPlayers = 4 }, CancellationToken.None);
+        var id = created.Data!.MatchId;
+        await BindAsync(service, host, host, id, "recovery-core", 1);
+        var started = await service.StartAsync(host, id, CancellationToken.None, new StartMatchAuthorityRequest
+            { MapId = MatchContentCatalog.SalvageMap, Difficulty = "NORMAL" });
+        Assert.True(started.IsSuccess, started.Message);
+        var match = await db.MatchAuthorityBindings.SingleAsync(x => x.MatchId == id);
+        Assert.Equal(MatchContentCatalog.SalvageMap, match.MapId);
+        Assert.Equal(RemoteFixedBalanceContract.TestOnly, match.MatchDataPolicy);
+        Assert.Equal(SalvageRewardPolicy.PolicyVersion, match.RewardPolicyVersion);
+        Assert.Equal(SalvageProgressionPolicy.PolicyVersion, match.ProgressionPolicyVersion);
+    }
     [Fact]
     public async Task LastPlayerDisconnectStopsRoomWithoutResult()
     {

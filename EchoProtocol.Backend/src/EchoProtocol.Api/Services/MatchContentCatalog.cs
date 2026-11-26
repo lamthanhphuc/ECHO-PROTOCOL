@@ -2,6 +2,8 @@ namespace EchoProtocol.Api.Services;
 
 public static class MatchContentCatalog
 {
+    public const string SalvageMap = "Salvage_SciFi";
+    public static bool IsSalvage(string? map) => string.Equals(map, SalvageMap, StringComparison.Ordinal);
     public sealed record Entry(string Map, string Mode, string Monster, string Route);
 
     public static readonly Entry[] Entries =

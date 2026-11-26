@@ -87,6 +87,12 @@ public sealed class MatchResultService : IMatchResultService
                 (request.EvidenceVersion != 2 || request.Players.Any(player => player.EvidenceComplete != true)))
                 return Failure("Complete V2 reward evidence is required", ErrorCodes.MatchResultInvalidPayload);
 
+            bool salvage=MatchContentCatalog.IsSalvage(match.MapId);
+            if(salvage ? request.SalvageCompletedLevels is null || request.SalvageCompletedDays is null
+                || !SalvageRewardPolicy.ValidEvidence(request.SalvageCompletedLevels.Value,request.SalvageCompletedDays.Value)
+                || request.EvidenceVersion!=2 || request.Players.Any(p=>p.EvidenceComplete!=true)
+                : request.SalvageCompletedLevels.HasValue || request.SalvageCompletedDays.HasValue)
+                return Failure("Invalid Salvage result evidence",ErrorCodes.MatchResultInvalidPayload);
             var wallNow = UtcNow();
             var now = reviewedEndUtc ?? wallNow;
             if (match.Status != MatchAuthorityStatus.InMatch)
@@ -134,6 +140,9 @@ public sealed class MatchResultService : IMatchResultService
                 DurationSeconds = durationSeconds,
                 ObjectiveCompletion = request.ObjectiveCompletion,
                 EvidenceVersion = request.EvidenceVersion,
+                SalvageCompletedLevels = request.SalvageCompletedLevels,
+                SalvageUsedDebugCheats = salvage ? request.UsedDebugCheats : null,
+                SalvageCompletedDays = request.SalvageCompletedDays,
                 PlayerCount = request.Players.Count,
                 RosterKey = string.Join(",", request.Players
                     .Select(player => player.UserId.ToString("N"))
@@ -333,6 +342,8 @@ public sealed class MatchResultService : IMatchResultService
             writer.WriteString("outcome", request.Outcome!.Value.ToString());
             if (request.UsedDebugCheats) writer.WriteBoolean("usedDebugCheats", true);
             writer.WriteNumber("objectiveCompletion", request.ObjectiveCompletion);
+            if(request.SalvageCompletedLevels.HasValue)writer.WriteNumber("salvageCompletedLevels",request.SalvageCompletedLevels.Value);
+            if(request.SalvageCompletedDays.HasValue)writer.WriteNumber("salvageCompletedDays",request.SalvageCompletedDays.Value);
             if (request.EvidenceVersion.HasValue)
                 writer.WriteNumber("evidenceVersion", request.EvidenceVersion.Value);
             writer.WriteStartArray("players");

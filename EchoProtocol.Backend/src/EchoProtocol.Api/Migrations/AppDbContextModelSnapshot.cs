@@ -1010,7 +1010,7 @@ namespace EchoProtocol.Api.Migrations
                         {
                             t.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", "COALESCE((\r\n    \"ResolutionMode\" IS NULL\r\n    AND \"BalanceSource\" IS NULL\r\n    AND \"BalanceProtocolVersion\" IS NULL\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'LOCAL'\r\n    AND \"ResolutionMode\" IN ('FIXED', 'ADAPTIVE')\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NULL\r\n    AND \"BalanceHash\" IS NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n)\r\nOR\r\n(\r\n    \"BalanceSource\" = 'REMOTE_FIXED'\r\n    AND (\"ResolutionMode\" = 'FIXED' OR\r\n        (\"ResolutionMode\" = 'ADAPTIVE' AND \"BalanceBuildVersion\" IS NOT NULL\r\n         AND \"MapId\" = 'SciFi' AND \"Difficulty\" = 'NORMAL'))\r\n    AND \"BalanceProtocolVersion\" = 'RFB-1'\r\n    AND \"BalanceVersion\" IS NOT NULL\r\n    AND \"BalanceHash\" IS NOT NULL\r\n    AND \"MatchDataPolicy\" IN ('TEST_ONLY', 'STANDARD')\r\n    AND \"MapId\" IS NOT NULL\r\n    AND \"Difficulty\" IS NOT NULL\r\n    AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B')\r\n    AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD')\r\n), FALSE)");
 
-                            t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
+                            t.HasCheckConstraint("CK_MatchAuthorityBindings_LeaderboardContext", "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR (\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND \"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B', 'Salvage_SciFi') AND \"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
                         });
                 });
 
@@ -1148,6 +1148,15 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<string>("RosterKey")
                         .HasMaxLength(131)
                         .HasColumnType("character varying(131)");
+
+                    b.Property<int?>("SalvageCompletedDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SalvageCompletedLevels")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("SalvageUsedDebugCheats")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
