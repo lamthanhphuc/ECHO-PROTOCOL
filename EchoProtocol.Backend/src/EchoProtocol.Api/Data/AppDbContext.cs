@@ -388,7 +388,7 @@ public class AppDbContext : DbContext
                     "CK_MatchAuthorityBindings_LeaderboardContext",
                     "(\"MapId\" IS NULL AND \"Difficulty\" IS NULL) OR " +
                     "(\"MapId\" IS NOT NULL AND \"Difficulty\" IS NOT NULL AND " +
-                    "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B') AND " +
+                    "\"MapId\" IN ('SciFi', 'Scene_A', 'Scene_B', 'Salvage_SciFi') AND " +
                     "\"Difficulty\" IN ('EASY', 'NORMAL', 'HARD'))");
                 table.HasCheckConstraint("CK_MatchAuthorityBindings_BalancePolicy", """
                     COALESCE((

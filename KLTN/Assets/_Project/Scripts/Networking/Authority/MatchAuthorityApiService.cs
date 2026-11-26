@@ -173,6 +173,12 @@ namespace EchoProtocol.Networking.Authority
             Guid matchId,
             SubmitMatchResultRequestDto request)
         {
+            if(request.salvageEvidence)
+                return PutAsync<SalvageSubmitMatchResultRequestDto,MatchResultResponseDto>(
+                    $"/api/matches/{matchId:D}/result",new SalvageSubmitMatchResultRequestDto{
+                        usedDebugCheats=request.usedDebugCheats,evidenceVersion=request.evidenceVersion,
+                        salvageCompletedLevels=request.salvageCompletedLevels,salvageCompletedDays=request.salvageCompletedDays,
+                        outcome=request.outcome,objectiveCompletion=request.objectiveCompletion,players=request.players});
             if (request.evidenceVersion == 0 && !request.usedDebugCheats)
                 return PutAsync<LegacySubmitMatchResultRequestDto, MatchResultResponseDto>(
                     $"/api/matches/{matchId:D}/result",
@@ -195,8 +201,10 @@ namespace EchoProtocol.Networking.Authority
                         evidenceVersion = request.evidenceVersion, outcome = request.outcome,
                         objectiveCompletion = request.objectiveCompletion, players = request.players
                     });
-            return PutAsync<SubmitMatchResultRequestDto, MatchResultResponseDto>(
-                $"/api/matches/{matchId:D}/result", request);
+            return PutAsync<DebugSubmitMatchResultRequestDto, MatchResultResponseDto>(
+                $"/api/matches/{matchId:D}/result",new DebugSubmitMatchResultRequestDto{
+                    usedDebugCheats=request.usedDebugCheats,evidenceVersion=request.evidenceVersion,
+                    outcome=request.outcome,objectiveCompletion=request.objectiveCompletion,players=request.players});
         }
 
         public Task<ApiResult<ApiResponse<RewardMeResponseDto>>> GetMyRewardAsync(Guid matchId) =>

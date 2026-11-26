@@ -96,10 +96,13 @@ namespace EchoProtocol.Tools.Scanner
         public float LastRadarSampleTime { get; private set; }
 
         private FieldScannerTuning _remoteTuning;
+        private FieldScannerTuning _salvageTuning;
         public FieldScannerTuning Tuning
         {
             get
             {
+                if (EchoProtocol.Salvage.SalvageSite.IsActive)
+                    return _salvageTuning ??= _tuning.WithRemoteValues(_tuning.ActiveDuration, _tuning.ScanCooldown, _tuning.CoreRange, _tuning.MotionRange);
                 var active = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerDuration, _tuning.ActiveDuration);
                 var cooldown = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerCooldown, _tuning.ScanCooldown);
                 var coreRange = NetworkMatchState.RemoteGameplayValue(NetworkMatchState.RemoteGameplayPresentation.ScannerRange, _tuning.CoreRange);
@@ -125,6 +128,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
+                if (EchoProtocol.Salvage.SalvageSite.IsActive) return "CARGO";
                 if (IsAlienHuntMode)
                 {
                     return CurrentMode == FieldScannerMode.Core
@@ -481,6 +485,14 @@ namespace EchoProtocol.Tools.Scanner
 
         public bool IsScannerEquipped()
         {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var run = EchoProtocol.Salvage.SalvageRunState.Instance;
+                var state = GetComponent<LobbyPlayerState>();
+                if (run == null || state == null || state.Object == null || !state.Object.IsValid) return false;
+                int seat = run.Seat(state.Object.InputAuthority);
+                return seat >= 0 && run.Crew[seat].Selected == 4 && state.ToolId == LobbyPlayerState.FieldScannerToolId;
+            }
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.ToolId == 1)
             {
@@ -500,6 +512,7 @@ namespace EchoProtocol.Tools.Scanner
 
         public bool IsCarryingCore()
         {
+            if (!EchoProtocol.Salvage.SalvageRunState.AllowsSprint(gameObject)) return true;
             if (EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject)) return true;
             var lobbyState = GetComponent<LobbyPlayerState>();
             if (lobbyState != null && lobbyState.Object != null && lobbyState.Object.IsValid && lobbyState.CarriedCoreId.IsValid)
@@ -929,6 +942,13 @@ namespace EchoProtocol.Tools.Scanner
         {
             List<ICoreScanCandidate> candidates =
                 new List<ICoreScanCandidate>();
+
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var run = EchoProtocol.Salvage.SalvageRunState.Instance;
+                if (run != null) foreach (var item in run.WorldItems.Values) if (item != null) candidates.Add(item);
+                return candidates;
+            }
 
             if (IsAlienHuntMode)
             {

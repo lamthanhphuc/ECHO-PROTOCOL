@@ -84,7 +84,7 @@ namespace EchoProtocol.AI.Stalker.Special
 
         public void Arm(StalkerDownedPlayerFact fact)
         {
-            if (AlienHuntMission.Instance) { SuppressForPurge(); return; }
+            if (AlienHuntMission.Instance || EchoProtocol.Salvage.SalvageSite.IsActive) { SuppressForPurge(); return; }
             if (!fact.IsValid || IsActive)
             {
                 return;
@@ -122,7 +122,7 @@ namespace EchoProtocol.AI.Stalker.Special
             FusionPlayerLifecycle lifecycle,
             AiSimulationStep step)
         {
-            if (AlienHuntMission.Instance) { SuppressForPurge(); return; }
+            if (AlienHuntMission.Instance || EchoProtocol.Salvage.SalvageSite.IsActive) { SuppressForPurge(); return; }
             ResolveDependencies();
             if (step.IsValid) _cabinetNow = step.Time.Seconds;
             if (_cabinet.IsActive || _cabinet.Phase == EchoProtocol.AI.Common.AED.AEDV02CabinetPhase.Backoff)

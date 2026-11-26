@@ -16,7 +16,8 @@ public sealed record RewardMatchSnapshot(
     int DurationSeconds,
     IReadOnlyList<RewardPlayerSnapshot> Players,
     string? MapId = null,
-    string? Difficulty = null);
+    string? Difficulty = null,
+    int? SalvageCompletedLevels = null, int? SalvageCompletedDays = null, bool SalvageUsedDebugCheats = false);
 
 public sealed record RewardPlayerSnapshot(
     Guid UserId,

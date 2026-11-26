@@ -147,6 +147,7 @@ namespace EchoProtocol.Networking
 
         private void Update()
         {
+            if(Object!=null&&Object.IsValid&&_toolId==3)EchoProtocol.Salvage.SalvageAidVisual.Apply(gameObject,RemainingUses);
             RefreshOutlineVisibility();
         }
 
@@ -230,7 +231,7 @@ namespace EchoProtocol.Networking
             }
 
             RemainingUses =
-                _toolId == LobbyPlayerState.NoiseMakerToolId
+                _toolId == LobbyPlayerState.FirstAidKitToolId && EchoProtocol.Salvage.SalvageSite.IsActive ? Mathf.Clamp(remainingUses,1,2) : _toolId == LobbyPlayerState.NoiseMakerToolId
                 || _toolId == LobbyPlayerState.DoorJammerToolId
                     ? Mathf.Clamp(
                         remainingUses,

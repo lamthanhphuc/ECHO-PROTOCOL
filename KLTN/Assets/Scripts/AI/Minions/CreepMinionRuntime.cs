@@ -374,9 +374,11 @@ namespace EchoProtocol.AI.Minions
             return true;
         }
 
+        [SerializeField] private int salvageRole = -1;
         public override void Spawned()
         {
             _agent = GetComponent<NavMeshAgent>();
+            if(EchoProtocol.Salvage.SalvageSite.IsActive && salvageRole>=0 && Object.HasStateAuthority) RoleValue=salvageRole;
             ApplyVisualVariant();
             _animators = GetComponentsInChildren<Animator>();
             foreach (var animator in _animators)
@@ -1625,6 +1627,7 @@ namespace EchoProtocol.AI.Minions
             lobby = null;
             life = null;
             return player.IsRealPlayer && Runner.TryGetPlayerObject(player, out obj) && obj != null && obj.IsValid
+                && !EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(obj.gameObject)
                 && obj.TryGetComponent(out lobby) && lobby.IsGameplayPlayer
                 && obj.TryGetComponent(out life) && life.Status == NetworkPlayerLifeStatus.Alive
                 && (!obj.TryGetComponent<NetworkPlayerMovement>(out var movement) || !movement.IsHidden)
@@ -1742,6 +1745,7 @@ namespace EchoProtocol.AI.Minions
 
         private bool TrySendStalkerAlert()
         {
+            if(EchoProtocol.Salvage.SalvageSite.IsActive) { EchoProtocol.Salvage.SalvageRunState.Instance?.AlertEnemies(ReplicatedLastKnownTargetPosition,25);return true; }
             var ordinal = ++_alertOrdinal;
             var occurrence = $"minion-alert:{Object.Id}:{ordinal}";
             RuntimeNoiseEvent noiseEvent = default;

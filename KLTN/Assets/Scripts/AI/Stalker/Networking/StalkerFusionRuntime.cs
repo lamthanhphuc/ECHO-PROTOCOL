@@ -961,7 +961,8 @@ namespace EchoProtocol.AI.Stalker.Networking
 
                 var isStabilizerProtected =
                     lobbyState != null
-                    && lobbyState.IsStabilizerBuffed;
+                    && lobbyState.IsStabilizerBuffed
+                    || EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(playerObject.gameObject);
 
                 if (isStabilizerProtected)
                 {
@@ -1448,6 +1449,7 @@ namespace EchoProtocol.AI.Stalker.Networking
 
         private void ApplyMatchDifficulty()
         {
+            if(EchoProtocol.Salvage.SalvageSite.IsActive) return;
             var authority = MatchAuthorityRuntime.Instance;
             var difficulty = authority != null ? authority.Difficulty : MatchDifficulty.Normal;
             var profile = MatchDifficultyProfiles.Get(difficulty);

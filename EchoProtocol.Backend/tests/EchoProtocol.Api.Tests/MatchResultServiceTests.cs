@@ -418,6 +418,32 @@ public sealed class MatchResultServiceTests
         Assert.Empty(harness.Db.MatchResults);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SalvageEvidenceIsSavedAndReplayCannotChangePaidLevels(bool debug)
+    {
+        await using var harness=await UnitHarness.CreateAsync();
+        var match=await harness.Db.MatchAuthorityBindings.SingleAsync();match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";
+        await harness.Db.SaveChangesAsync();var request=harness.ValidRequest();
+        request.EvidenceVersion=2;request.SalvageCompletedLevels=1;request.SalvageCompletedDays=3;request.UsedDebugCheats=debug;
+        foreach(var p in request.Players){p.ObjectiveActions=0;p.RescueActions=0;p.EvidenceComplete=true;}
+        var submitted=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.True(submitted.IsSuccess,submitted.Message);
+        var stored=await harness.Db.MatchResults.SingleAsync();Assert.Equal(1,stored.SalvageCompletedLevels);Assert.Equal(debug,stored.SalvageUsedDebugCheats);
+        var replay=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.True(replay.IsSuccess);Assert.True(replay.Data!.IsReplay);
+        request.SalvageCompletedLevels=0;
+        var changed=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.Equal(ErrorCodes.MatchResultConflict,changed.ErrorCode);
+    }
+    [Fact] public async Task SalvageCannotOmitEvidenceOrInjectItIntoAnOldMode()
+    {
+        await using var harness=await UnitHarness.CreateAsync();var request=harness.ValidRequest();
+        request.SalvageCompletedLevels=0;request.SalvageCompletedDays=0;
+        var injected=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.Equal(ErrorCodes.MatchResultInvalidPayload,injected.ErrorCode);
+        var match=await harness.Db.MatchAuthorityBindings.SingleAsync();match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";await harness.Db.SaveChangesAsync();
+        request.SalvageCompletedLevels=null;request.SalvageCompletedDays=null;
+        var omitted=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.Equal(ErrorCodes.MatchResultInvalidPayload,omitted.ErrorCode);
+    }
+
     private sealed class UnitHarness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;

@@ -14,6 +14,8 @@ public sealed class SubmitMatchResultRequest
     public decimal ObjectiveCompletion { get; set; }
     public int? EvidenceVersion { get; set; }
     public bool UsedDebugCheats { get; set; }
+    public int? SalvageCompletedLevels {get;set;}
+    public int? SalvageCompletedDays {get;set;}
 
     [Required, MinLength(1), MaxLength(4)]
     public List<SubmitMatchResultPlayerRequest> Players { get; set; } = [];

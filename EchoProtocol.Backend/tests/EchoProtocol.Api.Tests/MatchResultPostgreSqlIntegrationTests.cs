@@ -2930,8 +2930,28 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
                     Survived = true
                 }
             ];
-            db.MatchResults.Add(result);
-            await db.SaveChangesAsync();
+            if (legacyBindings)
+            {
+                // This fixture deliberately predates newer result columns. Seed the historical
+                // contract directly, then let the test exercise the complete migration chain.
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO "MatchResults" ("MatchId", "SubmittedByUserId", "Outcome", "StartedAtUtc", "EndedAtUtc",
+                        "DurationSeconds", "ObjectiveCompletion", "PlayerCount", "PayloadHash", "RewardStatus", "SubmittedAtUtc")
+                    VALUES ({result.MatchId}, {result.SubmittedByUserId}, 'WIN', {result.StartedAtUtc}, {result.EndedAtUtc},
+                        {result.DurationSeconds}, {result.ObjectiveCompletion}, {result.PlayerCount}, {result.PayloadHash}, 'Pending', {result.SubmittedAtUtc});
+                    """);
+                foreach (var player in result.Players)
+                    await db.Database.ExecuteSqlInterpolatedAsync($"""
+                        INSERT INTO "MatchResultPlayers" ("MatchId", "UserId", "Survived", "Disconnected", "DetectionCount", "DownedCount", "ReviveCount", "ObjectiveContribution")
+                        VALUES ({player.MatchId}, {player.UserId}, {player.Survived}, {player.Disconnected}, 0, 0, 0, 0);
+                        """);
+            }
+            else
+            {
+                db.MatchResults.Add(result);
+                await db.SaveChangesAsync();
+            }
             return seed;
         }
 

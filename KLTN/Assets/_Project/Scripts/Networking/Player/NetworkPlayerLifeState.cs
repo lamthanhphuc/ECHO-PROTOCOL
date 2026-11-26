@@ -94,7 +94,9 @@ namespace EchoProtocol.Networking
         [SerializeField, Min(1f)] private float _maximumHealth = 100f;
         [Networked] private float RemoteFixedMaximumHealth { get; set; }
 
-        private float EffectiveMaximumHealth =>
+        public float MaximumHealth => EffectiveMaximumHealth;
+        private float EffectiveMaximumHealth => BaseMaximumHealth + EchoProtocol.Salvage.SalvageRunState.PowerBonus(gameObject, EchoProtocol.Salvage.SalvagePower.Health);
+        private float BaseMaximumHealth =>
             Object != null && Object.IsValid && RemoteFixedMaximumHealth > 0f
                 ? RemoteFixedMaximumHealth : _maximumHealth;
 
@@ -389,6 +391,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
+            if(EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(gameObject)) return false;
             if (!Object.HasStateAuthority
                 || DebugGodMode
                 || damage <= 0f
@@ -397,6 +400,8 @@ namespace EchoProtocol.Networking
                 return false;
             }
 
+            if(EchoProtocol.Salvage.SalvageSite.IsActive && (sourceType?.StartsWith("MINION")==true||sourceType=="PURGE_FISHCAT")
+                && (EchoProtocol.Salvage.SalvageRunState.Instance==null||!EchoProtocol.Salvage.SalvageRunState.Instance.ReserveMinionHit(this)))return false;
             Health = Mathf.Max(0f, Health - damage);
             if (Health <= 0f)
             {
@@ -440,6 +445,8 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
+            if(EchoProtocol.Salvage.SalvageSite.IsActive) return EchoProtocol.Salvage.SalvageRunState.Instance!=null
+                && EchoProtocol.Salvage.SalvageRunState.Instance.TryEnemyHit(this,hitPosition);
             if (!Object.HasStateAuthority
                 || DebugGodMode
                 || HasReviveProtection
@@ -464,6 +471,8 @@ namespace EchoProtocol.Networking
                 || (ghost.transform.position - transform.position).sqrMagnitude > range * range)
                 return false;
 
+            if(EchoProtocol.Salvage.SalvageSite.IsActive) return EchoProtocol.Salvage.SalvageRunState.Instance!=null
+                && EchoProtocol.Salvage.SalvageRunState.Instance.TryEnemyHit(this,ghost.transform.position);
             ClearSurvivalTimers();
             CaughtByGhostId = ghost.Id;
             CatchDuration = duration;
@@ -573,6 +582,11 @@ namespace EchoProtocol.Networking
         private void DropHeldItemsForForcedTransition(string reason)
         {
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority) return;
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                EchoProtocol.Salvage.SalvageRunState.Instance?.DropForLifeTransition(Object.InputAuthority, reason == "ELIMINATED");
+                return;
+            }
             var state = GetComponent<LobbyPlayerState>();
             if (state == null)
             {
@@ -687,6 +701,9 @@ namespace EchoProtocol.Networking
 
             var completedReviver = Reviver;
             var usedFirstAidKit = ActiveReviveUsedFirstAidKit;
+            float salvageHeal=50;
+            if(EchoProtocol.Salvage.SalvageSite.IsActive && Runner.TryGetPlayerObject(completedReviver,out var aidPlayer))
+                salvageHeal=aidPlayer.GetComponent<LobbyPlayerState>()?.TeamToolUsesRemaining==2?100:50;
             if (!TryResolvePlayerLifeState(completedReviver, out var reviverObject, out _)
                 || !reviverObject.TryGetComponent<LobbyPlayerState>(out var reviverState)
                 || !reviverObject.TryGetComponent<NetworkPlayerInteractor>(out var reviverInteractor)
@@ -702,7 +719,7 @@ namespace EchoProtocol.Networking
             BleedoutTimer = TickTimer.None;
             PausedBleedoutRemainingSeconds = 0f;
             IsCrawling = false;
-            Health = usedFirstAidKit ? EffectiveMaximumHealth : Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
+            Health = usedFirstAidKit ? (EchoProtocol.Salvage.SalvageSite.IsActive ? Mathf.Min(salvageHeal,EffectiveMaximumHealth) : EffectiveMaximumHealth) : Mathf.Clamp(_revivedHealth, 1f, EffectiveMaximumHealth);
             ReviveCount++;
             MatchReviveCount++;
             ProtectionTimer = _reviveProtectionSeconds > 0f

@@ -160,12 +160,32 @@ namespace EchoProtocol.Networking.Authority
     public sealed class SubmitMatchResultRequestDto
     {
         public bool usedDebugCheats;
+        public bool salvageEvidence;
+        public int salvageCompletedLevels,salvageCompletedDays;
         public int evidenceVersion = 2;
         public string outcome;
         public float objectiveCompletion;
         public SubmitMatchResultPlayerDto[] players = Array.Empty<SubmitMatchResultPlayerDto>();
     }
 
+    [Serializable]
+    public sealed class SalvageSubmitMatchResultRequestDto
+    {
+        public bool usedDebugCheats;
+        public int evidenceVersion,salvageCompletedLevels,salvageCompletedDays;
+        public string outcome;
+        public float objectiveCompletion;
+        public SubmitMatchResultPlayerDto[] players;
+    }
+    [Serializable]
+    public sealed class DebugSubmitMatchResultRequestDto
+    {
+        public bool usedDebugCheats;
+        public int evidenceVersion;
+        public string outcome;
+        public float objectiveCompletion;
+        public SubmitMatchResultPlayerDto[] players;
+    }
     // Keep normal result payloads compatible during the backend/client rollout.
     [Serializable]
     public sealed class StandardSubmitMatchResultRequestDto

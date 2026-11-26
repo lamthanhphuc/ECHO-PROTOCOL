@@ -16,7 +16,24 @@ namespace EchoProtocol.Networking
         public NavMeshAgent Agent { get; private set; }
         private Collider[] _colliders;
         private Renderer[] _renderers;
-        private const uint HeldMeatRenderingLayer = 1u << 1;
+        public const uint HeldMeatRenderingLayer = 1u << 1;
+        public static void ApplyCarriedVisualPose(Transform visual, HuntKind kind, bool mercenary, bool humanoid, Vector3 groundScale)
+        {
+            if (kind == HuntKind.Alien)
+            { visual.localPosition = new Vector3(-.037f, .145f, .244f); visual.localRotation = Quaternion.identity; visual.localScale = Vector3.one * .6f; }
+            else if (kind == HuntKind.Meat)
+            {
+                visual.localPosition = mercenary ? new Vector3(-.086f, .607f, .154f) : new Vector3(-.082f, .64f, .152f);
+                visual.localRotation = Quaternion.Euler(10.643f, -141.51f, -117.218f);
+                visual.localScale = mercenary ? Vector3.one * 576f : groundScale * (humanoid ? .8f : 1f);
+            }
+            else
+            {
+                visual.localPosition = mercenary ? new Vector3(.039f, .41f, .687f) : new Vector3(.055f, .368f, .647f);
+                visual.localRotation = Quaternion.Euler(64.147f, 169.87f, -15.506f);
+                visual.localScale = mercenary ? Vector3.one * 1.6f : groundScale * (humanoid ? .8f : 1f);
+            }
+        }
         private uint[] _originalRenderingLayerMasks;
         private string _animation;
         private AlienHuntAudio _audio;
@@ -265,9 +282,8 @@ namespace EchoProtocol.Networking
             bool carried = kind == HuntKind.Alien ? state.Stage == (int)AlienStage.Carried : state.Stage == 1;
             if (_alienVisual)
             {
-                _alienVisual.localPosition = carried ? new Vector3(-.037f, .145f, .244f) : _alienGroundPosition;
-                _alienVisual.localRotation = carried ? Quaternion.identity : _alienGroundRotation;
-                _alienVisual.localScale = carried ? Vector3.one * .6f : _alienGroundScale;
+                if (carried) ApplyCarriedVisualPose(_alienVisual, kind, false, false, _alienGroundScale);
+                else { _alienVisual.localPosition = _alienGroundPosition; _alienVisual.localRotation = _alienGroundRotation; _alienVisual.localScale = _alienGroundScale; }
                 bool onPan = state.Stage == (int)AlienStage.OnPan || state.Stage == (int)AlienStage.Burning;
                 animator.transform.localPosition = onPan ? new Vector3(-.172f, 1.687f, .13873f) : _alienRigPosition;
                 animator.transform.localRotation = onPan ? Quaternion.Euler(-200f, -90f, 0f) : _alienRigRotation;
@@ -275,20 +291,13 @@ namespace EchoProtocol.Networking
             bool mercenaryCarry = carried && AlienHuntMission.Instance.HasMercenaryCarrier(state.Carrier);
             if (_meatVisual && carried != _wasCarried)
             {
-                _meatVisual.localPosition = carried
-                    ? mercenaryCarry ? new Vector3(-.086f, .607f, .154f) : new Vector3(-.082f, .64f, .152f)
-                    : _meatGroundPosition;
-                _meatVisual.localRotation = carried ? Quaternion.Euler(10.643f, -141.51f, -117.218f) : _meatGroundRotation;
-                _meatVisual.localScale = mercenaryCarry ? Vector3.one * 576f : _meatGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
+                if (carried) ApplyCarriedVisualPose(_meatVisual, kind, mercenaryCarry, AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier), _meatGroundScale);
+                else { _meatVisual.localPosition = _meatGroundPosition; _meatVisual.localRotation = _meatGroundRotation; _meatVisual.localScale = _meatGroundScale; }
             }
             if (_jerrycanVisual && carried != _wasCarried)
             {
-                _jerrycanVisual.localPosition = carried
-                    ? mercenaryCarry
-                        ? new Vector3(.039f, .41f, .687f) : new Vector3(.055f, .368f, .647f)
-                    : _jerrycanGroundPosition;
-                _jerrycanVisual.localRotation = carried ? Quaternion.Euler(64.147f, 169.87f, -15.506f) : _jerrycanGroundRotation;
-                _jerrycanVisual.localScale = mercenaryCarry ? Vector3.one * 1.6f : _jerrycanGroundScale * (carried && AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier) ? .8f : 1f);
+                if (carried) ApplyCarriedVisualPose(_jerrycanVisual, kind, mercenaryCarry, AlienHuntMission.Instance.HasHumanoidCarrier(state.Carrier), _jerrycanGroundScale);
+                else { _jerrycanVisual.localPosition = _jerrycanGroundPosition; _jerrycanVisual.localRotation = _jerrycanGroundRotation; _jerrycanVisual.localScale = _jerrycanGroundScale; }
             }
             _wasCarried = carried;
             for (int i = 0; i < _renderers.Length; i++)

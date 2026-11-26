@@ -68,7 +68,7 @@ namespace EchoProtocol.Networking
         private float StaminaResumeThreshold =>
             Mathf.Max(
                 _minStaminaToSprint,
-                MaxStamina * 0.3f);
+                (EchoProtocol.Salvage.SalvageSite.IsActive ? BaseMaxStamina : MaxStamina) * 0.3f);
 
         private NetworkCharacterController _controller;
         private CharacterController _unityCharacterController;
@@ -132,13 +132,15 @@ namespace EchoProtocol.Networking
         public long V02SlowUntilTick => Object != null && Object.IsValid && Runner != null && ExternalSlowTimer.IsRunning
             ? Runner.Tick.Raw + System.Math.Max(0, ExternalSlowTimer.RemainingTicks(Runner) ?? 0) : 0;
         private bool UsesPurgeStamina => SceneManager.GetActiveScene().name == AlienHuntMission.SceneName;
-        public float MaxStamina => UsesPurgeStamina
+        public float MaxStamina => BaseMaxStamina + EchoProtocol.Salvage.SalvageRunState.PowerBonus(gameObject, EchoProtocol.Salvage.SalvagePower.Stamina);
+        private float BaseMaxStamina => UsesPurgeStamina
             ? 250f
             : Object != null && Object.IsValid && RemoteFixedMaxStamina > 0f
                 ? RemoteFixedMaxStamina : _maxStamina;
         private float SprintStaminaDrain => HasRemoteFixedBalance && RemoteFixedStaminaDrain > 0f
             ? RemoteFixedStaminaDrain : UsesPurgeStamina ? 22f : _sprintStaminaDrainPerSecond;
-        private float StaminaRegen => HasRemoteFixedBalance && RemoteFixedStaminaRecovery > 0f
+        private float StaminaRegen => BaseStaminaRegen * EchoProtocol.Salvage.SalvageRunState.PowerMultiplier(gameObject, EchoProtocol.Salvage.SalvagePower.Recovery);
+        private float BaseStaminaRegen => HasRemoteFixedBalance && RemoteFixedStaminaRecovery > 0f
             ? RemoteFixedStaminaRecovery : UsesPurgeStamina ? 50f : _staminaRegenPerSecond;
         public bool IsPresentationGrounded => Runner != null && Object != null && Object.IsValid
             ? _controller != null && _controller.Grounded
@@ -816,7 +818,8 @@ namespace EchoProtocol.Networking
 
             bool effectiveCrouch = Object.HasStateAuthority ? wantsCrouch : IsCrouching;
 
-            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore);
+            bool coreAllowsSprint = CoreStabilizerRules.AllowsSprint(isCarryingCore)
+                && EchoProtocol.Salvage.SalvageRunState.AllowsSprint(gameObject);
             var isSprintMoving =
                 canInitiateAction
                 && !effectiveCrouch
@@ -854,7 +857,8 @@ namespace EchoProtocol.Networking
                     : 0.72f;
             }
             _controller.maxSpeed = baseSpeed * (lifeState?.MovementSpeedMultiplier ?? 1f)
-                * coreCarryMultiplier * GetExternalSlowMultiplier();
+                * coreCarryMultiplier * GetExternalSlowMultiplier()
+                * EchoProtocol.Salvage.SalvageRunState.MovementMultiplier(gameObject);
 
             if (!FloodedWaterBoundary.TryMove(_controller, _unityCharacterController, direction))
                 _controller.Move(direction);

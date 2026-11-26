@@ -39,6 +39,8 @@ namespace EchoProtocol.UI.HUD
         private Text _usesLabel;
         private Text _carryLabel;
         private HUDPurgeIcon _purgeToolIcon;
+        private GameObject[] _salvageSlots;
+        private Text[] _salvageNames;
 
         private void OnEnable()
         {
@@ -90,6 +92,7 @@ namespace EchoProtocol.UI.HUD
 
         private void Update()
         {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive) { UpdateSalvage(); return; }
             if (inventory == null
                 || carrier == null
                 || (IsActiveFusionSession() && !IsValidLocalNetworkPlayer(_boundNetworkPlayerState)))
@@ -312,6 +315,7 @@ namespace EchoProtocol.UI.HUD
 
         public void RefreshSlots()
         {
+            if (EchoProtocol.Salvage.SalvageSite.IsActive) return;
             try
             {
                 if (_usesLabel != null) _usesLabel.gameObject.SetActive(false);
@@ -478,6 +482,59 @@ namespace EchoProtocol.UI.HUD
             {
                 Debug.LogWarning($"[HUDHotbar] UpdateSlotView exception: {ex.Message}");
             }
+        }
+
+        private void UpdateSalvage()
+        {
+            var run = EchoProtocol.Salvage.SalvageRunState.Instance;
+            if (run == null || run.Object == null || !run.Object.IsValid) return;
+            int seat = run.Seat(run.Runner.LocalPlayer); if (seat < 0 || slot1Container == null || slot2Container == null || toolContainer == null) return;
+            if (_salvageSlots == null)
+            {
+                _salvageSlots = new[] { slot1Container, slot2Container,
+                    Instantiate(slot1Container, slot1Container.transform.parent), Instantiate(slot2Container, slot2Container.transform.parent), toolContainer };
+                _salvageNames = new Text[5];
+                for (int i = 0; i < 5; i++)
+                {
+                    var sourceName = i == 4 ? toolNameText : i % 2 == 0 ? slot1NameText : slot2NameText;
+                    _salvageNames[i] = i < 2 ? sourceName : i == 4 ? toolNameText
+                        : sourceName != null ? _salvageSlots[i].transform.Find(sourceName.transform.name)?.GetComponent<Text>() : null;
+                    if (_salvageNames[i] == null)
+                    {
+                        var labels = _salvageSlots[i].GetComponentsInChildren<Text>(true);
+                        foreach (var label in labels) if (label.name.IndexOf("Name", System.StringComparison.OrdinalIgnoreCase) >= 0) _salvageNames[i] = label;
+                    }
+                    foreach (var image in _salvageSlots[i].GetComponentsInChildren<Image>(true))
+                        if (image.name.Contains("Icon") || image.name.Contains("Lock") || image.name.Contains("Cooldown")) image.gameObject.SetActive(false);
+                    foreach (var label in _salvageSlots[i].GetComponentsInChildren<Text>(true)) label.gameObject.SetActive(label == _salvageNames[i]);
+                }
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                var root = _salvageSlots[i]; root.SetActive(true);
+                var rect = root.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1,0);
+                rect.anchoredPosition = new Vector2(-(4-i)*132,0); rect.sizeDelta = new Vector2(126,94);
+                var label = _salvageNames[i]; if (label == null) continue;
+                var labelRect = label.rectTransform; labelRect.anchorMin = Vector2.zero; labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = new Vector2(7,7); labelRect.offsetMax = new Vector2(-7,-7);
+                label.alignment = TextAnchor.MiddleCenter; label.fontSize = 12; label.color = HUDPresentationStyle.Ink;
+                if (i < 4)
+                {
+                    int index = run.HeldIndex(seat, i); string text = "Trống";
+                    if (index >= 0) { var c = run.Cargo(index); var type = EchoProtocol.Salvage.SalvageLedger.Types[c.Definition];
+                        text = c.Slot != i ? "CHIẾM 2 Ô" : $"{type.Name}\n{c.Value} RV • {c.Integrity}%"; }
+                    label.text = $"[{i+1}]\n{text}";
+                    label.color = run.Crew[seat].Selected == i ? HUDPresentationStyle.Accent : HUDPresentationStyle.Muted;
+                }
+                else
+                {
+                    int tool = run.Crew[seat].Tool;
+                    string name = tool switch { 1 => "Scanner", 2 => "Noise Maker", 3 => "First Aid", 4 => "Door Jammer", _ => "Trống" };
+                    label.text = $"[5] TRANG BỊ\n{name}" + (run.Crew[seat].Uses > 0 ? $" • {run.Crew[seat].Uses}" : "");
+                    label.color = run.Crew[seat].Selected == 4 ? HUDPresentationStyle.Accent : HUDPresentationStyle.Muted;
+                }
+            }
+            if (_carryLabel != null) _carryLabel.gameObject.SetActive(false);
         }
 
         private static string ShortName(string value)

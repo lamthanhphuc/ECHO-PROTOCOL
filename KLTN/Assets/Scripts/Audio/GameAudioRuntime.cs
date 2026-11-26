@@ -141,7 +141,7 @@ namespace EchoProtocol.Audio
             _roomCurrent.Stop();
             _roomNext.Stop();
             Loop(_dangerMusic, null);
-            var inFacility = current.name == LobbyManager.GameSceneName || current.name == "Lobby";
+            var inFacility = current.name == LobbyManager.GameSceneName || current.name == "Lobby" || EchoProtocol.Salvage.SalvageSite.IsActive;
             bool outdoor = current.name == "Scene_A" || current.name == "Scene_B";
             Loop(_ambience, inFacility ? "map_ambience/facility_room_tone_loop" : outdoor ? "flooded/Background" : null,
                 _catalog.ambienceVolume);
@@ -188,8 +188,8 @@ namespace EchoProtocol.Audio
 
         private void UpdateEnvironment()
         {
-            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName) return;
-            var camera = Camera.main;
+            if (SceneManager.GetActiveScene().name != LobbyManager.GameSceneName && !EchoProtocol.Salvage.SalvageSite.IsActive) return;
+            var camera = EchoProtocol.Salvage.SalvageSite.IsActive ? EchoProtocol.Salvage.SalvagePresentation.ViewCamera : Camera.main;
             if (camera == null) return;
             float nearest = 16f;
             string room = null;

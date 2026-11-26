@@ -96,7 +96,8 @@ namespace EchoProtocol.AI.Stalker.Networking
 
                 var isStabilizerProtected =
                     lobbyState != null
-                    && lobbyState.IsStabilizerBuffed;
+                    && lobbyState.IsStabilizerBuffed
+                    || EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(identity.gameObject);
 
                 if (isStabilizerProtected)
                 {

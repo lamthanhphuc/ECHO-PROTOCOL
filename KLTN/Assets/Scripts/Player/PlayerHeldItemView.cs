@@ -1,4 +1,4 @@
-﻿using EchoProtocol.Networking;
+using EchoProtocol.Networking;
 using UnityEngine;
 
 [DisallowMultipleComponent, DefaultExecutionOrder(100)]
@@ -99,6 +99,9 @@ public sealed class PlayerHeldItemView : MonoBehaviour
         }
         if (_currentVisual == null) RefreshVisual();
         if (_currentVisual == null) return;
+        var aidState=GetComponentInParent<EchoProtocol.Networking.LobbyPlayerState>();
+        if(aidState!=null && aidState.Object!=null && aidState.Object.IsValid && aidState.ToolId==3)
+            EchoProtocol.Salvage.SalvageAidVisual.Apply(_currentVisual,aidState.TeamToolUsesRemaining);
         var character = GetComponentInParent<PlayerCharacterPresenter>();
         var visual = _currentVisual.transform;
         visual.localScale = _heldVisualBaseScale * (_currentItem?.ItemType == InventoryItemType.EnergyCore
@@ -244,6 +247,7 @@ public sealed class PlayerHeldItemView : MonoBehaviour
 
     private InventoryItemDefinition ResolveDesiredHeldItem()
     {
+        if (EchoProtocol.Salvage.SalvageRunState.HasSelectedCargo(gameObject)) return null;
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby") return null;
         if ((EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject) != null || EchoProtocol.Networking.AlienHuntMission.IsCarrying(gameObject))) return null;
         if (IsPushing())

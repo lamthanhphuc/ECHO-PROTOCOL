@@ -40,10 +40,17 @@ namespace EchoProtocol.UI.HUD
         {
             EnsureSubModuleReferences();
             HUDPresentationStyle.Apply(transform);
-            if (!HUDPurgePresentation.IsPurgeScene && GetComponent<HUDZoneMissions>() == null)
+            if (!HUDPurgePresentation.IsPurgeScene && !EchoProtocol.Salvage.SalvageSite.IsActive && GetComponent<HUDZoneMissions>() == null)
                 gameObject.AddComponent<HUDZoneMissions>();
             if (GetComponent<HUDPurgePresentation>() == null)
                 gameObject.AddComponent<HUDPurgePresentation>();
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                if (hotbar != null) hotbar.gameObject.SetActive(true);
+                if (objectiveTracker != null) objectiveTracker.gameObject.SetActive(false);
+                if (GetComponent<EchoProtocol.Salvage.SalvageHUD>() == null)
+                    gameObject.AddComponent<EchoProtocol.Salvage.SalvageHUD>();
+            }
         }
 
         private void Start()

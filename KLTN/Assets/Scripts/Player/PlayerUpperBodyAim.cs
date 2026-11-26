@@ -227,7 +227,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return;
         }
 
-        var heldHuntKind = EchoProtocol.Networking.AlienHuntMission.GetHeldKind(gameObject);
+        var salvageCargo = EchoProtocol.Salvage.SalvageRunState.SelectedCargo(gameObject);
+        var heldHuntKind = EchoProtocol.Networking.AlienHuntMission.GetHeldKind(gameObject) ?? salvageCargo?.LegacyHuntKind;
         bool carryingHuntItem = heldHuntKind.HasValue;
         Vector3 aimForward;
         Vector3 aimUp;
@@ -261,7 +262,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
         bool jammo = character != null && character.IsJammo;
         bool humanoidGrip = character != null && character.UsesHumanoidGrip;
         var fuelCell = EchoProtocol.MatchFlow.Zone3FuelCell.FindCarried(gameObject);
-        if (fuelCell != null)
+        var salvageFuel = salvageCargo != null && salvageCargo.UsesFuelCellGrip ? salvageCargo : null;
+        if (fuelCell != null || salvageFuel != null)
         {
             if (rightHandBone == null || rightUpperArm == null || rightForeArm == null) return;
             Vector3 handle = chestOrigin
@@ -271,7 +273,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             Vector3 gripForward = Vector3.ProjectOnPlane(aimForward, Vector3.up).normalized;
             if (gripForward.sqrMagnitude < .001f) gripForward = transform.forward;
             Vector3 gripUp = Vector3.up;
-            Vector3 wrist = character != null
+              if (salvageFuel != null) handle = salvageFuel.ResolvePocketHandle(handle);
+              Vector3 wrist = character != null
                 ? character.FuelCellWristTarget(rightHandBone, false, handle, gripForward, gripUp) : handle;
             Vector3 pole = rightUpperArm.position + aimRight * .35f - aimUp * .25f - aimForward * .10f;
             SolveTwoBoneIK(rightUpperArm, rightForeArm, rightHandBone, wrist, pole, 1f);
@@ -280,8 +283,9 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
                 ? character.FuelCellHandlePoint(rightHandBone, false, gripForward, gripUp) : rightHandBone.position;
             // Place the two bars fore/aft along the player's facing direction.
             // Rotate around the held bar, preserving its contact with the hand.
-            fuelCell.AttachToRightHandGrip(rightHandBone, actualHandle,
-                Quaternion.LookRotation(gripForward, gripUp) * Quaternion.Euler(0f, 90f, 0f));
+            var fuelRotation = Quaternion.LookRotation(gripForward, gripUp) * Quaternion.Euler(0f, 90f, 0f);
+            if (fuelCell != null) fuelCell.AttachToRightHandGrip(rightHandBone, actualHandle, fuelRotation);
+            else salvageFuel.AttachFuelGrip(rightHandBone, actualHandle, fuelRotation);
             character?.ApplyFuelCellFingerPose(gripForward, gripUp, true);
             return;
         }
@@ -528,7 +532,8 @@ public sealed class PlayerUpperBodyAim : MonoBehaviour
             return false;
         }
 
-        return (_inventory != null && _inventory.TeamToolSlot != null)
+        return EchoProtocol.Salvage.SalvageRunState.HasSelectedCargo(gameObject)
+            || (_inventory != null && _inventory.TeamToolSlot != null)
             || (_lobbyState != null && _lobbyState.Object != null && _lobbyState.Object.IsValid && _lobbyState.ToolId != 0);
     }
 

@@ -509,6 +509,13 @@ namespace EchoProtocol.Networking
 
         public bool RequestDropCarriedItem()
         {
+            var salvage = EchoProtocol.Salvage.SalvageRunState.Instance;
+            if (EchoProtocol.Salvage.SalvageSite.IsActive && salvage != null)
+            {
+                int seat = salvage.Seat(Runner.LocalPlayer);
+                if (seat >= 0 && (salvage.PhysicsHeldIndex(seat)>=0 || salvage.HeldIndex(seat, salvage.Crew[seat].Selected) >= 0))
+                { salvage.Request(EchoProtocol.Salvage.SalvageCommand.Drop); return true; }
+            }
             if (!Object.HasInputAuthority) return false;
             var hunt = AlienHuntMission.Instance;
             if (hunt != null && hunt.TryDropLocal(gameObject)) return true;
@@ -684,6 +691,7 @@ namespace EchoProtocol.Networking
 
         public bool RequestUseTeamTool()
         {
+            if (!EchoProtocol.Salvage.SalvageRunState.AllowsToolUse(gameObject)) return false;
             if (!_toolInputArmed || UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Lobby"
                 || PlayerInteractionControlLock.IsGameplayInputBlocked(gameObject)) return false;
             if (NetworkPlayerFlashlight.IsResonating(gameObject)) return false;
@@ -752,8 +760,8 @@ namespace EchoProtocol.Networking
                 }
                 else
                 {
-                    // No downed ally in range — FAK cannot be used on self or alive allies.
-                    return false;
+                    // Salvage kits may heal their owner; other modes retain revive-only behavior.
+                    if (!EchoProtocol.Salvage.SalvageSite.IsActive) return false;
                 }
             }
 
@@ -1391,7 +1399,8 @@ namespace EchoProtocol.Networking
             }
 
             var state = GetComponent<LobbyPlayerState>();
-            if (AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
+            if (!EchoProtocol.Salvage.SalvageRunState.AllowsToolUse(gameObject)
+                || AlienHuntMission.IsCarrying(gameObject) || (state != null && state.CarriedCoreId.IsValid))
             {
                 return;
             }
@@ -1514,7 +1523,10 @@ namespace EchoProtocol.Networking
                 return InteractionValidationResult.OutOfRange;
             }
 
-            // FAK can only revive Downed allies — no heal on alive targets or self.
+            if(EchoProtocol.Salvage.SalvageSite.IsActive && !targetId.IsValid
+                && selfLifeState.TryHeal(state.TeamToolUsesRemaining==2?100:50))
+            {ConsumeGameplayTeamTool(state);SetTeamToolCooldown(2f);return InteractionValidationResult.Accepted;}
+            // Other modes keep revive-only first aid.
             return InteractionValidationResult.InvalidTargetState;
         }
 

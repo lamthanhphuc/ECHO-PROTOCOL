@@ -30,7 +30,12 @@ namespace EchoProtocol.MatchFlow
             _carryPoseRotation = rotation;
             transform.localScale = _originalVisualScale;
             _carryPosePosition = rightHandle - rotation * Vector3.Scale(rightGripLocalPosition, _originalVisualScale);
-            transform.SetPositionAndRotation(_carryPosePosition, rotation);
+            ApplySingleHandGripPose(transform, _originalVisualScale, rightGripLocalPosition, rightHandle, rotation);
+        }
+        public static void ApplySingleHandGripPose(Transform item, Vector3 originalScale, Vector3 grip, Vector3 handle, Quaternion rotation)
+        {
+            item.localScale = originalScale;
+            item.SetPositionAndRotation(handle - rotation * Vector3.Scale(grip, originalScale), rotation);
         }
         private Transform _gripHand;
         private Vector3 _gripHandLocalPoint;

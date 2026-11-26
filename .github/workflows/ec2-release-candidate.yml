@@ -52,6 +52,8 @@ jobs:
             docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}' > release/backend-image-id.txt
             docker save "aws-lightsail-backend:$GITHUB_SHA" | gzip -1 > release/backend-image.tar.gz
             gzip -t release/backend-image.tar.gz
+            mkdir -p release/migrations
+            cp EchoProtocol.Backend/deploy/sql/Salvage-Release-And-Rewards.sql release/migrations/
             docker image rm "aws-lightsail-backend:$GITHUB_SHA"
             gzip -dc release/backend-image.tar.gz | docker load
             test "$(docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/backend-image-id.txt)"
@@ -67,6 +69,9 @@ jobs:
             test "$(docker image inspect "aws-lightsail-web:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/web-image-id.txt)"
           fi
           (cd release && sha256sum *-image.tar.gz > SHA256SUMS)
+          if [[ -d release/migrations ]]; then
+            (cd release && sha256sum migrations/*.sql >> SHA256SUMS)
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ec2-images-${{ github.sha }}
