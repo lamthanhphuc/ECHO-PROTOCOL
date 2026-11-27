@@ -437,6 +437,45 @@ public sealed class MatchResultServiceTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task SalvageSettlementOnlyInvalidatesCheckpointForAFailedRun(bool failed)
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        match.MapId = MatchContentCatalog.SalvageMap;
+        match.Difficulty = "NORMAL";
+        harness.Db.SalvageCheckpoints.Add(new SalvageCheckpoint
+        {
+            MatchId = harness.MatchId, OwnerId = harness.HostId, Revision = 1,
+            StateJson = "{\"cycle\":8}", ResultJson = "{}", SavedAtUtc = Now.UtcDateTime
+        });
+        await harness.Db.SaveChangesAsync();
+
+        var request = harness.ValidRequest();
+        request.Outcome = failed ? MatchOutcome.LOSE : MatchOutcome.WIN;
+        request.EvidenceVersion = 2;
+        request.SalvageCompletedLevels = 1;
+        request.SalvageCompletedDays = 3;
+        request.SalvageRunFailed = failed;
+        foreach (var player in request.Players)
+        {
+            player.EvidenceComplete = true;
+            player.ObjectiveActions = 0;
+            player.RescueActions = 0;
+        }
+
+        var result = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.Equal(8, (await harness.Db.MatchResults.SingleAsync()).SalvageReachedLevel);
+        Assert.Equal(failed, (await harness.Db.SalvageCheckpoints.SingleAsync()).Failed);
+        Assert.True((await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request)).Data!.IsReplay);
+        request.SalvageRunFailed = !failed;
+        Assert.Equal(ErrorCodes.MatchResultConflict,
+            (await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, request)).ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task LongSessionDurationExceptionIsSalvageOnly(bool salvage)
     {
         await using var harness=await UnitHarness.CreateAsync(matchAge:TimeSpan.FromHours(4));

@@ -16,6 +16,7 @@ public sealed class SubmitMatchResultRequest
     public bool UsedDebugCheats { get; set; }
     public int? SalvageCompletedLevels {get;set;}
     public int? SalvageCompletedDays {get;set;}
+    public bool SalvageRunFailed {get;set;}
 
     [Required, MinLength(1), MaxLength(4)]
     public List<SubmitMatchResultPlayerRequest> Players { get; set; } = [];

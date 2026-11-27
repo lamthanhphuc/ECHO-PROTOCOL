@@ -14,6 +14,7 @@ public sealed class MatchResult
     public int? EvidenceVersion { get; set; }
     public int? SalvageCompletedLevels {get;set;}
     public int? SalvageCompletedDays {get;set;}
+    public int? SalvageReachedLevel { get; set; }
     public bool? SalvageUsedDebugCheats {get;set;}
     public int PlayerCount { get; set; }
     public string? RosterKey { get; set; }

@@ -27,16 +27,22 @@ public sealed class LeaderboardService : ILeaderboardService
         // A result is written only by the bound Host after server-side roster, lease,
         // state, and duration validation. Legacy results lack start context and cannot
         // be assigned to a map/difficulty ranking safely.
+        bool salvage = MatchContentCatalog.IsSalvage(mapId);
         var eligible = _db.MatchResults.AsNoTracking().Where(result =>
-            result.Outcome == MatchOutcome.WIN
-            && result.ObjectiveCompletion == 1m
-            && result.Match.MapId == mapId
-            && result.Match.Difficulty == difficulty
-            && result.Match.MatchDataPolicy == RemoteFixedBalanceContract.Standard);
+            result.Match.MapId == mapId
+            && result.Match.Difficulty == difficulty);
+        // Salvage opts out of shared analytics even in Release. Its own policy and
+        // debug flag distinguish eligible runs without changing that data policy.
+        eligible = salvage
+            ? eligible.Where(result => result.SalvageReachedLevel > 0 && result.SalvageCompletedDays > 0
+                && result.SalvageUsedDebugCheats == false
+                && result.Match.RewardPolicyVersion == SalvageRewardPolicy.PolicyVersion)
+            : eligible.Where(result => result.Match.MatchDataPolicy == RemoteFixedBalanceContract.Standard
+                && result.Outcome == MatchOutcome.WIN && result.ObjectiveCompletion == 1m);
 
         var candidates = eligible.Where(result =>
             result.RosterKey != null
-            && result.Players.Any(player => player.Survived && !player.Disconnected));
+            && result.Players.Any(player => !player.Disconnected && (salvage || player.Survived)));
         candidates = mode == LeaderboardMode.SOLO
             ? candidates.Where(result => result.PlayerCount == 1)
             : candidates.Where(result => result.PlayerCount >= 2);
@@ -46,7 +52,7 @@ public sealed class LeaderboardService : ILeaderboardService
         var bestMatchIds = candidates
             .GroupBy(result => result.RosterKey)
             .Select(group => group
-                .OrderBy(result => result.DurationSeconds)
+                .OrderBy(result => salvage ? -result.SalvageReachedLevel : result.DurationSeconds)
                 .ThenBy(result => result.EndedAtUtc)
                 .ThenBy(result => result.MatchId)
                 .Select(result => result.MatchId)
@@ -56,7 +62,7 @@ public sealed class LeaderboardService : ILeaderboardService
         var totalCount = await ranked.CountAsync(cancellationToken);
         var offset = (page - 1) * pageSize;
         var rows = await ranked
-            .OrderBy(result => result.DurationSeconds)
+            .OrderBy(result => salvage ? -result.SalvageReachedLevel : result.DurationSeconds)
             .ThenBy(result => result.EndedAtUtc)
             .ThenBy(result => result.MatchId)
             .Skip(offset)
@@ -106,6 +112,7 @@ public sealed class LeaderboardService : ILeaderboardService
                 SquadLabel = squadLabel,
                 DurationSeconds = result.DurationSeconds,
                 DurationCentiseconds = result.DurationSeconds * 100,
+                ReachedLevel = result.SalvageReachedLevel,
                 Players = players
             };
         }).ToArray();
@@ -116,7 +123,7 @@ public sealed class LeaderboardService : ILeaderboardService
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
-            Maps = LeaderboardCatalog.Maps,
+            Maps = salvage ? [MatchContentCatalog.SalvageMap] : LeaderboardCatalog.Maps,
             Difficulties = LeaderboardCatalog.Difficulties
         };
     }

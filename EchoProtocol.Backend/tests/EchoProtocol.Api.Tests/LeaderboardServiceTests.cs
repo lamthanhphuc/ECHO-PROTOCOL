@@ -131,6 +131,27 @@ public sealed class LeaderboardServiceTests
         Assert.Single(page.Items);
     }
 
+    [Fact]
+    public async Task SalvageRanksHighestSavedLevelEvenAfterDefeatAndExcludesDebugRuns()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var alice = await harness.AddUserAsync("Alice");
+        var bob = await harness.AddUserAsync("Bob");
+        await harness.AddSalvageResultAsync(850, 7, false, alice);
+        await harness.AddSalvageResultAsync(410, 3, false, alice);
+        await harness.AddSalvageResultAsync(450, 5, false, bob);
+        await harness.AddSalvageResultAsync(900, 20, true, bob);
+        await harness.AddSalvageResultAsync(700, 30, false, alice, bob);
+
+        var solo = await harness.Service.GetAsync(LeaderboardMode.SOLO, MatchContentCatalog.SalvageMap, "NORMAL", 1, 10, default);
+        Assert.Equal(2, solo.TotalCount);
+        Assert.Equal(new int?[] { 7, 5 }, solo.Items.Select(item => item.ReachedLevel));
+        Assert.Equal(new[] { "Alice", "Bob" }, solo.Items.Select(item => item.DisplayName));
+
+        var team = await harness.Service.GetAsync(LeaderboardMode.TEAM, MatchContentCatalog.SalvageMap, "NORMAL", 1, 10, default);
+        Assert.Equal(30, Assert.Single(team.Items).ReachedLevel);
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -184,6 +205,20 @@ public sealed class LeaderboardServiceTests
 
         public async Task AddTestOnlyResultAsync(int duration, params Guid[] players) =>
             await AddResultAsync(duration, MatchOutcome.WIN, "SciFi", "NORMAL", 1m, true, players);
+
+        public async Task AddSalvageResultAsync(int duration, int level, bool debug, params Guid[] players)
+        {
+            await AddResultAsync(duration, MatchOutcome.LOSE, MatchContentCatalog.SalvageMap, "NORMAL", 0m, players);
+            var result = await Db.MatchResults.Include(item => item.Players).Include(item => item.Match)
+                .OrderByDescending(item => item.EndedAtUtc).FirstAsync();
+            result.Match.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
+            result.Match.RewardPolicyVersion = SalvageRewardPolicy.PolicyVersion;
+            result.SalvageReachedLevel = level;
+            result.SalvageCompletedDays = 3;
+            result.SalvageUsedDebugCheats = debug;
+            foreach (var player in result.Players) player.Survived = false;
+            await Db.SaveChangesAsync();
+        }
 
         private async Task AddResultAsync(
             int duration,

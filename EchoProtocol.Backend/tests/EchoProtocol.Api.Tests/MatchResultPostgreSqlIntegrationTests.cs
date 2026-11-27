@@ -7,6 +7,7 @@ using EchoProtocol.Api.Controllers;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.Data.Telemetry;
 using EchoProtocol.Api.DTOs.MatchResults;
+using EchoProtocol.Api.DTOs.Leaderboards;
 using EchoProtocol.Api.DTOs.Inventory;
 using EchoProtocol.Api.DTOs.MatchAuthority;
 using EchoProtocol.Api.DTOs.Admin;
@@ -213,6 +214,46 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     }
     private static readonly DateTimeOffset Now =
         new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task SalvageLeaderboardMigrationRanksAResultFromAnExistingCheckpoint()
+    {
+        await using var scope = await PostgresScope.CreateAsync("20261127043652_AddSalvageServerCheckpoints");
+        var seed = await scope.SeedMatchAsync(mapId: MatchContentCatalog.SalvageMap);
+        await using var db = scope.CreateDbContext();
+        var match = await db.MatchAuthorityBindings.SingleAsync();
+        match.MatchDataPolicy = RemoteFixedBalanceContract.TestOnly;
+        match.RewardPolicyVersion = SalvageRewardPolicy.PolicyVersion;
+        db.SalvageCheckpoints.Add(new SalvageCheckpoint
+        {
+            MatchId = seed.MatchId, OwnerId = seed.HostId, Revision = 4,
+            StateJson = "{\"cycle\":8}", ResultJson = "{}", SavedAtUtc = Now.UtcDateTime
+        });
+        await db.SaveChangesAsync();
+        await db.GetService<IMigrator>().MigrateAsync();
+        db.ChangeTracker.Clear();
+
+        var request = CreateRequest(seed);
+        request.Outcome = MatchOutcome.LOSE;
+        request.ObjectiveCompletion = 0;
+        request.EvidenceVersion = 2;
+        request.SalvageCompletedDays = 3;
+        request.SalvageCompletedLevels = 0;
+        request.SalvageRunFailed = true;
+        foreach (var player in request.Players)
+        {
+            player.Survived = false;
+            player.EvidenceComplete = true;
+            player.ObjectiveActions = 0;
+            player.RescueActions = 0;
+        }
+
+        var result = await new MatchResultService(db, new FixedTimeProvider(Now)).SubmitAsync(seed.HostId, seed.MatchId, request);
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.True((await db.SalvageCheckpoints.SingleAsync()).Failed);
+        var page = await new LeaderboardService(db).GetAsync(LeaderboardMode.TEAM, MatchContentCatalog.SalvageMap, "NORMAL", 1, 10, default);
+        Assert.Equal(8, Assert.Single(page.Items).ReachedLevel);
+    }
 
     private static Task<int> LeaderboardContextColumnCountAsync(AppDbContext db) =>
         db.Database.SqlQueryRaw<int>("""

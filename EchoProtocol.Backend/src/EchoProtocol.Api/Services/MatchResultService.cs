@@ -102,7 +102,7 @@ public sealed class MatchResultService : IMatchResultService
             if(salvage ? request.SalvageCompletedLevels is null || request.SalvageCompletedDays is null
                 || !SalvageRewardPolicy.ValidEvidence(request.SalvageCompletedLevels.Value,request.SalvageCompletedDays.Value)
                 || request.EvidenceVersion!=2 || request.Players.Any(p=>p.EvidenceComplete!=true)
-                : request.SalvageCompletedLevels.HasValue || request.SalvageCompletedDays.HasValue)
+                : request.SalvageCompletedLevels.HasValue || request.SalvageCompletedDays.HasValue || request.SalvageRunFailed)
                 return Failure("Invalid Salvage result evidence",ErrorCodes.MatchResultInvalidPayload);
             var wallNow = UtcNow();
             var now = reviewedEndUtc ?? wallNow;
@@ -141,6 +141,9 @@ public sealed class MatchResultService : IMatchResultService
                 return Failure(rosterFailure.Value.Message, rosterFailure.Value.Code);
             }
 
+            var checkpoint = salvage
+                ? await _db.SalvageCheckpoints.SingleOrDefaultAsync(x => x.MatchId == matchId, cancellationToken)
+                : null;
             var result = new MatchResult
             {
                 MatchId = match.MatchId,
@@ -154,6 +157,7 @@ public sealed class MatchResultService : IMatchResultService
                 SalvageCompletedLevels = request.SalvageCompletedLevels,
                 SalvageUsedDebugCheats = salvage ? request.UsedDebugCheats : null,
                 SalvageCompletedDays = request.SalvageCompletedDays,
+                SalvageReachedLevel = ReadSalvageLevel(checkpoint?.StateJson),
                 PlayerCount = request.Players.Count,
                 RosterKey = string.Join(",", request.Players
                     .Select(player => player.UserId.ToString("N"))
@@ -182,6 +186,7 @@ public sealed class MatchResultService : IMatchResultService
             match.EndedAtUtc = now;
             match.UpdatedAtUtc = now;
             _db.MatchResults.Add(result);
+            if (checkpoint != null && request.SalvageRunFailed) checkpoint.Failed = true;
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -344,6 +349,20 @@ public sealed class MatchResultService : IMatchResultService
         return null;
     }
 
+    private static int? ReadSalvageLevel(string? checkpointJson)
+    {
+        if (string.IsNullOrEmpty(checkpointJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(checkpointJson);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("cycle", out var cycle)
+                && cycle.ValueKind == JsonValueKind.Number && cycle.TryGetInt32(out int level)
+                && level > 0 ? level : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
     private static string ComputePayloadHash(SubmitMatchResultRequest request)
     {
         using var stream = new MemoryStream();
@@ -355,6 +374,7 @@ public sealed class MatchResultService : IMatchResultService
             writer.WriteNumber("objectiveCompletion", request.ObjectiveCompletion);
             if(request.SalvageCompletedLevels.HasValue)writer.WriteNumber("salvageCompletedLevels",request.SalvageCompletedLevels.Value);
             if(request.SalvageCompletedDays.HasValue)writer.WriteNumber("salvageCompletedDays",request.SalvageCompletedDays.Value);
+            if (request.SalvageRunFailed) writer.WriteBoolean("salvageRunFailed", true);
             if (request.EvidenceVersion.HasValue)
                 writer.WriteNumber("evidenceVersion", request.EvidenceVersion.Value);
             writer.WriteStartArray("players");

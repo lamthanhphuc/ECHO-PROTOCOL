@@ -1155,6 +1155,9 @@ namespace EchoProtocol.Api.Migrations
                     b.Property<int?>("SalvageCompletedLevels")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SalvageReachedLevel")
+                        .HasColumnType("integer");
+
                     b.Property<bool?>("SalvageUsedDebugCheats")
                         .HasColumnType("boolean");
 
