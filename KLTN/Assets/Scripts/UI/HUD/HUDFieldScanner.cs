@@ -321,8 +321,20 @@ namespace EchoProtocol.UI.HUD
             float heading = _viewCamera != null ? _viewCamera.transform.eulerAngles.y : connected ? _boundScanner.transform.eulerAngles.y : 0f;
             if (radarGraphic != null)
             {
+                if(EchoProtocol.Salvage.SalvageSite.IsActive)
+                {
+                    radarGraphic.Present(null,1,heading,false,false);radarGraphic.enabled=false;
+                    EchoProtocol.Salvage.SalvageScannerMap.Attach(radarGraphic.rectTransform,_boundScanner);
+                    SetText(titleText,"BẢN ĐỒ THU HỒI");SetText(modeBadgeText,motion?"CHUYỂN ĐỘNG · Chuột phải":"VẬT PHẨM · Chuột phải");
+                    SetText(detectedText,$"<size=18>{count}</size>  "+(motion?"CHUYỂN ĐỘNG":"VẬT PHẨM"));
+                }
+                else
+                {
+                    var salvageMap=radarGraphic.transform.Find("SalvageMapViewport");
+                    if(salvageMap!=null){salvageMap.gameObject.SetActive(false);radarGraphic.enabled=true;}
                 radarGraphic.TargetLabel = motion ? "STALKER" : coreTargetLabel;
                 radarGraphic.Present(offsets, connected ? (motion ? _boundScanner.Tuning.MotionRange : _boundScanner.Tuning.CoreRange) : 1f, heading, motion, active);
+                }
             }
             if (scannerAudio != null)
             {

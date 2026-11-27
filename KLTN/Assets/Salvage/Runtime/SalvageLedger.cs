@@ -110,6 +110,7 @@ namespace EchoProtocol.Salvage
                 {Cargo[i]=new SalvageCargo{Definition=CartDefinition,Serial=NextSerial++,Integrity=100,Owner=-1,Slot=-1,State=SalvageCargoState.Stored};index=i;Revision++;return true;}
             return false;
         }
+        public static int MinimumLevel(int definition) => definition>=30?5:definition>=24&&definition<=29?3:1;
         public static float LootScale(int cycle) => (float)Math.Min(800, Math.Pow(1.4, Math.Clamp(cycle - 3, 0, 30)));
         public static float CarrySpeed(float kg) => kg <= 10 ? 1 : kg <= 25
             ? 1 - (kg - 10) / 15 * .15f : Math.Max(.75f, .85f - (kg - 25) / 15 * .1f);
@@ -193,6 +194,11 @@ namespace EchoProtocol.Salvage
             var c=Cargo[index];c.State=SalvageCargoState.Stored;c.Owner=c.Slot=-1;Cargo[index]=c;Revision++;return true;
         }
         public void ReceivingChanged()=>Revision++;
+        public bool StoreItem(int index,int owner)
+        {
+            if(Phase!=SalvagePhase.InDay||index<0||index>=Cargo.Length||Cargo[index].State!=SalvageCargoState.Held||Cargo[index].Owner!=owner)return false;
+            var item=Cargo[index];item.State=SalvageCargoState.Stored;item.Owner=item.Slot=-1;Cargo[index]=item;Revision++;return true;
+        }
         public int Store(int owner)
         {
             if (Phase != SalvagePhase.InDay) return 0;
@@ -219,8 +225,8 @@ namespace EchoProtocol.Salvage
                 || Phase == SalvagePhase.Failed || Phase == SalvagePhase.Ended) return false;
             var item = Cargo[index];
             int surplus = SurplusFromSale(item.Value);
-            if (Funds > int.MaxValue - surplus || SoldThisCycle > int.MaxValue - item.Value || TotalSold > int.MaxValue - item.Value) return false;
-            Funds += surplus; SoldThisCycle += item.Value; TotalSold += item.Value;
+            if (SoldThisCycle > int.MaxValue - item.Value) return false;
+            Funds = (int)Math.Min(int.MaxValue,(long)Funds+surplus); SoldThisCycle += item.Value; TotalSold = (int)Math.Min(int.MaxValue,(long)TotalSold+item.Value);
             item.State = SalvageCargoState.Sold; Cargo[index] = item; Revision++; return true;
         }
         public int SurplusFromSale(int value) => value <= 0 ? 0 : Math.Max(0, value - Math.Max(0, Quota - SoldThisCycle));
@@ -242,11 +248,10 @@ namespace EchoProtocol.Salvage
         {
             if (expectedRevision != Revision || expectedValue <= 0 || StoredValue() != expectedValue
                 || Phase == SalvagePhase.Failed || Phase == SalvagePhase.Ended
-                || Funds > int.MaxValue - SurplusFromSale(expectedValue) || SoldThisCycle > int.MaxValue - expectedValue
-                || TotalSold > int.MaxValue - expectedValue) return false;
+                || SoldThisCycle > int.MaxValue - expectedValue) return false;
             for (int i = 0; i < Cargo.Length; i++)
             { var item = Cargo[i]; if (item.State != SalvageCargoState.Stored || item.Definition==CartDefinition) continue; item.State = SalvageCargoState.Sold; Cargo[i] = item; }
-            Funds += SurplusFromSale(expectedValue); SoldThisCycle += expectedValue; TotalSold += expectedValue; Revision++; return true;
+            Funds = (int)Math.Min(int.MaxValue,(long)Funds+SurplusFromSale(expectedValue)); SoldThisCycle += expectedValue; TotalSold = (int)Math.Min(int.MaxValue,(long)TotalSold+expectedValue); Revision++; return true;
         }
         public bool Damage(int index, int serial, int amount, bool physicsImpact=false)
         {

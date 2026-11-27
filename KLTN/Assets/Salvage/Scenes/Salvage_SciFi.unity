@@ -471,24 +471,24 @@ MonoBehaviour:
   - {x: 0.38902155, y: 0.25952324, z: 0.3167091}
   - {x: 0.17371272, y: 0.7292865, z: 0.7534913}
   - {x: 0.54682595, y: 0.9519882, z: 0.59890705}
-  - {x: 1.2, y: 0.85733426, z: 0.83550245}
+  - {x: 1.3987715, y: 0.9993456, z: 0.97389746}
   - {x: 0.55402607, y: 1.0594714, z: 0.55402625}
   - {x: 0.17773692, y: 0.6500002, z: 0.102210715}
   - {x: 0.4950278, y: 0.73282766, z: 0.49502784}
   - {x: 0.25010702, y: 0.5234649, z: 0.25010705}
   - {x: 0.33391547, y: 0.7724183, z: 0.33241186}
   - {x: 0.6500078, y: 0.4807129, z: 0.018547148}
-  - {x: 0.62426823, y: 1.2000005, z: 0.60380805}
-  - {x: 0.74089843, y: 0.6614378, z: 1.2000079}
-  - {x: 0.7643451, y: 1.0009158, z: 1.2000028}
-  - {x: 0.6517383, y: 1.2000003, z: 0.31795627}
-  - {x: 1.2000039, y: 0.5467478, z: 0.49886525}
-  - {x: 0.58200634, y: 1.2000017, z: 0.5120701}
-  - {x: 1.1999983, y: 0.5378045, z: 0.45234895}
-  - {x: 1.200009, y: 0.4806028, z: 0.52182025}
-  - {x: 1.2000029, y: 0.30463168, z: 0.2811377}
-  - {x: 1.2000003, y: 0.7379868, z: 0.33698988}
-  - {x: 1.2000002, y: 0.37556037, z: 1.2000005}
+  - {x: 0.6803505, y: 1.3078048, z: 0.6580522}
+  - {x: 2.3076954, y: 2.0601974, z: 3.7376955}
+  - {x: 2.5117784, y: 3.289193, z: 3.9434297}
+  - {x: 1.9608513, y: 3.610379, z: 0.9566186}
+  - {x: 2.8099456, y: 1.2802721, z: 1.1681496}
+  - {x: 0.5881566, y: 1.2126824, z: 0.5174813}
+  - {x: 2.616451, y: 1.1726177, z: 0.9862922}
+  - {x: 6.281663, y: 2.515802, z: 2.7315621}
+  - {x: 11.097561, y: 2.8172169, z: 2.5999463}
+  - {x: 35.72181, y: 21.968513, z: 10.03157}
+  - {x: 67.75294, y: 21.20443, z: 67.75295}
   PreviewCamera: {fileID: 604822706}
   GameplayCamera: {fileID: 1619637164}
   RandomMap: {fileID: 13069245}
@@ -907,6 +907,7 @@ GameObject:
   - component: {fileID: 604822708}
   - component: {fileID: 604822707}
   - component: {fileID: 604822711}
+  - component: {fileID: 604822712}
   m_Layer: 0
   m_Name: Prototype Preview Camera
   m_TagString: MainCamera
@@ -1082,6 +1083,50 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!114 &604822712
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 604822706}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
+  m_RenderShadows: 1
+  m_RequiresDepthTextureOption: 2
+  m_RequiresOpaqueTextureOption: 2
+  m_CameraType: 0
+  m_Cameras: []
+  m_RendererIndex: -1
+  m_VolumeLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  m_VolumeTrigger: {fileID: 0}
+  m_VolumeFrameworkUpdateModeOption: 2
+  m_RenderPostProcessing: 0
+  m_Antialiasing: 0
+  m_AntialiasingQuality: 2
+  m_StopNaN: 0
+  m_Dithering: 0
+  m_ClearDepth: 1
+  m_AllowXRRendering: 1
+  m_AllowHDROutput: 1
+  m_UseScreenCoordOverride: 0
+  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+  m_RequiresDepthTexture: 0
+  m_RequiresColorTexture: 0
+  m_TaaSettings:
+    m_Quality: 3
+    m_FrameInfluence: 0.1
+    m_JitterScale: 1
+    m_MipBias: 0
+    m_VarianceClampScale: 0.9
+    m_ContrastAdaptiveSharpening: 0
+  m_Version: 2
 --- !u!1 &608785479
 GameObject:
   m_ObjectHideFlags: 0
@@ -1365,6 +1410,63 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2074108506}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &808333653
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 32.478336
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 16.86704
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -116.932
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -3910990755373119420, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8771091787928289351, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
+      propertyPath: m_Name
+      value: AGV zOnron
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: -4161369568681901532, guid: 5212027a563924b49bdcb31638e92af4, type: 3}
 --- !u!1 &892666896
 GameObject:
   m_ObjectHideFlags: 0
@@ -2614,3 +2716,4 @@ SceneRoots:
   - {fileID: 1456222619}
   - {fileID: 13069244}
   - {fileID: 1619637169}
+  - {fileID: 808333653}

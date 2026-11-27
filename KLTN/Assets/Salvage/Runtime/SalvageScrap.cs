@@ -47,7 +47,7 @@ namespace EchoProtocol.Salvage
         public Vector3 WorldPosition => transform.position;
         public bool IsAvailableInWorld => TryCargo(out var c) && c.Definition!=SalvageLedger.CartDefinition && (c.State == SalvageCargoState.World||c.State==SalvageCargoState.Stored);
         public override string InteractionPrompt => TryCargo(out var c)
-            ? $"{SalvageLedger.Types[c.Definition].Name} • {c.Value} RV • {SalvageLedger.Types[c.Definition].Weight:0.#} kg • {(SalvageLedger.Types[c.Definition].Pocketable?"Nhặt / cất túi":"Kéo / cầm") }"
+            ? $"{SalvageLedger.Types[c.Definition].Name} • $ {c.Value:N0} • {SalvageLedger.Types[c.Definition].Weight:0.#} kg • {(SalvageLedger.Types[c.Definition].Pocketable?"Nhặt / cất túi":"Kéo / cầm") }"
             : "Scrap";
         public override bool EmitsRuntimeInteractionNoise => false;
 
@@ -281,7 +281,7 @@ namespace EchoProtocol.Salvage
             }
             _collider.enabled = world;
             if(c.State!=SalvageCargoState.Stored)_storedSettled=false;
-            else if(ReadyForDelivery)_storedSettled=true;
+            else if(ReadyForDelivery||_lastState==SalvageCargoState.Held)_storedSettled=true;
             _body.isKinematic = !world || c.State==SalvageCargoState.Stored&&_storedSettled || !Object.HasStateAuthority;
             _body.mass=Mathf.Clamp(SalvageLedger.Types[c.Definition].Weight,.5f,40);
             IgnoreOwner(c.State==SalvageCargoState.PhysicsHeld?c.Owner:-1);
@@ -350,7 +350,7 @@ namespace EchoProtocol.Salvage
             if(Vector3.Distance(eye,_body.worldCenterOfMass)>4.5f){run.ReleaseGrip(c.Owner);return;}
             // Real dynamic-body spring: walls stop the body. No teleport/parenting while physically held.
             float strength=SalvageRunState.PowerMultiplier(player.gameObject,SalvagePower.Strength);
-            Vector3 acceleration=(target-_body.worldCenterOfMass)*45*strength-_body.linearVelocity*(12*Mathf.Sqrt(strength))-Physics.gravity;
+            Vector3 acceleration=(target-transform.TransformPoint(crew.GripLocalPoint))*45*strength-_body.linearVelocity*(12*Mathf.Sqrt(strength))-Physics.gravity;
             if(c.Definition==SalvageLedger.CartDefinition){acceleration.y=0;acceleration.x*=.5f;acceleration.z*=.5f;}
             _body.AddForce(Vector3.ClampMagnitude(acceleration,55*strength),ForceMode.Acceleration);
             var delta=look*crew.GripRotation*Quaternion.Inverse(_body.rotation);

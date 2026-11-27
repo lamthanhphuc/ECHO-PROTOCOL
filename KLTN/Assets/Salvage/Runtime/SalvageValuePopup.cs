@@ -45,9 +45,9 @@ namespace EchoProtocol.Salvage
         {
             value=Mathf.Max(0,value);loss=Mathf.Max(0,loss);
             _loss=Time.unscaledTime-_refreshed<.4f?_loss+loss:loss;
-            _text.text=value.ToString("N0",CultureInfo.InvariantCulture)+"<size=55%> RV</size>";
+            _text.text="$ "+value.ToString("N0",CultureInfo.InvariantCulture);
             _text.color=new Color(.3f,1,.36f);
-            _lossText.text=_loss>0?"−"+_loss.ToString("N0",CultureInfo.InvariantCulture)+" RV":"";
+            _lossText.text=_loss>0?"−"+_loss.ToString("N0",CultureInfo.InvariantCulture):"";
             _lossText.color=new Color(1,.68f,.35f);_refreshed=Time.unscaledTime;_expires=_refreshed+3;
             if(value==0){_scrap=null;_follow=null;}
         }

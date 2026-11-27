@@ -165,6 +165,18 @@ namespace EchoProtocol.Tools.Scanner
         {
             if (_boundScanner == null) return;
 
+            if(EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                var radar=tmpRadar!=null?tmpRadar.rectTransform:legacyRadar!=null?legacyRadar.rectTransform:null;
+                if(radar!=null)EchoProtocol.Salvage.SalvageScannerMap.Attach(radar,_boundScanner);
+                if(tmpRadar!=null)tmpRadar.enabled=false;if(legacyRadar!=null)legacyRadar.enabled=false;
+                SetHeaderText("SALVAGE\nBẢN ĐỒ THU HỒI");
+                var target=_boundScanner.CurrentMode==FieldScannerMode.Motion&&!_boundScanner.IsAlienHuntMode?"CHUYỂN ĐỘNG":"VẬT PHẨM";
+                SetSignalText(_boundScanner.IsScanActive?$"{_boundScanner.RadarOffsets.Count} {target}":$"QUÉT TÌM {target}");
+                SetStatusText(_boundScanner.LocalCooldownRemaining>.05f?$"HỒI QUÉT {_boundScanner.LocalCooldownRemaining:F1}s":"SẴN SÀNG");
+                return;
+            }
+            RestoreLegacyRadar();
             FieldScannerMode mode = _boundScanner.CurrentMode;
             bool hasResult = _boundScanner.HasActiveResult;
             float cooldown = _boundScanner.LocalCooldownRemaining;
@@ -234,8 +246,16 @@ namespace EchoProtocol.Tools.Scanner
             }
         }
 
+        private void RestoreLegacyRadar()
+        {
+            var radar=tmpRadar!=null?tmpRadar.rectTransform:legacyRadar!=null?legacyRadar.rectTransform:null;
+            var map=radar!=null?radar.Find("SalvageMapViewport"):null;
+            if(map==null)return;map.gameObject.SetActive(false);
+            if(tmpRadar!=null)tmpRadar.enabled=true;if(legacyRadar!=null)legacyRadar.enabled=true;
+        }
         private void RenderIdleScreen()
         {
+            RestoreLegacyRadar();
             SetHeaderText("FIELD SCANNER\nOFFLINE");
             SetRadarText("\n   ▲\n");
             SetSignalText("NO LINK");

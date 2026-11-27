@@ -522,7 +522,7 @@ namespace EchoProtocol.UI.HUD
                 {
                     int index = run.HeldIndex(seat, i); string text = "Trống";
                     if (index >= 0) { var c = run.Cargo(index); var type = EchoProtocol.Salvage.SalvageLedger.Types[c.Definition];
-                        text = c.Slot != i ? "CHIẾM 2 Ô" : $"{type.Name}\n{c.Value} RV • {c.Integrity}%"; }
+                        text = c.Slot != i ? "CHIẾM 2 Ô" : $"{type.Name}\n$ {c.Value:N0} • {c.Integrity}%"; }
                     label.text = $"[{i+1}]\n{text}";
                     label.color = run.Crew[seat].Selected == i ? HUDPresentationStyle.Accent : HUDPresentationStyle.Muted;
                 }

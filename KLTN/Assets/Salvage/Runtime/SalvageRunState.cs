@@ -44,8 +44,8 @@ namespace EchoProtocol.Salvage
         [Networked] public int CartPurchaseLevel {get;private set;}
         [Networked] public NetworkBool AccountRewardsDisabled {get;private set;}
         public void DisableAccountRewards(){if(Object!=null&&Object.IsValid&&Object.HasStateAuthority)AccountRewardsDisabled=true;}
-        public int CompletedRewardLevels=>SalvageLedger.CompletedLevelsFor(Cycle,Day,DayCompleted,SoldThisCycle,Quota);
-        public int CompletedRewardDays=>SalvageLedger.CompletedDaysFor(Cycle,Day,DayCompleted);
+        public int CompletedRewardLevels=>Math.Min(10000,Math.Min(CompletedRewardDays/3,Math.Max(0,SalvageLedger.CompletedLevelsFor(Cycle,Day,DayCompleted,SoldThisCycle,Quota)-RewardStartLevels)));
+        public int CompletedRewardDays=>Math.Min(30003,Math.Max(0,SalvageLedger.CompletedDaysFor(Cycle,Day,DayCompleted)-RewardStartDays+RewardStartDays%3));
         public static SalvageRunState Instance { get; private set; }
         [Networked] public int PhaseCode { get; private set; }
         [Networked] public int Cycle { get; private set; }
@@ -99,17 +99,14 @@ namespace EchoProtocol.Salvage
             if (!Object.HasStateAuthority) return;
             if (NetworkBootstrap.IsHostMigrationResumeActive) return;
             if (Revision > 0) RestoreLedger();
-            else
-            {
-                int count = 0; foreach (var player in Runner.ActivePlayers) count++;
-                _ledger = new SalvageLedger(count); RunId = Guid.NewGuid().ToString("N");
-                Publish(); RefreshCrew(); SpawnStations();
-                if (Site.RandomMap != null)
-                {
-                    RunSeed = Site.RandomMap.TestSeed != 0 ? Site.RandomMap.TestSeed : BitConverter.ToInt32(Guid.NewGuid().ToByteArray(),0);
-                    PrepareMap(Cycle,Day);
-                }
-            }
+            else InitializeSavedRun();
+        }
+        private void StartFreshRun()
+        {
+            int count=0;foreach(var player in Runner.ActivePlayers)count++;
+            _ledger=new SalvageLedger(count);RunId=Guid.NewGuid().ToString("N");Publish();RefreshCrew();SpawnStations();
+            if(Site.RandomMap!=null)
+            {RunSeed=Site.RandomMap.TestSeed!=0?Site.RandomMap.TestSeed:BitConverter.ToInt32(Guid.NewGuid().ToByteArray(),0);PrepareMap(Cycle,Day);}
         }
         public override void Despawned(NetworkRunner runner, bool hasState)
         { if (Instance == this) Instance = null; WorldItems.Clear(); }
@@ -158,9 +155,10 @@ namespace EchoProtocol.Salvage
         public override void FixedUpdateNetwork()
         {
             EnsureLocalMap();
+            if(CloudLoading||CloudRecoveryRequired)return;
             if (!Object.HasStateAuthority || NetworkBootstrap.IsHostMigrationReconciliationPending) return;
             if (_ledger == null) RestoreLedger();
-            UpdateDeliveries(); TickEnemies();
+            UpdateDeliveries(); TickEnemies(); SaveCheckpoint();
             if (Time.time >= _nextCrewRefresh) { _nextCrewRefresh = Time.time + .25f; RefreshCrew(); TryEndByVotes(); }
             if (_departurePending)
             {
@@ -248,6 +246,11 @@ namespace EchoProtocol.Salvage
 
         private void RefreshCrew()
         {
+            for(int i=0;i<4;i++)if(Crew[i].User.Length>0&&!IsConnected(i))
+            {
+                var old=Crew[i];_checkpointCrew[old.User.ToString()]=SavedCrew.From(old);
+                DropSeat(i,true);Crew.Set(i,default);
+            }
             foreach (var actor in Runner.ActivePlayers)
             {
                 if (!Runner.TryGetPlayerObject(actor, out var player) || !player.TryGetComponent<LobbyPlayerState>(out var state)) continue;
@@ -257,10 +260,11 @@ namespace EchoProtocol.Salvage
                 if (seat < 0)
                 {
                     seat = free; if (seat < 0) continue;
-                    Crew.Set(seat, new SalvageCrew { User = user, Actor = actor, Selected = 0 });
-                    state.SetGameplayToolId(0); // Run equipment never comes from account/Lobby loadout.
+                    var saved=ResumeCrew(user);saved.Actor=actor;saved.Selected=0;
+                    Crew.Set(seat,saved);
+                    state.SetGameplayToolId(saved.Tool,saved.Uses); // Never inherit the account/Lobby loadout.
                 }
-                var crew = Crew[seat]; crew.Actor = actor; crew.Tool = state.ToolId; crew.Uses = state.TeamToolUsesRemaining;
+                var crew = Crew[seat]; if(crew.Actor!=actor&&crew.Tool!=0)state.SetGameplayToolId(crew.Tool,crew.Uses); crew.Actor = actor; crew.Tool = state.ToolId; crew.Uses = state.TeamToolUsesRemaining;
                 Crew.Set(seat, crew);
             }
         }
@@ -286,6 +290,7 @@ namespace EchoProtocol.Salvage
             LastDayRecovered = _ledger.LastDayRecovered; LastDayLost = _ledger.LastDayLost;
             for (int i = 0; i < Items.Length; i++)
             { var pose=Items[i];var data=SalvageNetCargo.From(_ledger.Cargo[i],pose.Position);data.Rotation=pose.Rotation;data.Velocity=pose.Velocity;data.InReceivingRoom=pose.InReceivingRoom;Items.Set(i,data); }
+            if(Phase==SalvagePhase.Failed)SaveCheckpoint(true);
         }
         public bool AdoptSnapshot()
         {
@@ -346,6 +351,8 @@ namespace EchoProtocol.Salvage
                 case SalvageCommand.Depart:
                     if (Runner.IsServer && actor == Runner.LocalPlayer && AllCrewAtBase())
                     {
+                        if(!CheckpointSynced)
+                        {SaveCheckpoint(true);RPC_Feedback(actor,"Đang đồng bộ tiến độ trước khi khởi hành. Vui lòng thử lại sau vài giây.");return;}
                         if(Site.RandomMap!=null)
                         {
                             if(_departurePending) { accepted=true;break; }
@@ -365,7 +372,7 @@ namespace EchoProtocol.Salvage
                                 }
                             }
                             _departurePending=true;_mapDeadline=Time.realtimeSinceStartup+45;
-                            RPC_Feedback(actor,"Đang chờ cả đội dựng khu thu hồi…");accepted=true;break;
+                            RPC_Feedback(actor,"Đang chuẩn bị khu thu hồi…");accepted=true;break;
                         }
                         accepted = _ledger.Depart(ConnectedCrew()); Publish();
                         if (accepted) StartDay();
@@ -382,7 +389,7 @@ namespace EchoProtocol.Salvage
                     if (AtTerminal(player, true) && _ledger.TryWithdraw(argument, serial, seat, out var selected))
                     { crew = Crew[seat]; crew.Selected = selected; Crew.Set(seat, crew); Publish(); accepted = true; } break;
             }
-            RPC_Feedback(actor, accepted ? "" : "Action unavailable: check cargo, funds, phase and crew at base.");
+            RPC_Feedback(actor, accepted ? "" : "Chưa thể thực hiện. Kiểm tra vật phẩm và tập hợp cả đội ở căn cứ.");
         }
         private bool TryActor(PlayerRef actor, out NetworkObject player)
         {
@@ -429,9 +436,14 @@ namespace EchoProtocol.Salvage
         public bool Deposit(PlayerRef actor)
         {
             if (!TryActor(actor, out var player) || !Site.Contains(player.transform.position) || _ledger == null) return false;
+            _receivingReservations.Clear();
+            int count=0;
             for(int i=0;i<Items.Length;i++)if(Cargo(i).State==SalvageCargoState.Held&&Cargo(i).Owner==Seat(actor))
-                SetCargoPose(i,BagDeliveryPosition(i),Quaternion.identity,Vector3.zero);
-            int count = _ledger.Store(Seat(actor)); if (count == 0) return false;
+            {
+                var point=BagDeliveryPosition(i);if(!float.IsFinite(point.x))continue;
+                SetCargoPose(i,point,Quaternion.identity,Vector3.zero);if(_ledger.StoreItem(i,Seat(actor)))count++;
+            }
+            if(count==0)return false;
             Publish(); RPC_Cue(1, Site.ReturnPoint.position, 0); return true;
         }
         private bool DropSelected(int seat)
@@ -445,7 +457,7 @@ namespace EchoProtocol.Salvage
             ReleaseGrip(seat);
             int active = HeldIndex(seat, Crew[seat].Selected);
             for (int i = 0; i < Items.Length; i++)
-            { var c = Cargo(i); if (c.State == SalvageCargoState.Held && c.Owner == seat && (all || i == active || SalvageLedger.Types[c.Definition].Heavy)) Drop(i, seat); }
+            { var c = Cargo(i); if (c.State == SalvageCargoState.Held && c.Owner == seat && (all || i == active || SalvageLedger.Types[c.Definition].Heavy)) Drop(i, seat, false); }
             if (all || Crew[seat].Selected == 4)
             { var obj = Player(seat); obj?.GetComponent<NetworkPlayerInteractor>()?.DropTeamToolAuthoritative(Crew[seat].Actor); RefreshCrew(); }
         }
@@ -457,14 +469,37 @@ namespace EchoProtocol.Salvage
                 if ((Cargo(i).State == SalvageCargoState.Sold || Cargo(i).State == SalvageCargoState.Destroyed)
                     && WorldItems.TryGetValue(i, out var actor) && actor != null && actor.Object.IsValid) Runner.Despawn(actor.Object);
         }
-        private bool Drop(int index, int seat)
+        private bool Drop(int index, int seat, bool allowPlacement=true)
         {
-            var player = Player(seat); if (player == null || !_ledger.TryDrop(index, Cargo(index).Serial, seat)) return false;
-            Vector3 origin = player.transform.position + Vector3.up * 1.1f;
-            Vector3 direction = player.transform.forward;
-            Vector3 position = origin + direction * .7f;
-            if (Physics.Raycast(origin, direction, out var hit, .9f, ~0, QueryTriggerInteraction.Ignore)) position = hit.point - direction * .25f;
-            Publish(); SetPosition(index, position); return true;
+            var player = Player(seat); if (player == null) return false;
+            Vector3 origin=GripEye(player),direction=allowPlacement?GripLook(player)*Vector3.forward:player.transform.forward;
+            Quaternion rotation=Quaternion.Euler(0,player.transform.eulerAngles.y,0);
+            Vector3 position=origin+direction*.8f;
+            bool placing=allowPlacement&&direction.y<-.25f;
+            var hits=Physics.RaycastAll(origin,direction,3.5f,~0,QueryTriggerInteraction.Ignore);
+            Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
+            bool surface=false;
+            foreach(var hit in hits)
+            {
+                if(hit.collider.GetComponentInParent<LobbyPlayerState>()!=null
+                    ||hit.collider.GetComponentInParent<SalvageScrap>() is SalvageScrap own&&own.Index==index)continue;
+                if(placing)
+                {
+                    if(hit.normal.y<.65f)return false;
+                    position=hit.point+Vector3.up*.04f;surface=true;
+                }
+                else if(hit.distance<1)position=hit.point-direction*.3f;
+                break;
+            }
+            if(placing)
+            {
+                if(!surface)return false;
+                var size=Site.ScrapSize(Cargo(index).Definition);
+                foreach(var collider in Physics.OverlapBox(position+Vector3.up*(size.y*.5f+.02f),size*.49f,rotation,~0,QueryTriggerInteraction.Ignore))
+                    if(!(collider.GetComponentInParent<SalvageScrap>() is SalvageScrap own&&own.Index==index))return false;
+            }
+            if(!_ledger.TryDrop(index,Cargo(index).Serial,seat))return false;
+            Publish();SetCargoPose(index,position,rotation,Vector3.zero);return true;
         }
         public void SetPosition(int index, Vector3 position)
         {
@@ -523,14 +558,18 @@ namespace EchoProtocol.Salvage
                 var crew = Crew[i]; crew.EndVote = 0; crew.PreviousLife = 0; Crew.Set(i, crew);
             }
             // Weighted loot on fixed authored anchors. A repair margin keeps the Day's recoverable budget above quota.
-            int spawnedValue = 0; int target = Mathf.CeilToInt(Quota * 1.5f);
+            int spawnedValue = 0; int needed=Mathf.Max(0,Quota-SoldThisCycle-_ledger.StoredValue()); int target = Mathf.CeilToInt(needed * 1.5f);
             var lootRandom=new System.Random(unchecked(MapSeed ^ Cycle*83492791 ^ Day*19349663));
             var anchors=(Transform[])Site.ScrapSpawns.Clone();
             for(int i=anchors.Length-1;i>0;i--){int j=lootRandom.Next(i+1);var swap=anchors[i];anchors[i]=anchors[j];anchors[j]=swap;}
-            int count = Mathf.Min(Site.ScrapSpawns.Length * 3, 48);
+            int count = Mathf.Min(Site.ScrapSpawns.Length * 3, 96);
             for (int n = 0; n < count; n++)
             {
-                int definition = lootRandom.NextDouble() < .65 ? lootRandom.Next(2, SalvageLedger.CartDefinition) : lootRandom.Next(0, 2);
+                var eligible=new List<int>();
+                for(int k=0;k<SalvageLedger.CartDefinition;k++)if(SalvageLedger.MinimumLevel(k)<=Cycle&&Site.CanTransport(k)
+                    &&(Cycle>=3||Mathf.Max(Site.ScrapSize(k).x,Site.ScrapSize(k).y,Site.ScrapSize(k).z)<=1.8f))eligible.Add(k);
+                if(eligible.Count==0)break;
+                int definition=n<48?eligible[lootRandom.Next(eligible.Count)]:2;
                 var type = SalvageLedger.Types[definition];
                 Vector3 position=default;bool spawnClear=false;
                 var size=Site.ScrapSize(definition);
@@ -540,7 +579,7 @@ namespace EchoProtocol.Salvage
                     if(Physics.CheckBox(candidate+Vector3.up*(size.y*.5f+.02f),size*.48f,Quaternion.identity,~0,QueryTriggerInteraction.Ignore))continue;
                     bool close=false;foreach(var existing in WorldItems.Values)
                         if(existing!=null&&existing.IsAvailableInWorld&&Vector3.Distance(existing.transform.position,candidate)<Mathf.Max(1.4f,size.magnitude*.6f)){close=true;break;}
-                    if(close)continue;position=candidate;spawnClear=true;break;
+                    if(close||!Site.CargoRouteClear(candidate,definition))continue;position=candidate;spawnClear=true;break;
                 }
                 if(!spawnClear)continue;
                 int value = Mathf.RoundToInt(lootRandom.Next(type.MinValue, type.MaxValue + 1) * SalvageLedger.LootScale(Cycle));
@@ -554,7 +593,17 @@ namespace EchoProtocol.Salvage
                 spawnedValue += value;
                 if (n >= 11 && spawnedValue >= target) break;
             }
-            if (spawnedValue < Quota) Debug.LogWarning("[Salvage] Authored loot capacity cannot meet this Cycle quota. Add spawn anchors before raising quotas.");
+            if(spawnedValue<needed)
+            {
+                // Never spend a Day on a map whose available cargo cannot cover the remaining objective.
+                for(int i=0;i<_ledger.Cargo.Length;i++)if(_ledger.Cargo[i].State==SalvageCargoState.World)
+                {var c=_ledger.Cargo[i];c.State=SalvageCargoState.Destroyed;_ledger.Cargo[i]=c;}
+                _ledger.Restore(SalvagePhase.Base,Cycle,Day,Funds,Quota,SoldThisCycle,TotalSold,_ledger.NextSerial,CrewAtCycleStart,false,Revision+1,LastDayRecovered,LastDayLost);
+                DayTimer=TickTimer.None;MapDay=0;RunSeed=unchecked(RunSeed+104729);
+                Publish();RetireExhaustedActors();ClearCorridorDoors();
+                RPC_Feedback(Runner.LocalPlayer,"Khu thu hồi chưa đủ hàng. Ngày chưa bắt đầu; hãy bán bớt hàng trong căn cứ hoặc khởi hành lại để tạo khu khác.");
+                return;
+            }
             ClearEnemies(); EnemySpawnTimer=TickTimer.CreateFromSeconds(Runner,35);
             RPC_Cue(6, Site.ReturnPoint.position, 0);
         }
@@ -575,7 +624,7 @@ namespace EchoProtocol.Salvage
             _ledger.Return(survivors); DayTimer = TickTimer.None; RefreshCrew(); Publish();
             RetireExhaustedActors();
             ClearEnemies();
-            foreach (var pickup in FindObjectsByType<NetworkInteractable>(FindObjectsInactive.Include))
+            foreach (var pickup in FindObjectsByType<NetworkBehaviour>(FindObjectsInactive.Include))
                 if ((pickup is NetworkTeamToolPickup || pickup is EchoProtocol.Tools.Scanner.NetworkToolPickup || pickup is NetworkDoorJammer)
                     && pickup.Runner == Runner && pickup.Object != null && pickup.Object.IsValid) Runner.Despawn(pickup.Object);
             foreach (var beacon in FindObjectsByType<NoiseMakerBeacon>(FindObjectsInactive.Include))

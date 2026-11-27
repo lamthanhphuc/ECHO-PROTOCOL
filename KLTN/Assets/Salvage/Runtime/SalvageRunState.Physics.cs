@@ -6,26 +6,40 @@ namespace EchoProtocol.Salvage
 {
     public sealed partial class SalvageRunState
     {
+        private readonly System.Collections.Generic.List<Bounds> _receivingReservations=new();
         private float _nextReceivingCue;
         private float _nextDelivery;
         private readonly float[] _nextGripAdjustment=new float[4];
         private Vector3 BagDeliveryPosition(int index)
         {
             if(Site.RandomMap==null)return Site.ReturnPoint.position;
-            var room=Site.RandomMap.FixedBase;int slot=0;
-            // Distinct receiving slots for all 128 serials; keep the terminal and crew spawn clear.
-            for(int row=0;row<13;row++)for(int column=0;column<13;column++)
+            var room=Site.RandomMap.FixedBase;
+            int owner=Cargo(index).Owner;var player=Player(owner);
+            var preferred=player!=null?player.transform.position+player.transform.forward*1.8f:Site.ReturnPoint.position;
+            var size=Site.ScrapSize(Cargo(index).Definition);
+            for(int ring=0;ring<24;ring++)for(int step=0;step<24;step++)
             {
-                var point=room.transform.TransformPoint(new Vector3((column-6)*1.8f,.03f,(row-6)*1.8f));
-                var terminal=Site.TerminalPoint.position;
-                if(Vector2.Distance(new Vector2(point.x,point.z),new Vector2(terminal.x,terminal.z))<2.2f)continue;
-                bool nearCrew=false;
-                foreach(var crew in Site.CrewSpawns)if(Vector2.Distance(new Vector2(point.x,point.z),new Vector2(crew.position.x,crew.position.z))<1.6f){nearCrew=true;break;}
-                if(nearCrew)continue;
-                if(slot++==index)return point;
+                float angle=step*Mathf.PI/12;
+                var point=preferred+new Vector3(Mathf.Cos(angle),0,Mathf.Sin(angle))*(.6f+ring*.65f);
+                if(!Physics.Raycast(point+Vector3.up*3.5f,Vector3.down,out var floor,6,~0,QueryTriggerInteraction.Ignore)||floor.normal.y<.8f||floor.collider.GetComponentInParent<LobbyPlayerState>()!=null)continue;
+                point=floor.point+Vector3.up*.04f;
+                var bounds=new Bounds(point+Vector3.up*(size.y*.5f+.02f),size);
+                if(!Site.ContainsCargo(bounds))continue;
+                if(Physics.CheckBox(bounds.center,size*.49f,Quaternion.identity,~0,QueryTriggerInteraction.Ignore))continue;
+                bool occupied=false;
+                for(int i=0;i<Items.Length;i++)if(i!=index&&_ledger.Cargo[i].State==SalvageCargoState.Stored)
+                {
+                    var otherSize=Site.ScrapSize(_ledger.Cargo[i].Definition);
+                    var other=new Bounds(Items[i].Position+Vector3.up*(otherSize.y*.5f+.02f),otherSize+Vector3.one*.1f);
+                    if(other.Intersects(bounds)){occupied=true;break;}
+                }
+                foreach(var reservation in _receivingReservations)if(reservation.Intersects(bounds)){occupied=true;break;}
+                if(!occupied){_receivingReservations.Add(bounds);return point;}
             }
-            return room.transform.position+Vector3.up*.03f;
+            // A completely full receiving floor keeps the item near the crew, visibly above the floor.
+            return new Vector3(float.NaN,0,0);
         }
+
         public int PhysicsHeldIndex(int owner)
         { for(int i=0;i<Items.Length;i++)if(Cargo(i).State==SalvageCargoState.PhysicsHeld&&Cargo(i).Owner==owner)return i;return -1; }
         public bool BeginGrip(PlayerRef actor,int index,int serial)
@@ -34,15 +48,20 @@ namespace EchoProtocol.Salvage
             if(!TryActor(actor,out var player)||seat<0||_ledger==null
                 ||!WorldItems.TryGetValue(index,out var item)||item.Serial!=serial)return false;
             Vector3 eye=GripEye(player);
-            Vector3 point=item.WorldBounds.ClosestPoint(eye);
-            if(Vector3.Distance(eye,point)>3.5f)return false;
-            Vector3 direction=point-eye;
-            if(Physics.Raycast(eye,direction.normalized,out var hit,direction.magnitude+.05f,~0,QueryTriggerInteraction.Ignore)
-                &&hit.collider.GetComponentInParent<SalvageScrap>()!=item&&hit.collider.GetComponentInParent<LobbyPlayerState>()==null)return false;
+            Vector3 direction=GripLook(player)*Vector3.forward;
+            var hits=Physics.RaycastAll(eye,direction,3.5f,~0,QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits,(a,b)=>a.distance.CompareTo(b.distance));
+            RaycastHit hit=default;
+            foreach(var candidate in hits)
+            {
+                if(candidate.collider.GetComponentInParent<LobbyPlayerState>()!=null)continue;
+                hit=candidate;break;
+            }
+            if(hit.collider==null||hit.collider.GetComponentInParent<SalvageScrap>()!=item)return false;
             if(!_ledger.TryGrab(index,serial,seat))return false;
-            var crew=Crew[seat];crew.GripDistance=Mathf.Clamp(Vector3.Distance(eye,item.WorldBounds.center),1.1f,2.8f);
+            var crew=Crew[seat];crew.GripDistance=Mathf.Clamp(hit.distance,1.1f,2.8f);
             crew.GripRotation=Quaternion.Inverse(GripLook(player))*item.transform.rotation;
-            crew.GripLocalPoint=item.transform.InverseTransformPoint(hit.collider!=null&&hit.collider.GetComponentInParent<SalvageScrap>()==item?hit.point:point);
+            crew.GripLocalPoint=item.transform.InverseTransformPoint(hit.point);
             Crew.Set(seat,crew);
             item.LastHandler=actor;item.PhysicsHandled=true;Publish();RPC_Cue(9,item.GripPoint,(int)SalvageLedger.Types[Cargo(index).Definition].Material);return true;
         }
@@ -95,6 +114,7 @@ namespace EchoProtocol.Salvage
         private void UpdateDeliveries(bool finishDay=false)
         {
             if(_ledger==null||Site==null||!finishDay&&Time.time<_nextDelivery)return;_nextDelivery=Time.time+.2f;
+            _receivingReservations.Clear();
             bool changed=false,received=false;
             for(int seat=0;seat<4;seat++)
             {
@@ -104,9 +124,11 @@ namespace EchoProtocol.Salvage
                 for(int i=0;i<Items.Length;i++)if(Cargo(i).State==SalvageCargoState.Held&&Cargo(i).Owner==seat)
                 {
                     var position=BagDeliveryPosition(i);
+                    if(!float.IsFinite(position.x))continue;
                     SetCargoPose(i,position,Quaternion.identity,Vector3.zero);
+                    bool stored=_ledger.StoreItem(i,seat);changed|=stored;received|=stored;
                 }
-                bool stored=_ledger.Store(seat)>0;changed|=stored;received|=stored;
+
             }
             for(int i=0;i<Items.Length;i++)
             {

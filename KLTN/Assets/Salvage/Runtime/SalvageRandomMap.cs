@@ -24,6 +24,30 @@ namespace EchoProtocol.Salvage
         private NavMeshSurface _surface;
         private NavMeshData _runtimeData;
         private readonly List<(Vector3 point,Vector3 forward)> _endCaps=new();
+        private readonly Dictionary<Vector3,(NavMeshData data,NavMeshDataInstance instance)> _cargoNavigation=new();
+        private List<NavMeshBuildSource> _cargoSources;
+        private Bounds _cargoBounds;
+        public bool CargoPath(Vector3 from,Vector3 to,Vector3 size,NavMeshPath path)
+        {
+            if(_cargoSources==null)return false;
+            if(!_cargoNavigation.TryGetValue(size,out var navigation))
+            {
+                var settings=NavMesh.GetSettingsByIndex(0);
+                settings.agentRadius=Mathf.Min(size.x,size.z)*.5f+.12f;settings.agentHeight=size.y+.2f;
+                settings.overrideVoxelSize=true;settings.voxelSize=.1f;
+                var sources=new List<NavMeshBuildSource>(_cargoSources.Count);
+                foreach(var original in _cargoSources){var source=original;if(source.area!=1)source.area=30;sources.Add(source);}
+                var data=NavMeshBuilder.BuildNavMeshData(settings,sources,_cargoBounds,Vector3.zero,Quaternion.identity);
+                if(data==null)return false;
+                navigation=(data,default);_cargoNavigation.Add(size,navigation);
+            }
+            var filter=new NavMeshQueryFilter{agentTypeID=NavMesh.GetSettingsByIndex(0).agentTypeID,areaMask=1<<30};
+            var instance=NavMesh.AddNavMeshData(navigation.data);
+            try {return NavMesh.SamplePosition(from,out var start,.4f,filter)&&NavMesh.SamplePosition(to,out var end,4,filter)
+                &&NavMesh.CalculatePath(start.position,end.position,filter,path)&&path.status==NavMeshPathStatus.PathComplete;}
+            finally {instance.Remove();}
+
+        }
         public SalvageMapPlacement BasePlacement => new SalvageMapPlacement {
             Module=-1, Parent=-1, Position=FixedBase.transform.position,
             QuarterTurns=Mathf.RoundToInt(FixedBase.transform.eulerAngles.y/90) % 4 };
@@ -77,6 +101,12 @@ namespace EchoProtocol.Salvage
                         Connect(a,a+SalvageMapLayout.Direction(d)*6,d,true);
                     }
                 }
+                var hidingPositions=new List<Vector3>();
+                foreach(var spot in _area.GetComponentsInChildren<HidingSpot>(true))
+                {
+                    bool near=false;foreach(var position in hidingPositions)if(Vector3.Distance(position,spot.transform.position)<16){near=true;break;}
+                    if(near)spot.gameObject.SetActive(false);else hidingPositions.Add(spot.transform.position);
+                }
                 Physics.SyncTransforms();
                 foreach(var cap in _endCaps)
                     if(!Physics.Raycast(cap.point-cap.forward*.8f+Vector3.up,cap.forward,1.6f,~0,QueryTriggerInteraction.Ignore))
@@ -100,6 +130,7 @@ namespace EchoProtocol.Salvage
                 var geometryBounds=new Bounds(FixedBase.transform.position,Vector3.one*40);
                 for(int i=1;i<plan.Count;i++)geometryBounds.Encapsulate(SalvageMapLayout.WorldBounds(plan[i],Rooms[plan[i].Module].Footprint));
                 geometryBounds.Expand(new Vector3(60,20,60));
+                _cargoSources=sources;_cargoBounds=geometryBounds;
                 _runtimeData=NavMeshBuilder.BuildNavMeshData(settings,sources,geometryBounds,Vector3.zero,Quaternion.identity);
                 _surface.navMeshData=_runtimeData;
                 _surface.AddData();
@@ -161,6 +192,9 @@ namespace EchoProtocol.Salvage
         {var go=new GameObject(name);go.transform.SetParent(parent);go.transform.position=position;return go.transform;}
         private void Clear()
         {
+            foreach(var navigation in _cargoNavigation.Values)
+            {navigation.instance.Remove();if(Application.isPlaying)Destroy(navigation.data);else DestroyImmediate(navigation.data);}
+            _cargoNavigation.Clear();_cargoSources=null;
             if(EnemyGraph!=null){if(Application.isPlaying)Destroy(EnemyGraph);else DestroyImmediate(EnemyGraph);EnemyGraph=null;}
             if(_surface!=null)_surface.RemoveData();
             if(_runtimeData!=null){if(Application.isPlaying)Destroy(_runtimeData);else DestroyImmediate(_runtimeData);_runtimeData=null;}
@@ -174,6 +208,7 @@ namespace EchoProtocol.Salvage
         }
         private void OnDestroy()
         {
+            Clear();
             if(EnemyGraph!=null){if(Application.isPlaying)Destroy(EnemyGraph);else DestroyImmediate(EnemyGraph);}
             if(_surface!=null)_surface.RemoveData();
             if(_runtimeData!=null){if(Application.isPlaying)Destroy(_runtimeData);else DestroyImmediate(_runtimeData);}

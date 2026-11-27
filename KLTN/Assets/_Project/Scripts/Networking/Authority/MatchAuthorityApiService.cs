@@ -210,6 +210,15 @@ namespace EchoProtocol.Networking.Authority
         public Task<ApiResult<ApiResponse<RewardMeResponseDto>>> GetMyRewardAsync(Guid matchId) =>
             GetAsync<RewardMeResponseDto>($"/api/matches/{matchId:D}/reward/me");
 
+        [Serializable] public sealed class SalvageCloudState {public string stateJson,matchId;public bool failed;public int recovered;}
+        [Serializable] private sealed class SalvageCloudUpload
+        {public string matchId,stateJson;public long revision;public bool failed;public SalvageSubmitMatchResultRequestDto result;}
+        public Task<ApiResult<ApiResponse<SalvageCloudState>>> GetSalvageCheckpointAsync()=>GetAsync<SalvageCloudState>("/api/salvage/checkpoints/latest");
+        public Task<ApiResult<ApiResponse<SalvageCloudState>>> RecoverSalvageRewardsAsync()=>PostAsync<object,SalvageCloudState>("/api/salvage/checkpoints/recover",new object());
+        public Task<ApiResult<ApiResponse<SalvageCloudState>>> SaveSalvageCheckpointAsync(Guid matchId,string json,long revision,bool failed,SubmitMatchResultRequestDto r)
+            =>PutAsync<SalvageCloudUpload,SalvageCloudState>("/api/salvage/checkpoints",new SalvageCloudUpload {matchId=matchId.ToString("D"),stateJson=json,revision=revision,failed=failed,
+                result=new SalvageSubmitMatchResultRequestDto {evidenceVersion=r.evidenceVersion,usedDebugCheats=r.usedDebugCheats,
+                salvageCompletedDays=r.salvageCompletedDays,salvageCompletedLevels=r.salvageCompletedLevels,outcome=r.outcome,objectiveCompletion=r.objectiveCompletion,players=r.players}});
         private Task<ApiResult<ApiResponse<TResponse>>> GetAsync<TResponse>(string endpoint)
         {
             var completion = new TaskCompletionSource<ApiResult<ApiResponse<TResponse>>>();

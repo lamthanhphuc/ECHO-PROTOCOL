@@ -606,6 +606,9 @@ namespace EchoProtocol.Networking
                 }
             }
 
+            bool salvageSettlement=!gracefulHostMigration&&!abortFailedLoading&&EchoProtocol.Salvage.SalvageSite.IsActive
+                &&sceneRunner!=null&&sceneRunner.IsServer;
+            if(salvageSettlement)EchoProtocol.Salvage.SalvageRunState.Instance?.PrepareSessionExit();
             _reconnectSessionName = null;
             IsReconnecting = false;
             IsSceneLoading = false;
@@ -621,14 +624,14 @@ namespace EchoProtocol.Networking
                 {
                     if (abortFailedLoading && sceneRunner != null && sceneRunner.IsServer)
                         await _matchAuthority.EndAsync("MATCH_LOADING_FAILED");
-                    else await _matchAuthority.RelinquishHostAuthorityAsync();
+                    else if(!salvageSettlement) await _matchAuthority.RelinquishHostAuthorityAsync();
                 }
             }
             catch (Exception exception)
             {
                 Debug.LogWarning($"[NetworkSession] Backend Host relinquish failed: {exception.Message}");
             }
-            if (!gracefulHostMigration && sceneRunner != null && sceneRunner.IsServer
+            if (!gracefulHostMigration && !salvageSettlement && sceneRunner != null && sceneRunner.IsServer
                 && _matchAuthority != null && _matchAuthority.RoomInstanceId != Guid.Empty)
             {
                 try

@@ -17,10 +17,11 @@ namespace EchoProtocol.Salvage
             var mouse=Mouse.current;var keyboard=Keyboard.current;int held=run.PhysicsHeldIndex(seat);
             if(PlayerInteractionControlLock.IsGameplayInputBlocked(player.gameObject))
             {if(held>=0)run.Request(SalvageCommand.Release);_mouseGrip=false;return;}
+            if(mouse!=null&&_mouseGrip&&!mouse.leftButton.isPressed)
+            {run.Request(SalvageCommand.Release);_mouseGrip=false;}
             if(held>=0)
             {
                 if(keyboard!=null&&keyboard.eKey.wasPressedThisFrame)run.Request(SalvageCommand.Pocket);
-                if(mouse!=null&&_mouseGrip&&!mouse.leftButton.isPressed){run.Request(SalvageCommand.Release);_mouseGrip=false;}
                 if(mouse!=null&&Time.unscaledTime>=_adjustAt&&Mathf.Abs(mouse.scroll.ReadValue().y)>.01f)
                 {
                     int step=mouse.scroll.ReadValue().y>0?1:-1;bool rotate=mouse.rightButton.isPressed;
@@ -30,7 +31,7 @@ namespace EchoProtocol.Salvage
             }
             else if(mouse!=null&&mouse.leftButton.wasPressedThisFrame&&!(run.Crew[seat].Selected==4&&run.Crew[seat].Tool!=0))
             {
-                var camera=run.Site.GameplayCamera.GetComponent<Camera>();
+                var camera=SalvagePresentation.ViewCamera;
                 if(camera!=null&&Physics.Raycast(camera.transform.position,camera.transform.forward,out var hit,3.5f,~0,QueryTriggerInteraction.Ignore))
                 {
                     var scrap=hit.collider.GetComponentInParent<SalvageScrap>();
