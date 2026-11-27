@@ -21,6 +21,8 @@ public interface IAdminQueryService
         AdminPurchasesQuery query, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
+        Guid adminId,
         Guid userId,
         AdminGrantCreditsRequest request,
-        CancellationToken cancellationToken = default);}
+        CancellationToken cancellationToken = default);
+}

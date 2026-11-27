@@ -23,6 +23,12 @@ public static class AEDV02BatchBuild
     }
 
     public static void WindowsDevelopment()
+        => BuildWindows(true);
+
+    public static void WindowsPlayer()
+        => BuildWindows(false);
+
+    private static void BuildWindows(bool development)
     {
         string output = Argument("-aedBuildOutput");
         string candidate = Argument("-aedCandidate");
@@ -35,8 +41,8 @@ public static class AEDV02BatchBuild
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = scenes, locationPathName = output, target = BuildTarget.StandaloneWindows64,
-            options = BuildOptions.Development,
-            extraScriptingDefines = new[] { "AED_V02_PILOT_HARNESS" }
+            options = development ? BuildOptions.Development : BuildOptions.None,
+            extraScriptingDefines = development ? new[] { "AED_V02_PILOT_HARNESS" } : Array.Empty<string>()
         });
         var summary = report.summary;
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(output), "build-report.json"), JsonUtility.ToJson(new Result
@@ -46,7 +52,7 @@ public static class AEDV02BatchBuild
             seconds = summary.totalTime.TotalSeconds
         }, true));
         if (summary.result != BuildResult.Succeeded || summary.totalErrors != 0 || !File.Exists(output))
-            throw new InvalidOperationException("Windows Development build failed: " + summary.result);
+            throw new InvalidOperationException("Windows build failed: " + summary.result);
     }
 
     private static string Argument(string name)

@@ -991,9 +991,12 @@ namespace EchoProtocol.Networking.Authority
                 _nextTelemetryMatchStartAttempt = Time.unscaledTime + 1f;
                 TryBeginAuthoritativeTelemetryMatch();
             }
-            SampleAEDv2PlayerObservation(matchState);
-            TickV02Coordinator(matchState);
-            TickV02WorldSource(matchState);
+            if (matchState == null || matchState.IsGameplayReleased)
+            {
+                SampleAEDv2PlayerObservation(matchState);
+                TickV02Coordinator(matchState);
+                TickV02WorldSource(matchState);
+            }
             if (HasBinding
                 && ((matchState != null && matchState.IsEnded) ||
                     EchoProtocol.Salvage.SalvageSite.IsActive && EchoProtocol.Salvage.SalvageRunState.Instance!=null &&
@@ -2761,6 +2764,9 @@ namespace EchoProtocol.Networking.Authority
 
         private void TryBeginAuthoritativeTelemetryMatch()
         {
+            // Keep loading/intro time out of mission duration and first-phase AED evidence.
+            // Backend authorization/binding already happened; initial spawn facts remain queued below.
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return;
             if (!_pendingAuthoritativeTelemetryMatchStart
                 || _telemetryMatchActive
                 || !HasStateAuthority

@@ -4,12 +4,26 @@ import type { AdaptiveMatchAudit } from "@/lib/types/adaptive";
 import { formatAdminDate as formatDate } from "@/lib/utils/format";
 import { ProfileReprocessButton } from "./profile-reprocess-button";
 
-function decisionLabel(approval: string, application: string) {
-  if (approval === "HOLD") return "Giữ nguyên";
-  if (application === "APPLIED") return "Đã áp dụng";
-  if (application === "FAILED_EFFECT") return "Áp dụng lỗi hiệu ứng";
-  if (application === "ABORTED") return "Đã hủy";
-  if (application === "PENDING") return "Chờ xác nhận áp dụng";
+function hasVerifiedEffect(item: AdaptiveMatchAudit["decisions"][number]) {
+  const receipt = item.applyReceipt;
+  const validId = (id: string | undefined) => !!id && id !== "00000000-0000-0000-0000-000000000000";
+  return item.approvalStatus === "APPROVED" && item.applyStatus === "APPLIED"
+    && item.hostAppliedRevision === item.planRevision && !!receipt
+    && validId(receipt.receiptId) && validId(receipt.effectEventId)
+    && Number.isInteger(receipt.appliedTick) && receipt.appliedTick >= 0
+    && !!receipt.appliedAtUtc;
+}
+
+function decisionLabel(item: AdaptiveMatchAudit["decisions"][number], hostEvidenceUnavailable = false) {
+  if (item.approvalStatus === "HOLD") return "HOLD · Giữ nguyên";
+  if (item.applyStatus === "FAILED_EFFECT") return "Host đã commit · Hiệu ứng thất bại";
+  if (item.applyStatus === "ABORTED") return "Đã hủy (Aborted)";
+  if (item.applyStatus === "APPLIED") return hasVerifiedEffect(item)
+    ? item.changedKey ? "Hiệu ứng đã xác nhận" : "Receipt hợp lệ · Chưa xác nhận thay đổi riêng"
+    : "Applied chưa đủ bằng chứng";
+  if (item.applyStatus === "PENDING") return item.hostAppliedRevision === item.planRevision
+    ? "Host đã commit · Chờ xác nhận hiệu ứng"
+    : hostEvidenceUnavailable ? "Đã duyệt · Chưa đọc được bằng chứng Host commit" : "Đã duyệt · Chưa ghi nhận Host commit";
   return "Chưa có bằng chứng áp dụng";
 }
 
@@ -59,19 +73,19 @@ export function AdaptiveMatchPanel({ audit, matchId }: { audit: AdaptiveMatchAud
       {audit.hostEvidenceUnavailable && <p className="muted mb-2 text-sm">Tạm thời chưa đọc được dữ liệu xác nhận từ chủ phòng.</p>}
       {decisions.map((item) => <details key={item.decisionId} className="mb-2 rounded border border-[var(--line)] p-3 text-sm">
         <summary className="cursor-pointer">
-          <strong>Lần điều chỉnh {item.planRevision}</strong> · {decisionLabel(item.approvalStatus, item.applyStatus)}
+          <strong>Lần điều chỉnh {item.planRevision}</strong> · {decisionLabel(item, audit.hostEvidenceUnavailable)}
         </summary>
         <div className="mt-2 space-y-2 break-words">
           <p className="muted">Giai đoạn {item.phaseOrdinal} · {formatDate(item.createdAtUtc)}</p>
           {adaptiveReasons[item.reasonCode] && <p>{adaptiveReasons[item.reasonCode]}</p>}
-          {item.changes.length > 0 && <p>{item.applyReceipt ? "Thay đổi đã có biên nhận áp dụng" : item.approvalStatus === "HOLD" ? "Đề xuất bị giữ lại" : "Đề xuất chưa có biên nhận áp dụng"}</p>}
+          {item.changes.length > 0 && <p>{hasVerifiedEffect(item) && item.changedKey ? "Thay đổi có biên nhận hiệu ứng" : item.approvalStatus === "HOLD" ? "Đề xuất bị giữ lại" : "Đề xuất chưa có bằng chứng hiệu ứng hợp lệ"}</p>}
           {item.changes.length > 0
             ? <ul className="list-disc pl-5">{item.changes.map((change) => <li key={change.key}>
               {adaptiveParameterLabels[change.key] ?? "Thông số khác"} · {change.before} → {change.after}
             </li>)}</ul>
             : <p>{item.changedKey === "SupportTool" ? "Hành động hỗ trợ công cụ." : "Giữ nguyên thông số."}</p>}
           <p>{item.clientObservations.length > 0 ? `Đã có báo cáo quan sát từ máy người chơi · ${item.clientObservations.length} báo cáo` : "Chưa có báo cáo quan sát từ máy người chơi"}</p>
-          <p>Xác nhận từ chủ phòng · {item.applyReceipt ? formatDate(item.applyReceipt.appliedAtUtc) : "Chưa có"}</p>
+          <p>Biên nhận từ chủ phòng · {hasVerifiedEffect(item) ? formatDate(item.applyReceipt!.appliedAtUtc) : "Chưa đủ bằng chứng"}</p>
           <details className="muted text-xs">
             <summary className="cursor-pointer">Chi tiết kỹ thuật</summary>
             <p>Quy tắc {item.policyVersion} · {item.catalogVersion} · Lần trước {item.expectedPlanRevision} · Host {item.hostAppliedRevision ?? "—"}</p>

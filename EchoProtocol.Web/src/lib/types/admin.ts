@@ -53,6 +53,8 @@ export interface AdminPayment {
 
 export interface AdminWalletTransaction {
   transactionId: string;
+  actorAdminUserId: string | null;
+  actorAdminUsername: string | null;
   userId: string;
   username: string;
   displayName: string | null;

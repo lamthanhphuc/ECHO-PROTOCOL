@@ -191,6 +191,49 @@ public sealed class PaymentOrderServiceTests
     }
 
     [Fact, Trait("Category", "M4PaymentOrderUnit")]
+    public async Task HistoryReturnsOnlyOwnedOrdersWithStoredStatusesNewestFirst()
+    {
+        await using var harness = await Harness.CreateAsync();
+        var oldest = HistoryOrder(harness.OwnerId, "history-oldest", Now.AddHours(-2).UtcDateTime,
+            PaymentOrderStatus.FAILED);
+        var newest = HistoryOrder(harness.OwnerId, "history-newest", Now.UtcDateTime,
+            PaymentOrderStatus.FULFILLED);
+        var foreign = HistoryOrder(harness.OtherUserId, "history-foreign", Now.AddHours(1).UtcDateTime,
+            PaymentOrderStatus.PAID);
+        harness.Db.PaymentOrders.AddRange(oldest, newest, foreign);
+        await harness.Db.SaveChangesAsync();
+
+        var firstPage = await harness.Service.GetOwnedHistoryAsync(harness.OwnerId, 1, 1);
+        var secondPage = await harness.Service.GetOwnedHistoryAsync(harness.OwnerId, 2, 1);
+
+        Assert.True(firstPage.IsSuccess, firstPage.Message);
+        Assert.Equal(2, firstPage.Data!.TotalItems);
+        Assert.Equal(2, firstPage.Data.TotalPages);
+        var first = Assert.Single(firstPage.Data.Items);
+        Assert.Equal(newest.PaymentOrderId, first.PaymentOrderId);
+        Assert.Equal(PaymentOrderStatus.FULFILLED, first.Status);
+        var second = Assert.Single(secondPage.Data!.Items);
+        Assert.Equal(oldest.PaymentOrderId, second.PaymentOrderId);
+        Assert.Equal(PaymentOrderStatus.FAILED, second.Status);
+        Assert.DoesNotContain(firstPage.Data.Items, item => item.PaymentOrderId == foreign.PaymentOrderId);
+    }
+
+    [Theory, Trait("Category", "M4PaymentOrderUnit")]
+    [InlineData(0, 20)]
+    [InlineData(1, 0)]
+    [InlineData(1, 101)]
+    [InlineData(int.MaxValue, 100)]
+    public async Task HistoryRejectsInvalidPagination(int page, int pageSize)
+    {
+        await using var harness = await Harness.CreateAsync();
+
+        var result = await harness.Service.GetOwnedHistoryAsync(harness.OwnerId, page, pageSize);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationError, result.ErrorCode);
+    }
+
+    [Fact, Trait("Category", "M4PaymentOrderUnit")]
     public async Task ClientSuppliedAuthoritativePaymentFieldsAreRejected()
     {
         await using var harness = await Harness.CreateAsync();
@@ -199,7 +242,8 @@ public sealed class PaymentOrderServiceTests
         {
             ["amount"] = JsonDocument.Parse("1").RootElement.Clone(),
             ["status"] = JsonDocument.Parse("\"PAID\"").RootElement.Clone(),
-            ["providerTransactionId"] = JsonDocument.Parse("\"forged\"").RootElement.Clone()
+            ["providerTransactionId"] = JsonDocument.Parse("\"forged\"").RootElement.Clone(),
+            ["recipientUserId"] = JsonDocument.Parse("\"00000000-0000-0000-0000-000000000001\"").RootElement.Clone()
         };
 
         var result = await harness.Service.CreateAsync(harness.OwnerId, request);
@@ -320,6 +364,43 @@ public sealed class PaymentOrderServiceTests
         ProductReference = productReference,
         Provider = "TEST_PROVIDER",
         IdempotencyKey = key
+    };
+
+    private static PaymentOrder HistoryOrder(
+        Guid userId,
+        string idempotencyKey,
+        DateTime createdAtUtc,
+        PaymentOrderStatus status) => new()
+    {
+        PaymentOrderId = Guid.NewGuid(),
+        UserId = userId,
+        Provider = "PAYOS",
+        Purpose = "WALLET_CREDIT",
+        ProductReference = "WALLET_COIN_150",
+        FulfillmentKind = PaymentFulfillmentKind.WALLET_CREDIT,
+        WalletCreditAmount = 150,
+        Amount = 125_000,
+        Currency = "VND",
+        Status = status,
+        ProviderOrderId = status is PaymentOrderStatus.PENDING_PAYMENT or PaymentOrderStatus.PAID or PaymentOrderStatus.FULFILLED
+            ? $"provider-order-{idempotencyKey}"
+            : null,
+        ProviderTransactionId = status is PaymentOrderStatus.PAID or PaymentOrderStatus.FULFILLED
+            ? $"provider-transaction-{idempotencyKey}"
+            : null,
+        PaidAtUtc = status is PaymentOrderStatus.PAID or PaymentOrderStatus.FULFILLED
+            ? createdAtUtc
+            : null,
+        FulfillmentReference = status == PaymentOrderStatus.FULFILLED
+            ? $"fulfillment-{idempotencyKey}"
+            : null,
+        FulfilledAtUtc = status == PaymentOrderStatus.FULFILLED
+            ? createdAtUtc
+            : null,
+        IdempotencyKey = idempotencyKey,
+        RequestFingerprint = new string('A', 64),
+        CreatedAtUtc = createdAtUtc,
+        UpdatedAtUtc = createdAtUtc
     };
 
     private sealed class Harness : IAsyncDisposable

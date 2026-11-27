@@ -2499,6 +2499,8 @@ namespace EchoProtocol.Networking
 
         private InteractionValidationResult ValidateRequester(PlayerRef source, uint sequence, bool requireActivePlayer = true)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked)
+                return InteractionValidationResult.InvalidRequester;
             if (NetworkPlayerFlashlight.IsResonating(gameObject)) return InteractionValidationResult.InvalidRequester;
             if (!Object.HasStateAuthority || !source.IsValid || source != Object.InputAuthority)
             {

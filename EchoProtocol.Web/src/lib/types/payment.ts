@@ -49,6 +49,14 @@ export interface PaymentOrder {
   isReplay: boolean;
 }
 
+export interface PaymentOrderHistoryPage {
+  items: PaymentOrder[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
 export interface PaymentCheckout {
   paymentOrderId: string;
   provider: string;

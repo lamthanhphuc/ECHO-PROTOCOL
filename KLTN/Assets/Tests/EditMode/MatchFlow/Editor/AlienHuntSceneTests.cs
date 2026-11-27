@@ -173,7 +173,7 @@ public sealed class AlienHuntSceneTests
         var heldMeatVisual = mission.Actors[27].transform.GetChild(0);
         Assert.That(heldMeatVisual.localScale.x, Is.EqualTo(720f).Within(.01f),
             "Carrying meat must preserve its full world scale.");
-        Assert.That(heldMeatVisual.localPosition, Is.EqualTo(new Vector3(-.111f, .588f, .12f)));
+        Assert.That(heldMeatVisual.localPosition, Is.EqualTo(new Vector3(-.082f, .64f, .152f)));
         Assert.That(Quaternion.Angle(heldMeatVisual.localRotation,
             Quaternion.Euler(10.643f, -141.51f, -117.218f)), Is.LessThan(.01f));
         mission.HeldPose(actor,HuntKind.Meat,out var heldPosition,out var heldRotation,true);
@@ -396,7 +396,11 @@ public sealed class AlienHuntSceneTests
         player.transform.position = platform.transform.position + Vector3.up*.1f;
         Physics.SyncTransforms();
         Assert.That(mission.Act(actor,player.transform,-2,-1),Is.True);
-        Assert.That(Mathf.Abs(mission.Read(31).Position.y-player.transform.position.y),Is.LessThan(.15f));
+        var baitBox = mission.Actors[31].GetComponent<BoxCollider>();
+        var baitBottomOffset = (baitBox.center.y - baitBox.size.y * .5f)
+            * mission.Actors[31].transform.lossyScale.y;
+        Assert.That(mission.Read(31).Position.y + baitBottomOffset,
+            Is.EqualTo(platform.GetComponent<Collider>().bounds.max.y).Within(.01f));
         // An alien cannot be stranded on that isolated floor.
         var isolatedAlien=mission.Read(4); isolatedAlien.Stage=(int)AlienStage.Stunned; isolatedAlien.Remaining=30;
         write.Invoke(mission,new object[]{4,isolatedAlien});

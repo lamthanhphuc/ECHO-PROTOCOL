@@ -319,12 +319,20 @@ public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryServ
     }
 
     public async Task<ServiceResult<AdminGrantCreditsResponse>> GrantCreditsAsync(
+        Guid adminId,
         Guid userId,
         AdminGrantCreditsRequest request,
         CancellationToken cancellationToken = default)
     {
         const int maximumGrant = 100_000;
         const int maximumReasonLength = 200;
+
+        if (adminId == Guid.Empty)
+        {
+            return ServiceResult<AdminGrantCreditsResponse>.Failure(
+                "Admin identity is required",
+                ErrorCodes.TokenInvalid);
+        }
 
         if (request.Amount is < 1 or > maximumGrant)
         {
@@ -336,10 +344,10 @@ public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryServ
         var reason =
             (request.Reason ?? string.Empty).Trim();
 
-        if (reason.Length > maximumReasonLength)
+        if (reason.Length is < 1 or > maximumReasonLength)
         {
             return ServiceResult<AdminGrantCreditsResponse>.Failure(
-                $"Reason must not exceed {maximumReasonLength} characters",
+                $"Reason must be between 1 and {maximumReasonLength} characters",
                 ErrorCodes.ValidationError);
         }
 
@@ -397,6 +405,7 @@ public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryServ
                 Id = transactionId,
                 WalletId = wallet.Id,
                 Type = WalletTransactionType.ADMIN_GRANT,
+                ActorAdminUserId = adminId,
                 Amount = request.Amount,
                 BalanceBefore = balanceBefore,
                 BalanceAfter = balanceAfter,
@@ -414,6 +423,7 @@ public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryServ
         return ServiceResult<AdminGrantCreditsResponse>.Success(
             new AdminGrantCreditsResponse
             {
+                ActorAdminUserId = adminId,
                 UserId = userId,
                 TransactionId = transactionId,
                 Reference = reference,
@@ -431,6 +441,11 @@ public sealed partial class AdminQueryService(AppDbContext db) : IAdminQueryServ
         db.WalletTransactions.AsNoTracking().Select(item => new AdminWalletTransactionResponse
         {
             TransactionId = item.Id,
+            ActorAdminUserId = item.ActorAdminUserId,
+            ActorAdminUsername = item.ActorAdminUserId == null
+                ? null
+                : db.Users.Where(user => user.Id == item.ActorAdminUserId)
+                    .Select(user => user.Username).FirstOrDefault(),
             UserId = item.Wallet.UserId,
             Username = item.Wallet.User.Username,
             DisplayName = item.Wallet.User.PlayerProfile == null

@@ -15,6 +15,22 @@ public sealed class PaymentOrdersController(
     IPaymentCheckoutService checkoutService,
     ILogger<PaymentOrdersController> logger) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IActionResult> GetOwnedHistory(
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+            return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+
+        var result = await service.GetOwnedHistoryAsync(userId, page, pageSize, cancellationToken);
+        return result.IsSuccess
+            ? Ok(ApiResponse<PaymentOrderHistoryResponse>.Ok(result.Data!, result.Message))
+            : StatusCode(StatusFor(result.ErrorCode),
+                ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
+    }
+
     [HttpGet("{paymentOrderId:guid}")]
     public async Task<IActionResult> GetOwned(
         Guid paymentOrderId,

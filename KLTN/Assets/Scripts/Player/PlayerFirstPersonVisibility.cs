@@ -16,6 +16,13 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
     private NetworkObject _networkObject;
     private EchoProtocol.Networking.NetworkPlayerMovement _networkMovement;
     private PlayerHidingController _hidingController;
+    public bool IsCinematicView { get; private set; }
+
+    public void SetCinematicView(bool enabled)
+    {
+        IsCinematicView = enabled;
+        ApplyVisibility(IsLocalView());
+    }
 
     private void Awake()
     {
@@ -187,6 +194,7 @@ public sealed class PlayerFirstPersonVisibility : MonoBehaviour
 
     private bool IsLocalView()
     {
+        if (IsCinematicView) return false;
         if (_networkObject == null)
         {
             _networkObject = GetComponentInParent<NetworkObject>();

@@ -124,6 +124,7 @@ public sealed class AdminGrantExperienceRequest
 
 public sealed class AdminGrantCreditsResponse
 {
+    public Guid ActorAdminUserId { get; init; }
     public Guid UserId { get; init; }
     public Guid TransactionId { get; init; }
     public Guid Reference { get; init; }
@@ -247,6 +248,8 @@ public sealed class AdminPaymentFulfillmentSummary
 public sealed class AdminWalletTransactionResponse
 {
     public Guid TransactionId { get; init; }
+    public Guid? ActorAdminUserId { get; init; }
+    public string? ActorAdminUsername { get; init; }
     public Guid UserId { get; init; }
     public string Username { get; init; } = string.Empty;
     public string? DisplayName { get; init; }

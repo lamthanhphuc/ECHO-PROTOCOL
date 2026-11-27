@@ -142,7 +142,8 @@ InventoryItem and ShopItem records.
 | Id | UUID PK | |
 | WalletId | UUID FK → Wallets | |
 | Amount | INT | Reward `>= 0`; purchase `<= 0` |
-| Type | VARCHAR(30) | `MATCH_REWARD`, `PURCHASE` |
+| Type | VARCHAR(30) | `MATCH_REWARD`, `PURCHASE`, `PAYMENT_FULFILLMENT`, `ADMIN_GRANT` |
+| ActorAdminUserId | UUID NULL | Authenticated admin for `ADMIN_GRANT`; null for other entries and historical rows |
 | BalanceBefore | INT | Non-negative |
 | BalanceAfter | INT | Non-negative; after = before + amount |
 | ReferenceId | UUID | MatchId or PurchaseId |
