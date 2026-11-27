@@ -1179,7 +1179,7 @@ namespace EchoProtocol.Api.Migrations
 
                     b.ToTable("MatchResults", t =>
                         {
-                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND \"DurationSeconds\" <= 7260");
+                            t.HasCheckConstraint("CK_MatchResults_DurationSeconds_Range", "\"DurationSeconds\" >= 60 AND (\"DurationSeconds\" <= 7260 OR \"SalvageCompletedDays\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_MatchResults_ObjectiveCompletion_Range", "CAST(\"ObjectiveCompletion\" AS NUMERIC) >= 0 AND CAST(\"ObjectiveCompletion\" AS NUMERIC) <= 1");
 
@@ -2437,6 +2437,41 @@ namespace EchoProtocol.Api.Migrations
                         .HasFilter("\"ClosedAtUtc\" IS NULL");
 
                     b.ToTable("RoomSessions");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.SalvageCheckpoint", b =>
+                {
+                    b.Property<Guid>("MatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Failed")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasMaxLength(65536)
+                        .HasColumnType("character varying(65536)");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("SavedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasMaxLength(262144)
+                        .HasColumnType("character varying(262144)");
+
+                    b.HasKey("MatchId");
+
+                    b.HasIndex("OwnerId", "SavedAtUtc");
+
+                    b.ToTable("SalvageCheckpoints");
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioAdaptivePlanV2", b =>
@@ -3785,6 +3820,15 @@ namespace EchoProtocol.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("EchoProtocol.Api.Entities.SalvageCheckpoint", b =>
+                {
+                    b.HasOne("EchoProtocol.Api.Entities.MatchAuthorityBinding", null)
+                        .WithOne()
+                        .HasForeignKey("EchoProtocol.Api.Entities.SalvageCheckpoint", "MatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EchoProtocol.Api.Entities.ScenarioAdaptivePlanV2", b =>

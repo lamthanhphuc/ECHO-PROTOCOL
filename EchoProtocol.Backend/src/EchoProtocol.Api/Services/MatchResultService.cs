@@ -44,6 +44,17 @@ public sealed class MatchResultService : IMatchResultService
             $"Admin={adminId:D}; ReviewedAt={UtcNow():O}; Reason={reason.Trim()}");
     }
 
+    // Recovery trusts only a snapshot already received under a live host lease, never a client replay timestamp.
+    public async Task<ServiceResult<MatchResultResponse>> RecoverSalvageCheckpointAsync(Guid owner,Guid matchId,CancellationToken ct)
+    {
+        var snapshot=await _db.SalvageCheckpoints.AsNoTracking().SingleOrDefaultAsync(x=>x.MatchId==matchId&&x.OwnerId==owner,ct);
+        if(snapshot==null)return Failure("Checkpoint not found",ErrorCodes.MatchNotFound);
+        var match=await _db.MatchAuthorityBindings.AsNoTracking().SingleAsync(x=>x.MatchId==matchId,ct);
+        if(match.LeaseExpiresAtUtc>UtcNow())return Failure("Session is still active",ErrorCodes.MatchResultInvalidState);
+        var request=JsonSerializer.Deserialize<SubmitMatchResultRequest>(snapshot.ResultJson,new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if(request==null)return Failure("Checkpoint has no result",ErrorCodes.MatchResultInvalidPayload);
+        return await SubmitCoreAsync(match.HostUserId,matchId,request,ct,snapshot.SavedAtUtc,"Salvage server checkpoint recovery");
+    }
     private async Task<ServiceResult<MatchResultResponse>> SubmitCoreAsync(Guid hostUserId, Guid matchId,
         SubmitMatchResultRequest request, CancellationToken cancellationToken,
         DateTime? reviewedEndUtc = null, string? recoveryAudit = null)
@@ -95,7 +106,7 @@ public sealed class MatchResultService : IMatchResultService
                 return Failure("Invalid Salvage result evidence",ErrorCodes.MatchResultInvalidPayload);
             var wallNow = UtcNow();
             var now = reviewedEndUtc ?? wallNow;
-            if (match.Status != MatchAuthorityStatus.InMatch)
+            if (match.Status != MatchAuthorityStatus.InMatch && !(salvage && match.Status==MatchAuthorityStatus.Ended && recoveryAudit=="Salvage server checkpoint recovery"))
             {
                 return Failure(
                     "Only an active InMatch match can accept a result",
@@ -117,7 +128,7 @@ public sealed class MatchResultService : IMatchResultService
             }
 
             var durationSeconds = checked((int)Math.Floor((now - match.StartedAtUtc.Value).TotalSeconds));
-            if (durationSeconds is < GameConstants.MinimumMatchDurationSeconds or > GameConstants.MaximumAcceptedMatchDurationSeconds)
+            if (durationSeconds < GameConstants.MinimumMatchDurationSeconds || (!salvage && durationSeconds > GameConstants.MaximumAcceptedMatchDurationSeconds))
             {
                 return Failure(
                     $"Match duration must be between {GameConstants.MinimumMatchDurationSeconds} and {GameConstants.MaximumAcceptedMatchDurationSeconds} seconds",

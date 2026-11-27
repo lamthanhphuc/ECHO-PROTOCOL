@@ -53,7 +53,7 @@ jobs:
             docker save "aws-lightsail-backend:$GITHUB_SHA" | gzip -1 > release/backend-image.tar.gz
             gzip -t release/backend-image.tar.gz
             mkdir -p release/migrations
-            cp EchoProtocol.Backend/deploy/sql/Salvage-Release-And-Rewards.sql release/migrations/
+            cp EchoProtocol.Backend/deploy/sql/Salvage-*.sql release/migrations/
             docker image rm "aws-lightsail-backend:$GITHUB_SHA"
             gzip -dc release/backend-image.tar.gz | docker load
             test "$(docker image inspect "aws-lightsail-backend:$GITHUB_SHA" --format '{{.Id}}')" = "$(cat release/backend-image-id.txt)"

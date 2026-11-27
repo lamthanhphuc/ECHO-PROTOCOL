@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
 
     public DbSet<UserAgreementAcceptance> UserAgreementAcceptances => Set<UserAgreementAcceptance>();
     public DbSet<RewardConfiguration> RewardConfigurations => Set<RewardConfiguration>();
+    public DbSet<SalvageCheckpoint> SalvageCheckpoints => Set<SalvageCheckpoint>();
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<PlayerProfile> PlayerProfiles => Set<PlayerProfile>();
@@ -484,13 +485,20 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<SalvageCheckpoint>(entity=>
+        {
+            entity.HasKey(x=>x.MatchId);entity.Property(x=>x.Revision).IsConcurrencyToken();
+            entity.Property(x=>x.StateJson).HasMaxLength(262144);entity.Property(x=>x.ResultJson).HasMaxLength(65536);
+            entity.HasIndex(x=>new {x.OwnerId,x.SavedAtUtc});
+            entity.HasOne<MatchAuthorityBinding>().WithOne().HasForeignKey<SalvageCheckpoint>(x=>x.MatchId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<MatchResult>(entity =>
         {
             entity.ToTable(t =>
             {
                 t.HasCheckConstraint(
                     "CK_MatchResults_DurationSeconds_Range",
-                    $"\"DurationSeconds\" >= {GameConstants.MinimumMatchDurationSeconds} AND \"DurationSeconds\" <= {GameConstants.MaximumAcceptedMatchDurationSeconds}");
+                    $"\"DurationSeconds\" >= {GameConstants.MinimumMatchDurationSeconds} AND (\"DurationSeconds\" <= {GameConstants.MaximumAcceptedMatchDurationSeconds} OR \"SalvageCompletedDays\" IS NOT NULL)");
                 t.HasCheckConstraint(
                     "CK_MatchResults_Outcome_Allowed",
                     "\"Outcome\" IN ('WIN', 'LOSE')");

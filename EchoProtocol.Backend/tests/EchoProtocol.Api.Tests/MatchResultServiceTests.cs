@@ -434,6 +434,62 @@ public sealed class MatchResultServiceTests
         request.SalvageCompletedLevels=0;
         var changed=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);Assert.Equal(ErrorCodes.MatchResultConflict,changed.ErrorCode);
     }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LongSessionDurationExceptionIsSalvageOnly(bool salvage)
+    {
+        await using var harness=await UnitHarness.CreateAsync(matchAge:TimeSpan.FromHours(4));
+        var request=harness.ValidRequest();
+        if(salvage)
+        {
+            var match=await harness.Db.MatchAuthorityBindings.SingleAsync();match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";
+            await harness.Db.SaveChangesAsync();request.EvidenceVersion=2;request.SalvageCompletedLevels=1;request.SalvageCompletedDays=3;
+            foreach(var player in request.Players){player.EvidenceComplete=true;player.ObjectiveActions=0;player.RescueActions=0;}
+        }
+        var result=await harness.Service.SubmitAsync(harness.HostId,harness.MatchId,request);
+        if(salvage)Assert.True(result.IsSuccess,result.Message);
+        else Assert.Equal(ErrorCodes.MatchResultInvalidDuration,result.ErrorCode);
+    }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SalvageRecoveryUsesServerSnapshotAndNeverOverridesLiveLease(bool expired)
+    {
+        await using var harness=await UnitHarness.CreateAsync(status:expired?MatchAuthorityStatus.Ended:MatchAuthorityStatus.InMatch,leaseExpired:expired,matchAge:TimeSpan.FromMinutes(10));
+        var match=await harness.Db.MatchAuthorityBindings.SingleAsync();match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";
+        var request=harness.ValidRequest();request.EvidenceVersion=2;request.SalvageCompletedLevels=1;request.SalvageCompletedDays=3;
+        foreach(var player in request.Players){player.EvidenceComplete=true;player.ObjectiveActions=0;player.RescueActions=0;}
+        harness.Db.SalvageCheckpoints.Add(new EchoProtocol.Api.Entities.SalvageCheckpoint {MatchId=harness.MatchId,OwnerId=harness.HostId,Revision=1,
+            StateJson="{}",ResultJson=System.Text.Json.JsonSerializer.Serialize(request,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),SavedAtUtc=match.StartedAtUtc!.Value.AddMinutes(5)});
+        await harness.Db.SaveChangesAsync();
+        var service=(MatchResultService)harness.Service;
+        var denied=await service.RecoverSalvageCheckpointAsync(harness.PlayerId,harness.MatchId,default);Assert.False(denied.IsSuccess);
+        var result=await service.RecoverSalvageCheckpointAsync(harness.HostId,harness.MatchId,default);
+        if(!expired){Assert.False(result.IsSuccess);return;}
+        Assert.True(result.IsSuccess,result.Message);
+        var stored=await harness.Db.MatchResults.SingleAsync();Assert.Equal(300,stored.DurationSeconds);
+        var replay=await service.RecoverSalvageCheckpointAsync(harness.HostId,harness.MatchId,default);Assert.True(replay.IsSuccess);Assert.True(replay.Data!.IsReplay);
+    }
+    [Fact]
+    public async Task SalvageCheckpointRejectsWrongHostAndStaleWrites()
+    {
+        await using var h=await UnitHarness.CreateAsync();var match=await h.Db.MatchAuthorityBindings.SingleAsync();match.MapId=MatchContentCatalog.SalvageMap;match.Difficulty="NORMAL";
+        await h.Db.SaveChangesAsync();
+        var controller=new EchoProtocol.Api.Controllers.SalvageCheckpointsController(h.Db,new FixedTimeProvider(Now),null!,null!);
+        void Identity(Guid id)=>controller.ControllerContext=new Microsoft.AspNetCore.Mvc.ControllerContext {HttpContext=new Microsoft.AspNetCore.Http.DefaultHttpContext {User=new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(new[]{new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier,id.ToString())},"test"))}};
+        var result=h.ValidRequest();result.EvidenceVersion=2;result.SalvageCompletedDays=0;result.SalvageCompletedLevels=0;
+        var json=System.Text.Json.JsonSerializer.Serialize(new {owner=h.HostId.ToString(),version=1,cycle=1,day=1,funds=0,cargo=new object[128]});
+        var upload=new EchoProtocol.Api.Controllers.SalvageCheckpointsController.SaveRequest {MatchId=h.MatchId,Revision=1,StateJson=json,Result=result};
+        Identity(h.PlayerId);Assert.IsType<Microsoft.AspNetCore.Mvc.ForbidResult>(await controller.Save(upload,default));
+        Assert.Empty(h.Db.SalvageCheckpoints);
+        Identity(h.HostId);Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(await controller.Save(upload,default));
+        upload.StateJson=json.Replace("funds\":0","funds\":999");
+        Assert.IsType<Microsoft.AspNetCore.Mvc.ConflictObjectResult>(await controller.Save(upload,default));
+        Assert.Equal(json,(await h.Db.SalvageCheckpoints.SingleAsync()).StateJson);
+        match.LeaseExpiresAtUtc=Now.AddSeconds(-1).UtcDateTime;await h.Db.SaveChangesAsync();upload.Revision=2;
+        Assert.IsType<Microsoft.AspNetCore.Mvc.ForbidResult>(await controller.Save(upload,default));
+    }
     [Fact] public async Task SalvageCannotOmitEvidenceOrInjectItIntoAnOldMode()
     {
         await using var harness=await UnitHarness.CreateAsync();var request=harness.ValidRequest();
