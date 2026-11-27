@@ -5,6 +5,7 @@ using System.Linq;
 using EchoProtocol.Auth;
 using EchoProtocol.Audio;
 using EchoProtocol.Api;
+using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using EchoProtocol.UI;
 using UnityEngine;
@@ -57,7 +58,10 @@ namespace EchoProtocol.UI.MainMenu
         private Text _pageLabel;
         private Text _mapLabel;
         private Text _gameModeLabel;
-        private bool _purgeMode;
+        private enum GameBoard { Expedition, Purge, Salvage }
+        private GameBoard _gameBoard;
+        private bool IsSalvage => _gameBoard == GameBoard.Salvage;
+        private Button _mapFilter;
         private Text _difficultyLabel;
         private Text _columnLabel;
         private Button _soloTab;
@@ -360,14 +364,28 @@ namespace EchoProtocol.UI.MainMenu
             _gameModeLabel = modeButton.GetComponentInChildren<Text>();
             modeButton.onClick.AddListener(() =>
             {
-                _purgeMode = !_purgeMode;
-                _maps = _purgeMode ? new[] { "Scene_B" } : new[] { "SciFi", "Scene_A" };
+                _gameBoard = _gameBoard switch
+                {
+                    GameBoard.Expedition => GameBoard.Purge,
+                    GameBoard.Purge => GameBoard.Salvage,
+                    _ => GameBoard.Expedition
+                };
+                _maps = _gameBoard switch
+                {
+                    GameBoard.Purge => new[] { "Scene_B" },
+                    GameBoard.Salvage => new[] { LobbyMapCatalog.SalvageScene },
+                    _ => new[] { "SciFi", "Scene_A" }
+                };
                 _mapId = _maps[0];
                 _page = 1;
                 RefreshFilters();
                 Fetch();
             });
             var mapButton = NewFilterButton("MapFilter", 320f);
+            _mapFilter = mapButton;
+            var mapColors = mapButton.colors;
+            mapColors.disabledColor = new Color(.72f, .72f, .72f, 1f);
+            mapButton.colors = mapColors;
             TopLeft((RectTransform)mapButton.transform, 288f, 194f, 320f, 42f);
             _mapLabel = mapButton.GetComponentInChildren<Text>();
             mapButton.onClick.AddListener(CycleMap);
@@ -736,7 +754,7 @@ namespace EchoProtocol.UI.MainMenu
                     _difficulties = data.difficulties;
                 RefreshFilters();
                 _totalCount = Mathf.Max(0, data.totalCount);
-                RenderEntries(LeaderboardPresentation.OrderEntries(data.items));
+                RenderEntries(LeaderboardPresentation.OrderEntries(data.items, IsSalvage));
                 PresentState(_totalCount == 0
                     ? ArchiveState.Empty : ArchiveState.Records, _totalCount);
                 RefreshPagination();
@@ -763,8 +781,11 @@ namespace EchoProtocol.UI.MainMenu
                     SetStatus(L("HỒ SƠ: ĐANG KẾT NỐI", "ARCHIVE: CONNECTING"));
                     break;
                 case ArchiveState.Empty:
-                    _bodyMessage.text = L("CHƯA CÓ THÀNH TÍCH", "NO EXTRACTIONS ON FILE");
-                    _bodySubline.text = L("Chỉ xếp hạng trận thắng hoàn thành 100%, có người sống sót không mất kết nối.\nCá nhân: 1 người · Đội: 2–4 người. Hãy thử bộ lọc khác hoặc tải lại.", "Ranks wins with 100% completion and a connected survivor.\nSolo: 1 player · Team: 2–4 players. Try another filter or refresh.");
+                    _bodyMessage.text = IsSalvage ? L("CHƯA CÓ THÀNH TÍCH THU HỒI", "NO SALVAGE RECORDS")
+                        : L("CHƯA CÓ THÀNH TÍCH", "NO EXTRACTIONS ON FILE");
+                    _bodySubline.text = IsSalvage
+                        ? L("Cấp cao nhất đã lưu được ghi nhận khi chuyến thu hồi kết thúc.", "Your highest saved level is recorded when the salvage run ends.")
+                        : L("Chỉ xếp hạng trận thắng hoàn thành 100%, có người sống sót không mất kết nối.\nCá nhân: 1 người · Đội: 2–4 người. Hãy thử bộ lọc khác hoặc tải lại.", "Ranks wins with 100% completion and a connected survivor.\nSolo: 1 player · Team: 2–4 players. Try another filter or refresh.");
                     SetStatus(L("HỒ SƠ: CHƯA CÓ DỮ LIỆU", "ARCHIVE: NO RECORDS"));
                     break;
                 case ArchiveState.Error:
@@ -810,7 +831,7 @@ namespace EchoProtocol.UI.MainMenu
                 row.pivot = new Vector2(0.5f, 1f);
                 row.anchoredPosition = new Vector2(0f, -i * rowHeight);
                 row.sizeDelta = new Vector2(0f, rowHeight - 3f);
-                view.Bind(entry, _mode, _portraitSprite, i);
+                view.Bind(entry, _mode, _portraitSprite, i, IsSalvage);
             }
             _recordsScroll.StopMovement();
             _recordsScroll.verticalNormalizedPosition = 1f;
@@ -833,14 +854,26 @@ namespace EchoProtocol.UI.MainMenu
             "SciFi" => L("Cơ sở nghiên cứu", "Research Facility"),
             "Scene_A" => L("Vùng ngập", "Flooded District"),
             "Scene_B" => L("Khu thanh trừng", "Purge Grounds"),
+            LobbyMapCatalog.SalvageScene => L("Cơ sở nghiên cứu - Thu hồi", "Research Facility - Salvage"),
             _ => L("Bản đồ chưa xác định", "Unknown map")
         };
 
         private void RefreshFilters()
         {
-            if (_mapLabel != null) _mapLabel.text = L("BẢN ĐỒ", "MAP") + "  < " + DisplayMap(_mapId) + " >";
-            if (_gameModeLabel != null) _gameModeLabel.text = L("CHẾ ĐỘ", "MODE") + "  < "
-                + (_purgeMode ? L("Thanh trừng", "Purge") : L("Khám phá", "Expedition")) + " >";
+            if (_mapFilter != null) _mapFilter.interactable = !IsSalvage;
+            if (_mapLabel != null) _mapLabel.text = L("BẢN ĐỒ", "MAP") + "  "
+                + (IsSalvage ? DisplayMap(_mapId) : "< " + DisplayMap(_mapId) + " >");
+            string gameMode = _gameBoard switch
+            {
+                GameBoard.Purge => L("Thanh trừng", "Purge"),
+                GameBoard.Salvage => L("Thu hồi", "Salvage"),
+                _ => L("Khám phá", "Expedition")
+            };
+            if (_gameModeLabel != null) _gameModeLabel.text = L("CHẾ ĐỘ", "MODE") + "  < " + gameMode + " >";
+            SetLabel(_panel.Find("TimeHeading"), IsSalvage ? L("CẤP ĐẠT ĐƯỢC", "LEVEL REACHED")
+                : L("THỜI GIAN (PHÚT.GIÂY)", "TIME (MIN.SEC)"));
+            SetLabel(_panel.Find("EvidenceAnnotation"), IsSalvage ? string.Empty
+                : L("CHỈ NGƯỜI NHANH NHẤT\nĐỂ LẠI DẤU VẾT...", "ONLY THE FASTEST\nLEAVE A TRACE..."));
             if (_difficultyLabel != null)
                 _difficultyLabel.text = L("ĐỘ KHÓ", "DIFFICULTY") + "  < "
                     + (_difficulty == "EASY" ? L("Dễ", "Easy") : _difficulty == "HARD" ? L("Khó", "Hard") : L("Thường", "Normal")) + " >";
@@ -855,9 +888,6 @@ namespace EchoProtocol.UI.MainMenu
             SetButtonLabel(_soloTab, L("CÁ NHÂN", "SOLO RANKING"));
             SetButtonLabel(_teamTab, L("ĐỘI", "TEAM RANKING"));
             SetButtonLabel(_retryButton, L("TẢI LẠI", "REFRESH"));
-            SetLabel(_panel.Find("TimeHeading"), L("THỜI GIAN (PHÚT.GIÂY)", "TIME (MIN.SEC)"));
-            SetLabel(_panel.Find("EvidenceAnnotation"),
-                L("CHỈ NGƯỜI NHANH NHẤT\nĐỂ LẠI DẤU VẾT...", "ONLY THE FASTEST\nLEAVE A TRACE..."));
             var note = _panel.Find("EvidenceNote");
             SetLabel(note != null ? note.Find("EvidenceStamp") : null,
                 L("ĐỐI TƯỢNG\nKHÔNG RỜI ĐI", "SUBJECTS\nNEVER LEAVE"));

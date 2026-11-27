@@ -24,7 +24,7 @@ namespace EchoProtocol.UI.MainMenu
         private void Awake() => ResolveBindings();
 
         public void Bind(LeaderboardEntryDto entry, LeaderboardMode mode,
-            Sprite portrait, int stripeIndex)
+            Sprite portrait, int stripeIndex, bool byLevel = false)
         {
             ResolveBindings();
             if (entry == null) return;
@@ -81,8 +81,8 @@ namespace EchoProtocol.UI.MainMenu
             }
             if (durationText != null)
             {
-                durationText.text = LeaderboardPresentation.FormatDuration(
-                    entry.durationCentiseconds);
+                durationText.text = byLevel ? entry.reachedLevel.ToString("N0")
+                    : LeaderboardPresentation.FormatDuration(entry.durationCentiseconds);
                 durationText.color = IndustrialUiStyle.Text;
                 durationText.supportRichText = false;
             }

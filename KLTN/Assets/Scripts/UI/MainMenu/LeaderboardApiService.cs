@@ -31,6 +31,7 @@ namespace EchoProtocol.UI.MainMenu
         public string displayName;
         public string avatarUrl;
         public long durationCentiseconds;
+        public int reachedLevel;
         public string squadLabel;
         public LeaderboardPlayerDto[] players;
     }
@@ -103,7 +104,7 @@ namespace EchoProtocol.UI.MainMenu
             return minutes.ToString("00") + "." + seconds.ToString("00");
         }
 
-        public static LeaderboardEntryDto[] OrderEntries(LeaderboardEntryDto[] entries)
+        public static LeaderboardEntryDto[] OrderEntries(LeaderboardEntryDto[] entries, bool byLevel = false)
         {
             if (entries == null) return Array.Empty<LeaderboardEntryDto>();
             var ordered = (LeaderboardEntryDto[])entries.Clone();
@@ -112,7 +113,8 @@ namespace EchoProtocol.UI.MainMenu
                 if (ReferenceEquals(a, b)) return 0;
                 if (a == null) return 1;
                 if (b == null) return -1;
-                int comparison = a.durationCentiseconds.CompareTo(b.durationCentiseconds);
+                int comparison = byLevel ? b.reachedLevel.CompareTo(a.reachedLevel)
+                    : a.durationCentiseconds.CompareTo(b.durationCentiseconds);
                 return comparison != 0 ? comparison : a.rank.CompareTo(b.rank);
             });
             return ordered;

@@ -50,21 +50,6 @@ public sealed class HorrorPresentationTests
         => Assert.That(HorrorPresentationRules.StepPrefix(metal, soft, crouch, sprint), Is.EqualTo(expected));
 
     [Test]
-    public void EchoSettingClampsInvalidSavedValuesAndPersistsOff()
-    {
-        string key = "Echo.Audio.EchoIntensity";
-        bool existed = PlayerPrefs.HasKey(key); int old = PlayerPrefs.GetInt(key);
-        try
-        {
-            HorrorPresentationSettings.SetEchoIntensity(-10);
-            Assert.That(HorrorPresentationSettings.EchoIntensity, Is.Zero);
-            HorrorPresentationSettings.SetEchoIntensity(99);
-            Assert.That(HorrorPresentationSettings.EchoIntensity, Is.EqualTo(2));
-        }
-        finally { if (existed) PlayerPrefs.SetInt(key, old); else PlayerPrefs.DeleteKey(key); PlayerPrefs.Save(); }
-    }
-
-    [Test]
     public void RequiredPresentationClipsResolveWithoutNewAudioDependencies()
     {
         var catalog = Resources.Load<GameAudioCatalog>("GameAudioCatalog");

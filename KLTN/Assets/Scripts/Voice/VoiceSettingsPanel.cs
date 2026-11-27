@@ -197,7 +197,7 @@ namespace EchoProtocol.Voice
             // Voice output already has a slider in the microphone card.
             foreach (string name in new[] { "Voice", "VoiceTitle", "VoiceValue" })
                 audioRect.Find(name)?.gameObject.SetActive(false);
-            audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 280);
+            audioRect.sizeDelta = new Vector2(audioRect.sizeDelta.x, 214);
             string[] audioRows = { "Master", "Music", "Effects" };
             for (int i = 0; i < audioRows.Length; i++)
                 foreach (string suffix in new[] { "", "Title", "Value" })
@@ -205,10 +205,6 @@ namespace EchoProtocol.Voice
                     var row = audioRect.Find(audioRows[i] + suffix) as RectTransform;
                     if (row != null) row.anchoredPosition = new Vector2(row.anchoredPosition.x, -(65 + i * 54));
                 }
-            SettingsMenuWidgets.Button("RareAmbience", audioRect, 34, 235, 315, 32, "").onClick.AddListener(() =>
-            { HorrorPresentationSettings.SetAmbience(!HorrorPresentationSettings.AmbienceEnabled); RefreshVisuals(); });
-            SettingsMenuWidgets.Button("EchoIntensity", audioRect, 365, 235, 330, 32, "").onClick.AddListener(() =>
-            { HorrorPresentationSettings.SetEchoIntensity((HorrorPresentationSettings.EchoIntensity + 1) % 3); RefreshVisuals(); });
             LayoutRect("Devices", height: 278);
             LayoutRect("Devices/List", height: 106);
             var viewport = Find<RectTransform>(Body + "Devices/List/Viewport");
@@ -827,16 +823,6 @@ namespace EchoProtocol.Voice
 
         private void RefreshVisuals()
         {
-            TextAt(Body + "Audio/RareAmbience/Label").text = GameLanguage.Choose("Âm môi trường: ", "Ambient events: ")
-                + (HorrorPresentationSettings.AmbienceEnabled ? GameLanguage.Choose("Bật", "On") : GameLanguage.Choose("Tắt", "Off"));
-            int echo = HorrorPresentationSettings.EchoIntensity;
-            var echoLabel = TextAt(Body + "Audio/EchoIntensity/Label");
-            echoLabel.text = GameLanguage.Choose("Hiệu ứng dị thường: ", "Anomaly effects: ") + (echo == 0 ? GameLanguage.Choose("Tắt", "Off")
-                : echo == 1 ? GameLanguage.Choose("Nhẹ", "Low") : GameLanguage.Choose("Bình thường", "Normal"));
-            echoLabel.textWrappingMode = TextWrappingModes.NoWrap;
-            echoLabel.enableAutoSizing = true;
-            echoLabel.fontSizeMin = 17f;
-            echoLabel.fontSizeMax = SettingsMenuWidgets.ControlFontSize;
             TextAt("Overlay/Window/LanguageShortcut/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH";
             var sceneName = SceneManager.GetActiveScene().name;
             _creditsButton.gameObject.SetActive(sceneName == EchoProtocol.Core.GameConstants.SceneMainMenu

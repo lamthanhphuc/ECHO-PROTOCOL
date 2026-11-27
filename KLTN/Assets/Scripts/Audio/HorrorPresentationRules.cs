@@ -2,17 +2,6 @@ using UnityEngine;
 
 namespace EchoProtocol.Audio
 {
-    // Presentation preferences never change hearing, scanner results or AED inputs.
-    public static class HorrorPresentationSettings
-    {
-        public static bool AmbienceEnabled => PlayerPrefs.GetInt("Echo.Audio.RareAmbience", 1) != 0;
-        public static int EchoIntensity => Mathf.Clamp(PlayerPrefs.GetInt("Echo.Audio.EchoIntensity", 2), 0, 2);
-        public static void SetAmbience(bool enabled)
-        { PlayerPrefs.SetInt("Echo.Audio.RareAmbience", enabled ? 1 : 0); PlayerPrefs.Save(); }
-        public static void SetEchoIntensity(int intensity)
-        { PlayerPrefs.SetInt("Echo.Audio.EchoIntensity", Mathf.Clamp(intensity, 0, 2)); PlayerPrefs.Save(); }
-    }
-
     public sealed class HorrorPresentationRules
     {
         public static bool ConsumeOrdinal(uint incoming, ref uint consumed)
