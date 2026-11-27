@@ -21,11 +21,15 @@ namespace EchoProtocol.Cinematics
         [SerializeField] private AudioSource _audio;
         [SerializeField] private Light _fillLight;
         [SerializeField] private OpeningCutscenePresentation _presentation;
+        [SerializeField] private GameObject[] _shotVisuals;
         private readonly PlayerInteractionControlLock _inputLock = new PlayerInteractionControlLock();
         private readonly Dictionary<Camera, bool> _cameras = new Dictionary<Camera, bool>();
         private readonly Dictionary<AudioListener, bool> _listeners = new Dictionary<AudioListener, bool>();
         private readonly Dictionary<Canvas, bool> _hud = new Dictionary<Canvas, bool>();
         private readonly Dictionary<PlayerFirstPersonVisibility, bool> _bodyViews = new Dictionary<PlayerFirstPersonVisibility, bool>();
+        private readonly Dictionary<Renderer, bool> _hiddenPlayerRenderers = new Dictionary<Renderer, bool>();
+        private readonly Dictionary<Canvas, bool> _hiddenPlayerCanvases = new Dictionary<Canvas, bool>();
+        private readonly Dictionary<Light, bool> _hiddenPlayerLights = new Dictionary<Light, bool>();
         private NetworkMatchState _match;
         private Camera _playerCamera;
         private bool _captured, _playing, _voted, _reportedFailure;
@@ -78,6 +82,7 @@ namespace EchoProtocol.Cinematics
             if (_director != null) _director.playOnAwake = false;
             if (_presentation != null) _presentation.SkipRequested += Vote;
             _catalog = Resources.Load<GameAudioCatalog>("GameAudioCatalog");
+            GameAudioSettings.RouteEffects(_audio);
         }
 
         private void LateUpdate()
@@ -116,6 +121,20 @@ namespace EchoProtocol.Cinematics
             }
             CaptureGameplay(match);
             if (!_captured) return;
+            if (_definition.hidePlayers)
+            {
+                foreach (var camera in FindObjectsByType<Camera>(FindObjectsInactive.Exclude))
+                    if (camera != _camera)
+                    {
+                        _cameras.TryAdd(camera, camera.enabled);
+                        camera.enabled = false;
+                    }
+                // Include proxies, held props and any visuals attached during a late spawn.
+                foreach (var movement in FindObjectsByType<NetworkPlayerMovement>(FindObjectsInactive.Exclude))
+                    HidePlayerVisuals(movement.transform);
+                foreach (var movement in FindObjectsByType<PlayerMovement>(FindObjectsInactive.Exclude))
+                    HidePlayerVisuals(movement.transform);
+            }
             float elapsed = (float)match.OpeningElapsed;
             bool started = match.OpeningState == OpeningCutsceneState.Playing && match.Runner.Tick.Raw >= match.OpeningStartTick;
             if (started)
@@ -130,7 +149,7 @@ namespace EchoProtocol.Cinematics
                 _camera.enabled = true; _listener.enabled = true;
                 if (_fillLight != null) _fillLight.enabled = true;
                 // Finish at the local owned FPS pose, including that player's real spawn offset.
-                if (_playerCamera != null && elapsed > _definition.Duration - 1.8f)
+                if (!_definition.hidePlayers && _playerCamera != null && elapsed > _definition.Duration - 1.8f)
                 {
                     float blend = Mathf.SmoothStep(0, 1, (elapsed - (_definition.Duration - 1.8f)) / 1.2f);
                     _camera.transform.SetPositionAndRotation(Vector3.Lerp(_camera.transform.position, _playerCamera.transform.position, blend),
@@ -143,8 +162,10 @@ namespace EchoProtocol.Cinematics
             {
                 // Seeking into a cinematic does not replay earlier audio cues.
                 _lastShot = shot;
-                var clip = _catalog != null ? _catalog.Find(_definition.shots[shot].audioKey ?? string.Empty) : null;
-                if (clip != null && _audio != null) _audio.PlayOneShot(clip, _catalog.effectsVolume * 0.3f);
+                SetShotVisuals(shot);
+                var cue = _definition.shots[shot];
+                var clip = cue.audioOverride != null ? cue.audioOverride : _catalog?.Find(cue.audioKey ?? string.Empty);
+                if (clip != null && _audio != null) _audio.PlayOneShot(clip, (_catalog != null ? _catalog.effectsVolume : 1f) * 0.3f);
             }
             _voted |= match.HasOpeningVote(match.Runner.LocalPlayer);
             bool space = Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
@@ -168,10 +189,13 @@ namespace EchoProtocol.Cinematics
             _playerCamera = driver.GetComponent<Camera>();
             if (_playerCamera == null) return;
             _inputLock.Acquire(player.gameObject, unlockCursor: true);
-            foreach (var view in player.GetComponentsInChildren<PlayerFirstPersonVisibility>(true))
+            if (!_definition.hidePlayers)
             {
-                _bodyViews[view] = view.IsCinematicView;
-                view.SetCinematicView(true);
+                foreach (var view in player.GetComponentsInChildren<PlayerFirstPersonVisibility>(true))
+                {
+                    _bodyViews[view] = view.IsCinematicView;
+                    view.SetCinematicView(true);
+                }
             }
             _cameras[_playerCamera] = _playerCamera.enabled; _playerCamera.enabled = false;
             foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsInactive.Exclude))
@@ -188,6 +212,33 @@ namespace EchoProtocol.Cinematics
             _captured = true;
         }
 
+        private void HidePlayerVisuals(Transform player)
+        {
+            foreach (var renderer in player.GetComponentsInChildren<Renderer>(true))
+            {
+                // Independent of Renderer.enabled, which first-person and tool scripts manage.
+                _hiddenPlayerRenderers.TryAdd(renderer, renderer.forceRenderingOff);
+                renderer.forceRenderingOff = true;
+            }
+            foreach (var canvas in player.GetComponentsInChildren<Canvas>(true))
+            {
+                _hiddenPlayerCanvases.TryAdd(canvas, canvas.enabled);
+                canvas.enabled = false;
+            }
+            foreach (var light in player.GetComponentsInChildren<Light>(true))
+            {
+                _hiddenPlayerLights.TryAdd(light, light.enabled);
+                light.enabled = false;
+            }
+        }
+
+        public void SetShotVisuals(int shot)
+        {
+            if (_shotVisuals == null) return;
+            for (int i = 0; i < _shotVisuals.Length; i++)
+                if (_shotVisuals[i] != null) _shotVisuals[i].SetActive(i == shot);
+        }
+
         private void Vote()
         {
             if (_voted || _match == null || _match.OpeningState != OpeningCutsceneState.Playing) return;
@@ -196,6 +247,7 @@ namespace EchoProtocol.Cinematics
 
         private void RestoreGameplay()
         {
+            SetShotVisuals(-1);
             if (_director != null) _director.Stop();
             if (_camera != null) _camera.enabled = false;
             if (_listener != null) _listener.enabled = false;
@@ -206,8 +258,14 @@ namespace EchoProtocol.Cinematics
             foreach (var entry in _listeners) if (entry.Key != null) entry.Key.enabled = entry.Value;
             foreach (var entry in _hud) if (entry.Key != null) entry.Key.enabled = entry.Value;
             foreach (var entry in _bodyViews) if (entry.Key != null) entry.Key.SetCinematicView(entry.Value);
+            foreach (var entry in _hiddenPlayerRenderers) if (entry.Key != null) entry.Key.forceRenderingOff = entry.Value;
+            foreach (var entry in _hiddenPlayerCanvases) if (entry.Key != null) entry.Key.enabled = entry.Value;
+            foreach (var entry in _hiddenPlayerLights) if (entry.Key != null) entry.Key.enabled = entry.Value;
             _cameras.Clear(); _listeners.Clear(); _hud.Clear();
             _bodyViews.Clear();
+            _hiddenPlayerRenderers.Clear();
+            _hiddenPlayerCanvases.Clear();
+            _hiddenPlayerLights.Clear();
             _inputLock.Release();
             _captured = _playing = false; _hold = 0; _lastShot = -1;
         }

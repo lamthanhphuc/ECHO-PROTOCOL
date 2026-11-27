@@ -18,11 +18,13 @@ namespace EchoProtocol.Cinematics
             [TextArea] public string subtitle;
             [TextArea] public string subtitleEnglish;
             public string audioKey;
+            public AudioClip audioOverride;
             [Range(0f, 1f)] public float fillMultiplier = 1f;
         }
 
         public string sceneName = "SciFi";
         public TimelineAsset timeline;
+        public bool hidePlayers;
         public Shot[] shots = Array.Empty<Shot>();
         [Range(30f, 85f)] public float fieldOfView = 58f;
         [Min(0.2f)] public float holdToSkipSeconds = 1f;

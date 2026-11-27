@@ -24,6 +24,7 @@ public sealed class LeaderboardEntryResponse
     public string? AvatarUrl { get; init; }
     public int DurationSeconds { get; init; }
     public int DurationCentiseconds { get; init; }
+    public int? ReachedLevel { get; init; }
     public string? SquadLabel { get; init; }
     public IReadOnlyList<LeaderboardPlayerResponse> Players { get; init; } = [];
 }

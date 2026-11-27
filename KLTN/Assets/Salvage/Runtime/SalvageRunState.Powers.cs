@@ -9,6 +9,14 @@ namespace EchoProtocol.Salvage
     {
         public const int PowerRankLimit = 3, PowerDailyLimit = 2;
         public static readonly string[] PowerNames = { "Tốc độ di chuyển", "Máu tối đa", "Thể lực tối đa", "Hồi thể lực", "Sức nâng" };
+        internal static string PowerName(int power) => EchoProtocol.Settings.GameLanguage.Choose(PowerNames[power], power switch
+        {
+            0 => "Movement Speed",
+            1 => "Max Health",
+            2 => "Max Stamina",
+            3 => "Stamina Recovery",
+            _ => "Lifting Strength"
+        });
         public static readonly float[] PowerSteps = { .05f, 0f, 0f, .1f, .25f };
         public static bool UnlimitedPower(int power) => power == (int)SalvagePower.Health || power == (int)SalvagePower.Stamina;
         public static bool CanUpgradePower(int power, int rank) => power >= 0 && power < PowerNames.Length

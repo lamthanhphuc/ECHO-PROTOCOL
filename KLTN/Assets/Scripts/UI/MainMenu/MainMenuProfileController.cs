@@ -5,6 +5,7 @@ using EchoProtocol.Auth;
 using EchoProtocol.Core;
 using EchoProtocol.Profile;
 using EchoProtocol.Settings;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -773,6 +774,10 @@ namespace EchoProtocol.UI.MainMenu
     private Text _nextUnlock;
     private Text _unlocks;
     private ScrollRect _unlockScroll;
+    private RectTransform _unlockOverlay, _unlockPanel;
+    private CanvasGroup _profilePanelInput;
+    private Button _unlockButton, _unlockClose;
+    private TMP_Text _unlockTitle;
     private Text[] _statLabels;
     private Text[] _statValues;
     private Text[] _activityTitles;
@@ -847,7 +852,11 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (_root == null || !_root.gameObject.activeSelf) return;
       if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-        Close();
+      {
+        if (_unlockOverlay.gameObject.activeSelf) SetUnlocksOpen(false);
+        else Close();
+        return;
+      }
       if (_screenSize.x != Screen.width || _screenSize.y != Screen.height
           || !_safeArea.Equals(Screen.safeArea)) UpdateLayout();
     }
@@ -856,6 +865,7 @@ namespace EchoProtocol.UI.MainMenu
     {
       if (_root == null) return;
       _requestVersion++;
+      SetUnlocksOpen(false);
       _root.gameObject.SetActive(false);
       foreach (var state in _locked)
       {
@@ -883,6 +893,7 @@ namespace EchoProtocol.UI.MainMenu
       _panel.anchorMin = _panel.anchorMax = new Vector2(0.5f, 0.5f);
       _panel.pivot = new Vector2(0.5f, 0.5f);
       _panel.sizeDelta = new Vector2(1280f, 760f);
+      _profilePanelInput = _panel.gameObject.AddComponent<CanvasGroup>();
       var panelImage = _panel.gameObject.AddComponent<Image>();
       var visuals = Resources.Load<LeaderboardArchiveVisuals>("LeaderboardArchive/Visuals");
       panelImage.sprite = visuals != null ? visuals.dossierMetal : null;
@@ -954,33 +965,7 @@ namespace EchoProtocol.UI.MainMenu
       Decoration("PortraitTapeTop", visuals != null ? visuals.agedTape : null, 20, 104, 128, 28, -14);
       Decoration("PortraitTapeCorner", visuals != null ? visuals.agedTape : null, 213, 100, 115, 26, 17);
       Decoration("PortraitTapeBottom", visuals != null ? visuals.agedTape : null, 24, 441, 120, 25, 12);
-      Label("UnlockHeading", 34, 574, 278, 23, 15, headingFont);
-      var unlockViewport = Box("UnlockViewport", 34, 600, 278, 82, new Color(.015f,.02f,.02f,.85f));
-      unlockViewport.GetComponent<Image>().raycastTarget = true;
-      unlockViewport.gameObject.AddComponent<RectMask2D>();
-      _unlocks = Label("UnlockList", 0, 0, 260, 400, 15, bodyFont);
-      _unlocks.transform.SetParent(unlockViewport, false);
-      _unlocks.alignment = TextAnchor.UpperLeft;
-      _unlocks.supportRichText = false;
-      _unlocks.rectTransform.anchoredPosition = new Vector2(5, -4);
-      _unlockScroll = unlockViewport.gameObject.AddComponent<ScrollRect>();
-      _unlockScroll.viewport = unlockViewport;
-      _unlockScroll.content = _unlocks.rectTransform;
-      _unlockScroll.horizontal = false;
-      _unlockScroll.vertical = true;
-      _unlockScroll.scrollSensitivity = 24;
-      var barRect = Rect("UnlockScrollbar", unlockViewport);
-      barRect.anchorMin = new Vector2(1, 0); barRect.anchorMax = Vector2.one;
-      barRect.pivot = Vector2.one; barRect.sizeDelta = new Vector2(5, 0);
-      barRect.gameObject.AddComponent<Image>().color = new Color(.18f,.17f,.15f);
-      var thumb = Rect("Handle", barRect);
-      thumb.anchorMin = Vector2.zero; thumb.anchorMax = Vector2.one;
-      thumb.offsetMin = thumb.offsetMax = Vector2.zero;
-      var thumbImage = thumb.gameObject.AddComponent<Image>(); thumbImage.color = new Color(.64f,.55f,.4f);
-      var scrollbar = barRect.gameObject.AddComponent<Scrollbar>();
-      scrollbar.handleRect = thumb; scrollbar.targetGraphic = thumbImage;
-      scrollbar.direction = Scrollbar.Direction.BottomToTop;
-      _unlockScroll.verticalScrollbar = scrollbar;
+      BuildUnlockPopup(bodyFont);
       Decoration("Fingerprint", visuals != null ? visuals.fingerprint : null, 1008, 507, 105, 160, 12);
       Decoration("SurveillancePhoto", visuals != null ? visuals.surveillanceStill : null, 1093, 524, 135, 115, 9);
       Decoration("PhotoTape", visuals != null ? visuals.agedTape : null, 1090, 514, 138, 23, 16);
@@ -1009,6 +994,67 @@ namespace EchoProtocol.UI.MainMenu
       closeText.alignment = TextAnchor.MiddleCenter;
       closeButton.onClick.AddListener(Close);
       MenuViewportLayout.NormalizeChildren(_panel);
+    }
+
+    private void BuildUnlockPopup(Font bodyFont)
+    {
+      _unlockButton = SettingsMenuWidgets.Button("UnlockButton", _panel, 34, 574, 278, 42, "");
+      _unlockButton.onClick.AddListener(() => SetUnlocksOpen(true));
+      _unlockOverlay = Rect("UnlockOverlay", _root);
+      SettingsMenuWidgets.Stretch(_unlockOverlay);
+      _unlockOverlay.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .74f);
+      _unlockPanel = SettingsMenuWidgets.Panel("UnlockPanel", _unlockOverlay, 0, 0, 640, 540,
+        new Color(.045f, .041f, .04f));
+      var frame = SettingsMenuWidgets.Frame("Frame", _unlockPanel, 0, 0, 640, 540);
+      frame.GetComponent<Graphic>().raycastTarget = false;
+      _unlockPanel.anchorMin = _unlockPanel.anchorMax = _unlockPanel.pivot = new Vector2(.5f, .5f);
+      _unlockPanel.anchoredPosition = Vector2.zero;
+      _unlockTitle = SettingsMenuWidgets.Label("Heading", _unlockPanel, 28, 22, 584, 46, "", 27, bold: true);
+      SettingsMenuWidgets.Line("Rule", _unlockPanel, 28, 77, 584);
+      var unlockViewport = SettingsMenuWidgets.Panel("UnlockViewport", _unlockPanel, 28, 93, 564, 368,
+        new Color(.015f, .02f, .02f, .85f));
+      unlockViewport.GetComponent<Image>().raycastTarget = true;
+      unlockViewport.gameObject.AddComponent<RectMask2D>();
+      _unlocks = Label("UnlockList", 0, 0, 528, 368, 18, bodyFont);
+      _unlocks.transform.SetParent(unlockViewport, false);
+      _unlocks.alignment = TextAnchor.UpperLeft;
+      _unlocks.supportRichText = false;
+      _unlocks.rectTransform.anchoredPosition = new Vector2(14, -10);
+      _unlockScroll = unlockViewport.gameObject.AddComponent<ScrollRect>();
+      _unlockScroll.viewport = unlockViewport;
+      _unlockScroll.content = _unlocks.rectTransform;
+      _unlockScroll.horizontal = false;
+      _unlockScroll.vertical = true;
+      _unlockScroll.movementType = ScrollRect.MovementType.Clamped;
+      _unlockScroll.scrollSensitivity = 30;
+      var barRect = SettingsMenuWidgets.Rect("UnlockScrollbar", _unlockPanel, 600, 93, 12, 368);
+      barRect.gameObject.AddComponent<Image>().color = new Color(.18f,.17f,.15f);
+      var thumb = Rect("Handle", barRect);
+      thumb.anchorMin = Vector2.zero; thumb.anchorMax = Vector2.one;
+      thumb.offsetMin = thumb.offsetMax = Vector2.zero;
+      var thumbImage = thumb.gameObject.AddComponent<Image>(); thumbImage.color = new Color(.64f,.55f,.4f);
+      var scrollbar = barRect.gameObject.AddComponent<Scrollbar>();
+      scrollbar.handleRect = thumb; scrollbar.targetGraphic = thumbImage;
+      scrollbar.direction = Scrollbar.Direction.BottomToTop;
+      _unlockScroll.verticalScrollbar = scrollbar;
+      _unlockClose = SettingsMenuWidgets.Button("CloseUnlocks", _unlockPanel, 452, 481, 160, 38, "");
+      _unlockClose.onClick.AddListener(() => SetUnlocksOpen(false));
+      _unlockOverlay.gameObject.SetActive(false);
+    }
+
+    private void SetUnlocksOpen(bool open)
+    {
+      if (_unlockOverlay == null || _unlockOverlay.gameObject.activeSelf == open) return;
+      _profilePanelInput.interactable = _profilePanelInput.blocksRaycasts = !open;
+      _unlockOverlay.gameObject.SetActive(open);
+      if (open)
+      {
+        Canvas.ForceUpdateCanvases();
+        _unlockScroll.StopMovement();
+        _unlockScroll.verticalNormalizedPosition = 1;
+      }
+      UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(
+        (open ? _unlockClose : _unlockButton).gameObject);
     }
 
     private void Decoration(string name, Sprite sprite, float x, float y, float width, float height, float rotation)
@@ -1074,6 +1120,8 @@ namespace EchoProtocol.UI.MainMenu
       float width = canvasRect.rect.width * safe.width / Screen.width;
       float height = canvasRect.rect.height * safe.height / Screen.height;
       MenuViewportLayout.Fit(_panel, new Vector2(1280f, 760f), width, height);
+      _unlockPanel.anchorMin = _unlockPanel.anchorMax = _panel.anchorMin;
+      _unlockPanel.localScale = _panel.localScale;
       _screenSize = new Vector2Int(Screen.width, Screen.height);
       _safeArea = safe;
     }
@@ -1086,7 +1134,9 @@ namespace EchoProtocol.UI.MainMenu
       Copy("ActivityHeading", "HOẠT ĐỘNG GẦN ĐÂY", "RECENT ACTIVITY");
       Copy("TotalExperience", $"TỔNG KINH NGHIỆM  ·  {PlayerProfileSession.LifetimeExperiencePoints:N0} XP",
         $"TOTAL EXPERIENCE  ·  {PlayerProfileSession.LifetimeExperiencePoints:N0} XP");
-      Copy("UnlockHeading", "MỐC MỞ KHÓA · CUỘN ĐỂ XEM", "LEVEL UNLOCKS · SCROLL");
+      _unlockTitle.text = GameLanguage.Choose("MỐC MỞ KHÓA", "LEVEL UNLOCKS");
+      _unlockButton.GetComponentInChildren<TMP_Text>().text = _unlockTitle.text;
+      _unlockClose.GetComponentInChildren<TMP_Text>().text = GameLanguage.Choose("ĐÓNG", "CLOSE");
       var unlocks = PlayerProfileSession.LevelUnlocks;
       var rows = new System.Collections.Generic.List<string>();
       EchoProtocol.Profile.LevelUnlockDto next = null;
@@ -1094,17 +1144,24 @@ namespace EchoProtocol.UI.MainMenu
       foreach (var item in unlocks)
       {
         if (item == null) continue;
+        string itemName = GameLanguage.Translate(item.itemName);
+        itemName = item.category switch
+        {
+          "PET" => GameLanguage.Choose("Thú cưng ", "Pet ") + itemName,
+          "CHARACTER" => GameLanguage.Choose("Nhân vật ", "Character ") + itemName,
+          _ => itemName
+        };
         string state = item.owned ? GameLanguage.Choose("Đã sở hữu", "Owned")
           : item.requiredLevel <= PlayerProfileSession.Level ? GameLanguage.Choose("Đã mở quyền mua", "Purchase available")
           : GameLanguage.Choose($"Còn {item.experienceRemaining:N0} XP", $"{item.experienceRemaining:N0} XP remaining");
-        rows.Add(GameLanguage.Choose($"Cấp {item.requiredLevel}", $"Level {item.requiredLevel}") + " · " + item.itemName + "\n" + state);
+        rows.Add(GameLanguage.Choose($"Cấp {item.requiredLevel}", $"Level {item.requiredLevel}") + " · " + itemName + "\n" + state);
         if (!item.owned && item.requiredLevel > PlayerProfileSession.Level && (next == null || item.requiredLevel < next.requiredLevel))
         { next = item; nextNames.Clear(); }
-        if (next != null && !item.owned && item.requiredLevel == next.requiredLevel) nextNames.Add(item.itemName);
+        if (next != null && !item.owned && item.requiredLevel == next.requiredLevel) nextNames.Add(itemName);
       }
       _unlocks.text = rows.Count > 0 ? string.Join("\n\n", rows) : GameLanguage.Choose("Chưa có dữ liệu mốc mở khóa", "Unlock data unavailable");
-      _unlocks.rectTransform.sizeDelta = new Vector2(260, Mathf.Max(82, _unlocks.preferredHeight + 8));
-      _unlockScroll.verticalNormalizedPosition = 1f;
+      _unlocks.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+        Mathf.Max(368, _unlocks.preferredHeight + 20));
       _nextUnlock.text = unlocks.Length == 0 ? GameLanguage.Choose("Chưa có dữ liệu mốc mở khóa", "Unlock data unavailable")
         : next == null ? GameLanguage.Choose("Đã đạt các mốc mở quyền mua hiện tại", "All current purchase milestones reached")
         : GameLanguage.Choose($"Tiếp theo · Cấp {next.requiredLevel}", $"Next · Level {next.requiredLevel}")

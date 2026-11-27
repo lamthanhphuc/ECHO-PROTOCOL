@@ -6,6 +6,7 @@ using UnityEngine;
 using Fusion;
 using EchoProtocol.Auth;
 using EchoProtocol.Networking;
+using static EchoProtocol.Settings.GameLanguage;
 
 namespace EchoProtocol.Salvage
 {
@@ -35,7 +36,24 @@ namespace EchoProtocol.Salvage
         private readonly System.Collections.Generic.Dictionary<string,SavedCrew> _checkpointCrew=new();
         private SalvageCrew ResumeCrew(string user)
             =>_checkpointCrew.TryGetValue(user,out var saved)?saved.Restore():new SalvageCrew {User=user};
-        public string CheckpointStatus {get;private set;}="";
+        private enum SaveStatus { None, Saved, Synced, LocalOnly, SyncFailed, WriteFailed, Unverified, RestoreFailed }
+        private SaveStatus _saveStatus;
+
+        public string CheckpointStatus => _saveStatus switch
+        {
+            SaveStatus.Saved => Choose("Đã lưu tiến độ", "Progress saved"),
+            SaveStatus.Synced => Choose("Đã đồng bộ tiến độ", "Progress synced"),
+            SaveStatus.LocalOnly => Choose("Đã lưu trên máy. Hãy để trò chơi mở và kiểm tra kết nối để đồng bộ.",
+                "Saved locally. Keep the game open and check your connection to sync."),
+            SaveStatus.SyncFailed => Choose("Chưa đồng bộ tiến độ. Kiểm tra kết nối.", "Progress could not sync. Check your connection."),
+            SaveStatus.WriteFailed => Choose("Không lưu được tiến độ. Kiểm tra dung lượng và quyền ghi.",
+                "Could not save progress. Check available storage and write permissions."),
+            SaveStatus.Unverified => Choose("Máy chủ chưa xác nhận bản lưu cũ. Bạn có thể thử lại hoặc tạo chuyến mới.",
+                "The server has not verified your old save. You can retry or start a new run."),
+            SaveStatus.RestoreFailed => Choose("Không thể khôi phục chuyến đã lưu. Kiểm tra kết nối rồi thử lại.",
+                "Could not restore the saved run. Check your connection and try again."),
+            _ => string.Empty
+        };
         public void PrepareSessionExit()
         {
             if(Object==null||!Object.IsValid||!Object.HasStateAuthority)return;
@@ -57,6 +75,7 @@ namespace EchoProtocol.Salvage
         public async void InitializeSavedRun()
         {
             if(CloudLoading)return;CloudLoading=true;CloudRecoveryRequired=false;
+            _saveStatus = SaveStatus.None;
             try
             {
                 var authority=EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance;
@@ -64,7 +83,12 @@ namespace EchoProtocol.Salvage
                 if(Object==null||!Object.IsValid)return;
                 if(!TryRestoreCheckpoint())StartFreshRun();
             }
-            catch(Exception error){CheckpointStatus=error.Message;CloudRecoveryRequired=true;}
+            catch (Exception error)
+            {
+                if (_saveStatus != SaveStatus.Unverified) _saveStatus = SaveStatus.RestoreFailed;
+                CloudRecoveryRequired = true;
+                Debug.LogWarning("[Salvage] Checkpoint recovery failed: " + error.Message);
+            }
             finally{CloudLoading=false;}
         }
         private async void UploadCheckpoint(string json,bool failed)
@@ -75,10 +99,10 @@ namespace EchoProtocol.Salvage
             {
                 var authority=EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance;
                 if(authority==null||!await authority.SaveSalvageCloudAsync(json,++CloudSequence,failed))
-                    CheckpointStatus="Đã lưu trên máy; chưa đồng bộ. Giữ game mở và kiểm tra kết nối.";
-                else {_cloudSynced=Revision==savedRevision&&failed==(Phase==SalvagePhase.Failed);CheckpointStatus="Đã đồng bộ tiến độ";}
+                    _saveStatus=SaveStatus.LocalOnly;
+                else {_cloudSynced=Revision==savedRevision&&failed==(Phase==SalvagePhase.Failed);_saveStatus=SaveStatus.Synced;}
             }
-            catch(Exception){CheckpointStatus="Chưa đồng bộ tiến độ. Kiểm tra kết nối.";}
+            catch(Exception){_saveStatus=SaveStatus.SyncFailed;}
             finally{_cloudSaveBusy=false;}
         }
         private int _savedRevision=-1;
@@ -124,9 +148,9 @@ namespace EchoProtocol.Salvage
                 string json=JsonUtility.ToJson(data);File.WriteAllText(path+".tmp",json);
                 UploadCheckpoint(json,false);
                 if(File.Exists(path))File.Replace(path+".tmp",path,path+".bak");else File.Move(path+".tmp",path);
-                _savedRevision=Revision;_nextSave=Time.unscaledTime+5;CheckpointStatus="Đã lưu tiến độ";
+                _savedRevision=Revision;_nextSave=Time.unscaledTime+5;_saveStatus=SaveStatus.Saved;
             }
-            catch(Exception e){CheckpointStatus="Không lưu được tiến độ. Kiểm tra dung lượng và quyền ghi thư mục game.";Debug.LogWarning("[Salvage] Checkpoint write failed: "+e.Message);_checkpointRetryAt=Time.unscaledTime+5;}
+            catch(Exception e){_saveStatus=SaveStatus.WriteFailed;Debug.LogWarning("[Salvage] Checkpoint write failed: "+e.Message);_checkpointRetryAt=Time.unscaledTime+5;}
         }
         private bool TryRestoreCheckpoint()
         {
@@ -136,7 +160,7 @@ namespace EchoProtocol.Salvage
                 // The server response replaces local input, including edited or corrupt files.
                 if(string.IsNullOrEmpty(_approvedCloudState))
                 {
-                    if(File.Exists(path)&&!_allowFreshCloudRun){CanStartFreshCloudRun=true;throw new InvalidDataException("Có bản lưu cũ chưa được server xác nhận. Bạn có thể giữ file để đối soát hoặc xác nhận tạo chuyến mới.");}
+                    if(File.Exists(path)&&!_allowFreshCloudRun){CanStartFreshCloudRun=true;_saveStatus=SaveStatus.Unverified;throw new InvalidDataException("Local checkpoint is not verified by the server.");}
                     // Retain unverified legacy data for manual recovery, never upload it as trusted progress.
                     if(File.Exists(path))File.Copy(path,path+".unverified-local",true);
                     return false;
@@ -199,9 +223,9 @@ namespace EchoProtocol.Salvage
                     RefreshCrew();SpawnStations();if(Site.RandomMap!=null)PrepareMap(Cycle,Day);
                     return true;
                 }
-                catch(Exception e){if(_ledger!=null)throw new InvalidOperationException("Không thể khôi phục chuyến đã lưu. Dữ liệu vẫn được giữ nguyên.",e);Debug.LogWarning("[Salvage] Checkpoint read failed: "+e.Message);}
+                catch(Exception e){if(_ledger!=null)throw new InvalidOperationException("Checkpoint restoration failed.",e);Debug.LogWarning("[Salvage] Checkpoint read failed: "+e.Message);}
             }
-            if(found)throw new InvalidDataException("Không đọc được chuyến đã lưu. Dữ liệu gốc vẫn được giữ để khôi phục.");
+            if(found)throw new InvalidDataException("No valid checkpoint snapshot could be read.");
             return false;
         }
         private void OnApplicationQuit()=>PrepareSessionExit();

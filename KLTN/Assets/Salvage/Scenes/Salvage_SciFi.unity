@@ -429,7 +429,7 @@ MonoBehaviour:
   - {fileID: 1814955761440371603, guid: 47c682f6fe81435429ac10bef8cff4cb, type: 3}
   - {fileID: 7626783757063771999, guid: 7b6f064b50f4a3f4cbc7562de3e9b648, type: 3}
   - {fileID: 4955241846768103674, guid: 650b46d0e8796bd4eb480123416da9eb, type: 3}
-  - {fileID: 8972167682946588146, guid: ef717734057eeed48b6fdfb95a1236b3, type: 3}
+  - {fileID: 507641171256171541, guid: de3719f1ec8d12644ba42332f87103af, type: 3}
   - {fileID: 3926422412399065309, guid: d4ef33a12c8f9ca4d8d70049d84dfa97, type: 3}
   - {fileID: 7626783757063771999, guid: 7b6f064b50f4a3f4cbc7562de3e9b648, type: 3}
   - {fileID: 2388964124066696766, guid: 5d7b306819ca859488fe754a716401fa, type: 3}
@@ -464,7 +464,7 @@ MonoBehaviour:
   - {x: 0.9912375, y: 1.2260301, z: 0.8975401}
   - {x: 0.35890013, y: 0.8502141, z: 0.6169622}
   - {x: 1.3160536, y: 1.094512, z: 1.2159286}
-  - {x: 0.9800001, y: 0.31122795, z: 0.5599998}
+  - {x: 0.096267305, y: 0.36705554, z: 0.10384424}
   - {x: 0.26226905, y: 1, z: 0.2829115}
   - {x: 0.35890013, y: 0.8502141, z: 0.6169622}
   - {x: 0.24281156, y: 1.1366875, z: 0.36843795}
@@ -485,10 +485,10 @@ MonoBehaviour:
   - {x: 2.8099456, y: 1.2802721, z: 1.1681496}
   - {x: 0.5881566, y: 1.2126824, z: 0.5174813}
   - {x: 2.616451, y: 1.1726177, z: 0.9862922}
-  - {x: 6.281663, y: 2.515802, z: 2.7315621}
-  - {x: 11.097561, y: 2.8172169, z: 2.5999463}
-  - {x: 35.72181, y: 21.968513, z: 10.03157}
-  - {x: 67.75294, y: 21.20443, z: 67.75295}
+  - {x: 3.8, y: 1.5218976, z: 1.6524185}
+  - {x: 3.7999997, y: 0.9646646, z: 0.89026725}
+  - {x: 3.8, y: 2.3369575, z: 1.0671343}
+  - {x: 2.4999993, y: 0.7824172, z: 2.5}
   PreviewCamera: {fileID: 604822706}
   GameplayCamera: {fileID: 1619637164}
   RandomMap: {fileID: 13069245}
@@ -1525,7 +1525,8 @@ PrefabInstance:
       value: Salvage_Base
       objectReference: {fileID: 0}
     m_RemovedComponents: []
-    m_RemovedGameObjects: []
+    m_RemovedGameObjects:
+    - {fileID: 3151872258164012113, guid: 7a140255aa5be504f94ab28153c02929, type: 3}
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 581970843680513660, guid: 7a140255aa5be504f94ab28153c02929, type: 3}
       insertIndex: -1

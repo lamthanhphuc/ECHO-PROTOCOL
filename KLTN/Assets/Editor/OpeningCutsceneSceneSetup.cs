@@ -22,6 +22,7 @@ namespace EchoProtocol.Editor.Cinematics
     {
         private const string RequestPath = "Temp/OpeningCutscene.v2.request";
         private const string ReportPath = "Temp/OpeningCutscene.report.txt";
+        private const string PlayTestsPending = "EchoProtocol.OpeningCutscene.PlayTestsPending";
 
         private static PreviewSession _preview;
         private static double _nextRequestPollAt;
@@ -30,6 +31,7 @@ namespace EchoProtocol.Editor.Cinematics
         {
             EditorApplication.update += ProcessRequest;
             AssemblyReloadEvents.beforeAssemblyReload += () => _preview?.Dispose();
+            if (SessionState.GetBool(PlayTestsPending, false)) RegisterTestCallbacks(true);
         }
 
         private static void ProcessRequest()
@@ -47,6 +49,10 @@ namespace EchoProtocol.Editor.Cinematics
             try
             {
                 if (command == "survey") Survey();
+                else if (command == "purge-survey") PurgeOpeningSceneSetup.Survey();
+                else if (command == "purge-build") PurgeOpeningSceneSetup.Build();
+                else if (command == "purge-preview") PreviewPurge();
+                else if (command == "purge-play-tests") RunPurgePlayTests();
                 else if (command == "build") BuildSciFi();
                 else if (command == "preview") Preview();
                 else if (command == "tests") RunTests();
@@ -76,8 +82,8 @@ namespace EchoProtocol.Editor.Cinematics
             bool consumed = false;
             try
             {
-                // Claim by same-directory rename so only one consumer can dispatch a request.
-                // Producers publish complete files by renaming their temporary file to path.
+                // Producers publish a complete same-directory temp file by rename.
+                // Claim by rename so only one consumer can dispatch the request.
                 if (!File.Exists(path)) return false;
                 File.Move(path, claimedPath);
                 string pending;
@@ -377,13 +383,14 @@ namespace EchoProtocol.Editor.Cinematics
             Bake(controller); EditorSceneManager.MarkSceneDirty(controller.gameObject.scene);
         }
 
-        private static void Bake(OpeningCutsceneController controller)
+        internal static void Bake(OpeningCutsceneController controller)
         {
             var definition = controller.Definition;
             string clipFolder = definition.sceneName == "SciFi" ? AssetFolder : AssetFolder + "/" + definition.sceneName;
             Directory.CreateDirectory(clipFolder);
             string timelinePath = definition.timeline != null ? AssetDatabase.GetAssetPath(definition.timeline)
-                : definition.sceneName == "SciFi" ? TimelinePath : clipFolder + "/" + definition.sceneName + "Opening.playable";
+                : definition.sceneName == "SciFi" ? TimelinePath
+                : clipFolder + (definition.sceneName == AlienHuntSceneName ? "/PurgeOpeningTimeline.playable" : "/" + definition.sceneName + "Opening.playable");
             var timeline = AssetDatabase.LoadAssetAtPath<TimelineAsset>(timelinePath);
             if (timeline == null) { timeline = ScriptableObject.CreateInstance<TimelineAsset>(); AssetDatabase.CreateAsset(timeline, timelinePath); }
             foreach (var track in timeline.GetOutputTracks().Where(track => track is AnimationTrack && track.name == "Cinematic Camera").ToArray())
@@ -436,7 +443,8 @@ namespace EchoProtocol.Editor.Cinematics
             var report = new StringBuilder("\n| Shot | Reference | Start position / Euler | End position / Euler | Seconds | Audio key |\n| --- | --- | --- | --- | --- | --- |\n");
             foreach (var shot in definition.shots)
                 report.AppendLine($"| {shot.name} | `{shot.sourceHierarchy}` | `{shot.startPosition:F3}` / `{shot.startEuler:F3}` | `{shot.endPosition:F3}` / `{shot.endEuler:F3}` | {shot.duration} | `{shot.audioKey}` |");
-            string path = "../docs/OPENING_CUTSCENE_STORYBOARD.md";
+            string path = definition.sceneName == AlienHuntSceneName
+                ? "../docs/PURGE_OPENING_CUTSCENE_STORYBOARD.md" : "../docs/OPENING_CUTSCENE_STORYBOARD.md";
             if (File.Exists(path))
             {
                 var doc = File.ReadAllText(path);
@@ -449,10 +457,17 @@ namespace EchoProtocol.Editor.Cinematics
         }
 
         [MenuItem("ECHO Protocol/Cinematics/Render SciFi Shot Previews")]
-        public static void Preview()
+        public static void Preview() => StartPreview("SciFi", "Temp/OpeningCutscene");
+
+        private const string AlienHuntSceneName = EchoProtocol.Networking.AlienHuntMission.SceneName;
+
+        [MenuItem("ECHO Protocol/Cinematics/Render Purge Shot Previews")]
+        public static void PreviewPurge() => StartPreview(AlienHuntSceneName, "Temp/PurgeOpening");
+
+        private static void StartPreview(string sceneName, string folder)
         {
             if (_preview != null || EditorApplication.isPlayingOrWillChangePlaymode) return;
-            _preview = new PreviewSession();
+            _preview = new PreviewSession(sceneName, folder);
         }
 
         // One URP request per Editor update, with asynchronous readback. Never nest Camera.Render calls.
@@ -464,18 +479,22 @@ namespace EchoProtocol.Editor.Cinematics
             private readonly RenderTexture _texture;
             private readonly Vector3 _position;
             private readonly Quaternion _rotation;
+            private readonly string _folder;
+            private AsyncGPUReadbackRequest _readback;
             private double _progressAt;
             private readonly float _fillIntensity;
             private int _shot, _settle = 4;
             private bool _pending, _disposed;
             private string _error;
 
-            public PreviewSession()
+            public PreviewSession(string sceneName, string folder)
             {
+                _folder = folder;
                 _active = SceneManager.GetActiveScene();
-                _scene = SceneManager.GetSceneByPath("Assets/Scenes/SciFi.unity");
+                string path = "Assets/Scenes/" + sceneName + ".unity";
+                _scene = SceneManager.GetSceneByPath(path);
                 _opened = !_scene.IsValid() || !_scene.isLoaded;
-                if (_opened) _scene = EditorSceneManager.OpenScene("Assets/Scenes/SciFi.unity", OpenSceneMode.Additive);
+                if (_opened) _scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
                 SceneManager.SetActiveScene(_scene);
                 _controller = _scene.GetRootGameObjects().Select(obj => obj.GetComponent<OpeningCutsceneController>()).First(c => c != null);
                 _position = _controller.CinematicCamera.transform.position;
@@ -484,7 +503,7 @@ namespace EchoProtocol.Editor.Cinematics
                 _fillIntensity = _controller.FillLight != null ? _controller.FillLight.intensity : 0f;
                 if (_controller.FillLight != null) _controller.FillLight.enabled = true;
                 _texture = new RenderTexture(960, 540, 24);
-                Directory.CreateDirectory("Temp/OpeningCutscene");
+                Directory.CreateDirectory(_folder);
                 _progressAt = EditorApplication.timeSinceStartup;
             }
 
@@ -494,22 +513,30 @@ namespace EchoProtocol.Editor.Cinematics
                 if (_error != null || _shot >= _controller.Definition.shots.Length || EditorApplication.timeSinceStartup - _progressAt > 90)
                 {
                     File.WriteAllText(ReportPath, _error ?? (_shot >= _controller.Definition.shots.Length
-                        ? "Rendered 5 shot previews in Temp/OpeningCutscene." : "Preview timed out; gameplay assets were preserved."));
+                        ? "Rendered shot previews in " + _folder : "Preview timed out; gameplay assets were preserved."));
                     Dispose(); _preview = null; return;
                 }
                 EditorApplication.QueuePlayerLoopUpdate();
-                if (_pending || _settle-- > 0) return;
+                SceneView.RepaintAll();
+                UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+                if (_pending) { _readback.Update(); return; }
+                if (_settle-- > 0)
+                {
+                    _controller.SetShotVisuals(_shot);
+                    return;
+                }
                 try
                 {
                     var camera = _controller.CinematicCamera;
                     var shot = _controller.Definition.shots[_shot];
+                    _controller.SetShotVisuals(_shot);
                     if (_controller.FillLight != null) _controller.FillLight.intensity = _fillIntensity * shot.fillMultiplier;
                     camera.transform.SetPositionAndRotation(shot.startPosition, Quaternion.Euler(shot.startEuler));
                     var request = new UniversalRenderPipeline.SingleCameraRequest { destination = _texture };
                     if (!RenderPipeline.SupportsRenderRequest(camera, request)) throw new InvalidOperationException("URP camera render requests unavailable.");
                     _pending = true;
                     RenderPipeline.SubmitRenderRequest(camera, request);
-                    AsyncGPUReadback.Request(_texture, 0, TextureFormat.RGB24, result =>
+                    _readback = AsyncGPUReadback.Request(_texture, 0, TextureFormat.RGB24, result =>
                     {
                         if (_disposed) return;
                         try
@@ -519,7 +546,7 @@ namespace EchoProtocol.Editor.Cinematics
                             try
                             {
                                 pixels.LoadRawTextureData(result.GetData<byte>()); pixels.Apply();
-                                File.WriteAllBytes($"Temp/OpeningCutscene/shot{_shot + 1:00}.png", pixels.EncodeToPNG());
+                                File.WriteAllBytes($"{_folder}/shot{_shot + 1:00}.png", pixels.EncodeToPNG());
                             }
                             finally { UnityEngine.Object.DestroyImmediate(pixels); }
                             _shot++; _settle = 3; _progressAt = EditorApplication.timeSinceStartup;
@@ -527,6 +554,7 @@ namespace EchoProtocol.Editor.Cinematics
                         catch (Exception error) { _error = error.ToString(); }
                         finally { _pending = false; }
                     });
+                    _readback.forcePlayerLoopUpdate = true;
                 }
                 catch (Exception error) { _pending = false; _error = error.ToString(); }
             }
@@ -537,6 +565,7 @@ namespace EchoProtocol.Editor.Cinematics
                 _disposed = true;
                 if (_controller != null)
                 {
+                    _controller.SetShotVisuals(-1);
                     if (_controller.FillLight != null) _controller.FillLight.enabled = _lightEnabled;
                     if (_controller.FillLight != null) _controller.FillLight.intensity = _fillIntensity;
                     _controller.CinematicCamera.transform.SetPositionAndRotation(_position, _rotation);
@@ -550,31 +579,56 @@ namespace EchoProtocol.Editor.Cinematics
         [MenuItem("ECHO Protocol/Cinematics/Run Opening And Loading Tests")]
         public static void RunTests()
         {
-            var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            api.RegisterCallbacks(new TestResults(api));
+            File.WriteAllText("Temp/OpeningCutscene.test-failures.txt", string.Empty);
+            var api = RegisterTestCallbacks(false);
             api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.EditMode,
                 groupNames = new[] { "OpeningCutsceneRulesTests", "OpeningCutsceneLifecycleTests", "MatchLoadingBarrierTests",
                     "OpeningCutsceneRequestFileTests",
                     "MatchLoadingLifecycleTests", "CinematicMatchLoadingScreenTests", "NetworkMatchStateTests",
-                    "PlayerSpawnerContractTests", "FusionPlayerLifecycleContractTests" } }) { runSynchronously = true });
+                    "PlayerSpawnerContractTests", "FusionPlayerLifecycleContractTests", "AlienHuntSceneTests",
+                    "PurgeDirectorTests", "PurgeGameplayFixTests", "PurgePresentationRulesTests", "PurgeHUDPresentationTests",
+                    "MatchResultOutboxSerializationTests", "CreditsTests" } }) { runSynchronously = true });
+        }
+
+        [MenuItem("ECHO Protocol/Cinematics/Run Purge Play Mode Tests")]
+        public static void RunPurgePlayTests()
+        {
+            File.WriteAllText("Temp/OpeningCutscene.play-test-failures.txt", string.Empty);
+            SessionState.SetBool(PlayTestsPending, true);
+            var api = RegisterTestCallbacks(true);
+            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode,
+                testNames = new[] {
+                    "EchoProtocol.Networking.Tests.MapGameplayPlayModeTests.BaitCaptureFuelAndBurnCycleConsumesExactlyOneAlien",
+                    "EchoProtocol.Networking.Tests.MapGameplayPlayModeTests.DirectorRageUvSupplyAndCatchRunOnStateAuthority"
+                } }));
+        }
+
+        private static TestRunnerApi RegisterTestCallbacks(bool playMode)
+        {
+            var api = ScriptableObject.CreateInstance<TestRunnerApi>();
+            api.RegisterCallbacks(new TestResults(api, playMode));
+            return api;
         }
 
         private sealed class TestResults : ICallbacks
         {
             private readonly TestRunnerApi _api;
-            public TestResults(TestRunnerApi api) => _api = api;
+            private readonly bool _playMode;
+            public TestResults(TestRunnerApi api, bool playMode) { _api = api; _playMode = playMode; }
             public void RunStarted(ITestAdaptor testsToRun) { }
             public void TestStarted(ITestAdaptor test) { }
             public void TestFinished(ITestResultAdaptor result)
             {
                 if (!result.HasChildren && result.FailCount > 0)
-                    File.AppendAllText("Temp/OpeningCutscene.test-failures.txt", result.FullName + "\n" + result.Message + "\n");
+                    File.AppendAllText(_playMode ? "Temp/OpeningCutscene.play-test-failures.txt" : "Temp/OpeningCutscene.test-failures.txt",
+                        result.FullName + "\n" + result.Message + "\n");
             }
             public void RunFinished(ITestResultAdaptor result)
             {
-                File.WriteAllText("Temp/OpeningCutscene.tests.xml", result.ToXml().OuterXml);
+                File.WriteAllText(_playMode ? "Temp/OpeningCutscene.play-tests.xml" : "Temp/OpeningCutscene.tests.xml", result.ToXml().OuterXml);
+                if (_playMode) SessionState.SetBool(PlayTestsPending, false);
                 File.WriteAllText(ReportPath, $"Tests: {result.PassCount} passed, {result.FailCount} failed, {result.SkipCount} skipped.");
-                Debug.Log($"[OpeningCutscene] EditMode tests: {result.PassCount} passed, {result.FailCount} failed, {result.SkipCount} skipped.");
+                Debug.Log($"[OpeningCutscene] {(_playMode ? "PlayMode" : "EditMode")} tests: {result.PassCount} passed, {result.FailCount} failed, {result.SkipCount} skipped.");
                 _api.UnregisterCallbacks(this); UnityEngine.Object.DestroyImmediate(_api);
             }
         }

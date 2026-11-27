@@ -13,10 +13,26 @@ namespace EchoProtocol.Networking.Tests
 
         [UnityTest]
         public IEnumerator VerifiedResultPlaysLocalCreditsAndPreservesLobbyAfterSharedHandoff()
+            => StartFixture("ResultCreditsLobby");
+
+        [UnityTest]
+        [Timeout(185000)]
+        public IEnumerator DirectPreviewCompletesTheFullUnscaledTimeline()
+            => StartFixture("DirectPreviewPlaysFullTimelineWithoutNetworkOrAuthentication");
+
+        [UnityTest]
+        public IEnumerator UnconfirmedRewardRemainsNavigable()
+            => StartFixture("UnconfirmedRewardReturnsToLobbyWithoutLoadingCredits");
+
+        [UnityTest]
+        public IEnumerator AutoPlayCanRecoverFromMalformedCredits()
+            => StartFixture("AutoPlayWithMissingCreditsContentFallsBackToLobby");
+
+        private IEnumerator StartFixture(string name)
         {
             _fixture = Activator.CreateInstance(Type.GetType(
                 "EchoProtocol.Tests.EditMode.Controls.CreditsLocalFlowSmoke, Assembly-CSharp-Editor", true));
-            return Run("ResultCreditsLobby");
+            return Run(name);
         }
 
         [UnityTearDown]

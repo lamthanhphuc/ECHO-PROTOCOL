@@ -6,7 +6,7 @@ namespace EchoProtocol.UI.Credits
     [RequireComponent(typeof(CanvasRenderer))]
     public sealed class CreditsEdgeFade : MaskableGraphic
     {
-        [SerializeField, Min(1f)] private float _fadeHeight = 110f;
+        [SerializeField, Min(1f)] private float _fadeHeight = 160f;
 
         protected override void OnPopulateMesh(VertexHelper mesh)
         {
@@ -20,10 +20,14 @@ namespace EchoProtocol.UI.Credits
         private static void Strip(VertexHelper mesh, float left, float right, float bottom, float top, float bottomAlpha, float topAlpha)
         {
             int index = mesh.currentVertCount;
-            mesh.AddVert(new Vector3(left, bottom), new Color(0, 0, 0, bottomAlpha), Vector2.zero);
-            mesh.AddVert(new Vector3(left, top), new Color(0, 0, 0, topAlpha), Vector2.zero);
-            mesh.AddVert(new Vector3(right, top), new Color(0, 0, 0, topAlpha), Vector2.zero);
-            mesh.AddVert(new Vector3(right, bottom), new Color(0, 0, 0, bottomAlpha), Vector2.zero);
+            var bottomColor = CreditsController.BackgroundColor;
+            var topColor = bottomColor;
+            bottomColor.a = bottomAlpha;
+            topColor.a = topAlpha;
+            mesh.AddVert(new Vector3(left, bottom), bottomColor, Vector2.zero);
+            mesh.AddVert(new Vector3(left, top), topColor, Vector2.zero);
+            mesh.AddVert(new Vector3(right, top), topColor, Vector2.zero);
+            mesh.AddVert(new Vector3(right, bottom), bottomColor, Vector2.zero);
             mesh.AddTriangle(index, index + 1, index + 2);
             mesh.AddTriangle(index + 2, index + 3, index);
         }

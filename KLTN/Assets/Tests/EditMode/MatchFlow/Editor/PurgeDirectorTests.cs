@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using System.Reflection;
 using EchoProtocol.Networking;
 using EchoProtocol.Gameplay;
@@ -6,6 +7,8 @@ using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.Tools.Scanner;
+using EchoProtocol.Cinematics;
+using EchoProtocol.Networking.Loading;
 using Fusion;
 using NUnit.Framework;
 using UnityEditor;
@@ -51,6 +54,7 @@ public sealed class PurgeDirectorTests
         spawnMinions.Invoke(spawner,new object[]{runner});
         Assert.That(Object.FindObjectsByType<EchoProtocol.AI.Minions.CreepMinionRuntime>(FindObjectsSortMode.None).Length,Is.Zero,
             "No active gameplay player means no active spawn zone yet.");
+        yield return VerifyOpeningBeforeDirector(match, boss);
         float deadline=Time.realtimeSinceStartup+10;
         while(!match.HuntReady && Time.realtimeSinceStartup<deadline)yield return null;
         Assert.That((bool)match.HuntReady,Is.True);
@@ -299,6 +303,62 @@ public sealed class PurgeDirectorTests
         Assert.That(match.HuntBurned,Is.EqualTo(9));Assert.That(match.IsEnded,Is.True);
         Assert.That(match.Result,Is.EqualTo(NetworkMatchResult.Win));
         var shutdown=runner.Shutdown();while(!shutdown.IsCompleted)yield return null;
+    }
+
+    private IEnumerator VerifyOpeningBeforeDirector(NetworkMatchState match, NetworkObject boss)
+    {
+        Assert.That((bool)match.HasOpeningCutscene, Is.True);
+        Assert.That(match.OpeningState, Is.EqualTo(OpeningCutsceneState.NotStarted));
+        float startingTime = match.MatchRemainingSeconds;
+        var spawn = GameObject.Find("PlayerStart_EMPTY").transform;
+        var prefab = AssetDatabase.LoadAssetAtPath<NetworkObject>("Assets/Prefabs/PlayerNetwork.prefab");
+        var player = runner.Spawn(prefab, spawn.position, spawn.rotation, runner.LocalPlayer,
+            (_, obj) => obj.GetComponent<LobbyPlayerState>().InitializeAuthoritativeSelection(0, 0, true));
+        runner.SetPlayerObject(runner.LocalPlayer, player);
+        var playerCamera = Object.FindAnyObjectByType<PlayerCamera>();
+        playerCamera.SetTarget(player.transform);
+        var fps = playerCamera.GetComponent<Camera>();
+        var cinematic = OpeningCutsceneController.FindForScene(player.gameObject.scene);
+        var renderers = player.GetComponentsInChildren<Renderer>(true);
+        Assert.That(renderers, Is.Not.Empty);
+        Assert.That(renderers.All(r => !r.forceRenderingOff), Is.True);
+        var initialLife = player.GetComponent<NetworkPlayerLifeState>().Status;
+        var furnace = match.HuntFurnaces[0];
+        var bossPosition = boss.transform.position;
+
+        yield return new WaitForSeconds(.2f);
+        Assert.That(match.OpeningState, Is.EqualTo(OpeningCutsceneState.NotStarted), "Wait for spawn readiness.");
+        player.GetComponent<LobbyPlayerState>().MarkGameplaySpawnReadyAuthoritative();
+        float deadline = Time.realtimeSinceStartup + 10f;
+        while (!cinematic.CinematicCamera.enabled && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.That(cinematic.CinematicCamera.enabled, Is.True);
+        Assert.That(fps.enabled, Is.False);
+        Assert.That(renderers.All(r => r.forceRenderingOff), Is.True, "All player renderers must be hidden locally.");
+        match.RequestHuntAction(0, -1);
+        match.RequestHuntAction(9, -1);
+        match.RequestHuntAction(27, -1);
+        match.RequestHuntAction(-1, 0);
+        match.RecordHuntBurn();
+        yield return null;
+        Assert.That((bool)match.HuntReady, Is.False);
+        Assert.That(match.HuntBurned, Is.Zero);
+        Assert.That(match.HuntFurnaces[0], Is.EqualTo(furnace));
+        Assert.That(match.PurgeHuntsStarted, Is.Zero);
+        Assert.That(Vector3.Distance(boss.transform.position, bossPosition), Is.LessThan(.1f));
+        Assert.That(player.GetComponent<NetworkPlayerLifeState>().Status, Is.EqualTo(initialLife));
+        Assert.That(match.MatchRemainingSeconds, Is.EqualTo(startingTime));
+
+        match.RequestOpeningSkip();
+        deadline = Time.realtimeSinceStartup + 5f;
+        while (!match.IsGameplayReleased && Time.realtimeSinceStartup < deadline) yield return null;
+        yield return null;
+        Assert.That(match.IsGameplayReleased, Is.True, "The only connected player's skip vote releases the match.");
+        Assert.That(match.OpeningSkipVotes, Is.EqualTo(1));
+        Assert.That(match.MatchRemainingSeconds, Is.GreaterThan(startingTime - 2f));
+        Assert.That(fps.enabled, Is.True);
+        Assert.That(cinematic.CinematicCamera.enabled, Is.False);
+        Assert.That(renderers.All(r => !r.forceRenderingOff), Is.True);
+        runner.Despawn(player);
     }
 
     public IEnumerator Cleanup()

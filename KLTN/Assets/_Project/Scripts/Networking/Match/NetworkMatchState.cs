@@ -5010,6 +5010,10 @@ namespace EchoProtocol.Networking
             {
                 return;
             }
+            // Purge already uses its authored mission and RemoteFixedBalanceSnapshot.
+            // The Expedition scenario registry only accepts the SciFi content contract.
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == AlienHuntMission.SceneName)
+                return;
 
             var authority = MatchAuthorityRuntime.Instance;
             var matchId = authority != null && authority.TryGetMatchId(out var resolvedMatchId)

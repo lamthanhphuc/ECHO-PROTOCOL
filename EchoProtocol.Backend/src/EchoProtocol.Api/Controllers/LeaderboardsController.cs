@@ -1,5 +1,6 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.DTOs.Leaderboards;
+using EchoProtocol.Api.Services;
 using EchoProtocol.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,7 +27,7 @@ public sealed class LeaderboardsController : ControllerBase
     {
         if (!Enum.TryParse<LeaderboardMode>(mode, ignoreCase: true, out var parsedMode)
             || !Enum.IsDefined(parsedMode)
-            || !LeaderboardCatalog.IsKnownMap(mapId)
+            || !(LeaderboardCatalog.IsKnownMap(mapId) || MatchContentCatalog.IsSalvage(mapId))
             || !LeaderboardCatalog.IsKnownDifficulty(difficulty?.ToUpperInvariant())
             || page is < 1 or > 1_000_000
             || pageSize is < 1 or > 50)

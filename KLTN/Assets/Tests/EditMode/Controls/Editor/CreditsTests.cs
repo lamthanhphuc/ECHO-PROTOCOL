@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using EchoProtocol.Core;
 using EchoProtocol.UI.Credits;
 using EchoProtocol.UI.Result;
@@ -49,16 +48,16 @@ namespace EchoProtocol.Tests.EditMode.Controls
         }
 
         [Test]
-        public void ScrollStartsAfterDelay_AndUsesDesignUnits()
+        public void OpeningFadesInThenRolls()
         {
             var roll = new CreditsRollPlayback();
-            Tick(roll, 1, delay: 1.5f);
-            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Waiting));
-            Assert.That(roll.Distance, Is.Zero);
-            Tick(roll, 0.5f, delay: 1.5f);
+            Tick(roll, 0.5f, opening: 1.5f);
+            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Opening));
+            Assert.That(roll.RollSeconds, Is.Zero);
+            Assert.That(roll.Opacity, Is.EqualTo(0.5f));
+            Tick(roll, 2, opening: 1.5f);
             Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Rolling));
-            Tick(roll, 1, speed: 58);
-            Assert.That(roll.Distance, Is.EqualTo(58).Within(0.001));
+            Assert.That(roll.RollSeconds, Is.EqualTo(1).Within(0.001));
             Assert.That(roll.Opacity, Is.EqualTo(1));
         }
 
@@ -91,12 +90,11 @@ namespace EchoProtocol.Tests.EditMode.Controls
         public void NaturalEndHoldsThankYouBeforeFadeAndCompletion()
         {
             var roll = new CreditsRollPlayback();
-            Tick(roll, 0);
-            Tick(roll, 1, speed: 100, end: 100);
+            Tick(roll, 2, opening: 1, duration: 1);
             Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Closing));
-            Tick(roll, 2, end: 100);
+            Tick(roll, 2, duration: 1);
             Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Closing));
-            Tick(roll, 1, end: 100);
+            Tick(roll, 1, duration: 1);
             Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Fading));
             Tick(roll, 1);
             Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Completed));
@@ -119,27 +117,38 @@ namespace EchoProtocol.Tests.EditMode.Controls
         public void InvalidTimeDoesNotCorruptPlayback(float delta)
         {
             var roll = new CreditsRollPlayback(); Tick(roll, delta);
-            Assert.That(roll.Distance, Is.Zero); Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Waiting));
+            Assert.That(roll.RollSeconds, Is.Zero);
+            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Opening));
         }
 
-        [Test]
-        public async Task LobbyNavigationWaitsForLocalPlaybackCompletion()
+        [TestCase(30)]
+        [TestCase(144)]
+        public void PlaybackConsumesFullTimelineAtDifferentFrameRates(int fps)
         {
-            var completion = new TaskCompletionSource<bool>(); int navigations = 0;
-            var flow = AwaitCreditsCompletion(completion.Task, () => { navigations++; return Task.CompletedTask; });
-            Assert.That(navigations, Is.Zero); Assert.That(flow.IsCompleted, Is.False);
-            completion.SetResult(true); await flow;
-            Assert.That(navigations, Is.EqualTo(1));
+            var roll = new CreditsRollPlayback();
+            float elapsed = 0;
+            while (elapsed < 20 && roll.Phase != CreditsRollPhase.Completed)
+            {
+                Tick(roll, 1f / fps, opening: 5, duration: 4);
+                elapsed += 1f / fps;
+            }
+            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Completed));
+            Assert.That(elapsed, Is.EqualTo(13).Within(2f / fps));
+            Tick(roll, 100, true);
+            Assert.That(roll.Opacity, Is.Zero);
         }
 
-        [Test]
-        public void InterruptedPlaybackDoesNotNavigatePrematurely()
+        [TestCase(0)]
+        [TestCase(6)]
+        [TestCase(11)]
+        public void SkipFadesFromOpeningRollAndClosing(float elapsed)
         {
-            var completion = new TaskCompletionSource<bool>(); int navigations = 0;
-            completion.SetCanceled();
-            var flow = AwaitCreditsCompletion(completion.Task, () => { navigations++; return Task.CompletedTask; });
-            Assert.ThrowsAsync<TaskCanceledException>(async () => await flow);
-            Assert.That(navigations, Is.Zero);
+            var roll = new CreditsRollPlayback();
+            roll.Tick(elapsed, false, 5, 1, 5, 6);
+            roll.Tick(2, true, 5, 1, 5, 6);
+            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Fading));
+            roll.Tick(1, false, 5, 1, 5, 6);
+            Assert.That(roll.Phase, Is.EqualTo(CreditsRollPhase.Completed));
         }
 
         [Test]
@@ -147,10 +156,50 @@ namespace EchoProtocol.Tests.EditMode.Controls
         {
             var data = AssetDatabase.LoadAssetAtPath<CreditsData>("Assets/Resources/UI/Credits/EchoCreditsData.asset");
             Assert.That(data, Is.Not.Null); Assert.That(data.logo, Is.Not.Null);
-            Assert.That(data.sections.SelectMany(section => section.names), Is.EqualTo(new[]
-                { "Đặng Huy Hoàng", "Hứa Thành Đạt", "Lâm Thanh Phúc", "Nguyễn Nhật Lệ Thuyên", "Đào Quốc Tuấn" }));
-            Assert.That(data.sections.All(section => !string.IsNullOrWhiteSpace(section.evidence)), Is.True);
-            Assert.That(data.closingMessage, Is.EqualTo("THANK YOU FOR PLAYING"));
+            Assert.That(data.sections.Select(section => section.title), Is.EqualTo(new[]
+            {
+                "Opening Title", "Development Team", "Production & Project Management", "Game Design",
+                "Narrative & Worldbuilding", "Engineering & Programming", "Art & Environment",
+                "Technical Art & Cinematics", "UI/UX Design", "Audio & Sound Design",
+                "Quality Assurance & Playtesting", "Academic Supervision", "Powered By",
+                "Third-Party Assets & Attributions", "Legal & Copyright", "Special Thanks & Closing Title"
+            }));
+            Assert.That(data.sections.Select(section => section.id).Distinct().Count(), Is.EqualTo(16));
+            Assert.That(data.sections.SelectMany(section => section.blocks).Count(), Is.EqualTo(19));
+            var team = new[] { "Lâm Thanh Phúc", "Đặng Huy Hoàng", "Hứa Thành Đạt", "Nguyễn Nhật Lệ Thuyên" };
+            Assert.That(data.sections[1].blocks.Single().entries.Select(entry => entry.name), Is.EqualTo(team));
+            Assert.That(data.sections[10].blocks[0].entries.Select(entry => entry.name), Is.EqualTo(team));
+            Assert.That(data.sections[10].blocks[1].entries.Select(entry => entry.name), Is.EqualTo(new[]
+            {
+                "Hồ Gia Bảo", "Nguyễn Đức Anh", "Trần Đức Anh", "ThieuTaTrungDoan2", "Huỳnh", "MinhOB",
+                "Hieusensei", "NghiEm", "MeowToxic", "Buddy", "BuBu", "Sulie Uyen", "Ji1"
+            }));
+            Assert.That(data.sections[11].blocks.Single().entries.Single().name, Is.EqualTo("Đào Quốc Tuấn"));
+            Assert.That(data.sections[15].blocks[0].entries.Single().name, Is.EqualTo("Đào Quốc Tuấn"));
+            Assert.That(data.sections[15].blocks[1].note, Is.EqualTo("Thank you for playing."));
+        }
+
+        [Test]
+        public void CreditsRolesAttributionsAndLegalMatchApprovedScope()
+        {
+            var data = AssetDatabase.LoadAssetAtPath<CreditsData>("Assets/Resources/UI/Credits/EchoCreditsData.asset");
+            var engineering = data.sections[5].blocks.Single().entries;
+            Assert.That(engineering.Where(entry => entry.role.Contains("Deployment & Infrastructure")).Select(entry => entry.name),
+                Is.EqualTo(new[] { "Lâm Thanh Phúc", "Nguyễn Nhật Lệ Thuyên" }));
+            var audio = data.sections[9].blocks.Single().entries;
+            Assert.That(audio.Where(entry => entry.contribution.Contains("UI Sound Effects")).Select(entry => entry.name),
+                Is.EqualTo(new[] { "Hứa Thành Đạt" }));
+            var platforms = data.sections[12].blocks.Single();
+            Assert.That(platforms.holdSeconds, Is.EqualTo(5));
+            Assert.That(platforms.entries.Select(entry => entry.name), Is.EqualTo(new[] { "Unity", "Photon Engine" }));
+            var attributions = data.sections[13].blocks.SelectMany(block => block.entries).ToDictionary(entry => entry.name, entry => entry.role);
+            Assert.That(attributions.Count, Is.EqualTo(11));
+            Assert.That(attributions["Spacefrigate"], Is.EqualTo("Game-Ready Legacy"));
+            Assert.That(attributions["Flying carnivorous beetle"], Is.EqualTo("Andryuha1981"));
+            Assert.That(attributions["Grave Mercer"], Is.EqualTo("MESHCORP"));
+            var legal = string.Join("\n", data.sections[14].blocks.Single().entries.Select(entry => entry.role));
+            foreach (string line in new[] { "© 2026 ECHO PROTOCOL Development Team.", "FPT University", "FA26SE069", "GFA26SE117" })
+                Assert.That(legal, Does.Contain(line));
         }
 
         [Test]
@@ -161,6 +210,11 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 Assert.That(controller.HasReferences, Is.True);
                 Assert.That(controller.GetComponentsInChildren<Fusion.NetworkRunner>(true), Is.Empty);
                 Assert.That(controller.GetComponentsInChildren<Fusion.NetworkObject>(true), Is.Empty);
+                var scene = controller.gameObject.scene;
+                Assert.That(scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Camera>(true))
+                    .Any(camera => camera.enabled), Is.False);
+                Assert.That(scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Light>(true))
+                    .Any(light => light.enabled), Is.False);
                 Assert.That(controller.Viewport.GetComponent<RectMask2D>(), Is.Not.Null);
                 Assert.That(controller.Content.GetComponent<VerticalLayoutGroup>(), Is.Not.Null);
                 Assert.That(controller.Content.GetComponent<CanvasGroup>(), Is.Not.Null);
@@ -188,28 +242,50 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 controller.RebuildContent(); int count = controller.Content.childCount;
                 controller.RebuildContent(); Assert.That(controller.Content.childCount, Is.EqualTo(count));
                 var labels = controller.Content.GetComponentsInChildren<TMP_Text>(true);
-                Assert.That(labels.Count(label => label.name == "MemberName"), Is.EqualTo(5));
+                Assert.That(count, Is.EqualTo(19));
                 float roleSize = labels.First(label => label.name == "Role").fontSize;
                 Assert.That(labels.Where(label => label.name == "MemberName").All(label => label.fontSize > roleSize), Is.True);
                 Assert.That(controller.ThankYou, Is.Not.Null);
+                Assert.That(controller.PlannedDuration, Is.EqualTo(155.2f).Within(0.001f));
+                Assert.That(labels.All(label => !label.text.Contains("Voice Acting") && !label.text.Contains("Narration")), Is.True);
+                var logos = controller.Content.GetComponentsInChildren<Image>();
+                Assert.That(logos.Count(image => image.preserveAspect && image.sprite == controller.Data.logo), Is.EqualTo(2));
             });
         }
 
         [TestCase(1920, 1080)]
         [TestCase(2560, 1440)]
         [TestCase(3840, 2160)]
+        [TestCase(2560, 1080)]
+        [TestCase(1280, 720)]
+        [TestCase(960, 540)]
+        [TestCase(1024, 768)]
         public void ReferenceLayoutFitsAllTargetResolutions(int width, int height)
         {
             WithCredits(controller =>
             {
                 var canvas = controller.GetComponent<Canvas>(); canvas.renderMode = RenderMode.WorldSpace;
                 var rect = controller.GetComponent<RectTransform>();
-                rect.sizeDelta = new Vector2(1920, 1080);
-                rect.localScale = Vector3.one * (width / 1920f);
-                controller.RebuildContent(); controller.PreviewSection(3);
-                Assert.That(width / 1920f, Is.EqualTo(height / 1080f).Within(0.001));
+                float scale = Mathf.Sqrt(width / 1920f * height / 1080f);
+                rect.sizeDelta = new Vector2(width, height) / scale;
+                controller.ApplySafeArea(new Rect(0, 0, width, height), new Vector2(width, height));
+                controller.RebuildContent();
+                var columns = controller.Content.Find("Development Team/Columns");
+                var left = columns.GetChild(0).GetComponentsInChildren<TMP_Text>()
+                    .Where(label => label.name == "MemberName").Select(label => label.text);
+                var right = columns.GetChild(1).GetComponentsInChildren<TMP_Text>()
+                    .Where(label => label.name == "MemberName").Select(label => label.text);
+                var names = left.Zip(right, (first, second) => new[] { first, second }).SelectMany(row => row);
+                Assert.That(names, Is.EqualTo(new[] { "Lâm Thanh Phúc", "Đặng Huy Hoàng", "Hứa Thành Đạt", "Nguyễn Nhật Lệ Thuyên" }));
                 foreach (var label in controller.Content.GetComponentsInChildren<TMP_Text>())
-                    Assert.That(label.rectTransform.rect.width, Is.LessThanOrEqualTo(controller.Viewport.rect.width + 1));
+                {
+                    label.ForceMeshUpdate(true);
+                    Assert.That(label.rectTransform.rect.width, Is.GreaterThan(0).And.LessThanOrEqualTo(controller.Viewport.rect.width + 1), label.text);
+                    Assert.That(label.preferredHeight, Is.LessThanOrEqualTo(label.rectTransform.rect.height + 1), label.text);
+                    Assert.That(label.isTextOverflowing, Is.False, label.text);
+                    foreach (char character in label.text.Where(c => c > 127))
+                        Assert.That(label.font.HasCharacter(character, true, false), Is.True, $"{label.font.name} missing {character} in {label.text}");
+                }
             });
         }
 
@@ -238,14 +314,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
             finally { EditorSceneManager.ClosePreviewScene(scene); }
         }
 
-        private static Task AwaitCreditsCompletion(Task completion, Func<Task> navigate)
-        {
-            var method = typeof(CreditsFlow).GetMethod("AwaitPlaybackThenNavigateAsync", BindingFlags.Static | BindingFlags.NonPublic);
-            Assert.That(method, Is.Not.Null);
-            return (Task)method.Invoke(null, new object[] { completion, navigate });
-        }
-
         private static void Tick(CreditsRollPlayback roll, float delta, bool hold = false,
-            float speed = 58, float delay = 0, float end = 10000) => roll.Tick(delta, hold, speed, delay, 1, end, 3, 2);
+            float opening = 0, float duration = 100) => roll.Tick(delta, hold, opening, 1, duration, 3, 2);
     }
 }

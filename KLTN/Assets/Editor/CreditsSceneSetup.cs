@@ -63,6 +63,9 @@ namespace EchoProtocol.Editor.Credits
         public static void Build()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play mode before building credits.");
+            var data = AssetDatabase.LoadAssetAtPath<CreditsData>(DataPath);
+            if (data == null || data.sections.Length != 16)
+                throw new InvalidOperationException("Restore the official 16-section EchoCreditsData.asset before building AfterCredit.");
             var previous = SceneManager.GetActiveScene();
             var scene = SceneManager.GetSceneByPath(ScenePath);
             bool opened = !scene.IsValid() || !scene.isLoaded;
@@ -73,10 +76,22 @@ namespace EchoProtocol.Editor.Credits
                 var existing = scene.GetRootGameObjects().FirstOrDefault(root => root.GetComponent<CreditsController>() != null);
                 if (existing != null)
                 {
+                    var state = new SerializedObject(existing.GetComponent<CreditsController>());
+                    var dataRef = state.FindProperty("_data");
+                    bool changed = dataRef.objectReferenceValue == null;
+                    if (changed)
+                    {
+                        dataRef.objectReferenceValue = data;
+                        state.ApplyModifiedPropertiesWithoutUndo();
+                    }
                     var existingProgress = existing.GetComponentsInChildren<Image>(true).FirstOrDefault(image => image.name == "SkipProgress");
                     if (existingProgress != null && existingProgress.sprite == null)
                     {
                         existingProgress.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd");
+                        changed = true;
+                    }
+                    if (changed)
+                    {
                         EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene, ScenePath);
                     }
                     EnsureBuildList();
@@ -84,14 +99,12 @@ namespace EchoProtocol.Editor.Credits
                     File.WriteAllText(ReportPath, "AfterCredit already configured; preserving Inspector edits.");
                     return;
                 }
-                var data = CreateDataIfMissing();
-                // The existing scene camera is retained but UI/audio do not need another renderer/listener.
+                // Presentation loads additively and must not contribute cameras, lights, or an extra listener.
                 foreach (var root in scene.GetRootGameObjects())
-                foreach (var camera in root.GetComponentsInChildren<Camera>(true))
                 {
-                    camera.enabled = false;
-                    var listener = camera.GetComponent<AudioListener>();
-                    if (listener != null) listener.enabled = false;
+                    foreach (var camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+                    foreach (var listener in root.GetComponentsInChildren<AudioListener>(true)) listener.enabled = false;
+                    foreach (var light in root.GetComponentsInChildren<Light>(true)) light.enabled = false;
                 }
                 var canvasRoot = new GameObject("CinematicEndCredits", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
                 SceneManager.MoveGameObjectToScene(canvasRoot, scene);
@@ -100,7 +113,7 @@ namespace EchoProtocol.Editor.Credits
                 scaler.referenceResolution = new Vector2(1920, 1080); scaler.matchWidthOrHeight = 0.5f;
                 var rootRect = canvasRoot.GetComponent<RectTransform>();
                 rootRect.sizeDelta = new Vector2(1920, 1080);
-                Image("BlackBackground", rootRect, Vector2.zero, Vector2.one, Color.black).raycastTarget = true;
+                Image("BlackBackground", rootRect, Vector2.zero, Vector2.one, new Color32(5, 6, 8, 255)).raycastTarget = true;
                 var viewport = Rect("CreditsViewport", rootRect, new Vector2(0.12f, 0.12f), new Vector2(0.88f, 0.93f));
                 viewport.gameObject.AddComponent<RectMask2D>();
                 var content = Rect("RollingContent", viewport, new Vector2(0, 1), Vector2.one);
@@ -113,7 +126,7 @@ namespace EchoProtocol.Editor.Credits
                 var fade = Rect("TopAndBottomEdgeFade", viewport, Vector2.zero, Vector2.one).gameObject.AddComponent<CreditsEdgeFade>();
                 fade.raycastTarget = false;
                 var hint = Label("HoldSpaceToSkip", rootRect, new Vector2(0.69f, 0.045f), new Vector2(0.95f, 0.08f));
-                hint.text = "HOLD SPACE TO SKIP"; hint.fontSize = 20; hint.alignment = TextAlignmentOptions.Right;
+                hint.text = "HOLD SPACE TO SKIP"; hint.fontSize = 23; hint.alignment = TextAlignmentOptions.MidlineRight;
                 var progressTrack = Image("SkipProgressTrack", rootRect, new Vector2(0.82f, 0.028f), new Vector2(0.95f, 0.031f), new Color(0.18f, 0.18f, 0.18f));
                 var progress = Image("SkipProgress", progressTrack.transform, Vector2.zero, Vector2.one, new Color(0.8f, 0.8f, 0.8f));
                 progress.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Background.psd");
@@ -127,7 +140,6 @@ namespace EchoProtocol.Editor.Credits
                 var controller = canvasRoot.AddComponent<CreditsController>();
                 controller.Configure(data, UiTypographyTheme.BodyTmp, UiTypographyTheme.ButtonTmp, viewport, content,
                     group, music, fallbackListener, hint, progress, drone);
-                Canvas.ForceUpdateCanvases(); controller.RebuildContent();
                 EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene, ScenePath);
                 EnsureBuildList(); AssetDatabase.SaveAssets();
                 File.WriteAllText(ReportPath, "AfterCredit saved: local rolling TMP credits, verified names, scene references and build scene list.");
@@ -139,29 +151,6 @@ namespace EchoProtocol.Editor.Credits
                 if (opened) EditorSceneManager.CloseScene(scene, true);
             }
         }
-
-        private static CreditsData CreateDataIfMissing()
-        {
-            var data = AssetDatabase.LoadAssetAtPath<CreditsData>(DataPath);
-            if (data != null) return data;
-            Directory.CreateDirectory(Path.GetDirectoryName(DataPath)); AssetDatabase.Refresh();
-            data = ScriptableObject.CreateInstance<CreditsData>();
-            data.logo = Resources.Load<Sprite>("UI/Loading/ReferenceEchoLogo");
-            const string ownership = "docs/04_ECHO_PROTOCOL_Project_Management_Baseline_REVISED.md, 01_MODULE_OWNERSHIP; A–D names confirmed by user on 2026-11-26.";
-            data.sections = new[]
-            {
-                Section("GAMEPLAY · UI · LEVEL DESIGN", "Đặng Huy Hoàng", "Player systems, mission flow, maps and presentation.", ownership),
-                Section("MULTIPLAYER · NETWORKING", "Hứa Thành Đạt", "Lobby, host authority, state replication and scene synchronization.", ownership),
-                Section("MONSTER AI · AED · TELEMETRY", "Lâm Thanh Phúc", "Monster behavior, player and team modeling, adaptive experience and research.", ownership),
-                Section("BACKEND · DATABASE · ECONOMY", "Nguyễn Nhật Lệ Thuyên", "Authentication, profiles, APIs, rewards, shop and payment sandbox.", ownership),
-                Section("ACADEMIC SUPERVISOR", "Đào Quốc Tuấn", "", "Supervisor identity confirmed by user on 2026-11-26; no academic degree was supplied.")
-            };
-            AssetDatabase.CreateAsset(data, DataPath);
-            return data;
-        }
-
-        private static CreditsData.Section Section(string role, string name, string contribution, string evidence) =>
-            new CreditsData.Section { role = role, names = new[] { name }, contribution = contribution, evidence = evidence };
 
         private static void EnsureBuildList()
         {
@@ -204,11 +193,11 @@ namespace EchoProtocol.Editor.Credits
         private static TMP_Text Label(string name, Transform parent, Vector2 min, Vector2 max)
         {
             var label = Rect(name, parent, min, max).gameObject.AddComponent<TextMeshProUGUI>();
-            UiTypographyTheme.Apply(label); label.color = new Color(0.55f, 0.55f, 0.55f); label.raycastTarget = false;
+            UiTypographyTheme.Apply(label); label.color = new Color32(157, 157, 170, 255); label.raycastTarget = false;
             return label;
         }
 
-        [MenuItem("ECHO Protocol/Credits/Render 1080p 1440p And 4K Previews")]
+        [MenuItem("ECHO Protocol/Credits/Render Final Credits Previews")]
         public static void CapturePreviews()
         {
             if (_capture != null || EditorApplication.isPlayingOrWillChangePlaymode) return;
@@ -222,7 +211,22 @@ namespace EchoProtocol.Editor.Credits
             private readonly Camera _camera;
             private readonly Canvas _canvas;
             private readonly System.Collections.Generic.Dictionary<Canvas, bool> _otherOverlays = new();
-            private readonly Vector2Int[] _resolutions = { new(1920, 1080), new(2560, 1440), new(3840, 2160) };
+            private readonly (string Section, int Index, int Width, int Height)[] _shots =
+            {
+                ("opening", 0, 1920, 1080),
+                ("development-team", 1, 1920, 1080),
+                ("game-design", 3, 1920, 1080),
+                ("engineering", 5, 2560, 1440),
+                ("audio", 9, 3840, 2160),
+                ("playtesters", 11, 2560, 1080),
+                ("powered-by", 13, 1920, 1080),
+                ("environment-vehicles", 14, 1920, 1080),
+                ("asset-attributions", 15, 2560, 1440),
+                ("legal", 16, 3840, 2160),
+                ("special-thanks", 17, 1280, 720),
+                ("closing", 18, 960, 540),
+                ("compact-window", 5, 1024, 768)
+            };
             private RenderTexture _texture;
             private AsyncGPUReadbackRequest _readback;
             private int _index, _settle;
@@ -252,22 +256,25 @@ namespace EchoProtocol.Editor.Credits
                     _otherOverlays[other] = other.enabled; other.enabled = false;
                 }
                 Directory.CreateDirectory("Temp/Credits");
-                File.WriteAllText("Temp/Credits/preview-layout.csv", "width,height,canvasScale,viewportWidth,viewportHeight,contentHeight\n");
+                File.WriteAllText("Temp/Credits/preview-layout.csv", "section,width,height,designScale,viewportWidth,viewportHeight\n");
                 Prepare();
             }
 
             private void Prepare()
             {
-                var size = _resolutions[_index];
-                _texture = new RenderTexture(size.x, size.y, 24); _texture.Create();
+                var shot = _shots[_index];
+                _texture = new RenderTexture(shot.Width, shot.Height, 24); _texture.Create();
                 _camera.targetTexture = _texture;
-                Canvas.ForceUpdateCanvases(); _controller.PreviewSection(_index == 0 ? 0 : _index == 1 ? 2 : int.MaxValue);
-                _controller.GetComponentsInChildren<Image>().Single(image => image.name == "SkipProgress").fillAmount = _index * 0.5f;
+                var rect = _canvas.GetComponent<RectTransform>();
+                float scale = Mathf.Sqrt(shot.Width / 1920f * shot.Height / 1080f);
+                rect.sizeDelta = new Vector2(shot.Width, shot.Height) / scale;
+                _controller.ApplySafeArea(new Rect(0, 0, shot.Width, shot.Height), new Vector2(shot.Width, shot.Height));
+                Canvas.ForceUpdateCanvases();
+                _controller.PreviewSection(shot.Index);
                 foreach (var label in _controller.Content.GetComponentsInChildren<TMP_Text>()) label.ForceMeshUpdate(true);
                 Canvas.ForceUpdateCanvases();
                 // Switching an imported overlay Canvas can update its root transform during layout.
                 // Frame its settled rect, rather than assuming its saved screen origin is world zero.
-                var rect = _canvas.GetComponent<RectTransform>();
                 _camera.transform.position = rect.TransformPoint(rect.rect.center) - rect.forward * 10;
                 _camera.transform.rotation = rect.rotation;
                 _camera.orthographicSize = rect.rect.height * rect.lossyScale.y * 0.5f;
@@ -277,10 +284,10 @@ namespace EchoProtocol.Editor.Credits
             public void Tick()
             {
                 if (_disposed) return;
-                if (_error != null || _index >= _resolutions.Length || EditorApplication.timeSinceStartup - _progressAt > 90)
+                if (_error != null || _index >= _shots.Length || EditorApplication.timeSinceStartup - _progressAt > 90)
                 {
-                    File.WriteAllText(ReportPath, _error ?? (_index >= _resolutions.Length
-                        ? "Credits previews rendered at 1920x1080, 2560x1440 and 3840x2160 in Temp/Credits."
+                    File.WriteAllText(ReportPath, _error ?? (_index >= _shots.Length
+                        ? $"{_shots.Length} Final Credits previews rendered in Temp/Credits."
                         : "Credits preview timed out; scene assets preserved."));
                     Dispose(); _capture = null; return;
                 }
@@ -303,18 +310,20 @@ namespace EchoProtocol.Editor.Credits
                             var raw = result.GetData<byte>(); bool visible = false;
                             for (int p = 0; p < raw.Length; p++) if (raw[p] > 32) { visible = true; break; }
                             if (!visible) throw new InvalidOperationException("Credits preview contains no visible UI; no successful visual validation recorded.");
-                            var size = _resolutions[_index];
-                            var pixels = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
+                            var shot = _shots[_index];
+                            var pixels = new Texture2D(shot.Width, shot.Height, TextureFormat.RGB24, false);
                             try
                             {
                                 pixels.LoadRawTextureData(result.GetData<byte>()); pixels.Apply();
-                                File.WriteAllBytes($"Temp/Credits/{size.x}x{size.y}.png", pixels.EncodeToPNG());
+                                File.WriteAllBytes($"Temp/Credits/{shot.Section}-{shot.Width}x{shot.Height}.png", pixels.EncodeToPNG());
                             }
                             finally { UnityEngine.Object.DestroyImmediate(pixels); }
-                            File.AppendAllText("Temp/Credits/preview-layout.csv", $"{size.x},{size.y},{_canvas.scaleFactor:F3},{_controller.Viewport.rect.width:F2},{_controller.Viewport.rect.height:F2},{_controller.Content.rect.height:F2}\n");
+                            float scale = Mathf.Sqrt(shot.Width / 1920f * shot.Height / 1080f);
+                            File.AppendAllText("Temp/Credits/preview-layout.csv",
+                                FormattableString.Invariant($"{shot.Section},{shot.Width},{shot.Height},{scale:F3},{_controller.Viewport.rect.width:F2},{_controller.Viewport.rect.height:F2}\n"));
                             _camera.targetTexture = null; UnityEngine.Object.DestroyImmediate(_texture); _texture = null;
                             _index++;
-                            if (_index < _resolutions.Length) Prepare();
+                            if (_index < _shots.Length) Prepare();
                         }
                         catch (Exception error) { _error = error.ToString(); }
                         finally { _pending = false; }

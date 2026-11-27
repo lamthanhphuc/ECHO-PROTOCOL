@@ -1,4 +1,5 @@
 using System;
+using EchoProtocol.Settings;
 
 namespace EchoProtocol.Salvage
 {
@@ -17,14 +18,16 @@ namespace EchoProtocol.Salvage
     public readonly struct SalvageScrapType
     {
         public readonly string Name, Visual;
+        private readonly string _vietnameseName;
+        public string DisplayName => GameLanguage.Choose(_vietnameseName ?? Name, Name);
         public readonly int MinValue, MaxValue;
         public readonly float Weight;
         public readonly bool Heavy, Fragile, Noisy;
         public readonly bool Pocketable;
         public readonly SalvageCargoMaterial Material;
         public SalvageScrapType(string name, string visual, int min, int max, float weight,
-            SalvageCargoMaterial material, bool heavy = false, bool fragile = false, bool noisy = false, bool pocketable = true)
-        { Name = name; Visual = visual; MinValue = min; MaxValue = max; Weight = weight;
+            SalvageCargoMaterial material, bool heavy = false, bool fragile = false, bool noisy = false, bool pocketable = true, string vietnameseName = null)
+        { Name = name; _vietnameseName = vietnameseName; Visual = visual; MinValue = min; MaxValue = max; Weight = weight;
           Material = material; Heavy = heavy; Fragile = fragile; Noisy = noisy; Pocketable = pocketable; }
     }
 
@@ -35,41 +38,41 @@ namespace EchoProtocol.Salvage
         public const float DaySeconds = 600;
         public static readonly SalvageScrapType[] Types =
         {
-            new("Power Core", "FuelCell", 160, 240, 18, SalvageCargoMaterial.Metal, heavy:true),
-            new("Industrial Battery", "FuelCell", 110, 170, 14, SalvageCargoMaterial.Metal, heavy:true),
-            new("Research Scanner", "SurveyScanner", 45, 80, 3, SalvageCargoMaterial.Plastic),
-            new("Communication Module", "Resonator", 35, 65, 2, SalvageCargoMaterial.Metal),
-            new("Medical Supplies", "UtilityCase", 35, 60, 2, SalvageCargoMaterial.Plastic),
-            new("Security Actuator", "UtilityCase", 40, 75, 4, SalvageCargoMaterial.Metal),
-            new("Biological Specimen", "AlienSpecimen", 90, 150, 6, SalvageCargoMaterial.Organic, fragile:true),
-            new("Industrial Canister", "FuelCanister", 75, 120, 10, SalvageCargoMaterial.Metal, heavy:true),
-            new("Tissue Sample", "OrganicSample", 55, 100, 3, SalvageCargoMaterial.Organic, fragile:true),
-            new("Unstable Resonator", "Resonator", 100, 160, 5, SalvageCargoMaterial.Metal, noisy:true),
-            new("Survey Case", "UtilityCase", 50, 85, 5, SalvageCargoMaterial.Plastic),
-            new("Containment Device", "FuelCanister", 120, 190, 12, SalvageCargoMaterial.Metal, heavy:true),
-            new("Fire Extinguisher", "FireExtinguisher", 30, 65, 4, SalvageCargoMaterial.Metal),
-            new("Security Camera", "SecurityCamera", 45, 85, 2, SalvageCargoMaterial.Metal),
-            new("Wall Light", "WallLight", 25, 50, 1, SalvageCargoMaterial.Plastic),
-            new("Hanging Light", "HangingLight", 30, 60, 2, SalvageCargoMaterial.Metal),
-            new("Utility Cart", "UtilityCart", 100, 160, 18, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Waste Container", "WasteContainer", 60, 100, 12, SalvageCargoMaterial.Plastic, pocketable:false),
-            new("Antique Clock", "AntiqueClock", 55, 100, 2, SalvageCargoMaterial.Metal),
-            new("Table Lamp", "TableLamp", 35, 75, 2, SalvageCargoMaterial.Metal, fragile:true),
-            new("Ceramic Vase", "CeramicVase", 60, 110, 2, SalvageCargoMaterial.Plastic, fragile:true),
-            new("Decorative Vase", "DecorativeVase", 50, 95, 2, SalvageCargoMaterial.Plastic, fragile:true),
-            new("Framed Painting", "FramedPainting", 45, 90, 2, SalvageCargoMaterial.Plastic),
-            new("Recovery Chair", "RecoveryChair", 60, 100, 8, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Hospital Bed", "HospitalBed", 130, 210, 30, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Bunk Bed", "BunkBed", 140, 230, 35, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Storage Cabinet", "StorageCabinet", 100, 180, 25, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Recovery Sofa", "RecoverySofa", 110, 190, 22, SalvageCargoMaterial.Plastic, pocketable:false),
-            new("Utility Table", "UtilityTable", 75, 130, 15, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Recovery Bench", "RecoveryBench", 85, 145, 16, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Vehicle Relic", "VehicleRelic", 180, 280, 30, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Boat Relic", "BoatRelic", 150, 240, 25, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Ship Relic", "ShipRelic", 200, 320, 35, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Saucer Relic", "SaucerRelic", 220, 350, 35, SalvageCargoMaterial.Metal, pocketable:false),
-            new("Xe hàng", "TransportCart", 0, 0, 12, SalvageCargoMaterial.Metal, pocketable:false)
+            new("Power Core", "FuelCell", 160, 240, 18, SalvageCargoMaterial.Metal, heavy:true, vietnameseName:"Lõi năng lượng"),
+            new("Industrial Battery", "FuelCell", 110, 170, 14, SalvageCargoMaterial.Metal, heavy:true, vietnameseName:"Ắc quy công nghiệp"),
+            new("Research Scanner", "SurveyScanner", 45, 80, 3, SalvageCargoMaterial.Plastic, vietnameseName:"Máy quét nghiên cứu"),
+            new("Communication Module", "Resonator", 35, 65, 2, SalvageCargoMaterial.Metal, vietnameseName:"Mô-đun liên lạc"),
+            new("Medical Supplies", "UtilityCase", 35, 60, 2, SalvageCargoMaterial.Plastic, vietnameseName:"Vật tư y tế"),
+            new("Security Actuator", "UtilityCase", 40, 75, 4, SalvageCargoMaterial.Metal, vietnameseName:"Bộ truyền động an ninh"),
+            new("Biological Specimen", "AlienSpecimen", 90, 150, 6, SalvageCargoMaterial.Organic, fragile:true, vietnameseName:"Mẫu sinh vật"),
+            new("Industrial Canister", "FuelCanister", 75, 120, 10, SalvageCargoMaterial.Metal, heavy:true, vietnameseName:"Bình chứa công nghiệp"),
+            new("Tissue Sample", "OrganicSample", 55, 100, 3, SalvageCargoMaterial.Organic, fragile:true, vietnameseName:"Mẫu mô"),
+            new("Unstable Resonator", "Resonator", 100, 160, 5, SalvageCargoMaterial.Metal, noisy:true, vietnameseName:"Bộ cộng hưởng bất ổn"),
+            new("Survey Case", "UtilityCase", 50, 85, 5, SalvageCargoMaterial.Plastic, vietnameseName:"Vali khảo sát"),
+            new("Containment Device", "FuelCanister", 120, 190, 12, SalvageCargoMaterial.Metal, heavy:true, vietnameseName:"Thiết bị cách ly"),
+            new("Fire Extinguisher", "FireExtinguisher", 30, 65, 4, SalvageCargoMaterial.Metal, vietnameseName:"Bình chữa cháy"),
+            new("Security Camera", "SecurityCamera", 45, 85, 2, SalvageCargoMaterial.Metal, vietnameseName:"Camera an ninh"),
+            new("Wall Light", "WallLight", 25, 50, 1, SalvageCargoMaterial.Plastic, vietnameseName:"Đèn tường"),
+            new("Hanging Light", "HangingLight", 30, 60, 2, SalvageCargoMaterial.Metal, vietnameseName:"Đèn treo"),
+            new("Utility Cart", "UtilityCart", 100, 160, 18, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Xe đẩy dụng cụ"),
+            new("Waste Container", "WasteContainer", 60, 100, 12, SalvageCargoMaterial.Plastic, pocketable:false, vietnameseName:"Thùng rác"),
+            new("Antique Clock", "AntiqueClock", 55, 100, 2, SalvageCargoMaterial.Metal, vietnameseName:"Đồng hồ cổ"),
+            new("Table Lamp", "TableLamp", 35, 75, 2, SalvageCargoMaterial.Metal, fragile:true, vietnameseName:"Đèn bàn"),
+            new("Ceramic Vase", "CeramicVase", 60, 110, 2, SalvageCargoMaterial.Plastic, fragile:true, vietnameseName:"Bình gốm"),
+            new("Decorative Vase", "DecorativeVase", 50, 95, 2, SalvageCargoMaterial.Plastic, fragile:true, vietnameseName:"Bình trang trí"),
+            new("Framed Painting", "FramedPainting", 45, 90, 2, SalvageCargoMaterial.Plastic, vietnameseName:"Tranh có khung"),
+            new("Recovery Chair", "RecoveryChair", 60, 100, 8, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Ghế"),
+            new("Hospital Bed", "HospitalBed", 130, 210, 30, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Giường bệnh"),
+            new("Bunk Bed", "BunkBed", 140, 230, 35, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Giường tầng"),
+            new("Storage Cabinet", "StorageCabinet", 100, 180, 25, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Tủ đựng đồ"),
+            new("Recovery Sofa", "RecoverySofa", 110, 190, 22, SalvageCargoMaterial.Plastic, pocketable:false, vietnameseName:"Ghế sofa"),
+            new("Utility Table", "UtilityTable", 75, 130, 15, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Bàn dụng cụ"),
+            new("Recovery Bench", "RecoveryBench", 85, 145, 16, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Ghế băng"),
+            new("Vehicle Relic", "VehicleRelic", 180, 280, 30, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Xe cũ"),
+            new("Boat Relic", "BoatRelic", 150, 240, 25, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Thuyền cũ"),
+            new("Ship Relic", "ShipRelic", 200, 320, 35, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Tàu cũ"),
+            new("Saucer Relic", "SaucerRelic", 220, 350, 35, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Đĩa bay cũ"),
+            new("Transport Cart", "TransportCart", 0, 0, 12, SalvageCargoMaterial.Metal, pocketable:false, vietnameseName:"Xe hàng")
         };
 
         public readonly SalvageCargo[] Cargo = new SalvageCargo[Capacity];

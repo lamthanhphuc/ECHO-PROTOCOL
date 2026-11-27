@@ -29,7 +29,7 @@ namespace EchoProtocol.Audio
             if (runtime == null || !runtime.isActiveAndEnabled) return;
             if (runtime._hornMatch != match) { runtime._hornMatch = match; runtime._lastHorn = 0; }
             if (!HorrorPresentationRules.ConsumeOrdinal(ordinal, ref runtime._lastHorn)
-                || !HorrorPresentationSettings.AmbienceEnabled || match == null || match.IsEnded) return;
+                || match == null || match.IsEnded) return;
             var clip = runtime._catalog.Find("flooded/Horn");
             if (clip == null) return;
             runtime.StopPersonalEffects(); runtime._rareAmbient.Stop();
@@ -45,9 +45,9 @@ namespace EchoProtocol.Audio
             if (runtime == null) return;
             if (runtime._worldCueMatch != match) { runtime._worldCueMatch = match; runtime._lastWorldCue = 0; }
             if (!HorrorPresentationRules.ConsumeOrdinal(ordinal, ref runtime._lastWorldCue)) return;
-            // Consume even when muted; never replay after settings change.
+            // Consume the cue even when its presentation is blocked.
             var camera = Camera.main;
-            if (!HorrorPresentationSettings.AmbienceEnabled || runtime.CosmeticBlocked(camera)
+            if (runtime.CosmeticBlocked(camera)
                 || runtime._horn.isPlaying
                 || Time.unscaledTime < runtime._pacing.RecoveryUntil
                 || (camera.transform.position - position).sqrMagnitude > range * range) return;
@@ -64,17 +64,17 @@ namespace EchoProtocol.Audio
         }
 
         public static float ScannerInterference => _instance != null && _instance.isActiveAndEnabled && _instance._safeForCosmetics
-            && HorrorPresentationSettings.EchoIntensity > 0 && !PlayerCameraSettings.ReduceMotion
+            && !PlayerCameraSettings.ReduceMotion
                 ? Mathf.Clamp01((_instance._scannerUntil - Time.unscaledTime) / .5f) : 0f;
 
         public static void TryScannerInterference()
         {
             var runtime = _instance;
             float now = Time.unscaledTime;
-            if (runtime == null || !runtime._safeForCosmetics || HorrorPresentationSettings.EchoIntensity == 0
+            if (runtime == null || !runtime._safeForCosmetics
                 || PlayerCameraSettings.ReduceMotion || now < runtime._nextScannerEchoAt
                 || now < runtime._pacing.RecoveryUntil) return;
-            runtime._nextScannerEchoAt = now + (HorrorPresentationSettings.EchoIntensity == 1 ? 360f : 240f);
+            runtime._nextScannerEchoAt = now + 240f;
             runtime._scannerUntil = now + .5f;
         }
 
@@ -179,17 +179,18 @@ namespace EchoProtocol.Audio
                 bool gameplay = LobbyMapCatalog.IsGameplayScene(SceneManager.GetActiveScene().name);
                 bool blocked = !gameplay || CosmeticBlocked(camera) || _horn.isPlaying;
                 bool outdoor = SceneManager.GetActiveScene().name == "Scene_A" || SceneManager.GetActiveScene().name == "Scene_B";
-                Loop(_outdoorWind, outdoor && HorrorPresentationSettings.AmbienceEnabled ? "flooded/Wind" : null, .055f);
+                Loop(_outdoorWind, outdoor ? "flooded/Wind" : null, .055f);
                 var liveMatch = NetworkMatchState.Instance;
                 bool validMatch = liveMatch != null && liveMatch.Object != null && liveMatch.Object.IsValid
                     && liveMatch.Runner != null && liveMatch.Runner.IsRunning;
-                if (!gameplay || !validMatch || liveMatch.IsEnded || !HorrorPresentationSettings.AmbienceEnabled) _horn.Stop();
+                if (!gameplay || !validMatch || liveMatch.IsEnded) _horn.Stop();
                 _safeForCosmetics = !blocked;
-                if (blocked || HorrorPresentationSettings.EchoIntensity == 0) StopPersonalEffects();
-                if (blocked || !HorrorPresentationSettings.AmbienceEnabled) _rareAmbient.Stop();
-                bool ready = _pacing.Ready(now, blocked);
-                if (ready && HorrorPresentationSettings.EchoIntensity > 0)
-                    TryAtmosphereCue(camera, now);
+                if (blocked)
+                {
+                    StopPersonalEffects();
+                    _rareAmbient.Stop();
+                }
+                if (_pacing.Ready(now, blocked)) TryAtmosphereCue(camera, now);
             }
             if (_rareAmbient != null && _rareAmbient.isPlaying)
             {
@@ -215,9 +216,7 @@ namespace EchoProtocol.Audio
 
         private void TryAtmosphereCue(Camera camera, float now)
         {
-            bool echo = HorrorPresentationSettings.EchoIntensity > 0 && now >= _pacing.NextEchoAt
-                && Random.value < (HorrorPresentationSettings.EchoIntensity == 1 ? .2f : .4f);
-            if (!echo) return;
+            if (now < _pacing.NextEchoAt || Random.value >= .4f) return;
             int first = Random.Range(0, 3);
             for (int attempt = 0; attempt < 3; attempt++)
             {
@@ -226,19 +225,16 @@ namespace EchoProtocol.Audio
                 if (!_pacing.CanChoose(cueId)) continue;
                 var clip = _catalog.Find("player/concrete_footstep_01");
                 if (clip == null || !TryCuePosition(camera, out var position)) continue;
-                if (echo)
+                for (int i = 0; i < _echoSteps.Length; i++)
                 {
-                    for (int i = 0; i < _echoSteps.Length; i++)
-                    {
-                        var source = _echoSteps[i];
-                        source.transform.position = position + camera.transform.right * i * .65f;
-                        source.clip = _catalog.Find("player/concrete_footstep_0" + ((index + i) % 4 + 1));
-                        source.volume = _catalog.effectsVolume * (HorrorPresentationSettings.EchoIntensity == 1 ? .18f : .28f);
-                        source.pitch = .82f; source.loop = false;
-                        _echoStepAt[i] = now + i * .55f;
-                    }
+                    var source = _echoSteps[i];
+                    source.transform.position = position + camera.transform.right * i * .65f;
+                    source.clip = _catalog.Find("player/concrete_footstep_0" + ((index + i) % 4 + 1));
+                    source.volume = _catalog.effectsVolume * .28f;
+                    source.pitch = .82f; source.loop = false;
+                    _echoStepAt[i] = now + i * .55f;
                 }
-                _pacing.Presented(cueId, now, Random.Range(65f, 100f), echo);
+                _pacing.Presented(cueId, now, Random.Range(65f, 100f), true);
                 return;
             }
         }

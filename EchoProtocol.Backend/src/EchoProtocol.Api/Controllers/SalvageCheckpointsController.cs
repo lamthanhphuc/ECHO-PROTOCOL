@@ -50,6 +50,7 @@ public sealed class SalvageCheckpointsController(AppDbContext db,TimeProvider cl
         }catch(JsonException){return BadRequest();}catch(KeyNotFoundException){return BadRequest();}catch(InvalidOperationException){return BadRequest();}catch(FormatException){return BadRequest();}catch(OverflowException){return BadRequest();}
         var row=await db.SalvageCheckpoints.SingleOrDefaultAsync(x=>x.MatchId==request.MatchId,ct);
         if(row!=null&&request.Revision<=row.Revision)return Conflict(ApiResponse<object>.Fail("Stale checkpoint","SALVAGE_STALE_CHECKPOINT"));
+        if(row?.Failed == true && !request.Failed)return Conflict(ApiResponse<object>.Fail("Failed run cannot be resumed","SALVAGE_STALE_CHECKPOINT"));
         if(row==null){row=new SalvageCheckpoint {MatchId=request.MatchId};db.SalvageCheckpoints.Add(row);}
         row.OwnerId=UserId;row.Revision=request.Revision;row.StateJson=request.StateJson;row.Failed=request.Failed;
         row.ResultJson=JsonSerializer.Serialize(request.Result,new JsonSerializerOptions(JsonSerializerDefaults.Web));row.SavedAtUtc=now;

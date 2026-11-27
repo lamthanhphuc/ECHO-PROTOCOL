@@ -84,13 +84,15 @@ namespace EchoProtocol.Tests.EditMode.Controls
             Assert.That(time, Is.EqualTo(definition.Duration).Within(0.01));
         }
 
-        [Test]
-        public void TimelineEvaluatesCameraAtEachAuthoredShot()
+        [TestCase("SciFi", 30f)]
+        [TestCase("Scene_B", 28f)]
+        public void TimelineEvaluatesCameraAtEachAuthoredShot(string sceneName, float duration)
         {
-            var scene = EditorSceneManager.OpenPreviewScene("Assets/Scenes/SciFi.unity");
+            var scene = EditorSceneManager.OpenPreviewScene("Assets/Scenes/" + sceneName + ".unity");
             try
             {
                 var controller = scene.GetRootGameObjects().Select(root => root.GetComponent<OpeningCutsceneController>()).First(c => c != null);
+                Assert.That(controller.Definition.Duration, Is.EqualTo(duration).Within(0.01));
                 double start = 0;
                 foreach (var shot in controller.Definition.shots)
                 {
@@ -105,7 +107,7 @@ namespace EchoProtocol.Tests.EditMode.Controls
         }
 
         [Test]
-        public void SciFiSceneReferencesAreSaved_AndOtherMapsHaveNoIntro()
+        public void EachGameplaySceneUsesItsOwnOpeningDefinitionWhenConfigured()
         {
             foreach (string name in new[] { "SciFi", "Scene_A", "Scene_B" })
             {
@@ -113,14 +115,17 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 try
                 {
                     var controllers = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<OpeningCutsceneController>(true)).ToArray();
-                    Assert.That(controllers.Length, Is.EqualTo(name == "SciFi" ? 1 : 0));
+                    Assert.That(controllers.Length, Is.EqualTo(name == "Scene_A" ? 0 : 1));
                     if (controllers.Length == 0) continue;
                     var controller = controllers[0];
+                    Assert.That(controller.Definition.sceneName, Is.EqualTo(name));
+                    Assert.That(controller.Definition.hidePlayers, Is.EqualTo(name == "Scene_B"));
                     Assert.That(controller.IsPlayable, Is.True);
                     Assert.That(controller.Director.playOnAwake, Is.False);
                     Assert.That(controller.CinematicCamera.enabled, Is.False);
                     Assert.That(controller.GetComponentInChildren<AudioListener>().enabled, Is.False);
                     Assert.That(controller.GetComponentsInChildren<NetworkObject>(true).Length, Is.Zero);
+                    Assert.That(controller.GetComponentsInChildren<Collider>(true), Is.Empty);
                     Assert.That(controller.GetComponentsInChildren<OpeningCutsceneShotAnchor>(true).All(a => a.source != null && a.end != null), Is.True);
                     foreach (var binding in controller.Definition.timeline.outputs)
                         Assert.That(controller.Director.GetGenericBinding(binding.sourceObject), Is.Not.Null);

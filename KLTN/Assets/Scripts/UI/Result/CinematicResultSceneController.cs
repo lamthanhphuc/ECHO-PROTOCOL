@@ -433,11 +433,11 @@ namespace EchoProtocol.UI.Result
                 }
                 var reward = await ResultRewardBridge.LoadAsync(matchId, token);
                 if (token.IsCancellationRequested) return;
-                if (reward.HasConfirmedReward)
+                if (reward.HasConfirmedReward && reward.MatchId == matchId)
                 {
                     _rewardConfirmed = true;
                     _rewardConfirmedAt = Time.unscaledTime;
-                    SetText("ReturnLabel", EchoProtocol.Settings.GameLanguage.Choose("XEM CREDITS", "VIEW CREDITS"));
+                    SetText("ReturnLabel", EchoProtocol.Settings.GameLanguage.Choose("Đội Ngũ Sản Xuất", "VIEW CREDITS"));
                     SetText("RewardXp", $"+{reward.ExperienceAwarded.Value:N0} XP");
                     SetText("RewardCredits", $"+{reward.CreditsAwarded.Value:N0} CREDITS");
                     var levelNotice = Find<Text>("RewardStatus");
@@ -516,8 +516,7 @@ namespace EchoProtocol.UI.Result
             var runner = bootstrap?.Runner;
             bool inRoom = runner != null && runner.IsRunning;
             bool host = inRoom && runner.IsServer && runner.IsSceneAuthority;
-            if (!retry && SceneManager.GetActiveScene().name == GameConstants.SceneLobby
-                && (!inRoom || bootstrap.State == NetworkSessionState.InLobby))
+            if (!retry && SceneManager.GetActiveScene().name == GameConstants.SceneLobby)
             {
                 ResultSession.Clear();
                 return;

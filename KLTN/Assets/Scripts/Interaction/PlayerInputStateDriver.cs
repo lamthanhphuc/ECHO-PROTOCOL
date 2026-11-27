@@ -16,7 +16,12 @@ public sealed class PlayerInputStateDriver : MonoBehaviour
 
     private void OnEnable() => SceneManager.sceneUnloaded += OnSceneUnloaded;
     private void Update() => PlayerInteractionControlLock.ReleaseInvalidLocks();
-    private void OnSceneUnloaded(Scene scene) => PlayerInteractionControlLock.ReleaseAll();
+    private void OnSceneUnloaded(Scene scene)
+    {
+        // AfterCredit releases its own lock. Settings can still own a lock in the active scene.
+        if (scene.name != EchoProtocol.Core.GameConstants.SceneCredits)
+            PlayerInteractionControlLock.ReleaseAll();
+    }
     private void OnDisable()
     {
         SceneManager.sceneUnloaded -= OnSceneUnloaded;

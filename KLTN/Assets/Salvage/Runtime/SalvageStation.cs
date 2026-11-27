@@ -20,7 +20,7 @@ namespace EchoProtocol.Salvage
             if (_highlight != null) _highlight.SetHighlightActive(run != null
                 && run.Phase != SalvagePhase.Ended && run.Phase != SalvagePhase.Failed);
         }
-        public override string InteractionPrompt => "Terminal Salvage";
+        public override string InteractionPrompt => EchoProtocol.Settings.GameLanguage.Choose("Máy điều hành thu hồi", "Salvage Terminal");
         public override bool EmitsRuntimeInteractionNoise => false;
         protected override void ExecuteInteraction(in InteractionContext context)
         {

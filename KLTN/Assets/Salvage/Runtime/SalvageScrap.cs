@@ -47,8 +47,11 @@ namespace EchoProtocol.Salvage
         public Vector3 WorldPosition => transform.position;
         public bool IsAvailableInWorld => TryCargo(out var c) && c.Definition!=SalvageLedger.CartDefinition && (c.State == SalvageCargoState.World||c.State==SalvageCargoState.Stored);
         public override string InteractionPrompt => TryCargo(out var c)
-            ? $"{SalvageLedger.Types[c.Definition].Name} • $ {c.Value:N0} • {SalvageLedger.Types[c.Definition].Weight:0.#} kg • {(SalvageLedger.Types[c.Definition].Pocketable?"Nhặt / cất túi":"Kéo / cầm") }"
-            : "Scrap";
+            ? $"{SalvageLedger.Types[c.Definition].DisplayName} • $ {c.Value:N0} • {SalvageLedger.Types[c.Definition].Weight:0.#} kg • " +
+                (SalvageLedger.Types[c.Definition].Pocketable
+                    ? EchoProtocol.Settings.GameLanguage.Choose("Nhặt / cất túi", "Pick up / stow")
+                    : EchoProtocol.Settings.GameLanguage.Choose("Kéo / cầm", "Grab / drag"))
+            : EchoProtocol.Settings.GameLanguage.Choose("Vật phẩm thu hồi", "Salvage Cargo");
         public override bool EmitsRuntimeInteractionNoise => false;
 
         public override void Spawned()
