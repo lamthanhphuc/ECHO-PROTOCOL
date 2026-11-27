@@ -5,6 +5,7 @@ using EchoProtocol.Audio;
 using EchoProtocol.Networking;
 using EchoProtocol.Settings;
 using EchoProtocol.UI;
+using EchoProtocol.UI.Credits;
 using Fusion;
 using TMPro;
 using UnityEngine;
@@ -39,6 +40,8 @@ namespace EchoProtocol.Voice
         private Image[] _meter;
         private string _deviceSignature, _teamSignature, _bindingMessage;
         private bool _open, _micRebinding, _confirmQuit;
+        private bool _previewingCredits;
+        private Button _creditsButton;
         private GameplayAction? _rebindAction;
         private EventSystem _rebindEventSystem;
         private bool _navigationBeforeRebind;
@@ -107,6 +110,9 @@ namespace EchoProtocol.Voice
             }
             SettingsMenuWidgets.Button("LanguageShortcut", window, 20, 15, 170, 42,
                 GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH", false, 16);
+            _creditsButton = SettingsMenuWidgets.Button("ShowAfterCredit", window, 204, 15, 206, 42,
+                GameLanguage.Choose("Đội Ngũ Sản Xuất", "SHOW AFTER CREDIT"), false, 16);
+            _creditsButton.onClick.AddListener(ShowAfterCredit);
             var closeButton = window.Find("CloseButton");
             closeButton.Find("Label").gameObject.SetActive(false);
             foreach (float angle in new[] { -45f, 45f })
@@ -509,6 +515,7 @@ namespace EchoProtocol.Voice
 
         private void Update()
         {
+            if (_previewingCredits) return;
             var keyboard = Keyboard.current;
             if (!_open)
             {
@@ -804,6 +811,20 @@ namespace EchoProtocol.Voice
             rect.anchoredPosition = new Vector2(x, -y);
         }
 
+        private async void ShowAfterCredit()
+        {
+            if (_previewingCredits || !_open || !_creditsButton.gameObject.activeSelf) return;
+            _previewingCredits = true;
+            _creditsButton.interactable = false;
+            try { await CreditsFlow.PlayPreviewAsync(); }
+            catch (Exception error) { Debug.LogException(error); }
+            finally
+            {
+                _previewingCredits = false;
+                if (_creditsButton != null) _creditsButton.interactable = true;
+            }
+        }
+
         private void RefreshVisuals()
         {
             TextAt(Body + "Audio/RareAmbience/Label").text = GameLanguage.Choose("Âm môi trường: ", "Ambient events: ")
@@ -817,6 +838,10 @@ namespace EchoProtocol.Voice
             echoLabel.fontSizeMin = 17f;
             echoLabel.fontSizeMax = SettingsMenuWidgets.ControlFontSize;
             TextAt("Overlay/Window/LanguageShortcut/Label").text = GameLanguage.Current == GameLocale.Vietnamese ? "TIẾNG VIỆT" : "ENGLISH";
+            var sceneName = SceneManager.GetActiveScene().name;
+            _creditsButton.gameObject.SetActive(sceneName == EchoProtocol.Core.GameConstants.SceneMainMenu
+                || sceneName == NetworkBootstrap.LobbySceneName);
+            TextAt("Overlay/Window/ShowAfterCredit/Label").text = GameLanguage.Choose("Đội Ngũ Sản Xuất", "SHOW AFTER CREDIT");
             if (_settingsTitle != null) _settingsTitle.text = GameLanguage.Choose("CÀI ĐẶT", "SETTINGS");
             if (_voiceHeading != null) _voiceHeading.text = GameLanguage.Choose("MICRÔ", "MICROPHONE");
             if (_mouseHeading != null) _mouseHeading.text = GameLanguage.Choose("CHUỘT", "MOUSE");

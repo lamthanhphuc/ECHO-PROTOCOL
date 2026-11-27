@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b86f417d11282948b9e975601797e9e, type: 3}
+  m_Name: PurgeOpeningDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.Cinematics.OpeningCutsceneDefinition
+  sceneName: Scene_B
+  timeline: {fileID: 11400000, guid: ab36b1eb32587084e8a2479c997e345a, type: 2}
+  hidePlayers: 1
+  shots:
+  - name: Shot01_ContaminatedZone
+    sourceHierarchy: GameObject/WaterPlane 2
+    startPosition: {x: 598.7, y: 48.059998, z: 396.2}
+    endPosition: {x: 597.1708, y: 46.059998, z: 395.72946}
+    startEuler: {x: 23.803652, y: 162.89728, z: 0.00000023328835}
+    endEuler: {x: 22.372374, y: 161.54953, z: 0.00000023081708}
+    duration: 6
+    subtitle: "Ch\u1EC9 huy ECHO g\u1ECDi \u0111\u1ED9i Thanh Tr\u1EEBng. \u0110\xE3
+      t\u1EDBi khu v\u1EF1c ng\u1EADp n\u01B0\u1EDBc."
+    subtitleEnglish: ECHO command to Purge team. You have reached the flooded zone.
+    audioKey: horror_ambience/tension_drone_loop
+    audioOverride: {fileID: 0}
+    fillMultiplier: 0
+  - name: Shot02_HostileDetection
+    sourceHierarchy: AlienHunt_Gameplay/AlienNests/AlienNest_01/AlienYoung_01
+    startPosition: {x: 460.1776, y: 19.264585, z: 428.97293}
+    endPosition: {x: 460.57986, y: 19.264585, z: 428.57068}
+    startEuler: {x: 10.1247225, y: 224.99998, z: 0}
+    endEuler: {x: 9.926086, y: 236.4844, z: -0.000000433374}
+    duration: 5
+    subtitle: "Ph\xE1t hi\u1EC7n Alien non. D\xF9ng th\u1ECBt l\xE0m m\u1ED3i nh\u1EED
+      \u0111\u1EC3 ti\u1EBFp c\u1EADn v\xE0 thu gi\u1EEF."
+    subtitleEnglish: Juvenile Alien detected. Use meat as bait to approach and capture
+      it.
+    audioKey: purge_alien/idle_01
+    audioOverride: {fileID: 0}
+    fillMultiplier: 1
+  - name: Shot03_PurgeProtocol
+    sourceHierarchy: Furnace/Furnace_Export (2)
+    startPosition: {x: 474.688, y: 19.118866, z: 420.1501}
+    endPosition: {x: 475.12668, y: 19.118866, z: 421.35538}
+    startEuler: {x: 10.784289, y: 289.99994, z: -0.0000004345618}
+    endEuler: {x: 10.572433, y: 278.49216, z: 0.00000043425885}
+    duration: 7
+    subtitle: "N\u1EA1p nhi\xEAn li\u1EC7u v\xE0o l\xF2, r\u1ED3i \u0111\u01B0a Alien
+      \u0111\xE3 b\u1EAFt t\u1EDBi. M\u1EE5c ti\xEAu: thi\xEAu h\u1EE7y 9 Alien."
+    subtitleEnglish: 'Fuel the furnace before loading a captured Alien. Objective:
+      incinerate 9 Aliens.'
+    audioKey: ui/objective_update
+    audioOverride: {fileID: 0}
+    fillMultiplier: 1
+  - name: Shot04_UnknownThreat
+    sourceHierarchy: SpawnPoints/MonsterSpawn_Stalker_EMPTY
+    startPosition: {x: 467.3586, y: 18.662477, z: 433.50598}
+    endPosition: {x: 466.15158, y: 18.662477, z: 433.50598}
+    startEuler: {x: 358.04382, y: 193.72075, z: 0.000000053391965}
+    endEuler: {x: 357.99695, y: 174.13687, z: 0}
+    duration: 5
+    subtitle: "C\xF3 chuy\u1EC3n \u0111\u1ED9ng l\u1EDBn trong v\xF9ng ng\u1EADp.
+      Gi\u1EEF \u0111\u1ED9i h\xECnh v\xE0 quan s\xE1t."
+    subtitleEnglish: Something large is moving through the flooded zone. Stay together
+      and watch your surroundings.
+    audioKey: horror_ambience/distant_monster_sound
+    audioOverride: {fileID: 8300000, guid: 6d4ad7ff4c2e97f4bb17ecd74e9711dc, type: 3}
+    fillMultiplier: 0.38
+  - name: Shot05_MissionStart
+    sourceHierarchy: SpawnPoints/PlayerStart_EMPTY
+    startPosition: {x: 618.7, y: 21.06, z: 381.2}
+    endPosition: {x: 617.10004, y: 21.06, z: 381.2}
+    startEuler: {x: 7.40691, y: 180, z: 0}
+    endEuler: {x: 7.3149004, y: 170.90985, z: 0.0000000537987}
+    duration: 5
+    subtitle: "\u0110\u1ED9i Thanh Tr\u1EEBng, tri\u1EC3n khai."
+    subtitleEnglish: Purge team, move in.
+    audioKey: ui/match_start
+    audioOverride: {fileID: 0}
+    fillMultiplier: 1
+  fieldOfView: 52
+  holdToSkipSeconds: 1

@@ -392,7 +392,7 @@ namespace EchoProtocol.Networking
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
             if(EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(gameObject)) return false;
-            if (!Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || DebugGodMode
                 || damage <= 0f
                 || !NetworkPlayerLifeStateRules.CanReceiveDamage(Status, HasReviveProtection))
@@ -417,7 +417,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyAuthoritativeNonLethalDamage(float damage, string sourceType, Vector3 hitPosition)
         {
-            if (Object == null || !Object.IsValid || !Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || DebugGodMode
                 || damage <= 0f
                 || Status != NetworkPlayerLifeStatus.Alive
@@ -447,7 +447,7 @@ namespace EchoProtocol.Networking
         {
             if(EchoProtocol.Salvage.SalvageSite.IsActive) return EchoProtocol.Salvage.SalvageRunState.Instance!=null
                 && EchoProtocol.Salvage.SalvageRunState.Instance.TryEnemyHit(this,hitPosition);
-            if (!Object.HasStateAuthority
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || DebugGodMode
                 || HasReviveProtection
                 || !NetworkPlayerLifeStateRules.CanDown(Status))

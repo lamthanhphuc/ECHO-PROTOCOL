@@ -11,6 +11,7 @@ namespace EchoProtocol.Core
         public const string SceneLobby = "Lobby";
         public const string SceneGame = "Game";
         public const string SceneResult = "Result";
+        public const string SceneCredits = "AfterCredit";
         public const string SceneSample = "SampleScene";
     }
 }

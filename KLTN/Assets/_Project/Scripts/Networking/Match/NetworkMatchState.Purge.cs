@@ -136,7 +136,7 @@ namespace EchoProtocol.Networking
         }
         private void BeginPurgeHunt()
         {
-            if (IsEnded) return;
+            if (!IsGameplayReleased || IsEnded) return;
             PurgeHuntsStarted++;
             PurgeMood = PurgeBossMood.Warning; PurgeMoodTimer = TickTimer.CreateFromSeconds(Runner,3);
             PurgeHuntTimer = TickTimer.CreateFromSeconds(Runner,PurgeHuntSeconds); PurgeStaggers=0; PurgeUvExposure=0;
@@ -173,6 +173,7 @@ namespace EchoProtocol.Networking
         }
         private void TickPurgeDirector()
         {
+            if (!Object.HasStateAuthority || !IsGameplayReleased || IsEnded) return;
             PurgePartySize = Mathf.Max(PurgePartySize, CountPurgeGameplayPlayers());
             if (!_purgeBoss && PurgeBossId.IsValid && Runner.TryFindObject(PurgeBossId, out var boss))
                 _purgeBoss = boss.GetComponent<StalkerFusionRuntime>();

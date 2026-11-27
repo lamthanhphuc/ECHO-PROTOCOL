@@ -93,7 +93,7 @@ namespace EchoProtocol.Networking.Authority
                 return false;
             }
 
-            if (!actor.IsValid)
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !actor.IsValid)
             {
                 noiseEvent = default;
                 LastRejectReason = NoiseValidationRejectReason.SourceActionRejected;

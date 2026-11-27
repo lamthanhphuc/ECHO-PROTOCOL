@@ -1,0 +1,443 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 862826e04571f844ba90507ba4700b70, type: 3}
+  m_Name: EchoCreditsData
+  m_EditorClassIdentifier: Assembly-CSharp::EchoProtocol.UI.Credits.CreditsData
+  projectTitle: ECHO PROTOCOL
+  logo: {fileID: 21300000, guid: ff876ee3a32a6844881af4c7d9a72d2c, type: 3}
+  sections:
+  - id: opening
+    title: Opening Title
+    blocks:
+    - heading: 
+      layout: 1
+      columns: 1
+      travelSeconds: 0
+      holdSeconds: 5
+      entries: []
+      note: 
+  - id: team
+    title: Development Team
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 2
+      travelSeconds: 12
+      holdSeconds: 0
+      entries:
+      - name: "L\xE2m Thanh Ph\xFAc"
+        role: "Team Leader \xB7 AI & AED Developer"
+        contribution: 
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: Gameplay & Level Developer
+        contribution: 
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: Multiplayer & Network Developer
+        contribution: 
+      - name: "Nguy\u1EC5n Nh\u1EADt L\u1EC7 Thuy\xEAn"
+        role: Backend & Economy Developer
+        contribution: 
+      note: 
+  - id: production
+    title: Production & Project Management
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 8
+      holdSeconds: 0
+      entries:
+      - name: "L\xE2m Thanh Ph\xFAc"
+        role: Team Leadership & Project Management
+        contribution: 
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: "Project Management \xB7 Scheduling \xB7 Coordination"
+        contribution: 
+      note: 
+  - id: game-design
+    title: Game Design
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 5
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      note: 
+  - id: narrative
+    title: Narrative & Worldbuilding
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 6
+      holdSeconds: 0
+      entries:
+      - name: "Nguy\u1EC5n Nh\u1EADt L\u1EC7 Thuy\xEAn"
+        role: 
+        contribution: 
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      note: 
+  - id: engineering
+    title: Engineering & Programming
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 2
+      travelSeconds: 12
+      holdSeconds: 0
+      entries:
+      - name: "L\xE2m Thanh Ph\xFAc"
+        role: 'AI & AED Programming
+
+          Deployment & Infrastructure'
+        contribution: 'Monster AI
+
+          Adaptive Enemy Director
+
+          AI
+          Behavior & Navigation
+
+          AI Research & Telemetry
+
+          Deployment
+          & Infrastructure'
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 'Gameplay & Systems Programming
+
+          UI Programming'
+        contribution: 'Gameplay Mechanics
+
+          Mission Systems
+
+          Game
+          Modes
+
+          Player Interaction
+
+          Inventory & Equipment
+
+          Character
+          & Cosmetic Systems
+
+          UI Programming'
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: 'Multiplayer & Network Programming
+
+          UI Programming'
+        contribution: 'Multiplayer Networking
+
+          Network Synchronization
+
+          Lobby
+          & Session Management
+
+          Voice Communication
+
+          UI Programming'
+      - name: "Nguy\u1EC5n Nh\u1EADt L\u1EC7 Thuy\xEAn"
+        role: "Backend & Economy Programming\nWeb Systems \xB7 Deployment & Infrastructure"
+        contribution: 'Backend API & Database
+
+          Authentication
+
+          Economy
+          & Progression
+
+          Reward & XP Systems
+
+          Shop & Payment
+
+          Web
+          Systems
+
+          Deployment & Infrastructure'
+      note: 
+  - id: art
+    title: Art & Environment
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 6
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      - name: "L\xE2m Thanh Ph\xFAc"
+        role: 
+        contribution: 
+      note: 
+  - id: cinematics
+    title: Technical Art & Cinematics
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 6
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: 
+        contribution: 
+      note: 
+  - id: ui-ux
+    title: UI/UX Design
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 6
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: 
+        contribution: 
+      note: 
+  - id: audio
+    title: Audio & Sound Design
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 8
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: "Sound Design & Audio Integration\nGameplay \xB7 Environment \xB7 Horror
+          Ambience"
+        contribution: 'Gameplay Sound Effects
+
+          Environmental Audio
+
+          Horror
+          Ambience
+
+          Monster Sound Effects
+
+          Cinematic Audio
+
+          Audio
+          Integration'
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: "Background Music \xB7 UI Sound Design\nVoice Communication Integration"
+        contribution: 'UI Sound Effects
+
+          Background Music
+
+          Voice
+          Communication Integration'
+      note: 
+  - id: qa-playtesting
+    title: Quality Assurance & Playtesting
+    blocks:
+    - heading: Quality Assurance
+      layout: 0
+      columns: 2
+      travelSeconds: 7
+      holdSeconds: 0
+      entries:
+      - name: "L\xE2m Thanh Ph\xFAc"
+        role: 
+        contribution: 
+      - name: "\u0110\u1EB7ng Huy Ho\xE0ng"
+        role: 
+        contribution: 
+      - name: "H\u1EE9a Th\xE0nh \u0110\u1EA1t"
+        role: 
+        contribution: 
+      - name: "Nguy\u1EC5n Nh\u1EADt L\u1EC7 Thuy\xEAn"
+        role: 
+        contribution: 
+      note: "Gameplay \xB7 Multiplayer \xB7 System Testing"
+    - heading: Development Playtesters
+      layout: 0
+      columns: 2
+      travelSeconds: 14
+      holdSeconds: 0
+      entries:
+      - name: "H\u1ED3 Gia B\u1EA3o"
+        role: 
+        contribution: 
+      - name: "Nguy\u1EC5n \u0110\u1EE9c Anh"
+        role: 
+        contribution: 
+      - name: "Tr\u1EA7n \u0110\u1EE9c Anh"
+        role: 
+        contribution: 
+      - name: ThieuTaTrungDoan2
+        role: 
+        contribution: 
+      - name: "Hu\u1EF3nh"
+        role: 
+        contribution: 
+      - name: MinhOB
+        role: 
+        contribution: 
+      - name: Hieusensei
+        role: 
+        contribution: 
+      - name: NghiEm
+        role: 
+        contribution: 
+      - name: MeowToxic
+        role: 
+        contribution: 
+      - name: Buddy
+        role: 
+        contribution: 
+      - name: BuBu
+        role: 
+        contribution: 
+      - name: Sulie Uyen
+        role: 
+        contribution: 
+      - name: Ji1
+        role: 
+        contribution: 
+      note: Thank you for helping us shape ECHO PROTOCOL throughout its development.
+  - id: academic
+    title: Academic Supervision
+    blocks:
+    - heading: 
+      layout: 0
+      columns: 1
+      travelSeconds: 5
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\xE0o Qu\u1ED1c Tu\u1EA5n"
+        role: Academic Supervisor
+        contribution: 
+      note: 
+  - id: powered-by
+    title: Powered By
+    blocks:
+    - heading: 
+      layout: 2
+      columns: 2
+      travelSeconds: 4
+      holdSeconds: 5
+      entries:
+      - name: Unity
+        role: Game Engine
+        contribution: 
+      - name: Photon Engine
+        role: Multiplayer & Voice
+        contribution: 
+      note: 
+  - id: attributions
+    title: Third-Party Assets & Attributions
+    blocks:
+    - heading: Environment & Vehicles
+      layout: 3
+      columns: 2
+      travelSeconds: 8
+      holdSeconds: 0
+      entries:
+      - name: Flooded Grounds
+        role: Sandro T
+        contribution: 
+      - name: SciFi Warehouse Kit
+        role: Sickhead Games
+        contribution: 
+      - name: Sci Fi Doors
+        role: MASH Virtual
+        contribution: 
+      - name: Spacefrigate
+        role: Game-Ready Legacy
+        contribution: 
+      note: 
+    - heading: Characters, Creatures & Pets
+      layout: 3
+      columns: 2
+      travelSeconds: 12
+      holdSeconds: 0
+      entries:
+      - name: Creep Horror Creature
+        role: AC Game Assets
+        contribution: 
+      - name: Cursed Priest
+        role: Serhat's Marketplace
+        contribution: 
+      - name: Lizard & Catfish
+        role: HATOGAME
+        contribution: 
+      - name: Jammo Character
+        role: Mix and Jam / Curiomatic
+        contribution: 
+      - name: Four Evil Dragons PBR
+        role: Dungeon Mason
+        contribution: 
+      - name: Flying carnivorous beetle
+        role: Andryuha1981
+        contribution: 
+      - name: Grave Mercer
+        role: MESHCORP
+        contribution: 
+      note: 
+  - id: legal
+    title: Legal & Copyright
+    blocks:
+    - heading: 
+      layout: 4
+      columns: 1
+      travelSeconds: 5
+      holdSeconds: 3
+      entries:
+      - name: ECHO PROTOCOL
+        role: "\xA9 2026 ECHO PROTOCOL Development Team.\nThird-party assets, software,
+          and trademarks\nbelong to their respective rights holders."
+        contribution: 
+      - name: Graduation Capstone Project
+        role: 'FPT University
+
+          Project Code: FA26SE069
+
+          Group
+          Code: GFA26SE117'
+        contribution: 
+      note: 
+  - id: thanks-closing
+    title: Special Thanks & Closing Title
+    blocks:
+    - heading: Special Thanks
+      layout: 0
+      columns: 1
+      travelSeconds: 8
+      holdSeconds: 0
+      entries:
+      - name: "\u0110\xE0o Qu\u1ED1c Tu\u1EA5n"
+        role: 'For your invaluable guidance, support, and encouragement
+
+          throughout
+          the development of ECHO PROTOCOL.'
+        contribution: 
+      note: With our deepest gratitude.
+    - heading: 
+      layout: 5
+      columns: 1
+      travelSeconds: 3
+      holdSeconds: 6
+      entries: []
+      note: Thank you for playing.

@@ -61,6 +61,8 @@ namespace EchoProtocol.Networking
             }
         }
         public string AttemptId => _barrier.AttemptId;
+        public bool GameplayReadinessReleased => _barrier.ReleaseReceived;
+        public bool IsTrackingRunner(NetworkRunner runner) => _runner == runner && !string.IsNullOrEmpty(_barrier.AttemptId);
         public bool RecoveryReturnsToLobby => !_barrier.BackendAuthorized && !_barrier.SceneStarted
             && _bootstrap != null && _bootstrap.State == NetworkSessionState.InLobby && _bootstrap.HasRunningRunner;
         public bool IsAttemptActive => _barrier.IsVisible

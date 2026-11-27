@@ -141,24 +141,31 @@ public sealed class PurgeGameplayFixTests
     [Test] public void PurgeStaminaOverridesOnlySceneB()
     {
         var previousScene = SceneManager.GetActiveScene();
-        var scene = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
-            UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
-            UnityEditor.SceneManagement.NewSceneMode.Additive);
+        const string purgePath = "Assets/Scenes/Scene_B.unity";
+        const string expeditionPath = "Assets/Scenes/Scene_A.unity";
+        var purge = SceneManager.GetSceneByPath(purgePath);
+        var expedition = SceneManager.GetSceneByPath(expeditionPath);
+        bool openPurge = !purge.isLoaded;
+        bool openExpedition = !expedition.isLoaded;
         try
         {
-            SceneManager.SetActiveScene(scene);
+            if (openPurge) purge = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(purgePath,
+                UnityEditor.SceneManagement.OpenSceneMode.Additive);
+            SceneManager.SetActiveScene(purge);
             var movement = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/PlayerNetwork.prefab").GetComponent<NetworkPlayerMovement>();
-            scene.name = "Scene_B";
             Assert.That(movement.MaxStamina, Is.EqualTo(250));
             Assert.That(typeof(NetworkPlayerMovement).GetProperty("SprintStaminaDrain", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(movement), Is.EqualTo(22f));
             Assert.That(typeof(NetworkPlayerMovement).GetProperty("StaminaRegen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(movement), Is.EqualTo(50f));
-            scene.name = "Stamina_OtherMode_Test";
+            if (openExpedition) expedition = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(expeditionPath,
+                UnityEditor.SceneManagement.OpenSceneMode.Additive);
+            SceneManager.SetActiveScene(expedition);
             Assert.That(movement.MaxStamina, Is.EqualTo(200));
         }
         finally
         {
             SceneManager.SetActiveScene(previousScene);
-            UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true);
+            if (openExpedition && expedition.isLoaded) UnityEditor.SceneManagement.EditorSceneManager.CloseScene(expedition, true);
+            if (openPurge && purge.isLoaded) UnityEditor.SceneManagement.EditorSceneManager.CloseScene(purge, true);
         }
     }
 
