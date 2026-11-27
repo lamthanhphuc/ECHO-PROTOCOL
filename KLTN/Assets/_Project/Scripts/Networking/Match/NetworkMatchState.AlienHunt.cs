@@ -13,6 +13,7 @@ namespace EchoProtocol.Networking
 
         private void TickAlienHunt()
         {
+            if (!Object.HasStateAuthority || !IsGameplayReleased || IsEnded) return;
             var hunt = AlienHuntMission.Instance;
             if (!hunt) return;
             if (!HuntReady) { hunt.Initialize(); HuntReady = true; }
@@ -31,7 +32,7 @@ namespace EchoProtocol.Networking
         private void RpcHuntAction(int entity, int furnace, RpcInfo info = default) => TryHuntAction(info.Source, entity, furnace);
         private void TryHuntAction(PlayerRef actor, int entity, int furnace)
         {
-            if (!Object.HasStateAuthority || IsEnded || !HuntReady || !AlienHuntMission.Instance
+            if (!Object.HasStateAuthority || !IsGameplayReleased || IsEnded || !HuntReady || !AlienHuntMission.Instance
                 || !TryResolveActivePlayer(actor, out var life)) return;
             if (AlienHuntMission.Instance.Act(actor, life.transform, entity, furnace))
                 EchoProtocol.Networking.Authority.MatchAuthorityRuntime.Instance?.RecordObjectiveContribution(actor);
@@ -54,7 +55,7 @@ namespace EchoProtocol.Networking
         }
         public void RecordHuntBurn(Vector3? ritualPosition = null)
         {
-            if (!Object.HasStateAuthority || IsEnded || !AlienHuntMission.Instance) return;
+            if (!Object.HasStateAuthority || !IsGameplayReleased || IsEnded || !AlienHuntMission.Instance) return;
             HuntBurned++;
             if (HuntBurned < AlienHuntMission.AlienCount) PurgeBurnCompleted(ritualPosition ?? AlienHuntMission.Instance.Furnaces[0].transform.position);
             if (HuntBurned >= AlienHuntMission.AlienCount)
