@@ -1,4 +1,5 @@
 using System.Text;
+using EchoProtocol.Settings;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -170,10 +171,14 @@ namespace EchoProtocol.Tools.Scanner
                 var radar=tmpRadar!=null?tmpRadar.rectTransform:legacyRadar!=null?legacyRadar.rectTransform:null;
                 if(radar!=null)EchoProtocol.Salvage.SalvageScannerMap.Attach(radar,_boundScanner);
                 if(tmpRadar!=null)tmpRadar.enabled=false;if(legacyRadar!=null)legacyRadar.enabled=false;
-                SetHeaderText("SALVAGE\nBẢN ĐỒ THU HỒI");
-                var target=_boundScanner.CurrentMode==FieldScannerMode.Motion&&!_boundScanner.IsAlienHuntMode?"CHUYỂN ĐỘNG":"VẬT PHẨM";
-                SetSignalText(_boundScanner.IsScanActive?$"{_boundScanner.RadarOffsets.Count} {target}":$"QUÉT TÌM {target}");
-                SetStatusText(_boundScanner.LocalCooldownRemaining>.05f?$"HỒI QUÉT {_boundScanner.LocalCooldownRemaining:F1}s":"SẴN SÀNG");
+                SetHeaderText(GameLanguage.Choose("BẢN ĐỒ THU HỒI", "SALVAGE MAP"));
+                bool motion = _boundScanner.CurrentMode == FieldScannerMode.Motion && !_boundScanner.IsAlienHuntMode;
+                string target = motion ? GameLanguage.Choose("CHUYỂN ĐỘNG", "MOTION") : GameLanguage.Choose("VẬT PHẨM", "CARGO");
+                SetSignalText(_boundScanner.IsScanActive ? $"{_boundScanner.RadarOffsets.Count} {target}"
+                    : GameLanguage.Choose($"QUÉT TÌM {target}", $"SCAN FOR {target}"));
+                float remaining = _boundScanner.LocalCooldownRemaining;
+                SetStatusText(remaining > .05f ? GameLanguage.Choose($"HỒI QUÉT {remaining:F1}s", $"COOLDOWN {remaining:F1}s")
+                    : GameLanguage.Choose("SẴN SÀNG", "READY"));
                 return;
             }
             RestoreLegacyRadar();
@@ -256,6 +261,14 @@ namespace EchoProtocol.Tools.Scanner
         private void RenderIdleScreen()
         {
             RestoreLegacyRadar();
+            if (EchoProtocol.Salvage.SalvageSite.IsActive)
+            {
+                SetHeaderText(GameLanguage.Choose("MÁY QUÉT HIỆN TRƯỜNG", "FIELD SCANNER"));
+                SetRadarText("\n   ▲\n");
+                SetSignalText(GameLanguage.Choose("MẤT KẾT NỐI", "NO LINK"));
+                SetStatusText(GameLanguage.Choose("ĐANG CHỜ…", "WAITING…"));
+                return;
+            }
             SetHeaderText("FIELD SCANNER\nOFFLINE");
             SetRadarText("\n   ▲\n");
             SetSignalText("NO LINK");

@@ -78,6 +78,33 @@ namespace EchoProtocol.Salvage
         public float SecondsRemaining => DayTimer.RemainingTime(Runner) ?? 0;
         public SalvageSite Site { get; private set; }
         public readonly Dictionary<int, SalvageScrap> WorldItems = new Dictionary<int, SalvageScrap>();
+        // Keep the existing RPC payload stable and localize it on the receiving client.
+        private const string CrewAtBaseFeedback = "Cả đội cần ở căn cứ để khởi hành.";
+        private const string MapTimeoutFeedback = "Không dựng được map cho cả đội. Chưa bắt đầu chuyến; hãy tạo phòng mới.";
+        private const string SavePendingFeedback = "Đang đồng bộ tiến độ trước khi khởi hành. Vui lòng thử lại sau vài giây.";
+        private const string MapInvalidFeedback = "Không tạo được khu thu hồi có đường đi hợp lệ. Chưa bắt đầu chuyến; hãy thử lại hoặc tạo phòng mới.";
+        private const string PreparingSiteFeedback = "Đang chuẩn bị khu thu hồi…";
+        private const string ActionRejectedFeedback = "Chưa thể thực hiện. Kiểm tra vật phẩm và tập hợp cả đội ở căn cứ.";
+        private const string NotEnoughCargoFeedback = "Khu thu hồi chưa đủ hàng. Ngày chưa bắt đầu; hãy bán bớt hàng trong căn cứ hoặc khởi hành lại để tạo khu khác.";
+        internal const string EmptyStorageFeedback = "Kho chưa có hàng để bán.";
+        internal static string FeedbackText(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return string.Empty;
+            var labels = message switch
+            {
+                CrewAtBaseFeedback => (CrewAtBaseFeedback, "Everyone must be at base before departure."),
+                MapTimeoutFeedback => ("Không tải được bản đồ cho cả đội. Hãy tạo phòng mới.", "The map could not load for the crew. Create a new room."),
+                SavePendingFeedback => ("Đang đồng bộ tiến độ. Thử lại sau vài giây.", "Syncing progress. Try again in a few seconds."),
+                MapInvalidFeedback => ("Không tạo được khu thu hồi. Thử lại hoặc tạo phòng mới.", "Site generation failed. Try again or create a new room."),
+                PreparingSiteFeedback => (PreparingSiteFeedback, "Preparing the salvage site…"),
+                ActionRejectedFeedback => (ActionRejectedFeedback, "Action unavailable. Check the cargo and gather the crew at base."),
+                NotEnoughCargoFeedback => ("Khu thu hồi thiếu hàng. Bán bớt hàng ở căn cứ hoặc khởi hành lại.", "Not enough cargo at the site. Sell cargo at base or depart again."),
+                EmptyStorageFeedback => (EmptyStorageFeedback, "There is no cargo to sell."),
+                _ => ("Chưa thể thực hiện.", "Action unavailable.")
+            };
+            return EchoProtocol.Settings.GameLanguage.Choose(labels.Item1, labels.Item2);
+        }
+
         public event Action<string> LocalFeedback;
         private SalvageLedger _ledger;
         private float _nextCrewRefresh;
@@ -168,10 +195,10 @@ namespace EchoProtocol.Salvage
                 {
                     _departurePending=false;
                     if(AllCrewAtBase() && _ledger.Depart(ConnectedCrew())) { Publish();StartDay(); }
-                    else { Publish();RPC_Feedback(Runner.LocalPlayer,"Cả đội cần ở căn cứ để khởi hành."); }
+                    else { Publish();RPC_Feedback(Runner.LocalPlayer,CrewAtBaseFeedback); }
                 }
                 else if(Time.realtimeSinceStartup>_mapDeadline)
-                { _departurePending=false;RPC_Feedback(Runner.LocalPlayer,"Không dựng được map cho cả đội. Chưa bắt đầu chuyến; hãy tạo phòng mới."); }
+                { _departurePending=false;RPC_Feedback(Runner.LocalPlayer,MapTimeoutFeedback); }
             }
             if (Phase == SalvagePhase.InDay)
             {
@@ -352,7 +379,7 @@ namespace EchoProtocol.Salvage
                     if (Runner.IsServer && actor == Runner.LocalPlayer && AllCrewAtBase())
                     {
                         if(!CheckpointSynced)
-                        {SaveCheckpoint(true);RPC_Feedback(actor,"Đang đồng bộ tiến độ trước khi khởi hành. Vui lòng thử lại sau vài giây.");return;}
+                        {SaveCheckpoint(true);RPC_Feedback(actor,SavePendingFeedback);return;}
                         if(Site.RandomMap!=null)
                         {
                             if(_departurePending) { accepted=true;break; }
@@ -367,12 +394,12 @@ namespace EchoProtocol.Salvage
                                 catch(InvalidOperationException error)
                                 {
                                     Debug.LogError("[Salvage] Departure map failed: "+error.Message);
-                                    RPC_Feedback(actor,"Không tạo được khu thu hồi có đường đi hợp lệ. Chưa bắt đầu chuyến; hãy thử lại hoặc tạo phòng mới.");
+                                    RPC_Feedback(actor,MapInvalidFeedback);
                                     return;
                                 }
                             }
                             _departurePending=true;_mapDeadline=Time.realtimeSinceStartup+45;
-                            RPC_Feedback(actor,"Đang chuẩn bị khu thu hồi…");accepted=true;break;
+                            RPC_Feedback(actor,PreparingSiteFeedback);accepted=true;break;
                         }
                         accepted = _ledger.Depart(ConnectedCrew()); Publish();
                         if (accepted) StartDay();
@@ -389,7 +416,7 @@ namespace EchoProtocol.Salvage
                     if (AtTerminal(player, true) && _ledger.TryWithdraw(argument, serial, seat, out var selected))
                     { crew = Crew[seat]; crew.Selected = selected; Crew.Set(seat, crew); Publish(); accepted = true; } break;
             }
-            RPC_Feedback(actor, accepted ? "" : "Chưa thể thực hiện. Kiểm tra vật phẩm và tập hợp cả đội ở căn cứ.");
+            RPC_Feedback(actor, accepted ? "" : ActionRejectedFeedback);
         }
         private bool TryActor(PlayerRef actor, out NetworkObject player)
         {
@@ -601,7 +628,7 @@ namespace EchoProtocol.Salvage
                 _ledger.Restore(SalvagePhase.Base,Cycle,Day,Funds,Quota,SoldThisCycle,TotalSold,_ledger.NextSerial,CrewAtCycleStart,false,Revision+1,LastDayRecovered,LastDayLost);
                 DayTimer=TickTimer.None;MapDay=0;RunSeed=unchecked(RunSeed+104729);
                 Publish();RetireExhaustedActors();ClearCorridorDoors();
-                RPC_Feedback(Runner.LocalPlayer,"Khu thu hồi chưa đủ hàng. Ngày chưa bắt đầu; hãy bán bớt hàng trong căn cứ hoặc khởi hành lại để tạo khu khác.");
+                RPC_Feedback(Runner.LocalPlayer,NotEnoughCargoFeedback);
                 return;
             }
             ClearEnemies(); EnemySpawnTimer=TickTimer.CreateFromSeconds(Runner,35);

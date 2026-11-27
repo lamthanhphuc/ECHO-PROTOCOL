@@ -1,4 +1,7 @@
 using EchoProtocol.Settings;
+using EchoProtocol.Salvage;
+using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
@@ -41,6 +44,40 @@ namespace EchoProtocol.Tests.EditMode.Controls
             }
             finally { GameLanguage.Changed -= callback; }
         }
+        [Test]
+        public void SalvageHudAndFeedbackFollowTheLocalLanguage()
+        {
+            var root = new GameObject("Salvage HUD test", typeof(RectTransform), typeof(Canvas));
+            var hud = root.AddComponent<SalvageHUD>();
+            const BindingFlags instanceMethod = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                typeof(SalvageHUD).GetMethod("Awake", instanceMethod).Invoke(hud, null);
+                typeof(SalvageHUD).GetMethod("Feedback", instanceMethod).Invoke(hud, new object[] { "Cả đội cần ở căn cứ để khởi hành." });
+                var labels = root.GetComponentsInChildren<Text>(true);
+                Assert.That(labels.Select(label => label.text), Does.Contain("NHIỆM VỤ THU HỒI"));
+                Assert.That(labels.Select(label => label.text), Does.Contain("Cả đội cần ở căn cứ để khởi hành."));
+                var vietnameseNames = SalvageLedger.Types.Select(item => item.DisplayName).ToArray();
+                Assert.That(vietnameseNames, Does.Contain("Mô-đun liên lạc"));
+
+                GameLanguage.Set(GameLocale.English);
+                Assert.That(labels.Select(label => label.text), Does.Contain("SALVAGE OBJECTIVES"));
+                Assert.That(labels.Select(label => label.text), Does.Contain("SELL / STORAGE"));
+                Assert.That(labels.Select(label => label.text), Does.Contain("Everyone must be at base before departure."));
+                var englishNames = SalvageLedger.Types.Select(item => item.DisplayName).ToArray();
+                Assert.That(englishNames, Does.Contain("Communication Module"));
+                Assert.That(vietnameseNames.Zip(englishNames, (vi, en) => vi != en).All(changed => changed), Is.True);
+
+                GameLanguage.Set(GameLocale.Vietnamese);
+                Assert.That(labels.Select(label => label.text), Does.Contain("NHIỆM VỤ THU HỒI"));
+            }
+            finally
+            {
+                typeof(SalvageHUD).GetMethod("OnDestroy", instanceMethod).Invoke(hud, null);
+                Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void DynamicCountersTranslateInBothDirectionsWithoutChangingNumbers()
         {

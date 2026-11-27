@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
@@ -520,17 +521,18 @@ namespace EchoProtocol.UI.HUD
                 label.alignment = TextAnchor.MiddleCenter; label.fontSize = 12; label.color = HUDPresentationStyle.Ink;
                 if (i < 4)
                 {
-                    int index = run.HeldIndex(seat, i); string text = "Trống";
+                    int index = run.HeldIndex(seat, i); string text = GameLanguage.Choose("Trống", "Empty");
                     if (index >= 0) { var c = run.Cargo(index); var type = EchoProtocol.Salvage.SalvageLedger.Types[c.Definition];
-                        text = c.Slot != i ? "CHIẾM 2 Ô" : $"{type.Name}\n$ {c.Value:N0} • {c.Integrity}%"; }
+                        text = c.Slot != i ? GameLanguage.Choose("CHIẾM 2 Ô", "USES 2 SLOTS") : $"{type.DisplayName}\n$ {c.Value:N0} • {c.Integrity}%"; }
                     label.text = $"[{i+1}]\n{text}";
                     label.color = run.Crew[seat].Selected == i ? HUDPresentationStyle.Accent : HUDPresentationStyle.Muted;
                 }
                 else
                 {
                     int tool = run.Crew[seat].Tool;
-                    string name = tool switch { 1 => "Scanner", 2 => "Noise Maker", 3 => "First Aid", 4 => "Door Jammer", _ => "Trống" };
-                    label.text = $"[5] TRANG BỊ\n{name}" + (run.Crew[seat].Uses > 0 ? $" • {run.Crew[seat].Uses}" : "");
+                    int uses = run.Crew[seat].Uses;
+                    string name = EchoProtocol.Salvage.SalvageHUD.EquipmentName(tool == 3 && uses > 1 ? 5 : tool);
+                    label.text = GameLanguage.Choose("[5] TRANG BỊ", "[5] EQUIPMENT") + "\n" + name + (uses > 0 ? $" • {uses}" : "");
                     label.color = run.Crew[seat].Selected == 4 ? HUDPresentationStyle.Accent : HUDPresentationStyle.Muted;
                 }
             }

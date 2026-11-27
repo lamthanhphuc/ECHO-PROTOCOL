@@ -125,7 +125,7 @@ namespace EchoProtocol.UI
             if (_modeValue != null)
             {
                 int selectedMode = LobbyMapCatalog.RoomGameMode(runner);
-                _modeValue.text = selectedMode == LobbyMapCatalog.SalvageMode ? "Salvage"
+                _modeValue.text = selectedMode == LobbyMapCatalog.SalvageMode ? GameLanguage.Choose("Thu hồi", "Salvage")
                     : selectedMode == 1 ? GameLanguage.Choose("Thanh trừng", "Purge") : GameLanguage.Choose("Khám phá", "Expedition");
                 foreach (var button in _modeButtons) button.interactable = runner != null && runner.IsServer
                     && _bootstrap.State == NetworkSessionState.InLobby && _manager != null && !_manager.IsStartingMatch;
@@ -156,7 +156,7 @@ namespace EchoProtocol.UI
                 ? GameLanguage.Choose("Vùng ngập", "Flooded Grounds") : GameLanguage.Choose("Cơ sở nghiên cứu", "Research Facility"));
             _previous.interactable = _next.interactable = CanEdit;
             if (LobbyMapCatalog.RoomGameMode(runner) == LobbyMapCatalog.SalvageMode)
-                _title.text = "Salvage • SciFi";
+                _title.text = GameLanguage.Choose("Thu hồi • Cơ sở nghiên cứu", "Salvage • Research Facility");
         }
     }
 }

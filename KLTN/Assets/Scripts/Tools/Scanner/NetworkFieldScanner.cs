@@ -128,7 +128,7 @@ namespace EchoProtocol.Tools.Scanner
         {
             get
             {
-                if (EchoProtocol.Salvage.SalvageSite.IsActive) return "CARGO";
+                if (EchoProtocol.Salvage.SalvageSite.IsActive) return EchoProtocol.Settings.GameLanguage.Choose("VẬT PHẨM", "CARGO");
                 if (IsAlienHuntMode)
                 {
                     return CurrentMode == FieldScannerMode.Core

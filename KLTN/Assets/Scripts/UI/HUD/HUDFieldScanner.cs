@@ -1,4 +1,5 @@
 using EchoProtocol.Networking;
+using EchoProtocol.Settings;
 using EchoProtocol.Tools.Scanner;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -253,6 +254,8 @@ namespace EchoProtocol.UI.HUD
 
         private void RenderScannerState()
         {
+            bool salvage = EchoProtocol.Salvage.SalvageSite.IsActive;
+            string SalvageLabel(string vietnamese, string english) => salvage ? GameLanguage.Choose(vietnamese, english) : vietnamese;
             bool connected = _boundScanner != null;
             bool motion = connected
                 && !_boundScanner.IsAlienHuntMode
@@ -270,10 +273,20 @@ namespace EchoProtocol.UI.HUD
             for (int i = 0; i < count; i++) nearest = Mathf.Min(nearest, offsets[i].magnitude);
             Color accent = motion ? HUDPresentationStyle.Danger : HUDPresentationStyle.Accent;
 
-            SetText(titleText, motion ? "STALKER" : coreTargetLabel);
-            SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
+            if (salvage)
+            {
+                SetText(titleText, GameLanguage.Choose("BẢN ĐỒ THU HỒI", "SALVAGE MAP"));
+                string category = motion ? GameLanguage.Choose("CHUYỂN ĐỘNG", "MOTION") : GameLanguage.Choose("VẬT PHẨM", "CARGO");
+                SetText(modeBadgeText, category + GameLanguage.Choose(" · Chuột phải", " · Right click"));
+                SetText(detectedText, $"<size=18>{count}</size>  {category}");
+            }
+            else
+            {
+                SetText(titleText, motion ? "STALKER" : coreTargetLabel);
+                SetText(modeBadgeText, "[Chuột phải] Đổi chế độ");
+                SetText(detectedText, motion ? $"<size=18>{count}</size>\nPHÁT HIỆN" : $"<size=18>{count}</size>  {coreTargetLabel}");
+            }
             SetText(controlsText, "");
-            SetText(detectedText, motion ? $"<size=18>{count}</size>\nPHÁT HIỆN" : $"<size=18>{count}</size>  {coreTargetLabel}");
             SetText(signalDetailText, "<size=12>" + EchoProtocol.Settings.GameLanguage.Choose("MỤC TIÊU GẦN NHẤT", "NEAREST TARGET")
                 + "</size>\n<size=30>" + (count > 0 ? $"{nearest:F0} <size=18>m</size>" : "—") + "</size>");
             int bars = connected && count > 0 ? (int)FieldScannerCoreDetector.ResolveSignalBars(nearest, _boundScanner.Tuning) : 0;
@@ -283,33 +296,35 @@ namespace EchoProtocol.UI.HUD
                 string signal = "";
                 const string glyphs = "▂▄▆█";
                 for (int i = 0; i < 4; i++) signal += (i < intensity ? glyphs[i].ToString() : $"<color=#503E3A>{glyphs[i]}</color>") + " ";
-                SetText(signalBarsText, "CƯỜNG ĐỘ\n<size=16>" + (count > 0 ? signal : "—") + "</size>");
+                SetText(signalBarsText, SalvageLabel("CƯỜNG ĐỘ", "INTENSITY") + "\n<size=16>" + (count > 0 ? signal : "—") + "</size>");
             }
             else
             {
                 string signal = "";
                 const string glyphs = "▂▄▆█";
                 for (int i = 0; i < 4; i++) signal += (i < bars ? glyphs[i].ToString() : $"<color=#3E5050>{glyphs[i]}</color>") + " ";
-                SetText(signalBarsText, "TÍN HIỆU\n<size=16>" + signal + "</size>");
+                SetText(signalBarsText, SalvageLabel("TÍN HIỆU", "SIGNAL") + "\n<size=16>" + signal + "</size>");
             }
 
             if (!active || !hasResult || count > 0) _emptySince = -1f;
             else if (_emptySince < 0f) _emptySince = Time.unscaledTime;
             if (scanTimerText != null)
             {
-                if (!connected) SetText(scanTimerText, "MẤT KẾT NỐI");
+                if (!connected) SetText(scanTimerText, SalvageLabel("MẤT KẾT NỐI", "DISCONNECTED"));
                 else if (active) SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("ĐANG QUÉT", "SCANNING") + $"   <size=28>{Mathf.Max(1, Mathf.CeilToInt(activeRemaining)):00}s</size>");
                 else if (cooldown > 0.05f) SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("HỒI CHIÊU", "COOLDOWN") + $"   <size=28>{Mathf.CeilToInt(cooldown):00}s</size>");
                 else SetText(scanTimerText, EchoProtocol.Settings.GameLanguage.Choose("SẴN SÀNG  ·  [Chuột trái] Quét", "READY  ·  [Left click] Scan"));
                 scanTimerText.color = active ? IndustrialUiStyle.Accent : IndustrialUiStyle.Text;
             }
 
-            string status = !connected ? "ĐANG CHỜ KẾT NỐI" : active
-                ? count > 0 ? "PHÁT HIỆN TÍN HIỆU"
-                    : _emptySince >= 0f && Time.unscaledTime - _emptySince < 1.2f ? "KHÔNG CÓ TÍN HIỆU" : "ĐANG QUÉT..."
-                : cooldown > 0.05f ? "MÁY QUÉT ĐANG HỒI"
-                : Time.unscaledTime < _modeHintUntil ? "[Chuột trái] Quét · [Chuột phải] Đổi chế độ"
-                : "[Chuột trái] Quét";
+            string status = !connected ? SalvageLabel("ĐANG CHỜ KẾT NỐI", "WAITING FOR CONNECTION") : active
+                ? count > 0 ? SalvageLabel("PHÁT HIỆN TÍN HIỆU", "SIGNAL DETECTED")
+                    : _emptySince >= 0f && Time.unscaledTime - _emptySince < 1.2f
+                        ? SalvageLabel("KHÔNG CÓ TÍN HIỆU", "NO SIGNAL") : SalvageLabel("ĐANG QUÉT...", "SCANNING...")
+                : cooldown > 0.05f ? SalvageLabel("MÁY QUÉT ĐANG HỒI", "SCANNER COOLDOWN")
+                : Time.unscaledTime < _modeHintUntil
+                    ? SalvageLabel("[Chuột trái] Quét · [Chuột phải] Đổi chế độ", "[Left click] Scan · [Right click] Switch mode")
+                    : SalvageLabel("[Chuột trái] Quét", "[Left click] Scan");
             SetText(statusText, status);
             if (titleText != null) titleText.color = IndustrialUiStyle.Accent;
             if (detectedText != null) detectedText.color = accent;
@@ -321,12 +336,10 @@ namespace EchoProtocol.UI.HUD
             float heading = _viewCamera != null ? _viewCamera.transform.eulerAngles.y : connected ? _boundScanner.transform.eulerAngles.y : 0f;
             if (radarGraphic != null)
             {
-                if(EchoProtocol.Salvage.SalvageSite.IsActive)
+                if (salvage)
                 {
                     radarGraphic.Present(null,1,heading,false,false);radarGraphic.enabled=false;
                     EchoProtocol.Salvage.SalvageScannerMap.Attach(radarGraphic.rectTransform,_boundScanner);
-                    SetText(titleText,"BẢN ĐỒ THU HỒI");SetText(modeBadgeText,motion?"CHUYỂN ĐỘNG · Chuột phải":"VẬT PHẨM · Chuột phải");
-                    SetText(detectedText,$"<size=18>{count}</size>  "+(motion?"CHUYỂN ĐỘNG":"VẬT PHẨM"));
                 }
                 else
                 {
