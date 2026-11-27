@@ -6,6 +6,17 @@ namespace EchoProtocol.UI.Tests
 {
     public sealed class PlayerProfileProgressionTests
     {
+        private bool _hadLanguagePreference;
+        private int _previousLanguage;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _hadLanguagePreference = PlayerPrefs.HasKey("Echo.Language");
+            _previousLanguage = PlayerPrefs.GetInt("Echo.Language");
+            SetLanguage(1);
+        }
+
         [Test]
         public void ServerConfirmedLevelUpShowsUnlocksAndLegacyRewardsStayQuiet()
         {
@@ -24,7 +35,7 @@ namespace EchoProtocol.UI.Tests
         [Test]
         public void ProfileShowsNextUnlockAndScrollableMilestones()
         {
-            Apply(@"{""userId"":""test"",""level"":5,""levelCurveVersion"":""LEVEL_V3"",""experiencePoints"":1300,""experienceInLevel"":50,""experienceRequiredForNextLevel"":400,""levelCap"":30,""levelUnlocks"":[{""itemName"":""Cursed Priest"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Field Scanner"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Soul Eater"",""requiredLevel"":12,""experienceRemaining"":4075}]}");
+            Apply(@"{""userId"":""test"",""level"":5,""levelCurveVersion"":""LEVEL_V3"",""experiencePoints"":1300,""experienceInLevel"":50,""experienceRequiredForNextLevel"":400,""levelCap"":30,""levelUnlocks"":[{""itemName"":""Cursed Priest"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Field Scanner"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Soul Eater"",""requiredLevel"":12,""experienceRemaining"":4075},{""itemName"":""Milestone 15"",""requiredLevel"":15,""experienceRemaining"":5000},{""itemName"":""Milestone 18"",""requiredLevel"":18,""experienceRemaining"":6000},{""itemName"":""Milestone 21"",""requiredLevel"":21,""experienceRemaining"":7000},{""itemName"":""Milestone 24"",""requiredLevel"":24,""experienceRemaining"":8000},{""itemName"":""Milestone 27"",""requiredLevel"":27,""experienceRemaining"":9000}]}");
             var root = new GameObject("Progression UI test", typeof(RectTransform), typeof(Canvas));
             try
             {
@@ -114,7 +125,22 @@ namespace EchoProtocol.UI.Tests
             var dto = Type.GetType("EchoProtocol.Profile.PlayerProfileDataDto, Assembly-CSharp", true);
             Session.GetMethod("Apply").Invoke(null, new[] { JsonUtility.FromJson(json, dto) });
         }
-        [TearDown] public void Clear() => Session.GetMethod("Clear").Invoke(null, null);
+        [TearDown]
+        public void Clear()
+        {
+            Session.GetMethod("Clear").Invoke(null, null);
+            SetLanguage(Mathf.Clamp(_previousLanguage, 0, 1));
+            if (!_hadLanguagePreference) PlayerPrefs.DeleteKey("Echo.Language");
+            else PlayerPrefs.SetInt("Echo.Language", _previousLanguage);
+            PlayerPrefs.Save();
+        }
+
+        private static void SetLanguage(int value)
+        {
+            var language = Type.GetType("EchoProtocol.Settings.GameLanguage, Assembly-CSharp", true);
+            var method = language.GetMethod("Set");
+            method.Invoke(null, new[] { Enum.ToObject(method.GetParameters()[0].ParameterType, value) });
+        }
 
         [Test]
         public void V3UsesExplicitLevelProgressInsteadOfFiveHundredXp()
