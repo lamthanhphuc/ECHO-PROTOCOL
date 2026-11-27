@@ -93,9 +93,9 @@ Roslyn cũng được dùng để kiểm tra C# với references Unity/Fusion đ
 
 ## Log Editor và file request
 
-`OpeningCutsceneSceneSetup` dùng handle chỉ cho phép delete để đọc/xóa request trong cùng một scope; không cho reader/writer khác truy cập đồng thời. Khi producer còn giữ file, tool giữ nguyên request và thử lại mỗi 0.2 giây, không ném IOException ra Editor update. Chỉ dispatch sau khi đọc và xóa thành công; file rỗng được giữ để chờ producer ghi xong.
+`OpeningCutsceneSceneSetup` nhận request đã publish hoàn chỉnh bằng cách producer ghi file tạm trong cùng thư mục rồi rename thành request. Consumer claim request bằng rename sang tên duy nhất trước khi đọc; chỉ một consumer có thể claim, và nội dung file không bị lộ khi producer còn ghi. File rỗng được loại bỏ mà không dispatch; request thiếu hoặc đang được claim sẽ được thử lại ở lần poll sau.
 
-Đã kiểm tra trực tiếp bằng cách giữ khóa độc quyền file `Temp/OpeningCutscene.v2.request` trong 1.6 giây, sau đó nhả lệnh `tests`: tool tiếp tục chạy, không có Sharing violation mới và 126 test đều đạt. Khi gửi command từ bên ngoài, có thể ghi xong vào file tạm rồi rename sang request để publish nguyên nội dung.
+Khi gửi command từ bên ngoài, ghi xong vào file tạm trong cùng thư mục rồi rename sang request để publish nguyên nội dung. Cách này hỗ trợ Windows và Linux; producer không được ghi trực tiếp vào tên request.
 
 `FPL|COMMIT_OBSERVER_ERROR|...observer boom` trong stack của `FND_NET_LIFECYCLE_CommittedObserverExceptionsAreIsolatedPerSubscriber` là log cố ý: test gắn một subscriber ném exception, khai báo `LogAssert.Expect` và kiểm tra subscriber tiếp theo vẫn được gọi. Test này đã Passed. Không sửa hoặc tắt báo lỗi observer của runtime để che log test. Console có thể giữ log từ các lần chạy trước; kết quả XML và dòng `[OpeningCutscene] EditMode tests: ...` là tổng kết lần chạy mới nhất.
 

@@ -22,22 +22,26 @@ namespace EchoProtocol.Tests.EditMode.Controls
         public void TearDown()
         {
             if (File.Exists(_path)) File.Delete(_path);
+            if (File.Exists(_path + ".tmp")) File.Delete(_path + ".tmp");
             if (Directory.Exists(_directory)) Directory.Delete(_directory);
         }
 
         [Test]
         public void ExclusiveWriter_DefersConsumptionAndPreservesCommandUntilWriterCloses()
         {
-            using (var writer = new FileStream(_path, FileMode.Create, FileAccess.Write, FileShare.None))
+            var temporaryPath = _path + ".tmp";
+            using (var writer = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 var data = Encoding.UTF8.GetBytes("tests");
                 writer.Write(data, 0, data.Length);
                 writer.Flush();
                 Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var pending), Is.False);
                 Assert.That(pending, Is.Null);
-                Assert.That(File.Exists(_path), Is.True);
+                Assert.That(File.Exists(temporaryPath), Is.True);
+                Assert.That(File.Exists(_path), Is.False);
             }
 
+            File.Move(temporaryPath, _path);
             Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var command), Is.True);
             Assert.That(command, Is.EqualTo("tests"));
             Assert.That(File.Exists(_path), Is.False);
@@ -46,7 +50,8 @@ namespace EchoProtocol.Tests.EditMode.Controls
         [Test]
         public void WriterSharingReads_StillCannotExposePartiallyWrittenCommand()
         {
-            using (var writer = new FileStream(_path, FileMode.Create, FileAccess.Write,
+            var temporaryPath = _path + ".tmp";
+            using (var writer = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write,
                        FileShare.ReadWrite | FileShare.Delete))
             {
                 var partial = Encoding.UTF8.GetBytes("pre");
@@ -54,28 +59,44 @@ namespace EchoProtocol.Tests.EditMode.Controls
                 writer.Flush();
                 Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var pending), Is.False);
                 Assert.That(pending, Is.Null);
+                Assert.That(File.Exists(temporaryPath), Is.True);
+                Assert.That(File.Exists(_path), Is.False);
 
                 var remaining = Encoding.UTF8.GetBytes("view");
                 writer.Write(remaining, 0, remaining.Length);
             }
 
+            File.Move(temporaryPath, _path);
             Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var command), Is.True);
             Assert.That(command, Is.EqualTo("preview"));
+            Assert.That(File.Exists(_path), Is.False);
         }
 
         [Test]
         public void ReaderPreventingDeletion_DefersWithoutLosingRequest()
         {
             File.WriteAllText(_path, "survey");
+            bool consumed;
+            string command;
             using (var reader = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
-                Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var pending), Is.False);
-                Assert.That(pending, Is.Null);
-                Assert.That(File.Exists(_path), Is.True);
+                consumed = OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out command);
+                if (consumed)
+                    Assert.That(command, Is.EqualTo("survey"));
+                else
+                {
+                    Assert.That(command, Is.Null);
+                    Assert.That(File.Exists(_path), Is.True);
+                }
             }
 
-            Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var command), Is.True);
-            Assert.That(command, Is.EqualTo("survey"));
+            if (!consumed)
+            {
+                Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out command), Is.True);
+                Assert.That(command, Is.EqualTo("survey"));
+            }
+            Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var repeated), Is.False);
+            Assert.That(repeated, Is.Null);
         }
 
         [Test]
@@ -89,12 +110,12 @@ namespace EchoProtocol.Tests.EditMode.Controls
         }
 
         [Test]
-        public void EmptyFile_IsKeptUntilProducerPublishesContent()
+        public void EmptyRequest_IsDiscardedWithoutDispatch()
         {
             File.WriteAllText(_path, "\r\n ");
             Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var pending), Is.False);
             Assert.That(pending, Is.Null);
-            Assert.That(File.Exists(_path), Is.True);
+            Assert.That(File.Exists(_path), Is.False);
 
             File.WriteAllText(_path, "refresh");
             Assert.That(OpeningCutsceneSceneSetup.TryConsumeRequest(_path, out var command), Is.True);
