@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using EchoProtocol.AI.AED;
 using EchoProtocol.AI.Common;
 using EchoProtocol.AI.Stalker.Networking;
 using EchoProtocol.Diagnostics;
@@ -296,7 +298,7 @@ namespace EchoProtocol.AI.Stalker.Special
                                 settings,
                                 _lastJumpInPosition,
                                 navMeshAgent != null ? navMeshAgent.areaMask : NavMesh.AllAreas,
-                                controller.IsPositionInsidePatrolZone,
+                                position => IsJumpInPositionAllowed(position, controller.IsPositionInsidePatrolZone),
                                 out _jumpInPosition))
                         {
                             AbortHiddenTransfer(
@@ -827,7 +829,8 @@ namespace EchoProtocol.AI.Stalker.Special
             var teleportPosition =
                 navMeshHit.position;
 
-            if (!controller.IsPositionInsidePatrolZone(teleportPosition))
+            if (!IsJumpInPositionAllowed(_jumpInPosition, controller.IsPositionInsidePatrolZone) ||
+                !IsJumpInPositionAllowed(teleportPosition, controller.IsPositionInsidePatrolZone))
             {
                 return false;
             }
@@ -877,6 +880,9 @@ namespace EchoProtocol.AI.Stalker.Special
 
             return true;
         }
+
+        private static bool IsJumpInPositionAllowed(Vector3 position, Func<Vector3, bool> isInPatrolZone) =>
+            isInPatrolZone?.Invoke(position) == true && AEDV02SceneSource.IsSciFiSafeRoomClearPath(new[] { position });
 
         private bool TryResolveJumpInRotation(
             Vector3 jumpPosition,

@@ -282,6 +282,7 @@ namespace EchoProtocol.Networking.Authority
                 stalkerSources.Add(observed);
             }
             var players = new List<AEDV02PlayerSource>(); var tools = new List<AEDV02ToolSource>();
+            var playerRoots = new Dictionary<Guid, Vector3>();
             var scans = new List<AEDV02ScanSource>();
             AEDV02ScanCandidate[] scannables = null;
             foreach (var player in runner.ActivePlayers)
@@ -292,6 +293,9 @@ namespace EchoProtocol.Networking.Authority
                 _aedPhase8Source.TryGetHeldTool(identity, out var held);
                 if ((held?.ToolId ?? 0) != lobby.ToolId) return false;
                 var position = obj.transform.position;
+                if (!obj.TryGetComponent<CharacterController>(out var character) ||
+                    !TryV02GroundPosition(character, out var groundPosition))
+                { reason = "HOLD_PLAYER_NAVIGATION_POSITION_REQUIRED"; return false; }
                 if (!matchState.TryGetV02ObjectiveSource(player, out var objective)) { reason = "HOLD_OBJECTIVE_SOURCE_REQUIRED"; return false; }
                 if (lobby.CarriedCoreId.IsValid) objective = "core:" + lobby.CarriedCoreId;
                 var playerSource = new AEDV02PlayerSource { UserId = user, LifeState = life.IsEliminated ? "ELIMINATED" : life.IsDowned ? "DOWNED" : "ALIVE",
@@ -299,7 +303,7 @@ namespace EchoProtocol.Networking.Authority
                     ReviverUserId = life.IsReviveInProgress && TryResolveBackendUser(life.Reviver, out var reviver) ? reviver : (Guid?)null,
                     ObjectiveUnitId = objective, ObjectiveState = objective.Length == 0 ? "NONE" : "OPERATING",
                     HeldToolInstanceId = held?.InstanceId ?? string.Empty, HideSpotId = movement.CurrentHideSpotId.ToString(),
-                    SlowUntilTick = movement.V02SlowUntilTick, X = position.x, Y = position.y, Z = position.z };
+                    SlowUntilTick = movement.V02SlowUntilTick, X = groundPosition.x, Y = groundPosition.y, Z = groundPosition.z };
                 var interactor = obj.GetComponent<NetworkPlayerInteractor>();
                 playerSource.StabilizerUntilTick = interactor != null ? interactor.V02StabilizerUntilTick : 0;
                 playerSource.StabilizerActivationOrdinal = interactor != null ? interactor.V02StabilizerActivationOrdinal : 0;
@@ -322,12 +326,13 @@ namespace EchoProtocol.Networking.Authority
                     { playerSource.RequiredToolId = impact.ToolId; playerSource.ResourceCauseEventId = blocked.EventId.ToString("D"); }
                 }
                 players.Add(playerSource);
+                playerRoots[user] = position;
                 var scanner = obj.GetComponent<NetworkFieldScanner>();
                 if (scanner == null) { reason = "HOLD_SCANNER_WORLD_CENSUS_REQUIRED"; return false; }
                 if (scannables == null) scannables = scanner.ReadV02WorldTargets();
                 if (scanner != null && scanner.V02LastScan is { } scan && scan.MatchId == MatchId && scan.PhaseName == _currentTelemetryPhase)
                 { scan.UserId = user; scans.Add(scan); }
-                if (held != null) tools.Add(Tool(held, position, string.Empty));
+                if (held != null) tools.Add(Tool(held, groundPosition, string.Empty));
             }
             if (!players.Select(x => x.UserId).ToHashSet().SetEquals(_boundPlayers.Values)) return false;
             foreach (var pickup in FindObjectsByType<NetworkTeamToolPickup>(FindObjectsInactive.Exclude).Where(x => x.Runner == runner && x.Object != null && x.Object.IsValid && x.IsAvailableWorldSource))
@@ -387,11 +392,22 @@ namespace EchoProtocol.Networking.Authority
             foreach (var player in sample.Players)
             {
                 bool covered = player.LifeState == "ALIVE" && !player.IsCaught && stabilizers.Any(x =>
-                    x.IsCoreStabilizerCovering(new Vector3((float)player.X, (float)player.Y, (float)player.Z)));
+                    x.IsCoreStabilizerCovering(playerRoots[player.UserId]));
                 if (covered != player.StabilizerBuffed)
                 { reason = "HOLD_STABILIZER_BUFF_NOT_RECONCILED"; sample = null; return false; }
             }
             return true;
+        }
+        private static bool TryV02GroundPosition(CharacterController character, out Vector3 position)
+        {
+            position = default;
+            if (character == null || !character.enabled || !character.gameObject.activeInHierarchy) return false;
+            var bounds = character.bounds;
+            if (bounds.size.y <= 0f || character.height <= 0f) return false;
+            position = character.transform.TransformPoint(character.center - Vector3.up * (character.height * .5f));
+            return !float.IsNaN(position.x) && !float.IsInfinity(position.x) &&
+                !float.IsNaN(position.y) && !float.IsInfinity(position.y) &&
+                !float.IsNaN(position.z) && !float.IsInfinity(position.z);
         }
         private static AEDV02ToolSource Tool(AEDPhase8ToolSourceV1 source, Vector3 position, string marker) => new AEDV02ToolSource
         {

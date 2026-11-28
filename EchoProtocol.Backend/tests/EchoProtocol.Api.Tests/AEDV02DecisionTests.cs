@@ -7,6 +7,7 @@ using EchoProtocol.Api.DTOs.Scenarios;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using Xunit;
@@ -261,10 +262,40 @@ public sealed partial class ScenarioServiceTests
         var effect2 = V02Effect(f, events, approval2.Data, "StalkerFusionRuntime", AEDV02Key.DetectionAcquireSeconds, 2401, events.Count + 1, Now);
         events.Add(effect2);
         var receipt2 = new AEDV02ReceiptRequest(Guid.NewGuid(), effect2.Id, 2, plan2.Fingerprint(), 2401);
+        Assert.Equal("AED_V02_HOST_REQUIRED", (await service.ConfirmAsync(Guid.NewGuid(), f.MatchId, request2.DecisionId, receipt2)).Message);
+        Assert.Equal("AED_V02_RECEIPT_CONFLICT", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId,
+            receipt2 with { PlanRevision = 1 })).Message);
+        Assert.Equal("AED_V02_RECEIPT_CONFLICT", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId,
+            receipt2 with { PlanFingerprint = AEDV02Plan.Normal().Fingerprint() })).Message);
+        Assert.Equal("HOLD_EFFECT_NOT_ACCEPTED", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId,
+            receipt2 with { EffectEventId = Guid.NewGuid() })).Message);
+        effect2.ValueJson["data"]["effect"]["ObservedValue"] = 999d;
+        Assert.Equal("AED_V02_EFFECT_MISMATCH", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).Message);
+        effect2.ValueJson["data"]["effect"]["ObservedValue"] = plan2.Get(AEDV02Key.DetectionAcquireSeconds);
         Assert.Equal("HOLD_WORLD_EFFECT_NOT_OBSERVED", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).Message);
         V02AppendWindow(f, events, plan2, 2, 2401, Now, 1);
         Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).IsSuccess);
-        Assert.True((await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2)).Data!.IsReplay);
+        var persisted = await f.Db.AEDV02Decisions.AsNoTracking()
+            .SingleAsync(item => item.DecisionId == request2.DecisionId);
+        Assert.Equal(f.MatchId, persisted.MatchId);
+        Assert.Equal(request2.DecisionId, persisted.DecisionId);
+        Assert.Equal(2, persisted.PlanRevision);
+        Assert.Equal(plan2.Fingerprint(), persisted.PlanFingerprint);
+        Assert.Equal("APPROVED", persisted.ApprovalStatus);
+        Assert.Equal("APPLIED", persisted.ApplyStatus);
+        Assert.Equal(receipt2.ReceiptId, persisted.ReceiptId);
+        Assert.Equal(effect2.Id, persisted.EffectEventId);
+        Assert.Equal(receipt2.AppliedTick, persisted.AppliedTick);
+        Assert.NotNull(persisted.AppliedAtUtc);
+        Assert.Equal(AEDV02Key.DetectionAcquireSeconds.ToString(), persisted.ChangedKey);
+        Assert.Equal(plan2.ToArray(), JsonSerializer.Deserialize<double[]>(persisted.PlanValuesJson));
+        Assert.Equal(plan2.Get(AEDV02Key.DetectionAcquireSeconds),
+            effect2.ValueJson["data"]["effect"]["ObservedValue"].AsDouble);
+
+        var replay = await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2);
+        Assert.True(replay.Data!.IsReplay);
+        Assert.Equal(1, await f.Db.AEDV02Decisions.AsNoTracking()
+            .CountAsync(item => item.DecisionId == request2.DecisionId));
         Assert.Equal("AED_V02_RECEIPT_IDENTITY_CONFLICT", (await service.ConfirmAsync(f.HostId, f.MatchId, request2.DecisionId, receipt2 with { ReceiptId = Guid.NewGuid() })).Message);
 
         clock.UtcNow = Now.AddSeconds(121);

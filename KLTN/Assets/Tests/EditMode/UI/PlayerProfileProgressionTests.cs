@@ -6,6 +6,20 @@ namespace EchoProtocol.UI.Tests
 {
     public sealed class PlayerProfileProgressionTests
     {
+        private bool _hadLanguagePreference;
+        private int _previousLanguage;
+        private int _previousRuntimeLanguage;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _hadLanguagePreference = PlayerPrefs.HasKey("Echo.Language");
+            _previousLanguage = PlayerPrefs.GetInt("Echo.Language");
+            _previousRuntimeLanguage = GetLanguage();
+            try { SetLanguage(1); }
+            catch { RestoreLanguage(); throw; }
+        }
+
         [Test]
         public void ServerConfirmedLevelUpShowsUnlocksAndLegacyRewardsStayQuiet()
         {
@@ -24,7 +38,7 @@ namespace EchoProtocol.UI.Tests
         [Test]
         public void ProfileShowsNextUnlockAndScrollableMilestones()
         {
-            Apply(@"{""userId"":""test"",""level"":5,""levelCurveVersion"":""LEVEL_V3"",""experiencePoints"":1300,""experienceInLevel"":50,""experienceRequiredForNextLevel"":400,""levelCap"":30,""levelUnlocks"":[{""itemName"":""Cursed Priest"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Field Scanner"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Soul Eater"",""requiredLevel"":12,""experienceRemaining"":4075}]}");
+            Apply(@"{""userId"":""test"",""level"":5,""levelCurveVersion"":""LEVEL_V3"",""experiencePoints"":1300,""experienceInLevel"":50,""experienceRequiredForNextLevel"":400,""levelCap"":30,""levelUnlocks"":[{""itemName"":""Cursed Priest"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Field Scanner"",""requiredLevel"":6,""experienceRemaining"":350},{""itemName"":""Soul Eater"",""requiredLevel"":12,""experienceRemaining"":4075},{""itemName"":""Milestone 15"",""requiredLevel"":15,""experienceRemaining"":5000},{""itemName"":""Milestone 18"",""requiredLevel"":18,""experienceRemaining"":6000},{""itemName"":""Milestone 21"",""requiredLevel"":21,""experienceRemaining"":7000},{""itemName"":""Milestone 24"",""requiredLevel"":24,""experienceRemaining"":8000},{""itemName"":""Milestone 27"",""requiredLevel"":27,""experienceRemaining"":9000}]}");
             var root = new GameObject("Progression UI test", typeof(RectTransform), typeof(Canvas));
             try
             {
@@ -114,7 +128,71 @@ namespace EchoProtocol.UI.Tests
             var dto = Type.GetType("EchoProtocol.Profile.PlayerProfileDataDto, Assembly-CSharp", true);
             Session.GetMethod("Apply").Invoke(null, new[] { JsonUtility.FromJson(json, dto) });
         }
-        [TearDown] public void Clear() => Session.GetMethod("Clear").Invoke(null, null);
+        [TearDown]
+        public void Clear() => ClearAfter(() => Session.GetMethod("Clear").Invoke(null, null));
+
+        private void ClearAfter(Action clearSession)
+        {
+            try { clearSession(); }
+            finally { RestoreLanguage(); }
+        }
+
+        [TestCase(0, true, 0, false)]
+        [TestCase(1, true, 0, false)]
+        [TestCase(0, false, 0, false)]
+        [TestCase(1, true, 99, false)]
+        [TestCase(0, true, 0, true)]
+        public void RestoresRuntimeLocaleAndExactPreference(int runtime, bool hasPreference, int rawPreference, bool cleanupThrows)
+        {
+            int originalRuntime = _previousRuntimeLanguage;
+            bool originalHasPreference = _hadLanguagePreference;
+            int originalRawPreference = _previousLanguage;
+            try
+            {
+                SetLanguage(runtime);
+                if (hasPreference) PlayerPrefs.SetInt("Echo.Language", rawPreference);
+                else PlayerPrefs.DeleteKey("Echo.Language");
+                PlayerPrefs.Save();
+
+                SetUp();
+                Assert.That(GetLanguage(), Is.EqualTo(1));
+                if (cleanupThrows)
+                    Assert.Throws<InvalidOperationException>(() => ClearAfter(() => throw new InvalidOperationException()));
+                else Clear();
+                Assert.That(GetLanguage(), Is.EqualTo(runtime));
+                Assert.That(PlayerPrefs.HasKey("Echo.Language"), Is.EqualTo(hasPreference));
+                if (hasPreference) Assert.That(PlayerPrefs.GetInt("Echo.Language"), Is.EqualTo(rawPreference));
+            }
+            finally
+            {
+                _previousRuntimeLanguage = originalRuntime;
+                _hadLanguagePreference = originalHasPreference;
+                _previousLanguage = originalRawPreference;
+                RestoreLanguage();
+            }
+        }
+
+        private void RestoreLanguage()
+        {
+            try { SetLanguage(_previousRuntimeLanguage); }
+            finally
+            {
+                if (!_hadLanguagePreference) PlayerPrefs.DeleteKey("Echo.Language");
+                else PlayerPrefs.SetInt("Echo.Language", _previousLanguage);
+                PlayerPrefs.Save();
+            }
+        }
+
+        private static int GetLanguage() => Convert.ToInt32(
+            Type.GetType("EchoProtocol.Settings.GameLanguage, Assembly-CSharp", true)
+                .GetProperty("Current").GetValue(null));
+
+        private static void SetLanguage(int value)
+        {
+            var language = Type.GetType("EchoProtocol.Settings.GameLanguage, Assembly-CSharp", true);
+            var method = language.GetMethod("Set");
+            method.Invoke(null, new[] { Enum.ToObject(method.GetParameters()[0].ParameterType, value) });
+        }
 
         [Test]
         public void V3UsesExplicitLevelProgressInsteadOfFiveHundredXp()

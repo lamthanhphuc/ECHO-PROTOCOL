@@ -391,6 +391,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyAuthoritativeDamage(float damage, string sourceType, Vector3 hitPosition)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return false;
             if(EchoProtocol.Salvage.SalvageRunState.ProtectedFromEnemies(gameObject)) return false;
             if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority
                 || DebugGodMode
@@ -445,6 +446,7 @@ namespace EchoProtocol.Networking
 
         public bool TryApplyMonsterDown(string monsterType, Vector3 hitPosition)
         {
+            if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked) return false;
             if(EchoProtocol.Salvage.SalvageSite.IsActive) return EchoProtocol.Salvage.SalvageRunState.Instance!=null
                 && EchoProtocol.Salvage.SalvageRunState.Instance.TryEnemyHit(this,hitPosition);
             if (EchoProtocol.Cinematics.OpeningCutsceneCoordinator.IsGameplayBlocked || !Object.HasStateAuthority

@@ -70,18 +70,39 @@ public sealed class LoadoutServiceTests
     public async Task RejectUnownedCharacter()
     {
         await using var harness = await LoadoutHarness.CreateAsync();
+        Assert.True((await harness.Equip("CHARACTER", harness.CharacterOneId)).IsSuccess);
+        var before = await harness.Service.GetCurrentAsync(harness.UserId);
         var result = await harness.Equip("CHARACTER", harness.OtherUserCharacterId);
+        var after = await harness.Service.GetCurrentAsync(harness.UserId);
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.LoadoutItemNotOwned, result.ErrorCode);
+        Assert.Equal(before.Data!.Character!.ItemId, after.Data!.Character!.ItemId);
+        Assert.Single(await harness.Db.PlayerLoadoutItems.ToArrayAsync());
     }
 
     [Fact, Trait("Category", "M4LoadoutUnit")]
     public async Task RejectTeamToolInCharacterSlot()
     {
         await using var harness = await LoadoutHarness.CreateAsync();
+        Assert.True((await harness.Equip("CHARACTER", harness.CharacterOneId)).IsSuccess);
+        var before = await harness.Service.GetCurrentAsync(harness.UserId);
+        var rowsBefore = await harness.Db.PlayerLoadoutItems.AsNoTracking()
+            .OrderBy(item => item.SlotId).Select(item => new { item.SlotId, item.InventoryItemId }).ToArrayAsync();
+        var ownedTeamToolBefore = await harness.Db.InventoryItems.AsNoTracking()
+            .SingleAsync(item => item.UserId == harness.UserId && item.ShopItemId == harness.TeamToolOneId);
+
         var result = await harness.Equip("CHARACTER", harness.TeamToolOneId);
+
+        harness.Db.ChangeTracker.Clear();
+        var after = await harness.Service.GetCurrentAsync(harness.UserId);
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.LoadoutCategoryMismatch, result.ErrorCode);
+        Assert.Equal(before.Data!.Character!.ItemId, after.Data!.Character!.ItemId);
+        Assert.Equal(rowsBefore, await harness.Db.PlayerLoadoutItems.AsNoTracking()
+            .OrderBy(item => item.SlotId).Select(item => new { item.SlotId, item.InventoryItemId }).ToArrayAsync());
+        var ownedTeamToolAfter = await harness.Db.InventoryItems.AsNoTracking()
+            .SingleAsync(item => item.UserId == harness.UserId && item.ShopItemId == harness.TeamToolOneId);
+        Assert.Equal(ownedTeamToolBefore.InventoryItemId, ownedTeamToolAfter.InventoryItemId);
     }
 
     [Fact, Trait("Category", "M4LoadoutUnit")]

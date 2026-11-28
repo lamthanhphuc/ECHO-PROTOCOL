@@ -1,0 +1,38 @@
+{
+  "Scope": "DISPOSABLE_LOCAL_TECHNICAL_QUALIFICATION",
+  "Source": "KLTN/Assets/Scripts/AI/Common/AED/FixedDirector.cs; EchoProtocol.Backend/src/EchoProtocol.Api/Services/ScenarioConfigValidator.cs; owner authorization 2026-11-27",
+  "Compatibility": "0.1.0",
+  "Fixed": {
+    "ScenarioConfigId": "FIXED_BASELINE_V1",
+    "ScenarioConfigVersion": "FIXED_BASELINE_V1",
+    "SchemaVersion": "1.1",
+    "PolicyVersion": "AED_SCENARIO_POLICY_V1_1",
+    "ConfigSource": "Fixed",
+    "MapId": "M2-MAP-1",
+    "MonsterType": "STALKER",
+    "ObjectiveSpawnSetId": "DEFAULT_OBJECTIVES",
+    "SupportItemBudget": 0,
+    "DetectionFillRate": 0.5,
+    "DetectionDecayRate": 1,
+    "ChaseSpeed": 9,
+    "SearchDuration": 5,
+    "RouteModifier": "DEFAULT_ROUTE",
+    "EscapeDoorTimerSeconds": 45,
+    "FallbackConfigId": "FIXED_BASELINE_V1",
+    "FallbackConfigVersion": "FIXED_BASELINE_V1",
+    "ContentWhitelistVersion": "M2-WHITELIST-1",
+    "UnityCompatibilityVersion": "0.1.0",
+    "IsActive": true,
+    "IsProductionApproved": true,
+    "IsFixedFallback": true,
+    "Provenance": "LOCAL_TECHNICAL_FIXED_FROM_FIXEDDIRECTOR_20261127"
+  },
+  "ReliefId": "AED_PREMATCH_RELIEF_V1",
+  "ReliefVersion": "AED_PREMATCH_RELIEF_V1",
+  "Content": [
+    { "ContentType": "Map", "ContentId": "M2-MAP-1", "ContentWhitelistVersion": "M2-WHITELIST-1", "UnityCompatibilityVersion": "0.1.0", "IsActive": true, "IsProductionApproved": true, "Provenance": "LOCAL_TECHNICAL_FIXEDDIRECTOR_CONTENT_20261127" },
+    { "ContentType": "Monster", "ContentId": "STALKER", "ContentWhitelistVersion": "M2-WHITELIST-1", "UnityCompatibilityVersion": "0.1.0", "IsActive": true, "IsProductionApproved": true, "Provenance": "LOCAL_TECHNICAL_FIXEDDIRECTOR_CONTENT_20261127" },
+    { "ContentType": "ObjectiveSpawnSet", "ContentId": "DEFAULT_OBJECTIVES", "ContentWhitelistVersion": "M2-WHITELIST-1", "UnityCompatibilityVersion": "0.1.0", "IsActive": true, "IsProductionApproved": true, "Provenance": "LOCAL_TECHNICAL_FIXEDDIRECTOR_CONTENT_20261127" },
+    { "ContentType": "RouteModifier", "ContentId": "DEFAULT_ROUTE", "ContentWhitelistVersion": "M2-WHITELIST-1", "UnityCompatibilityVersion": "0.1.0", "IsActive": true, "IsProductionApproved": true, "Provenance": "LOCAL_TECHNICAL_FIXEDDIRECTOR_CONTENT_20261127" }
+  ]
+}

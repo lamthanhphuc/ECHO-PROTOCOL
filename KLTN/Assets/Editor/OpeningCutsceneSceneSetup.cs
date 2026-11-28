@@ -78,25 +78,29 @@ namespace EchoProtocol.Editor.Cinematics
         internal static bool TryConsumeRequest(string path, out string command)
         {
             command = null;
+            string claimedPath = path + "." + Guid.NewGuid().ToString("N") + ".claimed";
+            bool consumed = false;
             try
             {
-                // Deny readers/writers while consuming, but allow deleting our own open handle.
-                // An active producer (even one sharing reads) therefore makes us retry next update.
-                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Delete))
+                // Producers publish a complete same-directory temp file by rename.
+                // Claim by rename so only one consumer can dispatch the request.
+                if (!File.Exists(path)) return false;
+                File.Move(path, claimedPath);
+                string pending;
+                using (var stream = new FileStream(claimedPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 using (var reader = new StreamReader(stream, Encoding.UTF8, true))
                 {
-                    string pending = reader.ReadToEnd().Trim();
-                    if (pending.Length == 0) return false;
-                    // Delete before releasing the handle so a writer cannot reopen and change the file
-                    // between our read and deletion. Dispatch only after successful consumption.
-                    File.Delete(path);
-                    command = pending;
-                    return true;
+                    pending = reader.ReadToEnd().Trim();
                 }
+                File.Delete(claimedPath);
+                consumed = true;
+                if (pending.Length == 0) return false;
+                command = pending;
+                return true;
             }
             catch (IOException)
             {
-                // Includes sharing/lock violations and a producer removing/replacing the file.
+                // Includes concurrent claims and a producer removing/replacing the file.
                 command = null;
                 return false;
             }
@@ -104,6 +108,16 @@ namespace EchoProtocol.Editor.Cinematics
             {
                 command = null;
                 return false;
+            }
+            finally
+            {
+                try
+                {
+                    if (!consumed && File.Exists(claimedPath) && !File.Exists(path))
+                        File.Move(claimedPath, path);
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
             }
         }
 

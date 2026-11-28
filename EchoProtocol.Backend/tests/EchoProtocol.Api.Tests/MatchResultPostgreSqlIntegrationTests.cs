@@ -28,6 +28,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using MongoDB.Bson;
+using MongoDB.Driver;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
@@ -261,6 +262,37 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
             WHERE table_schema = current_schema() AND table_name = 'MatchAuthorityBindings'
               AND column_name IN ('MapId', 'Difficulty')
             """).SingleAsync();
+
+    [Fact, Trait("Category", "M4PostgreSqlIntegration")]
+    public async Task ValidHostResultPersistsExactAuthorizedRosterAndPayload()
+    {
+        await using var scope = await PostgresScope.CreateAsync();
+        var seed = await scope.SeedMatchAsync();
+        var request = CreateRequest(seed);
+
+        var submitted = await SubmitAsync(scope, seed, request);
+
+        Assert.True(submitted.IsSuccess, submitted.Message);
+        await using var verify = scope.CreateDbContext();
+        var stored = await verify.MatchResults.AsNoTracking().Include(item => item.Players)
+            .SingleAsync(item => item.MatchId == seed.MatchId);
+        Assert.Equal(seed.HostId, stored.SubmittedByUserId);
+        Assert.Equal(request.Outcome, stored.Outcome);
+        Assert.Equal(request.ObjectiveCompletion, stored.ObjectiveCompletion);
+        Assert.Equal(request.Players.Select(item => item.UserId).Order().ToArray(),
+            stored.Players.Select(item => item.UserId).Order().ToArray());
+        Assert.All(request.Players, submittedPlayer =>
+        {
+            var persistedPlayer = Assert.Single(stored.Players, item => item.UserId == submittedPlayer.UserId);
+            Assert.Equal(submittedPlayer.Survived, persistedPlayer.Survived);
+            Assert.Equal(submittedPlayer.DetectionCount, persistedPlayer.DetectionCount);
+            Assert.Equal(submittedPlayer.DownedCount, persistedPlayer.DownedCount);
+            Assert.Equal(submittedPlayer.ReviveCount, persistedPlayer.ReviveCount);
+            Assert.Equal(submittedPlayer.ObjectiveContribution, persistedPlayer.ObjectiveContribution);
+        });
+        Assert.Equal(MatchAuthorityStatus.Ended,
+            (await verify.MatchAuthorityBindings.AsNoTracking().SingleAsync(item => item.MatchId == seed.MatchId)).Status);
+    }
 
     [Fact, Trait("Category", "M4PostgreSqlIntegration")]
     public async Task MigrationAppliesToRealPostgreSql()
@@ -593,6 +625,103 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
         Assert.Null(profile.ObjectiveScore);
     }
 
+    [Fact, Trait("Category", "M4TelemetryProfileMongoPostgreSqlIntegration")]
+    public async Task IngestedMongoTelemetryPersistsPlayerAndTeamLineageAndReplayIsIdempotent()
+    {
+        var mongoUri = RequiredLocalMongoUri();
+        var databaseName = $"echo_protocol_bm04_profile_{Guid.NewGuid():N}";
+        var mongoClient = new MongoClient(mongoUri);
+        try
+        {
+            await using var scope = await PostgresScope.CreateAsync();
+            var seed = await scope.SeedRewardMatchAsync();
+            var mongoDatabase = mongoClient.GetDatabase(databaseName);
+            var mongoSettings = Options.Create(new MongoDbSettings
+            {
+                DatabaseName = databaseName,
+                TelemetryCollectionName = "telemetry_events",
+                MaxBatchSize = 500,
+                SupportedSchemaVersion = "1.1",
+                MaxValueJsonBytes = 32_768,
+                MaxFutureSkewMinutes = 5,
+                MaxEventAgeDays = 7
+            });
+            var repository = new MongoTelemetryEventRepository(mongoDatabase, mongoSettings);
+            await repository.EnsureIndexesAsync();
+            await using var db = scope.CreateDbContext();
+            var authority = CreateRemoteMatchService(db);
+            var accepted = await TelemetryServiceTests.IngestV02Trace(
+                seed.MatchId, CreateIngestedProfileTelemetry(seed), Now.UtcDateTime,
+                authority, seed.HostId, repository, teamSize: 2);
+            Assert.Equal(8, accepted.Length);
+            Assert.All(accepted, item => Assert.Equal(seed.MatchId, item.MatchId));
+            Assert.Equal(2, accepted.Where(item => item.EventType == "PLAYER_ESCAPED").Select(item => item.UserId).Distinct().Count());
+
+            var persistedEvents = await repository.LoadAcceptedMatchEventsAsync(seed.MatchId);
+            Assert.Equal(accepted.Select(item => item.Id).Order(), persistedEvents.Select(item => item.Id).Order());
+            var aggregator = new MatchTelemetryAggregator(db, repository, CreateProfilePolicy());
+            var aggregation = await aggregator.AggregateAsync(seed.MatchId, seed.HostId);
+            Assert.Equal(MatchProfileEligibilityStatus.Eligible, aggregation.Eligibility);
+            Assert.Equal(TelemetryCompleteness.Complete, aggregation.Completeness);
+            Assert.Equal(seed.MatchId, aggregation.MatchId);
+            Assert.Equal(seed.HostId, aggregation.UserId);
+
+            var updater = new PlayerAIProfileUpdater(
+                db, aggregator, CreateProfilePolicy(), new FixedTimeProvider(Now));
+            var playerResult = await updater.ProcessAsync(seed.MatchId, seed.HostId);
+            Assert.True(playerResult.IsSuccess, playerResult.Message);
+            db.ChangeTracker.Clear();
+            var profileBeforeReplay = await db.PlayerAIProfiles.AsNoTracking()
+                .SingleAsync(item => item.UserId == seed.HostId);
+            var playerReceiptsBeforeReplay = await db.MatchScores.AsNoTracking()
+                .Where(item => item.MatchId == seed.MatchId && item.UserId == seed.HostId)
+                .OrderBy(item => item.Dimension).ToArrayAsync();
+            Assert.NotEmpty(playerReceiptsBeforeReplay);
+            Assert.All(playerReceiptsBeforeReplay, receipt =>
+            {
+                Assert.Equal(profileBeforeReplay.ProfileLineageId, receipt.ProfileLineageId);
+                Assert.Equal(ProfileContributionStatus.Contributing, receipt.ContributionStatus);
+                Assert.Equal("1.1", receipt.SourceTelemetrySchemaVersion);
+                Assert.False(string.IsNullOrWhiteSpace(receipt.SourceEvidenceFingerprint));
+            });
+
+            var teamService = new TeamProfileService(
+                db, repository, CreateTeamProfilePolicy(), new FixedTimeProvider(Now));
+            var teamResult = await teamService.ProcessAsync(seed.MatchId);
+            Assert.True(teamResult.IsSuccess, teamResult.Message);
+            db.ChangeTracker.Clear();
+            var teamBeforeReplay = await db.TeamProfiles.AsNoTracking()
+                .SingleAsync(item => item.MatchId == seed.MatchId);
+            Assert.Equal(30m, teamBeforeReplay.ObjectiveTimeSeconds);
+            Assert.Equal("1.1", teamBeforeReplay.SourceTelemetrySchemaVersion);
+            Assert.False(string.IsNullOrWhiteSpace(teamBeforeReplay.SourceFingerprint));
+
+            var duplicate = await TelemetryServiceTests.IngestV02Trace(
+                seed.MatchId, accepted, Now.UtcDateTime, authority, seed.HostId, repository, teamSize: 2);
+            Assert.Equal(accepted.Select(item => item.Id).Order(), duplicate.Select(item => item.Id).Order());
+            Assert.Equal(8, (await repository.LoadAcceptedMatchEventsAsync(seed.MatchId)).Count);
+            Assert.True((await updater.ProcessAsync(seed.MatchId, seed.HostId)).IsSuccess);
+            Assert.True((await teamService.ProcessAsync(seed.MatchId)).Data!.IsDuplicate);
+
+            db.ChangeTracker.Clear();
+            var profileAfterReplay = await db.PlayerAIProfiles.AsNoTracking()
+                .SingleAsync(item => item.UserId == seed.HostId);
+            var playerReceiptsAfterReplay = await db.MatchScores.AsNoTracking()
+                .Where(item => item.MatchId == seed.MatchId && item.UserId == seed.HostId)
+                .OrderBy(item => item.Dimension).ToArrayAsync();
+            var teamAfterReplay = await db.TeamProfiles.AsNoTracking()
+                .SingleAsync(item => item.MatchId == seed.MatchId);
+            Assert.Equal(profileBeforeReplay.ProfileRevision, profileAfterReplay.ProfileRevision);
+            Assert.Equal(playerReceiptsBeforeReplay.Select(item => item.Id), playerReceiptsAfterReplay.Select(item => item.Id));
+            Assert.Equal(teamBeforeReplay.ProcessingRevision, teamAfterReplay.ProcessingRevision);
+            Assert.Equal(teamBeforeReplay.SourceFingerprint, teamAfterReplay.SourceFingerprint);
+        }
+        finally
+        {
+            await mongoClient.DropDatabaseAsync(databaseName);
+        }
+    }
+
     [Fact, Trait("Category", "M4PlayerAIProfilePostgreSqlIntegration")]
     public async Task PlayerAIProfile_ConcurrentDuplicate_IsAppliedExactlyOnce()
     {
@@ -688,6 +817,13 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     {
         await using var scope = await PostgresScope.CreateAsync();
         var seed = await scope.SeedPurchaseAsync();
+        await using (var setup = scope.CreateDbContext())
+        {
+            var item = await setup.ShopItems.SingleAsync(
+                shopItem => shopItem.ItemId == seed.FirstItemId);
+            item.Category = "TEAM_TOOL";
+            await setup.SaveChangesAsync();
+        }
 
         var result = await ProcessPurchaseAsync(
             scope, seed.UserId, seed.FirstItemId, "atomic-purchase");
@@ -705,6 +841,13 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
         Assert.Equal(ledger.Id, purchase.WalletTransactionId);
         var inventory = await verify.InventoryItems.AsNoTracking().SingleAsync();
         Assert.Equal(purchase.PurchaseId, inventory.PurchaseId);
+
+        var equip = await EquipLoadoutAsync(
+            scope, seed.UserId, "TEAM_TOOL_1", seed.FirstItemId);
+        Assert.True(equip.IsSuccess, equip.Message);
+        await using var reloaded = scope.CreateDbContext();
+        var loadout = await CreateLoadoutService(reloaded).GetCurrentAsync(seed.UserId);
+        Assert.Equal(seed.FirstItemId, Assert.Single(loadout.Data!.TeamTools).ItemId);
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
@@ -802,11 +945,17 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
-    public async Task ConcurrentRewardCreditAndPurchaseDebitDoNotLoseWalletUpdate()
+    public async Task ConcurrentRewardPurchaseAndPaymentTopUpReconcileSameWallet()
     {
         await using var scope = await PostgresScope.CreateAsync();
         var rewardSeed = await scope.SeedRewardMatchAsync();
         var itemId = await scope.SeedShopItemAsync(30);
+        int initialHostBalance;
+        await using (var initial = scope.CreateDbContext())
+            initialHostBalance = await initial.Wallets.AsNoTracking()
+                .Where(wallet => wallet.UserId == rewardSeed.HostId)
+                .Select(wallet => wallet.Balance)
+                .SingleAsync();
 
         var rewardTask = ProcessRewardAsync(scope, rewardSeed.MatchId);
         var purchaseTask = ProcessPurchaseAsync(
@@ -825,6 +974,58 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
         Assert.Equal(1, await verify.PurchaseTransactions.CountAsync());
         Assert.Equal(1, await verify.InventoryItems.CountAsync());
         Assert.Equal(3, await verify.WalletTransactions.CountAsync());
+
+        var paymentOrderId = Guid.NewGuid();
+        await using (var setup = scope.CreateDbContext())
+        {
+            setup.PaymentOrders.Add(new PaymentOrder
+            {
+                PaymentOrderId = paymentOrderId,
+                UserId = rewardSeed.HostId,
+                Provider = "PAYOS",
+                ProviderOrderId = $"topup-{paymentOrderId:N}",
+                Purpose = "AUTOMATED_TEST_ONLY",
+                ProductReference = "TEST_TOPUP",
+                FulfillmentKind = PaymentFulfillmentKind.WALLET_CREDIT,
+                WalletCreditAmount = 150,
+                Amount = 125_000,
+                Currency = "VND",
+                Status = PaymentOrderStatus.PAID,
+                IdempotencyKey = $"topup-key-{paymentOrderId:N}",
+                RequestFingerprint = new string('A', 64),
+                ProviderTransactionId = $"topup-payment-{paymentOrderId:N}",
+                CreatedAtUtc = Now.UtcDateTime,
+                UpdatedAtUtc = Now.UtcDateTime,
+                PaidAtUtc = Now.UtcDateTime
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var fulfillmentDb = scope.CreateDbContext())
+        {
+            var fulfillment = new PaymentFulfillmentService(
+                fulfillmentDb,
+                Options.Create(new PaymentCatalogSettings()),
+                new FixedTimeProvider(Now));
+            var topUp = await fulfillment.FulfillAsync(paymentOrderId);
+            Assert.True(topUp.IsSuccess, topUp.Message);
+        }
+
+        await using var reconciled = scope.CreateDbContext();
+        var reconciledWallet = await reconciled.Wallets.AsNoTracking()
+            .SingleAsync(wallet => wallet.UserId == rewardSeed.HostId);
+        var hostLedger = await reconciled.WalletTransactions.AsNoTracking()
+            .Where(item => item.WalletId == reconciledWallet.Id)
+            .ToListAsync();
+        Assert.Equal(245, reconciledWallet.Balance);
+        Assert.Equal(initialHostBalance + hostLedger.Sum(item => item.Amount),
+            reconciledWallet.Balance);
+        Assert.Equal(3, hostLedger.Count);
+        Assert.Equal(150, hostLedger.Single(
+            item => item.Type == WalletTransactionType.PAYMENT_FULFILLMENT).Amount);
+        Assert.Equal(paymentOrderId,
+            (await reconciled.PaymentFulfillments.AsNoTracking().SingleAsync())
+                .PaymentOrderId);
     }
 
     [Fact, Trait("Category", "M4PurchasePostgreSqlIntegration")]
@@ -2393,6 +2594,66 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
             }, "TEAM_ESCAPED")
     ];
 
+    private static TelemetryEventDocument[] CreateIngestedProfileTelemetry(MatchSeed seed)
+    {
+        var now = Now.UtcDateTime;
+        BsonDocument Context(string phase) => new()
+        {
+            ["eventSequence"] = 1L,
+            ["authorityTick"] = 42L,
+            ["scenarioConfigVersion"] = "TEST-SCENARIO-1",
+            ["policyVersion"] = "TEST-POLICY-1",
+            ["configSource"] = "FIXED",
+            ["phase"] = phase
+        };
+        TelemetryEventDocument Event(
+            string type, long sequence, DateTime timestamp, Guid? userId, string? reason,
+            string phase, BsonDocument data, BsonDocument? extraContext = null)
+        {
+            var context = Context(phase);
+            if (extraContext is not null)
+                foreach (var field in extraContext) context[field.Name] = field.Value;
+            return new TelemetryEventDocument
+            {
+                Id = Guid.NewGuid(), MatchId = seed.MatchId, UserId = userId,
+                EventType = type, EventSequence = sequence, Ts = timestamp,
+                ValueJson = new BsonDocument { ["context"] = context, ["data"] = data },
+                ReasonCode = reason, SchemaVersion = "1.1",
+                SemanticFingerprint = new string((char)('a' + (int)(sequence % 20)), 64),
+                IngestedAt = now
+            };
+        }
+
+        return
+        [
+            Event("PHASE_STARTED", 1, now.AddSeconds(-50), null, null, "TEST_OBJECTIVE", new BsonDocument()),
+            Event("PHASE_COMPLETED", 2, now.AddSeconds(-20), null, "OBJECTIVE_COMPLETED", "TEST_OBJECTIVE", new BsonDocument()),
+            Event("PHASE_STARTED", 3, now.AddSeconds(-18), null, "PREVIOUS_PHASE_COMPLETED", "FINAL_HUNT", new BsonDocument()),
+            Event("PLAYER_ESCAPED", 4, now.AddSeconds(-17), seed.HostId, "EXIT_REACHED", "FINAL_HUNT", new BsonDocument()),
+            Event("PLAYER_ESCAPED", 5, now.AddSeconds(-16), seed.PlayerId, "EXIT_REACHED", "FINAL_HUNT", new BsonDocument()),
+            Event("NOISE_EMITTED", 6, now.AddSeconds(-15), seed.HostId, "PLAYER_SPRINT", "FINAL_HUNT",
+                new BsonDocument { ["noiseEventId"] = Guid.NewGuid().ToString("D"), ["noiseType"] = "SPRINT", ["loudness"] = 0.7, ["hearingRadius"] = 12.0 },
+                new BsonDocument { ["position"] = new BsonDocument { ["x"] = 1.0, ["y"] = 2.0, ["z"] = 3.0 } }),
+            Event("MATCH_ENDED", 7, now, null, "TEAM_ESCAPED", "MATCH_END",
+                new BsonDocument { ["outcome"] = "SUCCESS", ["durationSeconds"] = 120, ["survivorCount"] = 2 })
+        ];
+    }
+
+    private static string RequiredLocalMongoUri()
+    {
+        var uri = Environment.GetEnvironmentVariable("ECHO_PHASE6R_MONGO_URI");
+        if (string.IsNullOrWhiteSpace(uri))
+            throw new InvalidOperationException("MongoDB integration tests require ECHO_PHASE6R_MONGO_URI.");
+        MongoUrl target;
+        try { target = new MongoUrl(uri); }
+        catch (Exception exception) when (exception is MongoConfigurationException or FormatException)
+        { throw new InvalidOperationException("MongoDB integration connection is invalid."); }
+        if (target.Servers.Any(server => server.Host is not ("127.0.0.1" or "localhost" or "::1")) ||
+            target.DirectConnection != true)
+            throw new InvalidOperationException("Profile integration requires loopback MongoDB with directConnection=true.");
+        return uri;
+    }
+
     private static TelemetryEventDocument TeamEvent(
         Guid matchId, string type, long sequence, DateTime timestamp,
         BsonDocument value, string? reason) => new()
@@ -2673,11 +2934,97 @@ public sealed partial class MatchResultPostgreSqlIntegrationTests
     public async Task StartedMatchKeepsLockedVersionAfterPublish()
     {
         await using var scope = await PostgresScope.CreateAsync(); var seed = await SeedRemoteStartMatchAsync(scope);
-        await using (var add = scope.CreateDbContext()) { var next = CreateRemoteBalance("RFB-NEXT"); next.IsActive = false; add.Add(next); await add.SaveChangesAsync(); }
+        var adaptiveVersion = AdaptiveConfigurationService.VersionPrefix + "PRESERVE";
+        var adaptiveJson = JsonSerializer.Serialize(new AdaptiveConfiguration(
+            true, 30, 70, 30, 70, 1, 1, true, null, null, null,
+            new Dictionary<string, AdaptiveParameter>
+            {
+                ["ChaseSpeed"] = new(9, [8, 9, 10])
+            },
+            AdaptiveConfigurationService.DefaultPilot));
+        var nextSnapshot = RemoteFixedBalanceTests.ValidSnapshot
+            .Replace("\"maxHealth\": 100", "\"maxHealth\": 101");
+        await using (var add = scope.CreateDbContext())
+        {
+            var next = CreateRemoteBalance("RFB-NEXT", nextSnapshot);
+            next.IsActive = false;
+            add.Add(next);
+            add.AdaptiveConfigurationVersions.Add(new AdaptiveConfigurationVersion
+            {
+                Version = adaptiveVersion,
+                Compatibility = MatchAuthoritySettings.CurrentGameVersion,
+                Revision = 1,
+                ConfigurationJson = adaptiveJson,
+                PublishedByUserId = Guid.NewGuid(),
+                PublishedAtUtc = Now.UtcDateTime
+            });
+            add.MatchAuthorityBindings.Add(new MatchAuthorityBinding
+            {
+                MatchId = Guid.NewGuid(),
+                FusionSessionName = $"aed-preserve-{Guid.NewGuid():N}",
+                HostUserId = seed.HostId,
+                MaxPlayers = 4,
+                MapId = "SciFi",
+                Difficulty = "NORMAL",
+                ResolutionMode = "ADAPTIVE",
+                BalanceSource = "LOCAL",
+                BalanceProtocolVersion = RemoteFixedBalanceContract.ProtocolVersion,
+                AdaptivePolicyConfigVersion = adaptiveVersion,
+                MatchDataPolicy = RemoteFixedBalanceContract.Standard,
+                Status = MatchAuthorityStatus.Lobby,
+                LeaseExpiresAtUtc = Now.AddMinutes(1).UtcDateTime,
+                CreatedAtUtc = Now.UtcDateTime,
+                UpdatedAtUtc = Now.UtcDateTime
+            });
+            await add.SaveChangesAsync();
+        }
+        string persistedAdaptiveSnapshot;
+        await using (var read = scope.CreateDbContext())
+            persistedAdaptiveSnapshot = await read.AdaptiveConfigurationVersions
+                .Where(x => x.Version == adaptiveVersion)
+                .Select(x => x.ConfigurationJson)
+                .SingleAsync();
         await using (var start = scope.CreateDbContext()) Assert.True((await CreateRemoteMatchService(start).StartV2Async(seed.HostId, seed.MatchId, RemoteStartRequest(), default)).IsSuccess);
-        await using (var publish = scope.CreateDbContext()) Assert.True((await CreateRemoteAdminService(publish).ActivateVersionAsync(Guid.NewGuid(), "RFB-NEXT", Change("RFB-START-1"), default)).IsSuccess);
-        await using var verify = scope.CreateDbContext(); var match = await verify.MatchAuthorityBindings.SingleAsync(x => x.MatchId == seed.MatchId);
+        var adminId = Guid.NewGuid();
+        const string reason = "Publish verified balance version";
+        await using (var publish = scope.CreateDbContext())
+        {
+            var result = await CreateRemoteAdminService(publish).ActivateVersionAsync(adminId, "RFB-NEXT",
+                new ChangeRemoteFixedActivationRequest
+                {
+                    ExpectedActiveVersion = "RFB-START-1",
+                    Reason = reason
+                }, default);
+            Assert.True(result.IsSuccess, result.Message);
+        }
+
+        await using var verify = scope.CreateDbContext();
+        var match = await verify.MatchAuthorityBindings.SingleAsync(x => x.MatchId == seed.MatchId);
         Assert.Equal("RFB-START-1", match.BalanceVersion);
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(RemoteFixedBalanceTests.ValidSnapshot),
+            match.BalanceHash);
+        var active = await verify.RemoteFixedBalanceVersions.SingleAsync(x => x.IsActive);
+        Assert.Equal("RFB-NEXT", active.Version);
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(nextSnapshot), active.ContentHash);
+        var audit = await verify.RemoteFixedBalanceAuditEntries.SingleAsync(x => x.Action == "ACTIVATE");
+        Assert.Equal(adminId, audit.AdminUserId);
+        Assert.Equal("RFB-START-1", audit.PreviousVersion);
+        Assert.Equal("RFB-NEXT", audit.TargetVersion);
+        Assert.Equal(reason, audit.Reason);
+        Assert.Equal(Now.UtcDateTime, audit.CreatedAtUtc);
+
+        var adaptiveMatch = await verify.MatchAuthorityBindings
+            .SingleAsync(x => x.AdaptivePolicyConfigVersion == adaptiveVersion);
+        var adaptiveSnapshot = await verify.AdaptiveConfigurationVersions
+            .SingleAsync(x => x.Version == adaptiveVersion);
+        Assert.Equal(adaptiveVersion, adaptiveMatch.AdaptivePolicyConfigVersion);
+        Assert.Equal(persistedAdaptiveSnapshot, adaptiveSnapshot.ConfigurationJson);
+        using var snapshotJson = JsonDocument.Parse(adaptiveSnapshot.ConfigurationJson);
+        Assert.Equal(9, snapshotJson.RootElement.GetProperty("Parameters")
+            .GetProperty("ChaseSpeed").GetProperty("Baseline").GetDouble());
+        Assert.Equal([8d, 9d, 10d], snapshotJson.RootElement.GetProperty("Parameters")
+            .GetProperty("ChaseSpeed").GetProperty("Tiers").EnumerateArray()
+            .Select(value => value.GetDouble()).ToArray());
     }
 
     [Fact, Trait("Category", "PR5PostgreSqlIntegration")]

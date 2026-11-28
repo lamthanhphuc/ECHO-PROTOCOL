@@ -25,6 +25,27 @@ public sealed class FloodedMapSceneTests
     }
 
     [Test]
+    public void TC_MF_02_02_03_EscortAcceptsOnlyTheAuthoredDock()
+    {
+        var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene("Assets/Scenes/Scene_A.unity", OpenSceneMode.Additive);
+        try
+        {
+            var mission = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<FloodedMapMission>(true)).Single();
+            var dock = mission.Destination.GetComponent<BoxCollider>();
+            Assert.That(mission.IsEscortInDock(mission.Route.Last().position), Is.True);
+            Assert.That(mission.IsEscortInDock(mission.Route.First().position), Is.False,
+                "The escort's departure point must not satisfy dock arrival.");
+            var outside = dock.transform.TransformPoint(dock.center + Vector3.right * (dock.size.x * .5f + 1f));
+            Assert.That(mission.IsEscortInDock(outside), Is.False,
+                "An escort outside the authored dock must not advance the route.");
+        }
+        finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
+    }
+
+    [Test]
     public void DebugSkipsResolveActualMissionTargetsWithoutZoneEntryTriggers()
     {
         var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");
@@ -122,9 +143,12 @@ public sealed class FloodedMapSceneTests
             Assert.That(mission.Destination.gameObject.activeInHierarchy, Is.True);
             Assert.That(mission.Route.Length, Is.GreaterThan(2));
             Assert.That(mission.Route.All(t => t && t.gameObject.scene == scene), Is.True);
-            Assert.That(mission.Route.Max(t => t.position.y), Is.LessThanOrEqualTo(mission.Escort.position.y + 3.05f),
-                "Escort should only rise slightly over barriers, never return to the old high flight route.");
-            Assert.That(mission.Route.Min(t => t.position.y), Is.GreaterThanOrEqualTo(mission.Escort.position.y - .01f));
+            var highestRoutePoint = mission.Route.OrderByDescending(t => t.position.y).First();
+            Assert.That(highestRoutePoint.position.y, Is.LessThanOrEqualTo(mission.Escort.position.y + 3.05f),
+                $"Escort route point {highestRoutePoint.name} at {highestRoutePoint.position} should only rise slightly over barriers.");
+            var lowestRoutePoint = mission.Route.OrderBy(t => t.position.y).First();
+            Assert.That(lowestRoutePoint.position.y, Is.GreaterThanOrEqualTo(mission.Escort.position.y - .01f),
+                $"Escort route point {lowestRoutePoint.name} at {lowestRoutePoint.position} fell below the escort deck.");
             Assert.That(mission.ChargeTarget.GetComponent<IInteractable>(), Is.TypeOf<FloodedChargeInteraction>());
             var director = roots.SelectMany(g => g.GetComponentsInChildren<Zone2MissionDirector>(true)).Single();
             Assert.That(director.RelayA1 && director.RelayA2 && director.RelayB1 && director.RelayB2, Is.True);
@@ -134,18 +158,18 @@ public sealed class FloodedMapSceneTests
             var boxes = roots.SelectMany(g => g.GetComponentsInChildren<EnergyCoreObjectiveProgress>(true)).ToArray();
             Assert.That(boxes.Length, Is.EqualTo(2));
             Physics.SyncTransforms();
-            var points = new[] { mission.Escort.position }.Concat(mission.Route.Select(t => t.position)).ToArray();
+            var points = new[] { mission.Escort }.Concat(mission.Route).ToArray();
             for (int i = 1; i < points.Length; i++)
             {
-                int samples = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(points[i - 1], points[i]) / .5f));
+                int samples = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(points[i - 1].position, points[i].position) / .5f));
                 for (int sample = 0; sample <= samples; sample++)
                 {
-                    var p = Vector3.Lerp(points[i - 1], points[i], sample / (float)samples);
+                    var p = Vector3.Lerp(points[i - 1].position, points[i].position, sample / (float)samples);
                     foreach (var hit in Physics.OverlapBox(p, new Vector3(3.5f, 1.2f, 3.5f), Quaternion.identity,
                                  Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
                         if (hit.gameObject.scene == scene && !(hit is TerrainCollider)
                             && !hit.transform.IsChildOf(mission.Escort) && hit.excludeLayers.value != -1)
-                            Assert.Fail($"Escort route segment {i} intersects {hit.name} at {p}");
+                            Assert.Fail($"Escort route segment {i} ({points[i - 1].name} {points[i - 1].position} -> {points[i].name} {points[i].position}) intersects {hit.name} bounds {hit.bounds} at {p}");
                 }
             }
             return "PASS: mission bindings, four relays, keypad, charge interaction and swept flight clearance.";

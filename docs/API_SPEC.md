@@ -861,9 +861,10 @@ Chat word policy: `GET /api/chat/words` requires a signed-in player and returns 
 |---|---|---|
 | GET | `/api/admin/users` | Paginated users; optional `search` |
 | GET | `/api/admin/users/{userId}` | User detail |
+| POST | `/api/admin/users/{userId}/wallet/credit` | Grant wallet credits with authenticated-admin attribution |
 | GET | `/api/admin/payments` | Paginated/filterable payment orders |
 | GET | `/api/admin/payments/{paymentOrderId}` | Payment/checkout/event/fulfillment aggregate |
-| GET | `/api/admin/wallet-transactions` | Paginated/filterable wallet ledger |
+| GET | `/api/admin/wallet-transactions` | Paginated/filterable wallet ledger, including grant actor where recorded |
 | GET | `/api/admin/purchases` | Paginated/filterable purchase history |
 | GET | `/api/admin/shop/items` | List all shop items (including disabled/archived) |
 | POST | `/api/admin/shop/items` | Create shop item |
@@ -873,6 +874,12 @@ Chat word policy: `GET /api/chat/words` requires a signed-in player and returns 
 | GET | `/api/admin/moderation/{targetId}` | 50 thao tác kiểm tra gần nhất của phòng hoặc người chơi |
 | POST | `/api/admin/moderation/{targetId}` | Admin ghi lý do (10–500 ký tự) và thực hiện `FLAG_MATCH`, `CLEAR_MATCH`, `STOP_MATCH`, `FLAG_USER`, `CLEAR_USER`, `LOCK_USER` hoặc `UNLOCK_USER`; thao tác tài khoản chỉ áp dụng cho người chơi |
 | GET | `/api/admin/ai/logs` | AI behavior logs |
+
+Credit grants require an amount and reason. The acting admin is derived from the
+authenticated server-side identity, not the request body. The wallet update and
+`ADMIN_GRANT` ledger entry commit together; the ledger records the actor, target
+wallet, amount, reason, UTC timestamp, and transaction identifier. Historical
+ledger rows may have no actor because that attribution was not previously stored.
 
 All list routes accept `page` (default `1`) and `pageSize` (default `20`, maximum `100`).
 Payments additionally accept `status`, `provider`, `userId`, `productReference`, `fromUtc`, `toUtc`.
@@ -967,6 +974,14 @@ Requires JWT Bearer authentication and returns the stored order only when it
 belongs to the authenticated user. It is the authoritative polling source for
 the browser return page; payOS return query values never determine payment or
 fulfillment state.
+
+### `GET /api/payments/orders`
+
+Requires JWT Bearer authentication and returns paginated orders belonging only
+to the authenticated user. Ownership comes from the token's user identity;
+clients cannot select another account. Results use stored order statuses and
+are ordered newest first by creation time and order ID. `page` defaults to 1,
+`pageSize` defaults to 20 and is limited to 100.
 
 ### `POST /api/payments/orders/{paymentOrderId}/checkout` (PROPOSED)
 

@@ -24,14 +24,38 @@ function Find-AEDV02NativeProof {
     return $null
 }
 
-function Read-AEDV02NativeRows {
+function Read-AEDV02NativeText {
     param([Parameter(Mandatory)][string]$Path)
-    $text=[IO.File]::ReadAllText($Path)
+    for ($attempt=0; $attempt -lt 5; $attempt++) {
+        try {
+            $stream=[IO.FileStream]::new($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,
+                ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            try {
+                $reader=[IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true)
+                try { return $reader.ReadToEnd() }
+                finally { $reader.Dispose() }
+            } finally { $stream.Dispose() }
+        } catch [IO.IOException] {
+            if ($attempt -eq 4) { throw }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+}
+
+function Read-AEDV02NativeLines {
+    param([Parameter(Mandatory)][string]$Path)
+    $text=Read-AEDV02NativeText -Path $Path
+    if (!$text) { return @() }
     if (!$text.EndsWith("`n")) {
         $lastNewline=$text.LastIndexOf("`n")
         if ($lastNewline -lt 0) { return @() }
         $text=$text.Substring(0,$lastNewline+1)
     }
+    @($text.Split("`n") | Where-Object { $_.Trim().Length -gt 0 })
+}
+
+function Read-AEDV02NativeRows {
+    param([Parameter(Mandatory)][string]$Path)
     # Only an unfinished final append may be deferred; malformed complete records remain a failure.
-    @($text.Split("`n") | Where-Object { $_.Trim().Length -gt 0 } | ForEach-Object { $_ | ConvertFrom-Json })
+    @(Read-AEDV02NativeLines -Path $Path | ForEach-Object { $_ | ConvertFrom-Json })
 }

@@ -85,9 +85,47 @@ namespace EchoProtocol.Networking
                         return false;
                     requiredItemIds = new[] { tool.ItemId };
                     return true;
+                case LobbySelectionKind.Pet:
+                    if (requestedId == 0) return true;
+                    if (!PetShopAssets.TryGetPet(requestedId, out var pet)) return false;
+                    requiredItemIds = new[] { pet.ItemId };
+                    return true;
+                case LobbySelectionKind.PetSkin:
+                    if (!PetShopAssets.TryGetPet(characterId, out var petParent)
+                        || !PetShopAssets.TryGetSkin(characterId, requestedId, out var skin))
+                        return false;
+                    if (!skin.DefaultOwned)
+                        requiredItemIds = new[] { petParent.ItemId, skin.ItemId };
+                    else
+                        requiredItemIds = new[] { petParent.ItemId };
+                    return true;
                 default:
                     return false;
             }
+        }
+    }
+
+    public static class LobbyPetSelectionRequestGuard
+    {
+        public static bool IsCurrent(
+            int requestSerial,
+            int currentRequestSerial,
+            int relatedSerial,
+            int currentRelatedSerial,
+            int? requiredParentPetId,
+            int currentPetId,
+            string requestUserId,
+            string currentUserId,
+            string requestMatchId,
+            string currentMatchId,
+            bool matchStartPending)
+        {
+            return requestSerial == currentRequestSerial
+                && relatedSerial == currentRelatedSerial
+                && (!requiredParentPetId.HasValue || requiredParentPetId.Value == currentPetId)
+                && string.Equals(requestUserId, currentUserId, StringComparison.Ordinal)
+                && string.Equals(requestMatchId, currentMatchId, StringComparison.Ordinal)
+                && !matchStartPending;
         }
     }
 
@@ -132,6 +170,8 @@ namespace EchoProtocol.Networking
         private int _characterSelectionSerial;
         private int _outfitSelectionSerial;
         private int _toolSelectionSerial;
+        private int _petSelectionSerial;
+        private int _petSkinSelectionSerial;
 
         [Networked, OnChangedRender(nameof(HandleSelectionChanged))]
         public NetworkBool IsReady { get; private set; }
@@ -750,6 +790,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_petSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -765,6 +806,18 @@ namespace EchoProtocol.Networking
             {
                 error =
                     LobbySelectionError.InvalidSelection;
+            }
+
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.Pet, 0, petId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.Pet,
+                    petId, petId, requiredItems, serial, _petSkinSelectionSerial);
+                return;
             }
 
             if (error == LobbySelectionError.None)
@@ -820,6 +873,7 @@ namespace EchoProtocol.Networking
                 return;
             }
 
+            int serial = ++_petSkinSelectionSerial;
             var error =
                 ValidateOwnedRequest(requester);
 
@@ -843,6 +897,18 @@ namespace EchoProtocol.Networking
             {
                 error =
                     LobbySelectionError.InvalidSelection;
+            }
+
+            string[] requiredItems = Array.Empty<string>();
+            if (error == LobbySelectionError.None
+                && !LobbySelectionEntitlements.TryGetRequiredItems(
+                    LobbySelectionKind.PetSkin, PetId, skinId, out requiredItems))
+                error = LobbySelectionError.InvalidSelection;
+            if (error == LobbySelectionError.None && requiredItems.Length > 0)
+            {
+                ConfirmOwnedSelection(requester, LobbySelectionKind.PetSkin,
+                    skinId, PetId, requiredItems, serial, _petSelectionSerial);
+                return;
             }
 
             if (error == LobbySelectionError.None)
@@ -1251,14 +1317,33 @@ namespace EchoProtocol.Networking
         }
 
         private async void ConfirmOwnedSelection(PlayerRef requester, LobbySelectionKind kind,
-            int requestedId, int characterId, string[] requiredItems, int serial)
+            int requestedId, int characterId, string[] requiredItems, int serial, int relatedSerial = -1)
         {
+            string backendUserId = BackendUserId.ToString();
+            string backendMatchId = BackendMatchId.ToString();
             bool verified = await MatchAuthorityRuntime.EnsureExists(NetworkBootstrap.Instance)
                 .VerifyPlayerEntitlementsAsync(this, requiredItems);
             if (Object == null || !Object.IsValid || !Object.HasStateAuthority
                 || (kind == LobbySelectionKind.Character && serial != _characterSelectionSerial)
                 || (kind == LobbySelectionKind.CharacterOutfit && serial != _outfitSelectionSerial)
-                || (kind == LobbySelectionKind.Tool && serial != _toolSelectionSerial))
+                || (kind == LobbySelectionKind.Tool && serial != _toolSelectionSerial)
+                || (kind == LobbySelectionKind.Pet && serial != _petSelectionSerial)
+                || (kind == LobbySelectionKind.PetSkin && serial != _petSkinSelectionSerial))
+                return;
+
+            if ((kind == LobbySelectionKind.Pet || kind == LobbySelectionKind.PetSkin)
+                && !LobbyPetSelectionRequestGuard.IsCurrent(
+                    serial,
+                    kind == LobbySelectionKind.Pet ? _petSelectionSerial : _petSkinSelectionSerial,
+                    relatedSerial,
+                    kind == LobbySelectionKind.Pet ? _petSkinSelectionSerial : _petSelectionSerial,
+                    kind == LobbySelectionKind.PetSkin ? characterId : (int?)null,
+                    PetId,
+                    backendUserId,
+                    BackendUserId.ToString(),
+                    backendMatchId,
+                    BackendMatchId.ToString(),
+                    NetworkBootstrap.Instance?.IsMatchStartPending == true))
                 return;
 
             var error = ValidateOwnedRequest(requester);
@@ -1276,6 +1361,9 @@ namespace EchoProtocol.Networking
                 && (!TryGetTool(requestedId, out var definition)
                     || definition.IsUnique && IsToolClaimedByAnother(requestedId)))
                 error = LobbySelectionError.ToolAlreadyClaimed;
+            if (error == LobbySelectionError.None && kind == LobbySelectionKind.PetSkin
+                && PetId != characterId)
+                error = LobbySelectionError.InvalidSelection;
 
             if (error == LobbySelectionError.None)
             {
@@ -1290,6 +1378,14 @@ namespace EchoProtocol.Networking
                         break;
                     case LobbySelectionKind.Tool:
                         ToolId = requestedId;
+                        break;
+                    case LobbySelectionKind.Pet:
+                        if (PetId != requestedId) PetSkinId = 0;
+                        PetId = requestedId;
+                        if (PetId == 0) PetSkinId = 0;
+                        break;
+                    case LobbySelectionKind.PetSkin:
+                        PetSkinId = requestedId;
                         break;
                 }
                 AnyStateChanged?.Invoke();

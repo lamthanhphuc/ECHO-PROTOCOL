@@ -179,11 +179,6 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
         if (match.Status == MatchAuthorityStatus.InMatch && userBinding?.Participated != true)
             return Failure<MatchPlayerBindingResponse>("Player is not in the started roster", ErrorCodes.MatchPlayerBindingConflict);
 
-        var isRosterActorRemap =
-            userBinding is not null
-            && userBinding.DisconnectedAtUtc == null
-            && userBinding.FusionActorNumber != request.FusionActorNumber;
-
         if ((actorBinding is not null
                 && actorBinding.UserId != proof.UserId)
             || (userBinding is not null
@@ -191,8 +186,7 @@ public sealed class MatchAuthorityService : IMatchAuthorityService
                 && userBinding.Id != actorBinding.Id)
             || (userBinding is not null
                 && userBinding.DisconnectedAtUtc == null
-                && userBinding.FusionActorNumber != request.FusionActorNumber
-                && !isRosterActorRemap))
+                && userBinding.FusionActorNumber != request.FusionActorNumber))
         {
             return Failure<MatchPlayerBindingResponse>(
                 "Fusion actor or backend user is already bound to another player",

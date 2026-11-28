@@ -1,23 +1,35 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Controllers;
 using EchoProtocol.Api.Data;
 using EchoProtocol.Api.DTOs.Admin;
+using EchoProtocol.Api.DTOs.Payments;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
+using EchoProtocol.Api.Services.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using EchoProtocol.Api.Configurations;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace EchoProtocol.Api.Tests;
@@ -253,6 +265,7 @@ public sealed class AdminApiTests
         var result =
             await harness.Service.GrantCreditsAsync(
                 harness.AdminUserId,
+                harness.AdminUserId,
                 new AdminGrantCreditsRequest
                 {
                     Amount = 1_000,
@@ -272,6 +285,8 @@ public sealed class AdminApiTests
         Assert.Equal(
             1_000,
             result.Data.Amount);
+        Assert.Equal(harness.AdminUserId, result.Data.ActorAdminUserId);
+        Assert.Equal(harness.AdminUserId, result.Data.UserId);
 
         var wallet =
             await harness.Db.Wallets
@@ -320,6 +335,13 @@ public sealed class AdminApiTests
         Assert.Contains(
             "Shop testing",
             transaction.Description);
+        var storedTransaction = await harness.Db.WalletTransactions
+            .SingleAsync(item => item.Id == result.Data.TransactionId);
+        Assert.Equal(WalletTransactionType.ADMIN_GRANT, storedTransaction.Type);
+        Assert.Equal(result.Data.Amount, storedTransaction.Amount);
+        Assert.Equal(result.Data.CreatedAtUtc, storedTransaction.CreatedAtUtc);
+        Assert.Equal(harness.AdminUserId, storedTransaction.ActorAdminUserId);
+        Assert.Equal(harness.AdminUserId, transaction.ActorAdminUserId);
     }
 
     [Fact, Trait("Category", "AdminApiUnit")]
@@ -336,8 +358,8 @@ public sealed class AdminApiTests
             await concurrentWriter.SaveChangesAsync();
         }
 
-        var result = await harness.Service.GrantCreditsAsync(harness.AdminUserId,
-            new AdminGrantCreditsRequest { Amount = 25 });
+        var result = await harness.Service.GrantCreditsAsync(harness.AdminUserId, harness.AdminUserId,
+            new AdminGrantCreditsRequest { Amount = 25, Reason = "concurrent balance update" });
 
         Assert.True(result.IsSuccess);
         Assert.Equal(625, result.Data!.BalanceBefore);
@@ -362,6 +384,7 @@ public sealed class AdminApiTests
         var result =
             await harness.Service.GrantCreditsAsync(
                 harness.AdminUserId,
+                harness.AdminUserId,
                 new AdminGrantCreditsRequest
                 {
                     Amount = amount
@@ -372,6 +395,289 @@ public sealed class AdminApiTests
         Assert.Equal(
             ErrorCodes.ValidationError,
             result.ErrorCode);
+    }
+
+    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task AdminGrantToUnknownTargetDoesNotChangeWalletsOrLedger()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var balancesBefore = await harness.Db.Wallets.AsNoTracking()
+            .ToDictionaryAsync(item => item.UserId, item => item.Balance);
+        var ledgerCountBefore = await harness.Db.WalletTransactions.CountAsync();
+
+        var result = await harness.Service.GrantCreditsAsync(
+            harness.AdminUserId,
+            Guid.NewGuid(),
+            new AdminGrantCreditsRequest { Amount = 25, Reason = "unknown target" });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.NotFound, result.ErrorCode);
+        harness.Db.ChangeTracker.Clear();
+        var balancesAfter = await harness.Db.Wallets.AsNoTracking()
+            .ToDictionaryAsync(item => item.UserId, item => item.Balance);
+        Assert.Equal(
+            balancesBefore.OrderBy(item => item.Key),
+            balancesAfter.OrderBy(item => item.Key));
+        Assert.Equal(ledgerCountBefore, await harness.Db.WalletTransactions.CountAsync());
+    }
+
+    [Fact, Trait("Category", "AdminApiHttp")]
+    public async Task AdminCreditAndRemoteFixedMutationsRequireHttpAuthorizationAndRecordClaimActor()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var playerId = await harness.Db.Users
+            .Where(item => item.Role == UserRole.PLAYER)
+            .Select(item => item.Id)
+            .SingleAsync();
+        var player = await harness.Db.Users.SingleAsync(item => item.Id == playerId);
+        var playerBalanceBefore = await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == playerId)
+            .Select(item => item.Balance)
+            .SingleAsync();
+        var ledgerCountBefore = await harness.Db.WalletTransactions.CountAsync();
+
+        var remote = new RemoteFixedBalanceAdminService(
+            harness.Db, TimeProvider.System, Options.Create(new MatchAuthoritySettings()));
+        var oldVersion = await remote.CreateVersionAsync(harness.AdminUserId,
+            new CreateRemoteFixedVersionRequest
+            {
+                Version = "RFB-HTTP-OLD",
+                MapId = "SciFi",
+                Difficulty = "NORMAL",
+                SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot
+            }, default);
+        Assert.True(oldVersion.IsSuccess, oldVersion.Message);
+        Assert.True((await remote.ActivateVersionAsync(harness.AdminUserId, "RFB-HTTP-OLD",
+            new ChangeRemoteFixedActivationRequest
+            {
+                ExpectedActiveVersion = string.Empty,
+                Reason = "HTTP authorization fixture"
+            }, default)).IsSuccess);
+        var nextVersion = await remote.CreateVersionAsync(harness.AdminUserId,
+            new CreateRemoteFixedVersionRequest
+            {
+                Version = "RFB-HTTP-NEXT",
+                MapId = "SciFi",
+                Difficulty = "NORMAL",
+                SnapshotJson = RemoteFixedBalanceTests.ValidSnapshot
+            }, default);
+        Assert.True(nextVersion.IsSuccess, nextVersion.Message);
+        var auditCountBefore = await harness.Db.RemoteFixedBalanceAuditEntries.CountAsync();
+
+        using var server = CreateHttpServer(harness.Db);
+        using var client = server.CreateClient();
+        var creditPath = $"/api/admin/users/{playerId}/wallet/credit";
+        var activatePath = "/api/admin/remote-fixed/versions/RFB-HTTP-NEXT/activate";
+        var grantBody = new
+        {
+            amount = 25,
+            reason = "support credit",
+            actorAdminUserId = playerId
+        };
+
+        var anonymousGrant = await client.PostAsJsonAsync(creditPath, grantBody);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousGrant.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = Bearer(CreateAccessToken(player));
+        var playerGrant = await client.PostAsJsonAsync(creditPath, grantBody);
+        Assert.Equal(HttpStatusCode.Forbidden, playerGrant.StatusCode);
+        var playerAnalytics = await client.GetAsync("/api/admin/balance-analytics");
+        Assert.Equal(HttpStatusCode.Forbidden, playerAnalytics.StatusCode);
+        var playerActivation = await client.PostAsJsonAsync(activatePath,
+            new ChangeRemoteFixedActivationRequest
+            {
+                ExpectedActiveVersion = "RFB-HTTP-OLD",
+                Reason = "unauthorized activation"
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, playerActivation.StatusCode);
+
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(playerBalanceBefore, await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == playerId)
+            .Select(item => item.Balance)
+            .SingleAsync());
+        Assert.Equal(ledgerCountBefore, await harness.Db.WalletTransactions.CountAsync());
+        Assert.Equal(auditCountBefore, await harness.Db.RemoteFixedBalanceAuditEntries.CountAsync());
+        Assert.Equal("RFB-HTTP-OLD", await harness.Db.RemoteFixedBalanceVersions
+            .Where(item => item.IsActive)
+            .Select(item => item.Version)
+            .SingleAsync());
+
+        var admin = await harness.Db.Users.SingleAsync(item => item.Id == harness.AdminUserId);
+        client.DefaultRequestHeaders.Authorization = Bearer(CreateAccessToken(admin));
+        var adminAnalytics = await client.GetAsync("/api/admin/balance-analytics");
+        Assert.Equal(HttpStatusCode.OK, adminAnalytics.StatusCode);
+        using (var analyticsJson = JsonDocument.Parse(await adminAnalytics.Content.ReadAsStringAsync()))
+        {
+            var analytics = analyticsJson.RootElement.GetProperty("data");
+            Assert.Equal(0, analytics.GetProperty("total").GetInt32());
+            Assert.Equal("NO_DATA", analytics.GetProperty("qualification").GetString());
+        }
+        var adminGrant = await client.PostAsJsonAsync(creditPath, grantBody);
+        Assert.Equal(HttpStatusCode.OK, adminGrant.StatusCode);
+        using var grantJson = JsonDocument.Parse(await adminGrant.Content.ReadAsStringAsync());
+        var grantData = grantJson.RootElement.GetProperty("data");
+        Assert.Equal(harness.AdminUserId, grantData.GetProperty("actorAdminUserId").GetGuid());
+        Assert.Equal(playerId, grantData.GetProperty("userId").GetGuid());
+        Assert.Equal(25, grantData.GetProperty("amount").GetInt32());
+        Assert.Equal("support credit", grantData.GetProperty("reason").GetString());
+
+        var grantId = grantData.GetProperty("transactionId").GetGuid();
+        var grantTime = grantData.GetProperty("createdAtUtc").GetDateTime();
+        harness.Db.ChangeTracker.Clear();
+        var walletTransaction = await harness.Db.WalletTransactions
+            .SingleAsync(item => item.Id == grantId);
+        Assert.Equal(harness.AdminUserId, walletTransaction.ActorAdminUserId);
+        Assert.Equal(25, walletTransaction.Amount);
+        Assert.Contains("support credit", walletTransaction.Description);
+        Assert.Equal(grantTime, walletTransaction.CreatedAtUtc);
+
+        var history = await client.GetAsync(
+            $"/api/admin/wallet-transactions?userId={playerId}&type=ADMIN_GRANT");
+        Assert.Equal(HttpStatusCode.OK, history.StatusCode);
+        using var historyJson = JsonDocument.Parse(await history.Content.ReadAsStringAsync());
+        var audit = Assert.Single(historyJson.RootElement.GetProperty("data")
+            .GetProperty("items").EnumerateArray().ToArray());
+        Assert.Equal(harness.AdminUserId, audit.GetProperty("actorAdminUserId").GetGuid());
+        Assert.Equal("admin", audit.GetProperty("actorAdminUsername").GetString());
+        Assert.Equal(playerId, audit.GetProperty("userId").GetGuid());
+        Assert.Equal(25, audit.GetProperty("amount").GetInt32());
+        Assert.Equal(grantId, audit.GetProperty("transactionId").GetGuid());
+        Assert.Equal(grantTime, audit.GetProperty("createdAtUtc").GetDateTime());
+    }
+
+    [Fact, Trait("Category", "AdminApiHttp")]
+    public async Task PaymentHistoryHttpEndpointUsesOnlyAuthenticatedOwner()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var player = await harness.Db.Users
+            .SingleAsync(item => item.Role == UserRole.PLAYER);
+        var playerOrder = await harness.Db.PaymentOrders.AsNoTracking()
+            .SingleAsync(item => item.UserId == player.Id);
+        var adminOrder = await harness.Db.PaymentOrders.AsNoTracking()
+            .SingleAsync(item => item.UserId == harness.AdminUserId);
+
+        using var server = CreateHttpServer(harness.Db);
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = Bearer(CreateAccessToken(player));
+        var playerResponse = await client.GetAsync("/api/payments/orders?page=1&pageSize=20");
+        Assert.Equal(HttpStatusCode.OK, playerResponse.StatusCode);
+        using var playerJson = JsonDocument.Parse(await playerResponse.Content.ReadAsStringAsync());
+        var playerResult = playerJson.RootElement.GetProperty("data");
+        var playerHistory = playerResult.GetProperty("items").EnumerateArray().ToArray();
+        var playerItem = Assert.Single(playerHistory);
+        Assert.Equal(playerOrder.PaymentOrderId,
+            playerItem.GetProperty("paymentOrderId").GetGuid());
+        Assert.Equal(playerOrder.Status.ToString(),
+            playerItem.GetProperty("status").GetString());
+        Assert.Equal(1, playerResult.GetProperty("totalItems").GetInt32());
+
+        var admin = await harness.Db.Users.SingleAsync(item => item.Id == harness.AdminUserId);
+        client.DefaultRequestHeaders.Authorization = Bearer(CreateAccessToken(admin));
+        var adminResponse = await client.GetAsync("/api/payments/orders?page=1&pageSize=20");
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        using var adminJson = JsonDocument.Parse(await adminResponse.Content.ReadAsStringAsync());
+        var adminItem = Assert.Single(adminJson.RootElement.GetProperty("data")
+            .GetProperty("items").EnumerateArray().ToArray());
+        Assert.Equal(adminOrder.PaymentOrderId,
+            adminItem.GetProperty("paymentOrderId").GetGuid());
+        Assert.NotEqual(playerOrder.PaymentOrderId,
+            adminItem.GetProperty("paymentOrderId").GetGuid());
+    }
+
+    [Fact, Trait("Category", "AdminApiHttp")]
+    public async Task ExpiredAccessTokenIsRejectedByProtectedHttpEndpoint()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var admin = await harness.Db.Users.SingleAsync(item => item.Id == harness.AdminUserId);
+        using var server = CreateHttpServer(harness.Db);
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            Bearer(CreateAccessToken(admin, expiryMinutes: -5));
+
+        var response = await client.GetAsync("/api/admin/users");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        var player = await harness.Db.Users.SingleAsync(item => item.Role == UserRole.PLAYER);
+        client.DefaultRequestHeaders.Authorization =
+            Bearer(CreateAccessToken(player, expiryMinutes: -5));
+        var playerResponse = await client.GetAsync("/api/payments/orders?page=1&pageSize=20");
+        Assert.Equal(HttpStatusCode.Unauthorized, playerResponse.StatusCode);
+    }
+
+    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task AdminGrantRequiresReasonWithoutChangingWalletOrLedger()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        var balanceBefore = await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == harness.AdminUserId)
+            .Select(item => item.Balance)
+            .SingleAsync();
+        var ledgerCountBefore = await harness.Db.WalletTransactions.CountAsync();
+
+        var result = await harness.Service.GrantCreditsAsync(
+            harness.AdminUserId,
+            harness.AdminUserId,
+            new AdminGrantCreditsRequest { Amount = 25, Reason = "  " });
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationError, result.ErrorCode);
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(balanceBefore, await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == harness.AdminUserId)
+            .Select(item => item.Balance)
+            .SingleAsync());
+        Assert.Equal(ledgerCountBefore, await harness.Db.WalletTransactions.CountAsync());
+    }
+
+    [Fact, Trait("Category", "AdminApiUnit")]
+    public async Task FailedAdminGrantRollsBackLedgerAndBalanceAndCanRetry()
+    {
+        await using var harness = await AdminHarness.CreateAsync();
+        const string trigger = "fail_admin_grant_insert";
+        await harness.Db.Database.ExecuteSqlRawAsync($"""
+            CREATE TRIGGER "{trigger}"
+            BEFORE INSERT ON "WalletTransactions"
+            WHEN NEW."Type" = 'ADMIN_GRANT'
+            BEGIN
+                SELECT RAISE(ABORT, 'test failure');
+            END;
+            """);
+        var balanceBefore = await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == harness.AdminUserId)
+            .Select(item => item.Balance)
+            .SingleAsync();
+        var ledgerCountBefore = await harness.Db.WalletTransactions.CountAsync();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => harness.Service.GrantCreditsAsync(
+            harness.AdminUserId,
+            harness.AdminUserId,
+            new AdminGrantCreditsRequest { Amount = 25, Reason = "retry after storage failure" }));
+
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(balanceBefore, await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == harness.AdminUserId)
+            .Select(item => item.Balance)
+            .SingleAsync());
+        Assert.Equal(ledgerCountBefore, await harness.Db.WalletTransactions.CountAsync());
+
+        await harness.Db.Database.ExecuteSqlRawAsync($"""DROP TRIGGER "{trigger}";""");
+        var retry = await harness.Service.GrantCreditsAsync(
+            harness.AdminUserId,
+            harness.AdminUserId,
+            new AdminGrantCreditsRequest { Amount = 25, Reason = "retry after storage failure" });
+
+        Assert.True(retry.IsSuccess, retry.Message);
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(balanceBefore + 25, await harness.Db.Wallets.AsNoTracking()
+            .Where(item => item.UserId == harness.AdminUserId)
+            .Select(item => item.Balance)
+            .SingleAsync());
+        Assert.Equal(ledgerCountBefore + 1, await harness.Db.WalletTransactions.CountAsync());
+        Assert.Equal(harness.AdminUserId,
+            (await harness.Db.WalletTransactions.SingleAsync(item => item.Id == retry.Data!.TransactionId))
+            .ActorAdminUserId);
     }
 
 
@@ -400,6 +706,76 @@ public sealed class AdminApiTests
             .GetCustomAttributes(typeof(AuthorizeAttribute), true)
             .Cast<AuthorizeAttribute>());
         Assert.Equal(nameof(UserRole.ADMIN), attribute.Roles);
+    }
+
+    private static TestServer CreateHttpServer(AppDbContext db) =>
+        new(new WebHostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddLogging();
+                services.AddControllers()
+                    .AddApplicationPart(typeof(AdminController).Assembly)
+                    .AddJsonOptions(options =>
+                        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+                services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddJwtBearer(options =>
+                    {
+                        options.TokenValidationParameters = new TokenValidationParameters
+                        {
+                            ValidateIssuerSigningKey = true,
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret)),
+                            ValidateIssuer = true,
+                            ValidIssuer = TestJwtIssuer,
+                            ValidateAudience = true,
+                            ValidAudience = TestJwtAudience,
+                            ValidateLifetime = true,
+                            ClockSkew = TimeSpan.FromSeconds(30),
+                            NameClaimType = ClaimTypes.Name,
+                            RoleClaimType = ClaimTypes.Role
+                        };
+                    });
+                services.AddAuthorization();
+                services.AddScoped<IAdminQueryService>(_ => new AdminQueryService(db));
+                services.AddScoped<IPaymentOrderService>(_ =>
+                    new PaymentOrderService(db, Options.Create(new PaymentCatalogSettings()), TimeProvider.System));
+                services.AddScoped<IPaymentCheckoutService, UnusedPaymentCheckoutService>();
+                services.AddScoped(_ => new AdminBalanceAnalyticsService(db));
+                services.AddScoped(_ => new RemoteFixedBalanceAdminService(
+                    db, TimeProvider.System, Options.Create(new MatchAuthoritySettings())));
+            })
+            .Configure(app =>
+            {
+                app.UseRouting();
+                app.UseAuthentication();
+                app.UseAuthorization();
+                app.UseEndpoints(endpoints => endpoints.MapControllers());
+            }));
+
+    private const string TestJwtIssuer = "echo-protocol-tests";
+    private const string TestJwtAudience = "echo-protocol-test-client";
+    private const string TestJwtSecret = "test-jwt-signing-key-for-backend-integration-at-least-32-bytes";
+
+    private static string CreateAccessToken(User user, int expiryMinutes = 5) =>
+        new JwtTokenService(Options.Create(new JwtSettings
+        {
+            Issuer = TestJwtIssuer,
+            Audience = TestJwtAudience,
+            SecretKey = TestJwtSecret,
+            ExpiryMinutes = expiryMinutes
+        })).GenerateToken(user).AccessToken;
+
+    private static AuthenticationHeaderValue Bearer(string token) =>
+        new(JwtBearerDefaults.AuthenticationScheme, token);
+
+    private sealed class UnusedPaymentCheckoutService : IPaymentCheckoutService
+    {
+        public Task<ServiceResult<PaymentCheckoutResponse>> CreateCheckoutAsync(
+            Guid userId,
+            Guid paymentOrderId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<PaymentCheckoutResponse>.Failure(
+                "Checkout is not used by this test host",
+                ErrorCodes.PaymentOrderNotFound));
     }
 
     private static async Task<PolicyAuthorizationResult> EvaluateAdminPolicy(

@@ -23,6 +23,21 @@ public sealed class ShopPurchaseController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("purchases")]
+    public async Task<IActionResult> GetOwnedHistory(
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+            return Unauthorized(ApiResponse<object>.Fail("Invalid token", ErrorCodes.TokenInvalid));
+
+        var result = await _service.GetOwnedHistoryAsync(userId, page, pageSize, cancellationToken);
+        return result.IsSuccess
+            ? Ok(ApiResponse<PurchaseHistoryResponse>.Ok(result.Data!, result.Message))
+            : BadRequest(ApiResponse<object>.Fail(result.Message, result.ErrorCode!));
+    }
+
     [HttpPost("purchase")]
     public async Task<IActionResult> Purchase(
         [FromBody] PurchaseRequest request,

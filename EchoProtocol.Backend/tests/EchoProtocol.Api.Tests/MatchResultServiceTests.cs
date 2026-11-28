@@ -1,5 +1,6 @@
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Data;
+using EchoProtocol.Api.DTOs.Leaderboards;
 using EchoProtocol.Api.DTOs.MatchResults;
 using EchoProtocol.Api.Entities;
 using EchoProtocol.Api.Enums;
@@ -134,13 +135,35 @@ public sealed class MatchResultServiceTests
     public async Task ValidHostSubmitsResult()
     {
         await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
 
         var result = await harness.Service.SubmitAsync(
-            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+            harness.HostId, harness.MatchId, request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Data!.IsReplay);
         Assert.Equal(MatchRewardStatus.Pending, result.Data.RewardStatus);
+
+        harness.Db.ChangeTracker.Clear();
+        var persisted = await harness.Db.MatchResults.Include(item => item.Players)
+            .SingleAsync(item => item.MatchId == harness.MatchId);
+        Assert.Equal(harness.MatchId, persisted.MatchId);
+        Assert.Equal(harness.HostId, persisted.SubmittedByUserId);
+        Assert.Equal(request.Outcome, persisted.Outcome);
+        Assert.Equal(request.ObjectiveCompletion, persisted.ObjectiveCompletion);
+        Assert.Equal(2, persisted.PlayerCount);
+        Assert.Equal(request.Players.Select(item => item.UserId).Order().ToArray(),
+            persisted.Players.Select(item => item.UserId).Order().ToArray());
+        Assert.All(request.Players, submitted =>
+        {
+            var stored = Assert.Single(persisted.Players, item => item.UserId == submitted.UserId);
+            Assert.Equal(submitted.Survived, stored.Survived);
+            Assert.Equal(submitted.Disconnected, stored.Disconnected);
+            Assert.Equal(submitted.DetectionCount, stored.DetectionCount);
+            Assert.Equal(submitted.DownedCount, stored.DownedCount);
+            Assert.Equal(submitted.ReviveCount, stored.ReviveCount);
+            Assert.Equal(submitted.ObjectiveContribution, stored.ObjectiveContribution);
+        });
     }
 
     [Fact]
@@ -676,5 +699,107 @@ public sealed class MatchResultServiceTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    // TC-MF-04-01-02: BM04 assertion gap: a rejected submission (non-host, invalid
+    // state, invalid roster) must leave balances, progression and ranking unchanged.
+    [Fact]
+    public async Task RejectedResultLeavesEconomyAndRankingUnchanged()
+    {
+        await using var harness = await UnitHarness.CreateAsync();
+
+        // Seed wallet balances and progression so we can compare them afterward.
+        var hostWallet = new EchoProtocol.Api.Entities.Wallet
+        {
+            Id = Guid.NewGuid(), UserId = harness.HostId,
+            Balance = 500, UpdatedAt = Now.UtcDateTime
+        };
+        var playerWallet = new EchoProtocol.Api.Entities.Wallet
+        {
+            Id = Guid.NewGuid(), UserId = harness.PlayerId,
+            Balance = 200, UpdatedAt = Now.UtcDateTime
+        };
+        harness.Db.Wallets.AddRange(hostWallet, playerWallet);
+        harness.Db.PlayerProfiles.AddRange(
+            new PlayerProfile
+            {
+                Id = Guid.NewGuid(), UserId = harness.HostId, DisplayName = "Host",
+                TotalMatches = 8, TotalWins = 5, ExperiencePoints = 900,
+                LifetimeExperiencePoints = 900, Level = 4,
+                CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime
+            },
+            new PlayerProfile
+            {
+                Id = Guid.NewGuid(), UserId = harness.PlayerId, DisplayName = "Player",
+                TotalMatches = 4, TotalWins = 2, ExperiencePoints = 450,
+                LifetimeExperiencePoints = 450, Level = 3,
+                CreatedAt = Now.UtcDateTime, UpdatedAt = Now.UtcDateTime
+            });
+        await harness.Db.SaveChangesAsync();
+        harness.Db.ChangeTracker.Clear();
+        var profilesBefore = await harness.Db.PlayerProfiles.AsNoTracking()
+            .OrderBy(item => item.UserId)
+            .Select(item => new
+            {
+                item.UserId, item.TotalMatches, item.TotalWins,
+                item.ExperiencePoints, item.LifetimeExperiencePoints, item.Level
+            })
+            .ToListAsync();
+        var leaderboard = new LeaderboardService(harness.Db);
+        var rankingBefore = await leaderboard.GetAsync(
+            LeaderboardMode.SOLO, "SciFi", "NORMAL", 1, 10, CancellationToken.None);
+
+        // Attempt 1: non-host submitter.
+        var nonHostRequest = harness.ValidRequest();
+        var nonHost = await harness.Service.SubmitAsync(harness.PlayerId, harness.MatchId, nonHostRequest);
+        Assert.False(nonHost.IsSuccess);
+        Assert.Equal(ErrorCodes.MatchAuthorityForbidden, nonHost.ErrorCode);
+
+        var match = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        var originalStatus = match.Status;
+        match.Status = MatchAuthorityStatus.Lobby;
+        await harness.Db.SaveChangesAsync();
+        harness.Db.ChangeTracker.Clear();
+        var unfinished = await harness.Service.SubmitAsync(
+            harness.HostId, harness.MatchId, harness.ValidRequest());
+        Assert.False(unfinished.IsSuccess);
+        Assert.Equal(ErrorCodes.MatchResultInvalidState, unfinished.ErrorCode);
+
+        var restoredMatch = await harness.Db.MatchAuthorityBindings.SingleAsync();
+        restoredMatch.Status = originalStatus;
+        await harness.Db.SaveChangesAsync();
+        harness.Db.ChangeTracker.Clear();
+
+        // Attempt 2: invalid roster (unknown user).
+        var badRosterRequest = harness.ValidRequest();
+        badRosterRequest.Players[0] = new EchoProtocol.Api.DTOs.MatchResults.SubmitMatchResultPlayerRequest
+        {
+            UserId = Guid.NewGuid(), Survived = true, Disconnected = false,
+            DetectionCount = 0, DownedCount = 0, ReviveCount = 0, ObjectiveContribution = 1
+        };
+        var badRoster = await harness.Service.SubmitAsync(harness.HostId, harness.MatchId, badRosterRequest);
+        Assert.False(badRoster.IsSuccess);
+
+        // No match result, no ledger entry, balances unchanged.
+        harness.Db.ChangeTracker.Clear();
+        Assert.Empty(harness.Db.MatchResults);
+        Assert.Empty(harness.Db.WalletTransactions);
+        Assert.Equal(500, (await harness.Db.Wallets.SingleAsync(w => w.UserId == harness.HostId)).Balance);
+        Assert.Equal(200, (await harness.Db.Wallets.SingleAsync(w => w.UserId == harness.PlayerId)).Balance);
+        var profilesAfter = await harness.Db.PlayerProfiles.AsNoTracking()
+            .OrderBy(item => item.UserId)
+            .Select(item => new
+            {
+                item.UserId, item.TotalMatches, item.TotalWins,
+                item.ExperiencePoints, item.LifetimeExperiencePoints, item.Level
+            })
+            .ToListAsync();
+        var rankingAfter = await leaderboard.GetAsync(
+            LeaderboardMode.SOLO, "SciFi", "NORMAL", 1, 10, CancellationToken.None);
+        Assert.Equal(profilesBefore, profilesAfter);
+        Assert.Equal(rankingBefore.TotalCount, rankingAfter.TotalCount);
+        Assert.Equal(
+            rankingBefore.Items.Select(item => item.MatchId),
+            rankingAfter.Items.Select(item => item.MatchId));
     }
 }

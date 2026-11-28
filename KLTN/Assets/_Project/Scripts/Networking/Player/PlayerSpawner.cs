@@ -1885,12 +1885,10 @@ namespace EchoProtocol.Networking
             position = default;
 
             var path = new NavMeshPath();
-            var authority = MatchAuthorityRuntime.Instance;
-            bool adaptiveV02 = authority != null &&
-                authority.RequestedScenarioResolutionMode == ScenarioResolutionMode.Adaptive &&
-                AEDv2Authority.TryGetV02(authority.MatchId, out _, out _);
+            var sciFi = SceneManager.GetSceneByPath("Assets/Scenes/SciFi.unity");
+            bool protectSafeRooms = sciFi.IsValid() && sciFi.isLoaded;
             AEDV02SceneManifest safeRoomManifest = null;
-            if (adaptiveV02 && (!AEDV02SceneSource.TryLoad(out safeRoomManifest, out _) || safeRoomManifest == null))
+            if (protectSafeRooms && (!AEDV02SceneSource.TryLoad(out safeRoomManifest, out _) || safeRoomManifest == null))
                 return false;
 
             for (int attempt = 0; attempt < attempts; attempt++)
@@ -1929,7 +1927,7 @@ namespace EchoProtocol.Networking
                     continue;
                 }
 
-                if (adaptiveV02 &&
+                if (protectSafeRooms &&
                     (!safeRoomManifest.TryIsInsideSafeRoom(hit.position.x, hit.position.y, hit.position.z, out var inside) ||
                      inside ||
                      !safeRoomManifest.TryPathIntersectsSafeRoom(

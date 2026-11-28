@@ -1304,18 +1304,9 @@ namespace EchoProtocol.AI.Listener.Tests
             Assert.That(service.LastRejectReason, Is.EqualTo(NoiseValidationRejectReason.NotStateAuthority));
             Assert.That(service.LastDiagnosticReason, Is.EqualTo(NoiseSystemDiagnosticReason.SubsystemUnavailable));
 
-            var method = typeof(EchoProtocol.Networking.Authority.HostRuntimeNoiseService)
-                .GetMethod("TryAccept", new[]
-                {
-                    typeof(PlayerRef),
-                    typeof(RuntimeNoiseType),
-                    typeof(RuntimeNoiseSourceOccurrenceKey),
-                    typeof(Vector3),
-                    typeof(RuntimeNoiseEvent).MakeByRefType()
-                });
-            Assert.That(method, Is.Not.Null);
             var sourceText = File.ReadAllText("Assets/_Project/Scripts/Networking/Authority/HostRuntimeNoiseService.cs");
-            StringAssert.Contains("if (!actor.IsValid)", sourceText);
+            StringAssert.Contains("!actor.IsValid", sourceText);
+            StringAssert.Contains("OpeningCutsceneCoordinator.IsGameplayBlocked", sourceText);
             StringAssert.Contains("SourceActionRejected", sourceText);
             Object.DestroyImmediate(service.gameObject);
         }

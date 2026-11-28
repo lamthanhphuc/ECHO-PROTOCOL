@@ -8,7 +8,9 @@ import { param, queryString } from "@/lib/utils/format";
 
 const labels: Record<string, string> = {
   FIXED: "Cấu hình cố định", ADAPTIVE_APPLIED: "AI đã áp dụng điều chỉnh",
-  ADAPTIVE_FALLBACK: "AI giữ nguyên hoặc dùng cấu hình dự phòng",
+  ADAPTIVE_CONFIG_CONFIRMED: "Cấu hình Adaptive có xác nhận",
+  ADAPTIVE_FALLBACK: "Dùng cấu hình dự phòng",
+  ADAPTIVE_HOLD: "AI giữ nguyên (HOLD)",
   ADAPTIVE_UNVERIFIED: "AI chưa có xác nhận áp dụng",
   UNKNOWN: "Chưa xác định",
 };
@@ -54,6 +56,10 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
         {data.total} trận trong mẫu.
       </p>
       {data.truncated && <p className="my-2 text-sm">Chỉ tính {data.limit} trận mới nhất. Thu hẹp bộ lọc để xem toàn bộ một phạm vi nhỏ hơn.</p>}
+      <p className="muted my-2 text-sm">Thống kê mô tả theo policy: Fixed {data.fixedMatches ?? "—"} trận · Adaptive {data.adaptiveMatches ?? "—"} trận. HOLD, fallback và hiệu ứng thất bại vẫn thuộc nhóm Adaptive. Một trận có thể có nhiều trạng thái quyết định.</p>
+      <p className="my-2 text-sm">{data.qualification === "COMPARABLE_DESCRIPTIVE"
+        ? "Các trận có cùng điều kiện đã lưu; số mẫu này chưa chứng minh Adaptive tốt hơn Fixed hoặc có ý nghĩa thống kê."
+        : "Chưa đủ điều kiện so sánh Fixed và Adaptive: dữ liệu có thể thiếu, không tương thích, chưa đủ bằng chứng hoặc đã bị cắt. Thu hẹp bộ lọc và kiểm tra từng trận."}</p>
       {data.cohorts.length === 0 ? <p className="muted">Chưa có kết quả trận phù hợp.</p> : <div className="table-wrap"><table>
         <thead><tr><th>Nhóm</th><th>Số trận</th><th>Thắng</th><th>Thời lượng TB</th><th>Sống sót</th><th>Trận gần đây</th></tr></thead>
         <tbody>{data.cohorts.map((row) => <tr key={row.group}>
@@ -66,7 +72,7 @@ export default async function BalanceAnalyticsPage({ searchParams }: { searchPar
     <Panel className="mt-5">
       <h2 className="admin-section-title mb-3">Quyết định Adaptive trước và trong trận</h2>
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Đã áp dụng / Đã duyệt" value={ratio(data.applied, data.approved)} />
+        <StatCard label="Quyết định có biên nhận hiệu ứng / Đã duyệt" value={ratio(data.applied, data.approved)} />
         <StatCard label="Máy người chơi ghi nhận / Đã áp dụng" value={ratio(data.clientObserved, data.applied)} />
         <StatCard label="Áp dụng thất bại / Đã duyệt" value={ratio(data.failedEffect, data.approved)} />
         <StatCard label="Hoàn tác có biên nhận" value={data.confirmedRollbacks ?? "Chưa đo"} />

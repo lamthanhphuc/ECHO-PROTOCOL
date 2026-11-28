@@ -882,7 +882,7 @@ public sealed class MatchAuthorityServiceTests
     }
 
     [Fact]
-    public async Task SameRosterUser_RebindMovesActorWithoutCreatingDuplicate()
+    public async Task SameRosterUser_ActiveActorCannotBeReboundButDisconnectedReconnectIsIdempotent()
     {
         await using var db = CreateDb();
         var service = CreateService(db);
@@ -906,17 +906,25 @@ public sealed class MatchAuthorityServiceTests
         await BindAsync(
             service,
             hostId,
-            playerId,
+            hostId,
             matchId,
             "duplicate-user-room",
             1);
+
+        await BindAsync(
+            service,
+            hostId,
+            playerId,
+            matchId,
+            "duplicate-user-room",
+            2);
 
         var secondProof = await service.IssueJoinProofAsync(
             playerId,
             matchId,
             new IssueJoinProofRequest
             {
-                FusionActorNumber = 2,
+                FusionActorNumber = 3,
                 FusionSessionName = "duplicate-user-room"
             },
             CancellationToken.None);
@@ -928,18 +936,59 @@ public sealed class MatchAuthorityServiceTests
             matchId,
             new BindMatchPlayerRequest
             {
-                FusionActorNumber = 2,
+                FusionActorNumber = 3,
                 JoinProof = secondProof.Data!.Proof
             },
             CancellationToken.None);
 
-        Assert.True(secondBind.IsSuccess);
-        Assert.Equal(2, secondBind.Data!.FusionActorNumber);
+        Assert.False(secondBind.IsSuccess);
+        Assert.Equal("MATCH_PLAYER_BINDING_CONFLICT", secondBind.ErrorCode);
         Assert.Equal(
             1,
             await db.MatchPlayerBindings.CountAsync(item =>
                 item.MatchId == matchId
                 && item.UserId == playerId));
+
+        var existing = await db.MatchPlayerBindings.SingleAsync(item =>
+            item.MatchId == matchId && item.UserId == playerId);
+        Assert.Equal(2, existing.FusionActorNumber);
+        Assert.True((await service.MarkPlayerDisconnectedAsync(
+            hostId, matchId, 2, playerId, CancellationToken.None)).IsSuccess);
+
+        var reconnectProof = await service.IssueJoinProofAsync(
+            playerId,
+            matchId,
+            new IssueJoinProofRequest
+            {
+                FusionActorNumber = 3,
+                FusionSessionName = "duplicate-user-room"
+            },
+            CancellationToken.None);
+        Assert.True(reconnectProof.IsSuccess, reconnectProof.ErrorCode);
+
+        var reconnect = await service.BindPlayerAsync(
+            hostId,
+            matchId,
+            new BindMatchPlayerRequest
+            {
+                FusionActorNumber = 3,
+                JoinProof = reconnectProof.Data!.Proof
+            },
+            CancellationToken.None);
+        Assert.True(reconnect.IsSuccess);
+        Assert.Equal(3, reconnect.Data!.FusionActorNumber);
+        Assert.True((await service.BindPlayerAsync(
+            hostId,
+            matchId,
+            new BindMatchPlayerRequest
+            {
+                FusionActorNumber = 3,
+                JoinProof = reconnectProof.Data.Proof
+            },
+            CancellationToken.None)).IsSuccess);
+        Assert.Null(existing.DisconnectedAtUtc);
+        Assert.Equal(1, await db.MatchPlayerBindings.CountAsync(item =>
+            item.MatchId == matchId && item.UserId == playerId));
     }
 
     [Fact]

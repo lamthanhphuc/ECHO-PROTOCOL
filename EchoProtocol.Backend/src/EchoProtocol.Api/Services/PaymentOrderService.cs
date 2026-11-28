@@ -159,6 +159,38 @@ public sealed class PaymentOrderService : IPaymentOrderService
             : Fail("Payment order does not belong to the authenticated user", ErrorCodes.PaymentOrderForbidden);
     }
 
+    public async Task<ServiceResult<PaymentOrderHistoryResponse>> GetOwnedHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var offset = ((long)page - 1) * pageSize;
+        if (page < 1 || pageSize is < 1 or > 100 || offset > int.MaxValue)
+            return ServiceResult<PaymentOrderHistoryResponse>.Failure(
+                "Invalid payment history pagination",
+                ErrorCodes.ValidationError);
+
+        var orders = _db.PaymentOrders.AsNoTracking()
+            .Where(item => item.UserId == userId);
+        var totalItems = await orders.CountAsync(cancellationToken);
+        var items = await orders
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ThenByDescending(item => item.PaymentOrderId)
+            .Skip((int)offset)
+            .Take(pageSize)
+            .ToArrayAsync(cancellationToken);
+
+        return ServiceResult<PaymentOrderHistoryResponse>.Success(
+            new PaymentOrderHistoryResponse(
+                items.Select(item => PaymentOrderResponse.From(item, false)).ToArray(),
+                page,
+                pageSize,
+                totalItems,
+                (int)Math.Ceiling(totalItems / (double)pageSize)),
+            "Payment history retrieved");
+    }
+
     public async Task<ServiceResult<PaymentOrderResponse>> TransitionAsync(
         Guid paymentOrderId,
         PaymentOrderTransition transition,

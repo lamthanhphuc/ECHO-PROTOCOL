@@ -9,6 +9,24 @@ namespace EchoProtocol.Api.Tests;
 public sealed partial class ScenarioServiceTests
 {
     [Fact, Trait("Category", "AEDV02")]
+    public async Task V02_Adaptive03GroundEvidenceDistinguishesPlayerFeetFromRootAndInvalidGeometry()
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Content/AEDV02/Rev02SceneManifest.json"));
+        var manifest = JsonSerializer.Deserialize<AEDV02SceneManifest>(json)!;
+        foreach (var (x, rootY, z) in new[]
+        {
+            (35.834446, 2.300647, -77.35453),
+            (34.766804, 2.205, -75.776802)
+        })
+        {
+            Assert.DoesNotContain(manifest.NavCells, cell => cell.Contains([x, rootY, z]));
+            Assert.Contains(manifest.NavCells, cell => cell.Contains([x, rootY - 1, z]));
+            Assert.DoesNotContain(manifest.NavCells, cell => cell.Contains([x, rootY + 4, z]));
+        }
+        Assert.DoesNotContain(manifest.NavCells, cell => cell.Contains([1000, 1.3, 1000]));
+    }
+
+    [Fact, Trait("Category", "AEDV02")]
     public async Task V02_BakedSciFiManifest_ReconstructsSourceFromActualMeshAndToolWhitelist()
     {
         await using var f = await ValidV02Fixture();

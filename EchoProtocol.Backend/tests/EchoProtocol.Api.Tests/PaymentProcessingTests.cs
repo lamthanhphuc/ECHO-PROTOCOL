@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using EchoProtocol.Api.Controllers;
 using EchoProtocol.Api.Common;
 using EchoProtocol.Api.Configurations;
 using EchoProtocol.Api.Data;
@@ -10,8 +11,11 @@ using EchoProtocol.Api.Enums;
 using EchoProtocol.Api.Services;
 using EchoProtocol.Api.Services.Interfaces;
 using EchoProtocol.Api.Services.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -253,6 +257,109 @@ public sealed class PaymentProcessingTests
         Assert.True(replay.IsSuccess);
         Assert.True(replay.Data!.IsReplay);
         Assert.Single(await harness.Db.PaymentProviderEvents.ToListAsync());
+    }
+
+    [Fact, Trait("Category", "M4PaymentProcessingUnit")]
+    public async Task SignedCallbackCreditsOnlyPersistedOrderOwnerAndReplaysOnce()
+    {
+        await using var harness = await Harness.CreateAsync(
+            pending: true, fulfillmentConfigured: true);
+        var otherUserId = Guid.NewGuid();
+        harness.Db.Users.Add(new User
+        {
+            Id = otherUserId,
+            Email = "other-payment-owner@test.local",
+            Username = "other-payment-owner",
+            PasswordHash = "test",
+            Role = UserRole.PLAYER,
+            Status = UserStatus.ACTIVE,
+            CreatedAt = Now.UtcDateTime,
+            UpdatedAt = Now.UtcDateTime
+        });
+        harness.Db.Wallets.Add(new Wallet
+        {
+            Id = Guid.NewGuid(),
+            UserId = otherUserId,
+            Balance = 700,
+            UpdatedAt = Now.UtcDateTime
+        });
+        await harness.Db.SaveChangesAsync();
+
+        var provider = CreatePayOSProvider(new StubHttpHandler(
+            _ => Task.FromException<HttpResponseMessage>(new NotSupportedException())));
+        var controller = new PaymentWebhooksController(
+            new PaymentProviderRegistry([provider]),
+            harness.WebhookService(),
+            NullLogger<PaymentWebhooksController>.Instance);
+        using var payload = PayOSWebhook(
+            "owner-bound-event", 125_000, harness.ProviderOrderId);
+
+        Assert.IsType<OkObjectResult>(await controller.PayOS(payload.RootElement, default));
+        harness.Db.ChangeTracker.Clear();
+
+        var order = await harness.Db.PaymentOrders.SingleAsync();
+        var ownerWallet = await harness.Db.Wallets.SingleAsync(
+            item => item.UserId == order.UserId);
+        var otherWallet = await harness.Db.Wallets.SingleAsync(
+            item => item.UserId == otherUserId);
+        var fulfillment = await harness.Db.PaymentFulfillments.SingleAsync();
+        var transaction = await harness.Db.WalletTransactions.SingleAsync();
+        var paymentEvent = await harness.Db.PaymentProviderEvents.SingleAsync();
+
+        Assert.Equal(harness.UserId, order.UserId);
+        Assert.Equal(PaymentOrderStatus.FULFILLED, order.Status);
+        Assert.Equal(250, ownerWallet.Balance);
+        Assert.Equal(700, otherWallet.Balance);
+        Assert.Equal(order.PaymentOrderId, fulfillment.PaymentOrderId);
+        Assert.Equal(ownerWallet.Id, transaction.WalletId);
+        Assert.Equal(order.PaymentOrderId, transaction.ReferenceId);
+        Assert.Equal(150, transaction.Amount);
+        Assert.Equal(125_000m, paymentEvent.Amount);
+        Assert.Equal("VND", paymentEvent.Currency);
+        Assert.Equal("VERIFIED", paymentEvent.VerificationStatus);
+
+        var refreshedOrder = await new PaymentOrderService(
+                harness.Db,
+                Options.Create(new PaymentCatalogSettings()),
+                TimeProvider.System)
+            .GetOwnedAsync(order.UserId, order.PaymentOrderId);
+        Assert.True(refreshedOrder.IsSuccess, refreshedOrder.Message);
+        Assert.Equal(PaymentOrderStatus.FULFILLED, refreshedOrder.Data!.Status);
+
+        Assert.IsType<OkObjectResult>(await controller.PayOS(payload.RootElement, default));
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(250, (await harness.Db.Wallets.SingleAsync(
+            item => item.UserId == harness.UserId)).Balance);
+        Assert.Equal(1, await harness.Db.WalletTransactions.CountAsync());
+        Assert.Equal(1, await harness.Db.PaymentFulfillments.CountAsync());
+        Assert.Equal(1, await harness.Db.PaymentProviderEvents.CountAsync());
+    }
+
+    [Theory, Trait("Category", "M4PaymentProcessingUnit")]
+    [InlineData(124_999, "VND")]
+    [InlineData(125_000, "USD")]
+    public async Task SignedCallbackWithMismatchedAmountOrCurrencyDoesNotCredit(
+        long amount, string currency)
+    {
+        await using var harness = await Harness.CreateAsync(pending: true);
+        var provider = CreatePayOSProvider(new StubHttpHandler(
+            _ => Task.FromException<HttpResponseMessage>(new NotSupportedException())));
+        var controller = new PaymentWebhooksController(
+            new PaymentProviderRegistry([provider]),
+            harness.WebhookService(),
+            NullLogger<PaymentWebhooksController>.Instance);
+        using var payload = PayOSWebhook(
+            "mismatched-evidence", amount, harness.ProviderOrderId, currency: currency);
+
+        var response = Assert.IsType<ObjectResult>(
+            await controller.PayOS(payload.RootElement, default));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+        harness.Db.ChangeTracker.Clear();
+        Assert.Equal(PaymentOrderStatus.PENDING_PAYMENT,
+            (await harness.Db.PaymentOrders.SingleAsync()).Status);
+        Assert.Equal(100, (await harness.Db.Wallets.SingleAsync()).Balance);
+        Assert.Empty(await harness.Db.PaymentFulfillments.ToListAsync());
     }
 
     [Fact, Trait("Category", "M4PaymentProcessingUnit")]
@@ -561,11 +668,12 @@ public sealed class PaymentProcessingTests
         }));
 
     private static JsonDocument PayOSWebhook(
-        string reference, long amount, string orderCode, bool validSignature = true, string? status = null)
+        string reference, long amount, string orderCode, bool validSignature = true,
+        string? status = null, string currency = "VND")
     {
         var data = new Dictionary<string, object>
         {
-            ["amount"] = amount, ["code"] = status is null ? "00" : "01", ["currency"] = "VND",
+            ["amount"] = amount, ["code"] = status is null ? "00" : "01", ["currency"] = currency,
             ["description"] = "EP0000001", ["orderCode"] = long.Parse(orderCode),
             ["paymentLinkId"] = "link-1", ["reference"] = reference,
             ["transactionDateTime"] = "2026-09-21T15:00:00Z"

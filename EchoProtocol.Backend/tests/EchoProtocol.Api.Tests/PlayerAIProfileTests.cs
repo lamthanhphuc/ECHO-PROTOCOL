@@ -35,6 +35,33 @@ public sealed class PlayerAIProfileTests
         Assert.Null(result.ResearchEligible); // owned by the approved research/experiment protocol
     }
 
+    [Fact, Trait("Category", "M4PlayerAIProfile")]
+    public async Task InvalidAcceptedIdentityRetractsPersistedProfileAndCannotReevaluateMatch()
+    {
+        await using var fixture = await ProfileFixture.CreateAsync();
+        var validEvents = CreateCompleteEvents(fixture.MatchId, fixture.UserId);
+        var first = await fixture.CreateUpdater(new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(validEvents), TestPolicy()))
+            .ProcessAsync(fixture.MatchId, fixture.UserId);
+        Assert.True(first.IsSuccess, first.Message);
+        Assert.NotEmpty(await fixture.Db.MatchScores.Where(x =>
+            x.MatchId == fixture.MatchId && x.ContributionStatus == ProfileContributionStatus.Contributing).ToArrayAsync());
+
+        var invalidEvents = validEvents.Append(Event(
+            fixture.MatchId, Guid.NewGuid(), "NOISE_EMITTED", 5, "PLAYER_SPRINT")).ToArray();
+        var updater = fixture.CreateUpdater(new MatchTelemetryAggregator(
+            fixture.Db, new FakeTelemetryRepository(invalidEvents), TestPolicy()));
+        var invalid = await updater.ProcessAsync(fixture.MatchId, fixture.UserId);
+
+        Assert.True(invalid.IsSuccess, invalid.Message);
+        Assert.NotEmpty(invalid.Data!.RetractedDimensions);
+        Assert.Empty(await fixture.Db.MatchScores.Where(x =>
+            x.MatchId == fixture.MatchId && x.ContributionStatus == ProfileContributionStatus.Contributing).ToArrayAsync());
+        Assert.All(await fixture.Db.MatchScores.Where(x => x.MatchId == fixture.MatchId).ToArrayAsync(),
+            score => Assert.Equal(ProfileContributionStatus.Retracted, score.ContributionStatus));
+        Assert.Equal(0, (await fixture.Db.PlayerAIProfiles.SingleAsync(x => x.UserId == fixture.UserId)).SurvivalSampleCount);
+    }
+
     [Fact, Trait("Category", "PR4MatchDataIsolation")]
     public async Task TestOnlyValidTelemetryIsProfileIneligible()
     {

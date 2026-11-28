@@ -366,8 +366,9 @@ public sealed class AdminController(
     public Task<IActionResult> GrantCredits(
         Guid userId,
         [FromBody] AdminGrantCreditsRequest request,
-        CancellationToken cancellationToken) => Execute(
-            () => service.GrantCreditsAsync(
+        CancellationToken cancellationToken) => WithAdmin(
+            adminId => service.GrantCreditsAsync(
+                adminId,
                 userId,
                 request,
                 cancellationToken),

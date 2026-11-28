@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using EchoProtocol.AI.Common.AED;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
@@ -10,6 +11,112 @@ namespace EchoProtocol.Networking.Tests
 {
     public sealed class AEDV02SceneAuthoringTests
     {
+        [Test]
+        public void AEDV02_FixedSafeRoomGuardRejectsZone1EntryWithoutAedActivation()
+        {
+            const string path = "Assets/Scenes/SciFi.unity";
+            var scene = SceneManager.GetSceneByPath(path);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            try
+            {
+                var source = Type.GetType("EchoProtocol.AI.AED.AEDV02SceneSource, Assembly-CSharp", true);
+                var args = new object[] { null, null };
+                Assert.That(source.GetMethod("TryLoad").Invoke(null, args), Is.True);
+                var manifest = (AEDV02SceneManifest)args[0];
+                var entry = manifest.Markers.Single(x => x.Id == "Z1_ENTRY");
+                var check = source.GetMethod("IsSciFiSafeRoomClearPath");
+                Assert.That(check, Is.Not.Null);
+                var crossing = new[] { new Vector3((float)entry.X, (float)entry.Y, (float)entry.Z),
+                    new Vector3(35.834446f, 1.300647f, -77.35453f) };
+                Assert.That(manifest.TryIsInsideSafeRoom(crossing[1].x, crossing[1].y, crossing[1].z, out var inside), Is.True);
+                Assert.That(inside, Is.True, "Fixed Minion spawn candidates inside the start Safe Room must be excluded.");
+                Assert.That((bool)check.Invoke(null, new object[] { crossing }), Is.False);
+                var clear = new[] { crossing[0], new Vector3(34.5f, 1.06f, -100.8f) };
+                Assert.That((bool)check.Invoke(null, new object[] { clear }), Is.True);
+            }
+            finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
+        }
+
+        [TestCase(35.834446f, 2.300647f, -77.35453f)]
+        [TestCase(34.766804f, 2.205f, -75.776802f)]
+        public void AEDV02_Adaptive03PlayerFeetRemainOnMeshAcrossDownAndRevive(float x, float y, float z)
+        {
+            var source = Type.GetType("EchoProtocol.AI.AED.AEDV02SceneSource, Assembly-CSharp", true);
+            var args = new object[] { null, null };
+            Assert.That(source.GetMethod("TryLoad").Invoke(null, args), Is.True);
+            var manifest = (AEDV02SceneManifest)args[0];
+            var player = new GameObject("AED ground evidence player");
+            try
+            {
+                player.transform.position = new Vector3(x, y, z);
+                var character = player.AddComponent<CharacterController>();
+                character.height = 2f;
+                character.radius = .5f;
+                character.center = Vector3.zero;
+                Physics.SyncTransforms();
+
+                Assert.That(manifest.NavCells.Any(c => c.Contains(new double[] { x, y, z })), Is.False,
+                    "The original player root must reproduce the Adaptive 03 rejection.");
+                foreach (var height in new[] { 2f, .75f, 2f })
+                {
+                    character.height = height;
+                    character.center = Vector3.up * ((character.height - 2f) * .5f);
+                    Physics.SyncTransforms();
+                    var feet = GroundPosition(character);
+                    Assert.That(feet.y, Is.EqualTo(y - 1f).Within(.02f));
+                    Assert.That(manifest.NavCells.Any(c => c.Contains(new double[] { feet.x, feet.y, feet.z })), Is.True,
+                        "Standing, downed, and revived feet must remain on the authored surface.");
+                }
+            }
+            finally { UnityEngine.Object.DestroyImmediate(player); }
+        }
+
+        [Test]
+        public void AEDV02_GroundEvidenceDoesNotSnapInvalidPositionsIntoMesh()
+        {
+            var source = Type.GetType("EchoProtocol.AI.AED.AEDV02SceneSource, Assembly-CSharp", true);
+            var args = new object[] { null, null };
+            Assert.That(source.GetMethod("TryLoad").Invoke(null, args), Is.True);
+            var manifest = (AEDV02SceneManifest)args[0];
+            var player = new GameObject("AED invalid ground evidence player");
+            try
+            {
+                var character = player.AddComponent<CharacterController>();
+                character.height = 2f;
+                player.transform.position = new Vector3(1000f, 2.3f, 1000f);
+                Physics.SyncTransforms();
+                var outside = GroundPosition(character);
+                Assert.That(manifest.NavCells.Any(c => c.Contains(new double[] { outside.x, outside.y, outside.z })), Is.False);
+
+                player.transform.position = new Vector3(35.834446f, 7.300647f, -77.35453f);
+                Physics.SyncTransforms();
+                var otherFloor = GroundPosition(character);
+                Assert.That(manifest.NavCells.Any(c => c.Contains(new double[] { otherFloor.x, otherFloor.y, otherFloor.z })), Is.False);
+
+                character.enabled = false;
+                Assert.That(TryGroundPosition(character, out _), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(player); }
+        }
+
+        private static Vector3 GroundPosition(CharacterController character)
+        {
+            Assert.That(TryGroundPosition(character, out var position), Is.True);
+            return position;
+        }
+
+        private static bool TryGroundPosition(CharacterController character, out Vector3 position)
+        {
+            var authority = Type.GetType("EchoProtocol.Networking.Authority.MatchAuthorityRuntime, Assembly-CSharp", true);
+            var method = authority.GetMethod("TryV02GroundPosition", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            var args = new object[] { character, Vector3.zero };
+            var result = (bool)method.Invoke(null, args);
+            position = (Vector3)args[1];
+            return result;
+        }
+
         [Test]
         public void AEDV02_MarkerIdentityIgnoresUnrelatedRootReordering()
         {

@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('Manifest','EditMode','PlayMode','WindowsBuild')][string]$Stage,
+    [Parameter(Mandatory)][ValidateSet('Manifest','EditMode','PlayMode','WindowsBuild','WindowsPlayer')][string]$Stage,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$UnityEditor = 'C:\Program Files\Unity\Hub\Editor\6000.5.8f1\Editor\Unity.exe',
     [int]$TimeoutMinutes = 45
@@ -35,6 +35,10 @@ switch ($Stage) {
         $argsList += @('-quit','-buildTarget','StandaloneWindows64','-executeMethod','AEDV02BatchBuild.WindowsDevelopment',
             '-aedBuildOutput',(Join-Path $output 'Windows/EchoProtocol.exe'),'-aedCandidate',$candidate)
     }
+    'WindowsPlayer' {
+        $argsList += @('-quit','-buildTarget','StandaloneWindows64','-executeMethod','AEDV02BatchBuild.WindowsPlayer',
+            '-aedBuildOutput',(Join-Path $output 'Windows/EchoProtocol.exe'),'-aedCandidate',$candidate)
+    }
 }
 $started = [DateTime]::UtcNow
 $record = [ordered]@{ stage=$Stage; candidate=$candidate; dirtyPaths=$dirty; startedUtc=$started.ToString('O'); status='NOT RUN' }
@@ -61,7 +65,7 @@ try {
             throw "$Stage did not pass completely."
         }
     }
-    if ($Stage -eq 'WindowsBuild') {
+    if ($Stage -in @('WindowsBuild','WindowsPlayer')) {
         $report = Join-Path $output 'Windows/build-report.json'
         if (!(Test-Path -LiteralPath $report)) { throw 'Build report missing.' }
         $build = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json

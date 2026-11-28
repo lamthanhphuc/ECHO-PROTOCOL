@@ -12,7 +12,9 @@ public sealed class SalvagePriceReceiptPlayModeTests
             Assert.That(final,Is.SameAs(first),"Late zero-value RPC must update its existing receipt");
             Assert.That(final.transform.childCount,Is.EqualTo(2),"Price is text only, without a reference-object bubble");
             var text=type.GetField("_text",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(final);
-            Assert.That(text.GetType().GetProperty("text").GetValue(text).ToString(),Does.StartWith("0<"));
+            Assert.That(text.GetType().GetProperty("text").GetValue(text).ToString(),Is.EqualTo("$ 0"));
+            var lossText=type.GetField("_lossText",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(final);
+            Assert.That(lossText.GetType().GetProperty("text").GetValue(lossText).ToString(),Is.EqualTo("−81"));
             var color=(Color)text.GetType().GetProperty("color").GetValue(text);
             Assert.That(color.g,Is.GreaterThan(color.r));Assert.That(color.g,Is.GreaterThan(color.b));
             other=(MonoBehaviour)show.Invoke(null,new object[]{Vector3.zero,50,0,null,100002});
