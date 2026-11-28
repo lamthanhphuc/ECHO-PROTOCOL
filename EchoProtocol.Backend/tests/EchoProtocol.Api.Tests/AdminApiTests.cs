@@ -505,6 +505,14 @@ public sealed class AdminApiTests
 
         var admin = await harness.Db.Users.SingleAsync(item => item.Id == harness.AdminUserId);
         client.DefaultRequestHeaders.Authorization = Bearer(CreateAccessToken(admin));
+        var adminAnalytics = await client.GetAsync("/api/admin/balance-analytics");
+        Assert.Equal(HttpStatusCode.OK, adminAnalytics.StatusCode);
+        using (var analyticsJson = JsonDocument.Parse(await adminAnalytics.Content.ReadAsStringAsync()))
+        {
+            var analytics = analyticsJson.RootElement.GetProperty("data");
+            Assert.Equal(0, analytics.GetProperty("total").GetInt32());
+            Assert.Equal("NO_DATA", analytics.GetProperty("qualification").GetString());
+        }
         var adminGrant = await client.PostAsJsonAsync(creditPath, grantBody);
         Assert.Equal(HttpStatusCode.OK, adminGrant.StatusCode);
         using var grantJson = JsonDocument.Parse(await adminGrant.Content.ReadAsStringAsync());
@@ -590,6 +598,12 @@ public sealed class AdminApiTests
         var response = await client.GetAsync("/api/admin/users");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        var player = await harness.Db.Users.SingleAsync(item => item.Role == UserRole.PLAYER);
+        client.DefaultRequestHeaders.Authorization =
+            Bearer(CreateAccessToken(player, expiryMinutes: -5));
+        var playerResponse = await client.GetAsync("/api/payments/orders?page=1&pageSize=20");
+        Assert.Equal(HttpStatusCode.Unauthorized, playerResponse.StatusCode);
     }
 
     [Fact, Trait("Category", "AdminApiUnit")]

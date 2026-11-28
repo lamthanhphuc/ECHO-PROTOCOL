@@ -25,6 +25,27 @@ public sealed class FloodedMapSceneTests
     }
 
     [Test]
+    public void TC_MF_02_02_03_EscortAcceptsOnlyTheAuthoredDock()
+    {
+        var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");
+        bool opened = !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene("Assets/Scenes/Scene_A.unity", OpenSceneMode.Additive);
+        try
+        {
+            var mission = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<FloodedMapMission>(true)).Single();
+            var dock = mission.Destination.GetComponent<BoxCollider>();
+            Assert.That(mission.IsEscortInDock(mission.Route.Last().position), Is.True);
+            Assert.That(mission.IsEscortInDock(mission.Route.First().position), Is.False,
+                "The escort's departure point must not satisfy dock arrival.");
+            var outside = dock.transform.TransformPoint(dock.center + Vector3.right * (dock.size.x * .5f + 1f));
+            Assert.That(mission.IsEscortInDock(outside), Is.False,
+                "An escort outside the authored dock must not advance the route.");
+        }
+        finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
+    }
+
+    [Test]
     public void DebugSkipsResolveActualMissionTargetsWithoutZoneEntryTriggers()
     {
         var scene = SceneManager.GetSceneByPath("Assets/Scenes/Scene_A.unity");

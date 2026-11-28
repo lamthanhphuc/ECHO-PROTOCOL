@@ -70,8 +70,11 @@ public sealed class PurgeGameplayFixTests
         var entities = (HuntEntityState[])typeof(AlienHuntMission).GetField("_offline", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mission);
         var furnaces = (HuntFurnaceState[])typeof(AlienHuntMission).GetField("_offlineFurnaces", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mission);
         var player = PlayerRef.FromIndex(0); entities[0] = new HuntEntityState { Carrier = player, Stage = (int)AlienStage.Carried };
+        int progressBefore = mission.Burned;
         Assert.That(mission.Act(player, owner.transform, -1, 0), Is.False);
         Assert.That(entities[0].Carrier, Is.EqualTo(player)); Assert.That(furnaces[0].AlienSlot, Is.Zero);
+        Assert.That(mission.Burned, Is.EqualTo(progressBefore));
+        Assert.That(furnaces[0].BurnedCount, Is.Zero);
         furnaces[0].Fuel = 1;
         Assert.That(mission.Act(player, owner.transform, -1, 0), Is.True);
         Assert.That(entities[0].Stage, Is.EqualTo((int)AlienStage.OnPan)); Assert.That(furnaces[0].AlienSlot, Is.EqualTo(1));
@@ -104,6 +107,80 @@ public sealed class PurgeGameplayFixTests
             Assert.That(entities[held].Carrier, Is.EqualTo(player));
             entities[held] = default;
         }
+    }
+
+    [Test] public void NineDistinctCapturedAliensRequireThreeCompletedBurnsPerFurnace()
+    {
+        var mission = New("Nine-burn mission").AddComponent<AlienHuntMission>();
+        typeof(AlienHuntMission).GetField("<Instance>k__BackingField", BindingFlags.Static | BindingFlags.NonPublic)
+            .SetValue(null, mission);
+        var actors = new AlienHuntActor[AlienHuntMission.EntityCount];
+        for (int i = 0; i < actors.Length; i++)
+        {
+            actors[i] = New($"Actor {i}").AddComponent<AlienHuntActor>();
+            actors[i].Configure(i, i < AlienHuntMission.AlienCount ? HuntKind.Alien
+                : i < 27 ? HuntKind.Jerrycan : HuntKind.Meat, null);
+        }
+        var furnaces = new AlienHuntFurnace[3];
+        for (int i = 0; i < furnaces.Length; i++)
+        {
+            furnaces[i] = New($"Furnace {i}").AddComponent<AlienHuntFurnace>();
+            furnaces[i].Configure(i, furnaces[i].transform);
+        }
+        var owner = New("Capturing player");
+        typeof(AlienHuntMission).GetField("actors", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mission, actors);
+        typeof(AlienHuntMission).GetField("furnaces", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mission, furnaces);
+        typeof(AlienHuntMission).GetField("_offlineReady", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mission, true);
+        typeof(AlienHuntMission).GetField("burnSeconds", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mission, .001f);
+        var entities = (HuntEntityState[])typeof(AlienHuntMission)
+            .GetField("_offline", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mission);
+        var furnaceStates = (HuntFurnaceState[])typeof(AlienHuntMission)
+            .GetField("_offlineFurnaces", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mission);
+        for (int i = 0; i < entities.Length; i++) entities[i].Carrier = PlayerRef.None;
+        for (int i = 0; i < AlienHuntMission.AlienCount; i++)
+            entities[i] = new HuntEntityState { Stage = (int)AlienStage.Stunned, Remaining = 10000f,
+                Carrier = PlayerRef.None };
+
+        var player = PlayerRef.FromIndex(0);
+        var outsider = PlayerRef.FromIndex(1);
+        for (int alien = 0; alien < AlienHuntMission.AlienCount; alien++)
+        {
+            int furnace = alien / AlienHuntMission.FurnaceCapacity;
+            int jerrycan = AlienHuntMission.AlienCount + alien;
+            owner.transform.position = actors[jerrycan].transform.position;
+            Assert.That(mission.Act(player, owner.transform, jerrycan, -1), Is.True, $"Fuel pickup {alien}");
+            owner.transform.position = furnaces[furnace].transform.position;
+            Assert.That(mission.Act(player, owner.transform, -1, furnace), Is.True, $"Fuel deposit {alien}");
+            owner.transform.position = actors[alien].transform.position;
+            Assert.That(mission.Act(player, owner.transform, alien, -1), Is.True, $"Capture {alien}");
+            Assert.That(entities[alien].Stage, Is.EqualTo((int)AlienStage.Carried));
+            Assert.That(entities[alien].Carrier, Is.EqualTo(player));
+            Assert.That(mission.Act(outsider, owner.transform, alien, -1), Is.False,
+                "An already captured target cannot be captured by another player.");
+
+            owner.transform.position = furnaces[furnace].transform.position;
+            Assert.That(mission.Act(player, owner.transform, -1, furnace), Is.True, $"Deposit {alien}");
+            Assert.That(entities[alien].Stage, Is.EqualTo((int)AlienStage.OnPan));
+            Assert.That(entities[alien].Carrier, Is.EqualTo(PlayerRef.None));
+            Assert.That(furnaceStates[furnace].AlienSlot, Is.EqualTo(alien + 1));
+            Assert.That(mission.Burned, Is.EqualTo(alien));
+            Assert.That(mission.Act(player, owner.transform, -1, furnace), Is.True, $"Ignite {alien}");
+            Assert.That(entities[alien].Stage, Is.EqualTo((int)AlienStage.Burning));
+            Assert.That(mission.Burned, Is.EqualTo(alien));
+            mission.Tick(.02f);
+            Assert.That(entities[alien].Stage, Is.EqualTo((int)AlienStage.Burned));
+            Assert.That(mission.Burned, Is.EqualTo(alien + 1));
+            Assert.That(mission.Act(player, owner.transform, alien, -1), Is.False,
+                "A disposed target cannot be captured and counted again.");
+            mission.Tick(.02f);
+            Assert.That(mission.Burned, Is.EqualTo(alien + 1), "A completed burn must count once.");
+            if (alien == 7) Assert.That(mission.Completed, Is.False, "Eight burns cannot complete Purge.");
+        }
+        Assert.That(furnaceStates.Select(state => state.BurnedCount), Is.EqualTo(new[] { 3, 3, 3 }));
+        Assert.That(mission.Completed, Is.True, "The ninth unique burn completes the offline mission.");
+        Assert.That(mission.Act(player, owner.transform, -1, 2), Is.False,
+            "A completed mission cannot re-enter the furnace transition.");
+        Assert.That(mission.Burned, Is.EqualTo(9));
     }
 
     [Test] public void WaterAllowsShallowSupportButRejectsDeepFloorAndRoof()
