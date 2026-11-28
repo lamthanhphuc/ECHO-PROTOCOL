@@ -12,6 +12,7 @@ namespace EchoProtocol.Api.Services;
 public sealed class PurchaseService : IPurchaseService
 {
     private const int MaximumIdempotencyKeyLength = 100;
+    private const int MaximumHistoryPageSize = 100;
 
     private readonly AppDbContext _db;
     private readonly TimeProvider _timeProvider;
@@ -20,6 +21,45 @@ public sealed class PurchaseService : IPurchaseService
     {
         _db = db;
         _timeProvider = timeProvider;
+    }
+
+    public async Task<ServiceResult<PurchaseHistoryResponse>> GetOwnedHistoryAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var offset = ((long)page - 1) * pageSize;
+        if (page < 1 || pageSize is < 1 or > MaximumHistoryPageSize || offset > int.MaxValue)
+            return ServiceResult<PurchaseHistoryResponse>.Failure(
+                "Page must be positive with a supported offset and pageSize must be between 1 and 100",
+                ErrorCodes.ValidationError);
+
+        var purchases = _db.PurchaseTransactions.AsNoTracking()
+            .Where(purchase => purchase.UserId == userId);
+        var totalItems = await purchases.CountAsync(cancellationToken);
+        var totalPages = totalItems == 0
+            ? 0
+            : (int)Math.Ceiling(totalItems / (double)pageSize);
+        var items = page > totalPages
+            ? Array.Empty<PurchaseHistoryItemResponse>()
+            : await purchases
+                .OrderByDescending(purchase => purchase.CreatedAtUtc)
+                .ThenByDescending(purchase => purchase.PurchaseId)
+                .Skip((int)offset)
+                .Take(pageSize)
+                .Select(purchase => new PurchaseHistoryItemResponse(
+                    purchase.PurchaseId,
+                    purchase.ShopItemId,
+                    purchase.ShopItem.ItemName,
+                    purchase.ShopItem.Category,
+                    purchase.PriceAtPurchase,
+                    purchase.Status.ToString(),
+                    purchase.CreatedAtUtc))
+                .ToArrayAsync(cancellationToken);
+
+        return ServiceResult<PurchaseHistoryResponse>.Success(new PurchaseHistoryResponse(
+            items, page, pageSize, totalItems, totalPages), "Purchase history retrieved");
     }
 
     public async Task<ServiceResult<PurchaseResponse>> PurchaseAsync(

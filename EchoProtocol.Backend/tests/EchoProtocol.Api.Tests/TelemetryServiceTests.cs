@@ -1060,7 +1060,8 @@ public sealed partial class TelemetryServiceTests
     private static TelemetryBatchRequest CreateMatchStarted(
         Guid? matchId = null,
         long sequence = 1,
-        bool researchCaptureEnabled = false) => new()
+        bool researchCaptureEnabled = false,
+        int teamSize = 1) => new()
     {
         Events =
         [
@@ -1071,7 +1072,7 @@ public sealed partial class TelemetryServiceTests
                 UserId = null,
                 EventType = "MATCH_STARTED",
                 Ts = UtcTs(),
-                ValueJson = MatchStartedValue(sequence, researchCaptureEnabled),
+                ValueJson = MatchStartedValue(sequence, researchCaptureEnabled, teamSize),
                 ReasonCode = "MATCH_READY",
                 SchemaVersion = "1.1"
             }
@@ -1227,7 +1228,7 @@ public sealed partial class TelemetryServiceTests
         SchemaVersion = "1.1"
     };
 
-    private static JsonElement MatchStartedValue(long sequence, bool researchCaptureEnabled) =>
+    private static JsonElement MatchStartedValue(long sequence, bool researchCaptureEnabled, int teamSize = 1) =>
         JsonSerializer.SerializeToElement(new
         {
             context = new
@@ -1237,7 +1238,7 @@ public sealed partial class TelemetryServiceTests
                 scenarioConfigVersion = "TEST-SCENARIO-1",
                 policyVersion = "TEST-POLICY-1",
                 configSource = "FIXED",
-                teamSize = 1,
+                teamSize,
                 buildVersion = "TEST-BUILD-1",
                 mapContentVersion = "TEST-MAP-1",
                 contentWhitelistVersion = "TEST-WHITELIST-1",

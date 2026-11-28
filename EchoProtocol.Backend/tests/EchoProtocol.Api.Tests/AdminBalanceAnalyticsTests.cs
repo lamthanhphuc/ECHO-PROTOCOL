@@ -64,6 +64,14 @@ public sealed class AdminBalanceAnalyticsTests
         await db.SaveChangesAsync();
         var incompatible = JsonSerializer.SerializeToElement((await service.GetAsync(30, null, null, null, null, false, default)).Data);
         Assert.Equal(expected, incompatible.GetProperty("qualification").GetString());
+        Assert.Equal(2, incompatible.GetProperty("Total").GetInt32());
+        Assert.Equal(1, incompatible.GetProperty("FixedMatches").GetInt32());
+        Assert.Equal(1, incompatible.GetProperty("AdaptiveMatches").GetInt32());
+        var separated = incompatible.GetProperty("cohorts").EnumerateArray()
+            .ToDictionary(item => item.GetProperty("Group").GetString()!,
+                item => item.GetProperty("RecentMatchIds")[0].GetGuid());
+        Assert.Contains("FIXED", separated.Keys);
+        Assert.Contains("ADAPTIVE_HOLD", separated.Keys);
     }
 
     [Fact]
@@ -93,13 +101,33 @@ public sealed class AdminBalanceAnalyticsTests
         foreach (var status in new[] { "PENDING", "FAILED_EFFECT", "APPLIED" })
             db.AEDV02Decisions.Add(new AEDV02Decision { DecisionId = Guid.NewGuid(), MatchId = id,
                 ApprovalStatus = "APPROVED", ApplyStatus = status, ChangedKey = "ChaseSpeed", ReceiptId = Guid.NewGuid() });
+        var incomplete = new AEDV02Decision
+        {
+            DecisionId = Guid.NewGuid(), MatchId = id, ApprovalStatus = "APPROVED", ApplyStatus = "APPLIED",
+            ChangedKey = "ChaseSpeed", ReceiptId = Guid.NewGuid(), EffectEventId = Guid.NewGuid(),
+            AppliedTick = 1
+        };
+        var emptyEvidence = new AEDV02Decision
+        {
+            DecisionId = Guid.NewGuid(), MatchId = id, ApprovalStatus = "APPROVED", ApplyStatus = "APPLIED",
+            ChangedKey = "ChaseSpeed", ReceiptId = Guid.Empty, EffectEventId = Guid.Empty,
+            AppliedTick = 1, AppliedAtUtc = DateTime.UtcNow
+        };
+        db.AEDV02Decisions.AddRange(incomplete, emptyEvidence);
         await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var beforeRows = await db.AEDV02Decisions.AsNoTracking().OrderBy(x => x.DecisionId)
+            .Select(x => new { x.DecisionId, x.ApplyStatus, x.ReceiptId, x.EffectEventId, x.AppliedTick, x.AppliedAtUtc })
+            .ToArrayAsync();
         var payload = JsonSerializer.SerializeToElement((await new AdminBalanceAnalyticsService(db)
             .GetAsync(30, null, null, null, null, false, default)).Data);
-        Assert.Equal(3, payload.GetProperty("Approved").GetInt32());
+        Assert.Equal(5, payload.GetProperty("Approved").GetInt32());
         Assert.Equal(1, payload.GetProperty("FailedEffect").GetInt32());
         Assert.Equal(0, payload.GetProperty("Applied").GetInt32());
         Assert.Equal("ADAPTIVE_UNVERIFIED", payload.GetProperty("cohorts")[0].GetProperty("Group").GetString());
+        Assert.Equal(beforeRows, await db.AEDV02Decisions.AsNoTracking().OrderBy(x => x.DecisionId)
+            .Select(x => new { x.DecisionId, x.ApplyStatus, x.ReceiptId, x.EffectEventId, x.AppliedTick, x.AppliedAtUtc })
+            .ToArrayAsync());
     }
 
     [Fact]
@@ -202,15 +230,22 @@ public sealed class AdminBalanceAnalyticsTests
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         await using var db = new AppDbContext(options);
-        var fixedMatch = AddResult("FIXED", "STANDARD");
-        var applied = AddResult("ADAPTIVE", "STANDARD");
-        var neutral = AddResult("ADAPTIVE", "STANDARD");
-        var trial = AddResult("FIXED", "TEST_ONLY");
+        var cutoff = DateTime.UtcNow.AddDays(-30);
+        var fixedMatch = AddResult("FIXED", "STANDARD", cutoff.AddDays(1), "Scene_A");
+        var applied = AddResult("ADAPTIVE", "STANDARD", cutoff.AddDays(2), "Scene_A");
+        var neutral = AddResult("ADAPTIVE", "STANDARD", cutoff.AddDays(3), "Scene_A");
+        var trial = AddResult("FIXED", "TEST_ONLY", cutoff.AddDays(4), "Scene_A");
+        var old = AddResult("ADAPTIVE", "STANDARD", cutoff.AddSeconds(-1), "Scene_A");
+        var wrongMap = AddResult("FIXED", "STANDARD", cutoff.AddDays(5), "Scene_B");
         db.AEDV02Decisions.AddRange(Receipt(applied, "ChaseSpeed"), Receipt(neutral, ""), Receipt(trial, "ChaseSpeed"));
+        var mismatched = Receipt(applied, "ChaseSpeed");
+        mismatched.ReceiptId = Guid.Empty;
+        mismatched.EffectEventId = Guid.NewGuid();
+        db.AEDV02Decisions.Add(mismatched);
         await db.SaveChangesAsync();
 
         var service = new AdminBalanceAnalyticsService(db);
-        var result = await service.GetAsync(30, null, null, null, null, false, default);
+        var result = await service.GetAsync(30, "Scene_A", "Normal", 1, null, false, default);
         var payload = JsonSerializer.SerializeToElement(result.Data);
         Assert.True(result.IsSuccess);
         Assert.Equal(3, payload.GetProperty("Total").GetInt32());
@@ -220,17 +255,28 @@ public sealed class AdminBalanceAnalyticsTests
         Assert.Equal(fixedMatch, groups["FIXED"]);
         Assert.Equal(applied, groups["ADAPTIVE_APPLIED"]);
         Assert.Equal(neutral, groups["ADAPTIVE_UNVERIFIED"]);
+        var gathered = groups.Values.ToHashSet();
+        Assert.Equal(new[] { fixedMatch, applied, neutral }.ToHashSet(), gathered);
+        Assert.DoesNotContain(old, gathered);
+        Assert.DoesNotContain(wrongMap, gathered);
+        Assert.DoesNotContain(trial, gathered);
 
-        var testResult = await service.GetAsync(30, null, null, null, null, true, default);
-        Assert.Equal(1, JsonSerializer.SerializeToElement(testResult.Data).GetProperty("Total").GetInt32());
+        var testResult = await service.GetAsync(30, "Scene_A", "Normal", 1, null, true, default);
+        var testPayload = JsonSerializer.SerializeToElement(testResult.Data);
+        Assert.Equal(1, testPayload.GetProperty("Total").GetInt32());
+        Assert.Equal(trial, Assert.Single(testPayload.GetProperty("cohorts").EnumerateArray()
+            .SelectMany(item => item.GetProperty("RecentMatchIds").EnumerateArray())
+            .Select(item => item.GetGuid())));
 
-        Guid AddResult(string mode, string policy)
+        Guid AddResult(string mode, string policy, DateTime endedAt, string map)
         {
             var id = Guid.NewGuid();
             db.MatchResults.Add(new MatchResult
             {
-                MatchId = id, DurationSeconds = 300, PlayerCount = 1, EndedAtUtc = DateTime.UtcNow,
-                Match = new MatchAuthorityBinding { MatchId = id, ResolutionMode = mode, MatchDataPolicy = policy }
+                MatchId = id, DurationSeconds = 300, PlayerCount = 1, EndedAtUtc = endedAt,
+                Match = new MatchAuthorityBinding
+                    { MatchId = id, ResolutionMode = mode, MatchDataPolicy = policy, MapId = map, Difficulty = "Normal" },
+                Players = { new MatchResultPlayer { UserId = Guid.NewGuid(), Survived = true } }
             });
             return id;
         }

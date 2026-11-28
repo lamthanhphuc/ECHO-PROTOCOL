@@ -11,14 +11,16 @@ namespace EchoProtocol.Api.Tests;
 public sealed partial class TelemetryServiceTests
 {
     internal static async Task<TelemetryEventDocument[]> IngestV02Trace(Guid match, IEnumerable<TelemetryEventDocument> documents, DateTime asOf,
-        EchoProtocol.Api.Services.Interfaces.IMatchAuthorityService? authority = null, Guid caller = default)
+        EchoProtocol.Api.Services.Interfaces.IMatchAuthorityService? authority = null, Guid caller = default,
+        ITelemetryEventRepository? storage = null, int teamSize = 1)
     {
-        var repository = new FakeTelemetryEventRepository();
+        var fakeRepository = storage is null ? new FakeTelemetryEventRepository() : null;
+        var repository = storage ?? fakeRepository!;
         var rows = documents.OrderBy(x => x.EventSequence).ToArray();
         var batch = new TelemetryBatchRequest();
         if (!rows.Any(x => x.EventType == "MATCH_STARTED"))
         {
-            batch = CreateMatchStarted(match, researchCaptureEnabled: true);
+            batch = CreateMatchStarted(match, researchCaptureEnabled: true, teamSize: teamSize);
             batch.Events[0].Ts = JsonSerializer.SerializeToElement(asOf.AddSeconds(-61).ToString("O"));
         }
         int offset = batch.Events.Count;
@@ -35,8 +37,12 @@ public sealed partial class TelemetryServiceTests
                 MaxBatchSize = 500, MaxValueJsonBytes = 32768, MaxFutureSkewMinutes = 5, MaxEventAgeDays = 7 }), new V02TraceClock(asOf));
         var result = await service.IngestBatchAsync(batch, caller == Guid.Empty ? Guid.NewGuid() : caller, CancellationToken.None);
         Assert.True(result.IsSuccess, result.Message);
-        Assert.All(result.Data!.Items, item => Assert.True(item.Status == TelemetryAckStatuses.Accepted, item.Id + ":" + item.RejectReason));
-        return repository.InsertedEvents.OrderBy(x => x.EventSequence).ToArray();
+        Assert.All(result.Data!.Items, item => Assert.True(
+            item.Status is TelemetryAckStatuses.Accepted or TelemetryAckStatuses.DuplicateAlreadyAccepted,
+            item.Id + ":" + item.RejectReason));
+        return fakeRepository is not null
+            ? fakeRepository.InsertedEvents.OrderBy(x => x.EventSequence).ToArray()
+            : (await repository.LoadAcceptedMatchEventsAsync(match)).OrderBy(x => x.EventSequence).ToArray();
     }
     private sealed class V02TraceClock(DateTime now) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(now); }
 
@@ -81,7 +87,12 @@ public sealed partial class TelemetryServiceTests
         var accepted = await service.IngestBatchAsync(batch, caller, CancellationToken.None);
         Assert.True(accepted.IsSuccess, accepted.Message);
         Assert.True(accepted.Data!.Items[2].Status == TelemetryAckStatuses.Accepted, accepted.Data.Items[2].RejectReason);
-        Assert.Single(repo.InsertedEvents, x => x.Id == batch.Events[2].Id);
+        var stored = Assert.Single(repo.InsertedEvents, x => x.Id == batch.Events[2].Id);
+        Assert.Equal(match, stored.MatchId);
+        Assert.Equal(batch.Events[2].UserId, stored.UserId);
+        Assert.Equal(batch.Events[2].EventType, stored.EventType);
+        Assert.Equal(batch.Events[2].SchemaVersion, stored.SchemaVersion);
+        Assert.False(string.IsNullOrWhiteSpace(stored.SemanticFingerprint));
         repo.Boundaries[match] = new TelemetryMatchBoundary(true, null);
         repo.ConflictResults[batch.Events[2].Id] = new TelemetryWriteItemResult(batch.Events[2].Id, TelemetryWriteStatus.DuplicateAlreadyAccepted);
         var replay = await service.IngestBatchAsync(new TelemetryBatchRequest { Events = [batch.Events[2]] }, caller, CancellationToken.None);

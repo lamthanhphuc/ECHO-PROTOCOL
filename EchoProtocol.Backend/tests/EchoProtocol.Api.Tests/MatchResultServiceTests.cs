@@ -135,13 +135,35 @@ public sealed class MatchResultServiceTests
     public async Task ValidHostSubmitsResult()
     {
         await using var harness = await UnitHarness.CreateAsync();
+        var request = harness.ValidRequest();
 
         var result = await harness.Service.SubmitAsync(
-            harness.HostId, harness.MatchId, harness.ValidRequest(), CancellationToken.None);
+            harness.HostId, harness.MatchId, request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Data!.IsReplay);
         Assert.Equal(MatchRewardStatus.Pending, result.Data.RewardStatus);
+
+        harness.Db.ChangeTracker.Clear();
+        var persisted = await harness.Db.MatchResults.Include(item => item.Players)
+            .SingleAsync(item => item.MatchId == harness.MatchId);
+        Assert.Equal(harness.MatchId, persisted.MatchId);
+        Assert.Equal(harness.HostId, persisted.SubmittedByUserId);
+        Assert.Equal(request.Outcome, persisted.Outcome);
+        Assert.Equal(request.ObjectiveCompletion, persisted.ObjectiveCompletion);
+        Assert.Equal(2, persisted.PlayerCount);
+        Assert.Equal(request.Players.Select(item => item.UserId).Order().ToArray(),
+            persisted.Players.Select(item => item.UserId).Order().ToArray());
+        Assert.All(request.Players, submitted =>
+        {
+            var stored = Assert.Single(persisted.Players, item => item.UserId == submitted.UserId);
+            Assert.Equal(submitted.Survived, stored.Survived);
+            Assert.Equal(submitted.Disconnected, stored.Disconnected);
+            Assert.Equal(submitted.DetectionCount, stored.DetectionCount);
+            Assert.Equal(submitted.DownedCount, stored.DownedCount);
+            Assert.Equal(submitted.ReviveCount, stored.ReviveCount);
+            Assert.Equal(submitted.ObjectiveContribution, stored.ObjectiveContribution);
+        });
     }
 
     [Fact]

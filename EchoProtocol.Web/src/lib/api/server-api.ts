@@ -16,6 +16,7 @@ import type {
   PaymentOrderHistoryPage,
   CreatePaymentOrderRequest,
 } from "@/lib/types/payment";
+import type { PurchaseHistoryPage } from "@/lib/types/purchase";
 import type {
   AdminPaymentDetail,
   AdminDashboard,
@@ -57,6 +58,8 @@ export const playerApi = {
   paymentCatalog: () => authorized<PaymentCatalog>("/api/payments/catalog"),
   paymentHistory: (page: number, pageSize: number) =>
     authorized<PaymentOrderHistoryPage>(`/api/payments/orders?page=${page}&pageSize=${pageSize}`),
+  purchaseHistory: (page: number, pageSize: number) =>
+    authorized<PurchaseHistoryPage>(`/api/shop/purchases?page=${page}&pageSize=${pageSize}`),
   paymentOrder: (paymentOrderId: string) =>
     authorized<PaymentOrder>(`/api/payments/orders/${encodeURIComponent(paymentOrderId)}`),
   createPayment: (request: CreatePaymentOrderRequest) =>

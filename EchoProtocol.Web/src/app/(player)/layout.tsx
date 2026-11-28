@@ -6,6 +6,7 @@ const items = [
   { href: "/dashboard", label: "Tổng quan" },
   { href: "/wallet", label: "Ví của tôi" },
   { href: "/wallet/history", label: "Lịch sử thanh toán" },
+  { href: "/wallet/history/purchases", label: "Lịch sử mua vật phẩm" },
   { href: "/profile", label: "Hồ sơ" },
 ];
 

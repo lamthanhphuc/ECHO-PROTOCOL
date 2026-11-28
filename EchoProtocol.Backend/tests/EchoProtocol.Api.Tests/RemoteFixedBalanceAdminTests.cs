@@ -24,8 +24,25 @@ public sealed class RemoteFixedBalanceAdminTests
     [Fact] public async Task CreateComputesCorrectHash()
     {
         await using var h = await Harness.CreateAsync();
-        var result = await h.Create("RFB-001");
-        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(RemoteFixedBalanceTests.ValidSnapshot), result.Data!.ContentHash);
+        var adminId = Guid.NewGuid();
+        Assert.True((await h.Service.CreateVersionAsync(adminId, Request("RFB-001"), default)).IsSuccess);
+        Assert.True((await h.Service.ActivateVersionAsync(adminId, "RFB-001", new()
+        {
+            ExpectedActiveVersion = string.Empty,
+            Reason = "Initial approved version"
+        }, default)).IsSuccess);
+
+        var created = await h.Service.CreateVersionAsync(adminId, Request("RFB-002"), default);
+
+        Assert.True(created.IsSuccess, created.Message);
+        h.Db.ChangeTracker.Clear();
+        var draft = await h.Db.RemoteFixedBalanceVersions.AsNoTracking()
+            .SingleAsync(item => item.Version == "RFB-002");
+        Assert.True(RemoteFixedBalanceContract.IsValidSnapshot(draft.SnapshotJson, draft.MapId));
+        Assert.Equal(RemoteFixedBalanceContract.ComputeHash(draft.SnapshotJson), draft.ContentHash);
+        Assert.False(draft.IsActive);
+        Assert.Equal("RFB-001", await h.Db.RemoteFixedBalanceVersions.AsNoTracking()
+            .Where(item => item.IsActive).Select(item => item.Version).SingleAsync());
     }
 
     [Fact] public async Task RejectInvalidSnapshot()
