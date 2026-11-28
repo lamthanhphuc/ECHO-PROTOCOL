@@ -8,13 +8,16 @@ namespace EchoProtocol.UI.Tests
     {
         private bool _hadLanguagePreference;
         private int _previousLanguage;
+        private int _previousRuntimeLanguage;
 
         [SetUp]
         public void SetUp()
         {
             _hadLanguagePreference = PlayerPrefs.HasKey("Echo.Language");
             _previousLanguage = PlayerPrefs.GetInt("Echo.Language");
-            SetLanguage(1);
+            _previousRuntimeLanguage = GetLanguage();
+            try { SetLanguage(1); }
+            catch { RestoreLanguage(); throw; }
         }
 
         [Test]
@@ -126,14 +129,63 @@ namespace EchoProtocol.UI.Tests
             Session.GetMethod("Apply").Invoke(null, new[] { JsonUtility.FromJson(json, dto) });
         }
         [TearDown]
-        public void Clear()
+        public void Clear() => ClearAfter(() => Session.GetMethod("Clear").Invoke(null, null));
+
+        private void ClearAfter(Action clearSession)
         {
-            Session.GetMethod("Clear").Invoke(null, null);
-            SetLanguage(Mathf.Clamp(_previousLanguage, 0, 1));
-            if (!_hadLanguagePreference) PlayerPrefs.DeleteKey("Echo.Language");
-            else PlayerPrefs.SetInt("Echo.Language", _previousLanguage);
-            PlayerPrefs.Save();
+            try { clearSession(); }
+            finally { RestoreLanguage(); }
         }
+
+        [TestCase(0, true, 0, false)]
+        [TestCase(1, true, 0, false)]
+        [TestCase(0, false, 0, false)]
+        [TestCase(1, true, 99, false)]
+        [TestCase(0, true, 0, true)]
+        public void RestoresRuntimeLocaleAndExactPreference(int runtime, bool hasPreference, int rawPreference, bool cleanupThrows)
+        {
+            int originalRuntime = _previousRuntimeLanguage;
+            bool originalHasPreference = _hadLanguagePreference;
+            int originalRawPreference = _previousLanguage;
+            try
+            {
+                SetLanguage(runtime);
+                if (hasPreference) PlayerPrefs.SetInt("Echo.Language", rawPreference);
+                else PlayerPrefs.DeleteKey("Echo.Language");
+                PlayerPrefs.Save();
+
+                SetUp();
+                Assert.That(GetLanguage(), Is.EqualTo(1));
+                if (cleanupThrows)
+                    Assert.Throws<InvalidOperationException>(() => ClearAfter(() => throw new InvalidOperationException()));
+                else Clear();
+                Assert.That(GetLanguage(), Is.EqualTo(runtime));
+                Assert.That(PlayerPrefs.HasKey("Echo.Language"), Is.EqualTo(hasPreference));
+                if (hasPreference) Assert.That(PlayerPrefs.GetInt("Echo.Language"), Is.EqualTo(rawPreference));
+            }
+            finally
+            {
+                _previousRuntimeLanguage = originalRuntime;
+                _hadLanguagePreference = originalHasPreference;
+                _previousLanguage = originalRawPreference;
+                RestoreLanguage();
+            }
+        }
+
+        private void RestoreLanguage()
+        {
+            try { SetLanguage(_previousRuntimeLanguage); }
+            finally
+            {
+                if (!_hadLanguagePreference) PlayerPrefs.DeleteKey("Echo.Language");
+                else PlayerPrefs.SetInt("Echo.Language", _previousLanguage);
+                PlayerPrefs.Save();
+            }
+        }
+
+        private static int GetLanguage() => Convert.ToInt32(
+            Type.GetType("EchoProtocol.Settings.GameLanguage, Assembly-CSharp", true)
+                .GetProperty("Current").GetValue(null));
 
         private static void SetLanguage(int value)
         {
