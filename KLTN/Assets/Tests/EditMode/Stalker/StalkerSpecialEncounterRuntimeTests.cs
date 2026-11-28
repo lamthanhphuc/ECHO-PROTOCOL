@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace EchoProtocol.AI.Stalker.Tests
 {
@@ -85,6 +87,27 @@ namespace EchoProtocol.AI.Stalker.Tests
                 UnityEngine.Object.DestroyImmediate(
                     _runtimeObject);
             }
+        }
+
+        [Test]
+        public void STK_SPECIAL_JumpInRejectsSafeRoomAndPreservesClearDestination()
+        {
+            const string path = "Assets/Scenes/SciFi.unity";
+            var scene = SceneManager.GetSceneByPath(path);
+            bool opened = !scene.IsValid() || !scene.isLoaded;
+            if (opened) scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            try
+            {
+                var method = _runtimeType.GetMethod("IsJumpInPositionAllowed", BindingFlags.Static | BindingFlags.NonPublic);
+                Assert.That(method, Is.Not.Null);
+                var inside = new Vector3(35.834446f, 1.300647f, -77.35453f);
+                var outside = new Vector3(34.5f, 1.06f, -100.8f);
+                Func<Vector3, bool> inPatrolZone = _ => true;
+                Assert.That((bool)method.Invoke(null, new object[] { inside, inPatrolZone }), Is.False);
+                Assert.That((bool)method.Invoke(null, new object[] { outside, inPatrolZone }), Is.True);
+                Assert.That((bool)method.Invoke(null, new object[] { outside, new Func<Vector3, bool>(_ => false) }), Is.False);
+            }
+            finally { if (opened) EditorSceneManager.CloseScene(scene, true); }
         }
 
         [Test]

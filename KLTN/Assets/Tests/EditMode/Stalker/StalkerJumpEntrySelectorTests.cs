@@ -118,6 +118,12 @@ namespace EchoProtocol.AI.Stalker.Tests
 
                 Assert.That((bool)method.Invoke(null, arguments), Is.True);
                 Assert.That(((Vector3)arguments[9]).x, Is.GreaterThan(2f));
+
+                arguments[8] = new Func<Vector3, bool>(_ => false);
+                arguments[9] = Vector3.one;
+                Assert.That((bool)method.Invoke(null, arguments), Is.False,
+                    "No authorized JumpIn destination must leave the transfer uncommitted.");
+                Assert.That((Vector3)arguments[9], Is.EqualTo(Vector3.zero));
             }
             finally
             {

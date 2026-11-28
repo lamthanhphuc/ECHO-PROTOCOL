@@ -27,6 +27,15 @@ namespace EchoProtocol.AI.AED
             }
             catch (ArgumentException) { return false; }
         }
+        public static bool IsSciFiSafeRoomClearPath(Vector3[] corners)
+        {
+            var scene = SceneManager.GetSceneByPath("Assets/Scenes/SciFi.unity");
+            if (!scene.IsValid() || !scene.isLoaded) return true;
+            if (corners == null || corners.Length == 0 || !TryLoad(out var manifest, out _) ||
+                !manifest.TryPathIntersectsSafeRoom(corners.Select(x => new[] { (double)x.x, x.y, x.z }).ToArray(), out var intersects))
+                return false;
+            return !intersects;
+        }
         public static string MarkerId(Transform item)
         {
             var parts = new Stack<string>();

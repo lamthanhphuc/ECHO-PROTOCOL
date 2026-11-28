@@ -4,6 +4,7 @@ using EchoProtocol.AI.Listener.Noise;
 using EchoProtocol.AI.Stalker;
 using EchoProtocol.AI.Stalker.Spatial;
 using EchoProtocol.AI.Common.AED;
+using EchoProtocol.AI.AED;
 using EchoProtocol.MatchFlow;
 using EchoProtocol.Networking;
 using EchoProtocol.Networking.Authority;
@@ -525,6 +526,7 @@ namespace EchoProtocol.AI.Minions
             if (_agent.enabled && _agent.isOnNavMesh)
             {
                 _navigation ??= new StalkerNavigationController(_agent);
+                _navigation.SetPathSafetyValidator(AEDV02SceneSource.IsSciFiSafeRoomClearPath);
                 _navigation.SetAuthoritativeLocomotion(true);
                 return true;
             }
@@ -541,6 +543,7 @@ namespace EchoProtocol.AI.Minions
             }
 
             _navigation ??= new StalkerNavigationController(_agent);
+            _navigation.SetPathSafetyValidator(AEDV02SceneSource.IsSciFiSafeRoomClearPath);
             _navigation.ClearDestinationCache();
             _navigation.SetAuthoritativeLocomotion(true);
 // #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -860,6 +863,7 @@ namespace EchoProtocol.AI.Minions
                 return;
             }
             _navigation ??= new StalkerNavigationController(_agent);
+            _navigation.SetPathSafetyValidator(AEDV02SceneSource.IsSciFiSafeRoomClearPath);
             var destination = target != null ? target.transform.position
                 : _navigation.TryGetActiveDestination(out var active) ? active : transform.position;
             if (_navigation.TryRecoverLocalPosition(destination)) _navigation.SetAuthoritativeLocomotion(true);
