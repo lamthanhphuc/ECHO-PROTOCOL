@@ -4,6 +4,8 @@ param(
     [Parameter(Mandatory)][string]$ClientConfig,
     [Parameter(Mandatory)][Security.SecureString]$HostPassword,
     [Parameter(Mandatory)][Security.SecureString]$ClientPassword,
+    [string]$ManualBuildEvidence,
+    [switch]$BuildPreflightOnly,
     [string[]]$AdditionalClientConfig = @(),
     [Security.SecureString[]]$AdditionalClientPassword = @(),
     [ValidateRange(0,1200)][int]$ObserveSecondsAfterProof = 0,
@@ -14,6 +16,12 @@ param(
     [int]$TimeoutSeconds = 600
 )
 $ErrorActionPreference = 'Stop'
+function Get-AEDV02Sha256([string]$Path) {
+    $stream=[IO.File]::OpenRead($Path)
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
 . (Join-Path $PSScriptRoot 'AEDV02NativeProof.ps1')
 . (Join-Path $PSScriptRoot 'AEDV02BackendTarget.ps1')
 if ($HostPassword.Length -eq 0 -or $ClientPassword.Length -eq 0) { throw 'Both native credentials are required before starting any player.' }
@@ -50,13 +58,56 @@ for ($index=0; $index -lt $configs.Count; $index++) {
 }
 if (!(Test-Path -LiteralPath $Executable)) { throw 'Windows executable missing; native integration NOT RUN.' }
 $buildReportPath = Join-Path (Split-Path ([IO.Path]::GetFullPath($Executable)) -Parent) 'build-report.json'
-if (!(Test-Path -LiteralPath $buildReportPath)) { throw 'Build provenance report missing; native integration NOT RUN.' }
-$buildReport = Get-Content -LiteralPath $buildReportPath -Raw | ConvertFrom-Json
-if ($buildReport.result -ne 'Succeeded' -or $buildReport.candidate -notmatch '^[a-f0-9]{40}$') { throw 'Build provenance invalid.' }
+if ($ManualBuildEvidence) {
+    if (Test-Path -LiteralPath $buildReportPath) { throw 'Manual evidence may not substitute an existing batch build report.' }
+    $manual = Get-Content -LiteralPath $ManualBuildEvidence -Raw | ConvertFrom-Json
+    if ($manual.classification -ne 'LOCAL_DIRTY_TREE_TECHNICAL_QUALIFICATION' -or
+        $manual.result -ne 'Succeeded' -or $manual.sourceTreeAtBuild -ne 'UNVERIFIED' -or
+        $manual.sourceGitHeadAtInspection -notmatch '^[a-f0-9]{40}$' -or
+        $manual.sourceGitHeadAtInspection -ne (& git -C (Split-Path $PSScriptRoot -Parent) rev-parse HEAD).Trim() -or
+        $manual.executableSha256 -ne (Get-AEDV02Sha256 $Executable) -or
+        !(Test-Path -LiteralPath $manual.editorLog) -or
+        $manual.editorLogSha256 -ne (Get-AEDV02Sha256 $manual.editorLog) -or
+        !(Select-String -LiteralPath $manual.editorLog -SimpleMatch "Build completed with a result of 'Succeeded'" -Quiet) -or
+        !(Test-Path -LiteralPath $manual.buildProfile) -or
+        $manual.buildProfileSha256 -ne (Get-AEDV02Sha256 $manual.buildProfile) -or
+        !(Select-String -LiteralPath $manual.buildProfile -SimpleMatch 'AED_V02_PILOT_HARNESS' -Quiet) -or
+        !(Select-String -LiteralPath $manual.buildProfile -SimpleMatch 'm_Development: 1' -Quiet) -or
+        !(Test-Path -LiteralPath $manual.packagedManifest) -or
+        $manual.packagedManifestSha256 -ne (Get-AEDV02Sha256 $manual.packagedManifest) -or
+        !(Test-Path -LiteralPath $manual.distributableManifest) -or
+        $manual.distributableManifestSha256 -ne (Get-AEDV02Sha256 $manual.distributableManifest) -or
+        $manual.managedAssemblySha256 -ne (Get-AEDV02Sha256 (Join-Path (Split-Path $Executable -Parent) (([IO.Path]::GetFileNameWithoutExtension($Executable))+'_Data/Managed/Assembly-CSharp.dll'))) -or
+        !(Test-Path -LiteralPath $manual.resourcesAssets) -or
+        [IO.Path]::GetFullPath($manual.resourcesAssets) -ne
+            [IO.Path]::GetFullPath((Join-Path (Split-Path $Executable -Parent) (([IO.Path]::GetFileNameWithoutExtension($Executable))+'_Data/resources.assets'))) -or
+        [long]$manual.packagedManifestOffset -lt 0 -or [int]$manual.packagedManifestLength -le 0) {
+        throw 'Manual build evidence invalid; native integration NOT RUN.'
+    }
+    $stream=[IO.File]::OpenRead($manual.resourcesAssets)
+    try {
+        if ([long]$manual.packagedManifestOffset + [int]$manual.packagedManifestLength -gt $stream.Length) { throw 'Packaged manifest range invalid.' }
+        $stream.Position=[long]$manual.packagedManifestOffset
+        $bytes=New-Object byte[] ([int]$manual.packagedManifestLength)
+        $read=0
+        while ($read -lt $bytes.Length) { $count=$stream.Read($bytes,$read,$bytes.Length-$read); if ($count -eq 0) { throw 'Packaged manifest truncated.' }; $read+=$count }
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try { $packedHash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        if ($packedHash -ne $manual.packagedManifestSha256) { throw 'Packaged scene manifest does not match manual evidence.' }
+    } finally { $stream.Dispose() }
+    $buildReport = [pscustomobject]@{result='Succeeded';candidate=$manual.sourceGitHeadAtInspection}
+} else {
+    if (!(Test-Path -LiteralPath $buildReportPath)) { throw 'Build provenance report missing; native integration NOT RUN.' }
+    $buildReport = Get-Content -LiteralPath $buildReportPath -Raw | ConvertFrom-Json
+    if ($buildReport.result -ne 'Succeeded' -or $buildReport.candidate -notmatch '^[a-f0-9]{40}$') { throw 'Build provenance invalid.' }
+}
 $processes = @()
 $record = [ordered]@{ status='NOT RUN'; candidate=$buildReport.candidate; apiUrl=$configs[0].apiUrl; session=$configs[0].session;
     backendEnvironment= $(if ($configs[0].backendEnvironment) { $configs[0].backendEnvironment } else { 'Local' });
-    startedUtc=[DateTime]::UtcNow.ToString('O'); executableHash=(Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash }
+    startedUtc=[DateTime]::UtcNow.ToString('O'); executableHash=(Get-AEDV02Sha256 $Executable) }
+if ($ManualBuildEvidence) { $record.buildClassification='LOCAL_DIRTY_TREE_TECHNICAL_QUALIFICATION'; $record.sourceTreeAtBuild='UNVERIFIED' }
+if ($BuildPreflightOnly) { [pscustomobject]$record | Add-Member -NotePropertyName buildPreflight -NotePropertyValue 'PASS' -PassThru; return }
 try {
     for ($index=0; $index -lt $configs.Count; $index++) {
         $role = if ($index -eq 0) { 'Host' } elseif ($index -eq 1) { 'Client' } else { 'Client'+$index }
@@ -75,13 +126,13 @@ try {
         $secret = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($credential)
         try { $start.EnvironmentVariables['ECHO_AED_PILOT_PASSWORD'] = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($secret) }
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($secret) }
-        try { $processes += [Diagnostics.Process]::Start($start) }
+        try { $processes += [Diagnostics.Process]::Start($start); $record.status='RUNNING'; $record.playerPids=@($processes | ForEach-Object { $_.Id }) }
         finally { $start.EnvironmentVariables.Remove('ECHO_AED_PILOT_PASSWORD') }
         if ($role -eq 'Host') {
             $hostDeadline = [DateTime]::UtcNow.AddSeconds(90)
             $ready = Join-Path $output 'Host-room-ready.txt'
             while (!(Test-Path -LiteralPath $ready) -and !$processes[0].HasExited -and [DateTime]::UtcNow -lt $hostDeadline) { Start-Sleep -Seconds 1 }
-            if (!(Test-Path -LiteralPath $ready) -or (Get-Content -LiteralPath $ready -Raw) -ne $configs[0].session) {
+            if (!(Test-Path -LiteralPath $ready) -or (Read-AEDV02NativeText -Path $ready) -ne $configs[0].session) {
                 throw 'Host did not create its room; remote Client NOT RUN.'
             }
         }
@@ -89,10 +140,12 @@ try {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $ended=$false
+        $exitedProcess=$null
         foreach ($process in $processes) {
             if ($process.HasExited) {
-                if (!$SessionOnly) { throw "Native player PID $($process.Id) exited before transaction proof: $($process.ExitCode)." }
-                $record.playerExit=@{pid=$process.Id;exitCode=$process.ExitCode};$ended=$true
+                $exitedProcess=$process
+                if ($SessionOnly) { $record.playerExit=@{pid=$process.Id;exitCode=$process.ExitCode};$record.terminationKind='PLAYER_EXIT_SESSION_ONLY' }
+                $ended=$true
             }
         }
         if ($SessionOnly) {
@@ -102,15 +155,17 @@ try {
         }
         $hostReadback = Join-Path $output 'Host-readback.jsonl'
         $clientReadback = Join-Path $output 'Client-readback.jsonl'
+        if ($ended) { Start-Sleep -Milliseconds 500 }
         if ((Test-Path -LiteralPath $hostReadback) -and (Test-Path -LiteralPath $clientReadback)) {
             $hostRows = @(Read-AEDV02NativeRows -Path $hostReadback)
             $clientRows = @(Read-AEDV02NativeRows -Path $clientReadback)
-            $proof=Find-AEDV02NativeProof -HostRows $hostRows -ClientRows $clientRows -ReceiptLines (Get-Content -LiteralPath (Join-Path $output 'Host.log')) -ExpectedPlayers $configs.Count
+            $proof=Find-AEDV02NativeProof -HostRows $hostRows -ClientRows $clientRows -ReceiptLines @(Read-AEDV02NativeLines -Path (Join-Path $output 'Host.log')) -ExpectedPlayers $configs.Count
             if ($proof) {
                 $record.status='PASS';$record.host=$proof.host;$record.remoteClient=$proof.remoteClient;$record.receipt=$proof.receipt;$record.initial=$proof.initial
             }
         }
         if ($record.status -eq 'PASS') { break }
+        if ($ended) { $record.failureKind='PLAYER_EXIT_BEFORE_PROOF'; throw "Native player PID $($exitedProcess.Id) exited before transaction proof: $($exitedProcess.ExitCode)." }
         Start-Sleep -Seconds 2
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($SessionOnly) {
@@ -124,7 +179,7 @@ try {
             }
         }
         $record.status='CAPTURED_UNVERIFIED';$record.requiresOwnerVerification=$true
-    } elseif ($record.status -ne 'PASS') { $record.status='FAIL'; throw 'No complete native relief transaction observed. Startup/readback alone is not PASS.' }
+    } elseif ($record.status -ne 'PASS') { $record.status='FAIL'; $record.failureKind='TIMEOUT_NO_TRANSACTION_PROOF'; throw 'No complete native relief transaction observed. Startup/readback alone is not PASS.' }
     if ($ObserveSecondsAfterProof -gt 0) {
         Write-Output "Initial transaction proven; observing controls for $ObserveSecondsAfterProof seconds. Later scenario results are not inferred from this proof."
         $observeUntil = [DateTime]::UtcNow.AddSeconds($ObserveSecondsAfterProof)
@@ -133,8 +188,17 @@ try {
             Start-Sleep -Seconds 1
         }
     }
-}
-finally {
+} catch {
+    $previousStatus=$record.status
+    $record.status='FAIL'
+    if (!$record.failureKind) {
+        $record.failureKind=if ($previousStatus -eq 'PASS') { 'POST_PROOF_OBSERVATION_FAILURE' }
+            elseif ($_.Exception -is [IO.IOException]) { 'EVIDENCE_READ_FAILURE' }
+            else { 'INFRASTRUCTURE_FAILURE' }
+    }
+    $record.failureType=$_.Exception.GetType().FullName
+    throw
+} finally {
     foreach ($process in $processes) {
         if (!$process.HasExited) { $process.Kill(); $process.WaitForExit() }
     }
